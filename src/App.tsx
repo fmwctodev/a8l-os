@@ -43,6 +43,7 @@ import { OrganizationSettingsPage } from './pages/settings/OrganizationSettingsP
 import { CalendarsSettingsPage } from './pages/settings/CalendarsSettingsPage';
 import { AIAgentsSettingsPage } from './pages/settings/AIAgentsSettingsPage';
 import { EmailServicesSettingsPage } from './pages/settings/EmailServicesSettingsPage';
+import PhoneSystemSettingsPage from './pages/settings/PhoneSystemSettingsPage';
 import { SettingsPlaceholder } from './pages/settings/SettingsPlaceholder';
 import { Bell, Shield, CreditCard, Palette, Globe, Zap } from 'lucide-react';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
@@ -358,6 +359,14 @@ function App() {
                 element={
                   <ProtectedRoute permission="email.settings.view" featureFlag="email_services">
                     <EmailServicesSettingsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="phone-system"
+                element={
+                  <ProtectedRoute permission="phone.settings.view" featureFlag="phone_services">
+                    <PhoneSystemSettingsPage />
                   </ProtectedRoute>
                 }
               />

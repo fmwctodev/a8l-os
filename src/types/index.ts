@@ -117,7 +117,9 @@ export type PermissionKey =
   | 'departments.manage'
   | 'settings.view' | 'settings.manage'
   | 'audit.view' | 'audit_logs.view'
-  | 'email.settings.view' | 'email.settings.manage' | 'email.send.test';
+  | 'email.settings.view' | 'email.settings.manage' | 'email.send.test'
+  | 'phone.settings.view' | 'phone.settings.manage' | 'phone.numbers.manage'
+  | 'phone.routing.manage' | 'phone.test.run' | 'phone.compliance.manage';
 
 export interface InviteStaffInput {
   first_name: string;
@@ -2682,5 +2684,181 @@ export interface EmailSetupStatus {
   activeFromAddressesCount: number;
   hasDefaultFromAddress: boolean;
   hasDefaultUnsubscribeGroup: boolean;
+  blockingReasons: string[];
+}
+
+export type PhoneProviderStatus = 'connected' | 'disconnected';
+export type PhoneNumberStatus = 'active' | 'disabled';
+export type SmsMode = 'number' | 'messaging_service';
+export type RoutingStrategy = 'simultaneous' | 'sequential';
+
+export interface PhoneNumberCapabilities {
+  sms: boolean;
+  mms: boolean;
+  voice: boolean;
+}
+
+export interface TwilioConnection {
+  id: string;
+  accountSid: string;
+  subaccountSid?: string;
+  friendlyName?: string;
+  status: PhoneProviderStatus;
+  connectedAt?: string;
+}
+
+export interface TwilioNumber {
+  id: string;
+  org_id: string;
+  phone_number: string;
+  phone_sid: string;
+  friendly_name?: string;
+  capabilities: PhoneNumberCapabilities;
+  country_code?: string;
+  status: PhoneNumberStatus;
+  is_default_sms: boolean;
+  is_default_voice: boolean;
+  department_id?: string;
+  department?: Department;
+  webhook_configured: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TwilioMessagingService {
+  id: string;
+  org_id: string;
+  service_sid: string;
+  name: string;
+  description?: string;
+  is_default: boolean;
+  status: PhoneNumberStatus;
+  a2p_registered: boolean;
+  sender_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MessagingServiceSender {
+  id: string;
+  service_id: string;
+  number_id: string;
+  number?: TwilioNumber;
+  created_at: string;
+}
+
+export interface VoiceRoutingDestination {
+  id: string;
+  org_id: string;
+  group_id: string;
+  phone_number: string;
+  label?: string;
+  sort_order: number;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VoiceRoutingGroup {
+  id: string;
+  org_id: string;
+  name: string;
+  strategy: RoutingStrategy;
+  ring_timeout: number;
+  fallback_number?: string;
+  is_default: boolean;
+  enabled: boolean;
+  destinations?: VoiceRoutingDestination[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PhoneSettings {
+  id: string;
+  org_id: string;
+  default_sms_mode: SmsMode;
+  default_sms_number_id?: string;
+  default_messaging_service_id?: string;
+  default_voice_number_id?: string;
+  default_routing_group_id?: string;
+  call_timeout: number;
+  voicemail_fallback_number?: string;
+  record_inbound_calls: boolean;
+  record_outbound_calls: boolean;
+  record_voicemail: boolean;
+  recording_retention_days: number;
+  quiet_hours_enabled: boolean;
+  quiet_hours_start?: string;
+  quiet_hours_end?: string;
+  quiet_hours_timezone: string;
+  business_name?: string;
+  opt_out_language: string;
+  auto_append_opt_out: boolean;
+  default_sms_number?: TwilioNumber;
+  default_voice_number?: TwilioNumber;
+  default_messaging_service?: TwilioMessagingService;
+  default_routing_group?: VoiceRoutingGroup;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DncNumber {
+  id: string;
+  phoneNumber: string;
+  reason?: string;
+  source: 'manual' | 'contact';
+  addedBy?: string;
+  contactName?: string;
+  createdAt?: string;
+}
+
+export interface PhoneTestLog {
+  id: string;
+  org_id: string;
+  test_type: 'sms' | 'call';
+  to_number: string;
+  from_number: string;
+  message_body?: string;
+  status: string;
+  twilio_sid?: string;
+  error_message?: string;
+  tested_by: string;
+  tested_by_user?: User;
+  created_at: string;
+}
+
+export interface WebhookHealth {
+  webhook_type: 'sms' | 'voice' | 'status';
+  last_received_at?: string;
+  success_count: number;
+  failure_count: number;
+  last_error?: string;
+}
+
+export interface WebhookHealthStatus {
+  lastReceived?: string;
+  successCount: number;
+  failureCount: number;
+  failureRate: number;
+  lastError?: string;
+  status: 'healthy' | 'degraded' | 'never_received';
+}
+
+export interface PhoneSetupStatus {
+  isConfigured: boolean;
+  isConnected: boolean;
+  activeNumbers: number;
+  hasDefaultSms: boolean;
+  hasDefaultVoice: boolean;
+  webhookHealth: WebhookHealth[];
+  blockingReasons: string[];
+}
+
+export interface PhoneSettingsResponse {
+  settings: PhoneSettings | null;
+  connection: TwilioConnection | null;
+  numberCount: number;
+  webhookHealth: WebhookHealth[];
+  isConfigured: boolean;
   blockingReasons: string[];
 }

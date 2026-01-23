@@ -7,6 +7,7 @@ import {
   Calendar,
   Bot,
   Mail,
+  Phone,
   Bell,
   Shield,
   CreditCard,
@@ -65,6 +66,13 @@ const settingsNavItems: SettingsNavItem[] = [
     icon: Mail,
     implemented: true,
     requiresPermission: 'email.settings.view',
+  },
+  {
+    name: 'Phone System',
+    path: '/settings/phone-system',
+    icon: Phone,
+    implemented: true,
+    requiresPermission: 'phone.settings.view',
   },
   {
     name: 'Notifications',
