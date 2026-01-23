@@ -100,7 +100,7 @@ export function NewAppointmentModal({
         setIsLoading(true);
         const [types, contactsData] = await Promise.all([
           getAppointmentTypes(calendar.id),
-          getContacts(currentUser.organization_id, { limit: 100 }),
+          getContacts(currentUser.organization_id, {}),
         ]);
 
         setAppointmentTypes(types.filter((t) => t.active));
