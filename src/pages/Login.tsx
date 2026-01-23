@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Loader2, AlertCircle, Zap, Eye, EyeOff } from 'lucide-react';
 
@@ -56,10 +56,6 @@ export function Login() {
       navigate(from, { replace: true });
     }
   }, [session, authLoading, navigate, from]);
-
-  const handleForgotPassword = () => {
-    alert('Password Reset\n\nPlease contact your administrator to reset your password.');
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,13 +174,12 @@ export function Login() {
             </div>
 
             <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={handleForgotPassword}
+              <Link
+                to="/forgot-password"
                 className="text-sm text-cyan-400 hover:text-cyan-300 focus:outline-none focus:underline transition-colors"
               >
                 Forgot password?
-              </button>
+              </Link>
             </div>
 
             <button
