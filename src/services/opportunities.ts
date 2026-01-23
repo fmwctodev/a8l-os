@@ -31,7 +31,7 @@ const OPPORTUNITY_SELECT = `
   ),
   pipeline:pipelines(*),
   stage:pipeline_stages(*),
-  assigned_user:users(*),
+  assigned_user:users!opportunities_assigned_user_id_fkey(*),
   department:departments(*),
   lost_reason_ref:lost_reasons(*),
   custom_field_values:opportunity_custom_field_values(
