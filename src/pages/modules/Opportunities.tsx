@@ -8,7 +8,10 @@ import {
   LayoutGrid,
   ChevronDown,
   DollarSign,
-  RefreshCw
+  RefreshCw,
+  Filter,
+  ArrowUpDown,
+  BarChart3
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermission } from '../../hooks/usePermission';
@@ -17,6 +20,7 @@ import type {
   Opportunity,
   OpportunityFilters,
   OpportunityBoardData,
+  OpportunityStats,
   User,
   Department
 } from '../../types';
@@ -27,7 +31,10 @@ import { getDepartments } from '../../services/departments';
 import { PipelineManageModal } from '../../components/opportunities/PipelineManageModal';
 import { OpportunityModal } from '../../components/opportunities/OpportunityModal';
 import { OpportunityCard } from '../../components/opportunities/OpportunityCard';
-import { BoardFilters } from '../../components/opportunities/BoardFilters';
+import { OpportunityFilterPanel } from '../../components/opportunities/OpportunityFilterPanel';
+import { PipelineSummaryStrip } from '../../components/opportunities/PipelineSummaryStrip';
+
+type SortOption = 'newest' | 'oldest' | 'highest_value' | 'lowest_value' | 'close_date';
 
 export function Opportunities() {
   const navigate = useNavigate();
@@ -35,10 +42,12 @@ export function Opportunities() {
   const { user } = useAuth();
   const canManagePipelines = usePermission('pipelines.manage');
   const canCreate = usePermission('opportunities.create');
+  const canMoveStage = usePermission('opportunities.move_stage');
 
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null);
   const [boardData, setBoardData] = useState<OpportunityBoardData | null>(null);
+  const [stats, setStats] = useState<OpportunityStats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,13 +57,39 @@ export function Opportunities() {
   const [showManagePipelines, setShowManagePipelines] = useState(false);
   const [showOpportunityModal, setShowOpportunityModal] = useState(false);
   const [selectedStageForNew, setSelectedStageForNew] = useState<string | null>(null);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [showSortDropdown, setShowSortDropdown] = useState(false);
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const [showTotals, setShowTotals] = useState(true);
 
   const [draggedOpp, setDraggedOpp] = useState<Opportunity | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const sortDropdownRef = useRef<HTMLDivElement>(null);
 
   const viewMode = searchParams.get('view') || 'board';
+
+  const sortOptions: { value: SortOption; label: string }[] = [
+    { value: 'newest', label: 'Newest First' },
+    { value: 'oldest', label: 'Oldest First' },
+    { value: 'highest_value', label: 'Highest Value' },
+    { value: 'lowest_value', label: 'Lowest Value' },
+    { value: 'close_date', label: 'Close Date' }
+  ];
+
+  const activeFilterCount = [
+    filters.status?.length,
+    filters.assignedUserId !== undefined ? 1 : 0,
+    filters.departmentId ? 1 : 0,
+    filters.stageId ? 1 : 0,
+    filters.minValue !== undefined ? 1 : 0,
+    filters.maxValue !== undefined ? 1 : 0,
+    filters.createdAfter ? 1 : 0,
+    filters.createdBefore ? 1 : 0,
+    filters.tagIds?.length,
+    filters.search ? 1 : 0
+  ].reduce((a, b) => a + (b || 0), 0);
 
   useEffect(() => {
     loadInitialData();
@@ -63,6 +98,7 @@ export function Opportunities() {
   useEffect(() => {
     if (selectedPipeline) {
       loadBoardData();
+      loadStats();
     }
   }, [selectedPipeline?.id, filters]);
 
@@ -70,6 +106,9 @@ export function Opportunities() {
     function handleClickOutside(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setShowPipelineDropdown(false);
+      }
+      if (sortDropdownRef.current && !sortDropdownRef.current.contains(e.target as Node)) {
+        setShowSortDropdown(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -107,10 +146,58 @@ export function Opportunities() {
     if (!selectedPipeline) return;
     try {
       const data = await opportunitiesService.getBoardData(selectedPipeline.id, filters);
-      setBoardData(data);
+      setBoardData(sortBoardData(data, sortBy));
     } catch (error) {
       console.error('Failed to load board data:', error);
     }
+  }
+
+  async function loadStats() {
+    if (!selectedPipeline) return;
+    try {
+      const statsData = await opportunitiesService.getOpportunityStats(selectedPipeline.id);
+      setStats(statsData);
+    } catch (error) {
+      console.error('Failed to load stats:', error);
+    }
+  }
+
+  function sortBoardData(data: OpportunityBoardData, sort: SortOption): OpportunityBoardData {
+    const sortFn = (a: Opportunity, b: Opportunity) => {
+      switch (sort) {
+        case 'newest':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case 'oldest':
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        case 'highest_value':
+          return Number(b.value_amount) - Number(a.value_amount);
+        case 'lowest_value':
+          return Number(a.value_amount) - Number(b.value_amount);
+        case 'close_date':
+          if (!a.close_date && !b.close_date) return 0;
+          if (!a.close_date) return 1;
+          if (!b.close_date) return -1;
+          return new Date(a.close_date).getTime() - new Date(b.close_date).getTime();
+        default:
+          return 0;
+      }
+    };
+
+    return {
+      ...data,
+      stages: data.stages.map(stage => ({
+        ...stage,
+        opportunities: [...stage.opportunities].sort(sortFn)
+      }))
+    };
+  }
+
+  function handleSortChange(sort: SortOption) {
+    setSortBy(sort);
+    if (boardData) {
+      setBoardData(sortBoardData(boardData, sort));
+    }
+    setShowSortDropdown(false);
   }
 
   function handlePipelineSelect(pipeline: Pipeline) {
@@ -120,10 +207,14 @@ export function Opportunities() {
   }
 
   function handleViewChange(view: 'board' | 'list') {
-    setSearchParams({
-      pipeline: selectedPipeline?.id || '',
-      view
-    });
+    if (view === 'list') {
+      navigate(`/opportunities/list${selectedPipeline ? `?pipeline=${selectedPipeline.id}` : ''}`);
+    } else {
+      setSearchParams({
+        pipeline: selectedPipeline?.id || '',
+        view
+      });
+    }
   }
 
   function openNewOpportunityModal(stageId?: string) {
@@ -139,16 +230,23 @@ export function Opportunities() {
     setShowOpportunityModal(false);
     setSelectedStageForNew(null);
     loadBoardData();
+    loadStats();
   }
 
   function handleDragStart(e: React.DragEvent, opportunity: Opportunity) {
+    if (opportunity.status !== 'open' || !canMoveStage) {
+      e.preventDefault();
+      return;
+    }
     setDraggedOpp(opportunity);
     e.dataTransfer.effectAllowed = 'move';
   }
 
   function handleDragOver(e: React.DragEvent, stageId: string) {
     e.preventDefault();
-    setDragOverStage(stageId);
+    if (draggedOpp && draggedOpp.status === 'open') {
+      setDragOverStage(stageId);
+    }
   }
 
   function handleDragLeave() {
@@ -160,12 +258,34 @@ export function Opportunities() {
     setDragOverStage(null);
 
     if (!draggedOpp || draggedOpp.stage_id === stageId || !user) return;
+    if (draggedOpp.status !== 'open') return;
+
+    const previousStageId = draggedOpp.stage_id;
+
+    if (boardData) {
+      const updatedStages = boardData.stages.map(stage => {
+        if (stage.id === previousStageId) {
+          return {
+            ...stage,
+            opportunities: stage.opportunities.filter(o => o.id !== draggedOpp.id)
+          };
+        }
+        if (stage.id === stageId) {
+          return {
+            ...stage,
+            opportunities: [...stage.opportunities, { ...draggedOpp, stage_id: stageId }]
+          };
+        }
+        return stage;
+      });
+      setBoardData({ ...boardData, stages: updatedStages });
+    }
 
     try {
       await opportunitiesService.moveOpportunityToStage(draggedOpp.id, stageId, user.id);
-      loadBoardData();
     } catch (error) {
       console.error('Failed to move opportunity:', error);
+      loadBoardData();
     } finally {
       setDraggedOpp(null);
     }
@@ -221,9 +341,9 @@ export function Opportunities() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-none p-4 border-b border-slate-700 space-y-4">
+      <div className="flex-none p-4 border-b border-slate-700">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setShowPipelineDropdown(!showPipelineDropdown)}
@@ -291,7 +411,64 @@ export function Opportunities() {
             </div>
 
             <button
-              onClick={() => loadBoardData()}
+              onClick={() => setShowFilterPanel(true)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                activeFilterCount > 0
+                  ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400'
+                  : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
+              }`}
+            >
+              <Filter className="w-4 h-4" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="px-1.5 py-0.5 bg-cyan-500 text-white text-xs rounded-full">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            <div className="relative" ref={sortDropdownRef}>
+              <button
+                onClick={() => setShowSortDropdown(!showSortDropdown)}
+                className="flex items-center gap-2 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-300 hover:bg-slate-600"
+              >
+                <ArrowUpDown className="w-4 h-4" />
+                Sort
+              </button>
+              {showSortDropdown && (
+                <div className="absolute z-30 top-full left-0 mt-1 w-48 bg-slate-700 border border-slate-600 rounded-lg shadow-xl">
+                  {sortOptions.map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => handleSortChange(opt.value)}
+                      className={`w-full px-4 py-2 text-left text-sm hover:bg-slate-600 first:rounded-t-lg last:rounded-b-lg ${
+                        sortBy === opt.value ? 'bg-cyan-500/20 text-cyan-400' : 'text-white'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setShowTotals(!showTotals)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                showTotals
+                  ? 'bg-amber-500/20 border-amber-500/50 text-amber-400'
+                  : 'bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600'
+              }`}
+              title="Toggle pipeline totals"
+            >
+              <BarChart3 className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => {
+                loadBoardData();
+                loadStats();
+              }}
               className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded"
             >
               <RefreshCw className="w-4 h-4" />
@@ -319,14 +496,9 @@ export function Opportunities() {
             )}
           </div>
         </div>
-
-        <BoardFilters
-          filters={filters}
-          users={users}
-          departments={departments}
-          onFilterChange={setFilters}
-        />
       </div>
+
+      {stats && <PipelineSummaryStrip stats={stats} isVisible={showTotals} />}
 
       {viewMode === 'board' && boardData && (
         <div className="flex-1 overflow-x-auto p-4">
@@ -363,14 +535,17 @@ export function Opportunities() {
                     {stage.opportunities.map(opportunity => (
                       <div
                         key={opportunity.id}
-                        draggable
+                        draggable={opportunity.status === 'open' && canMoveStage}
                         onDragStart={(e) => handleDragStart(e, opportunity)}
                         onDragEnd={() => setDraggedOpp(null)}
+                        className={opportunity.status !== 'open' || !canMoveStage ? 'cursor-not-allowed' : ''}
                       >
                         <OpportunityCard
                           opportunity={opportunity}
                           onClick={() => openOpportunityDetail(opportunity)}
                           isDragging={draggedOpp?.id === opportunity.id}
+                          stage={stage}
+                          canDrag={canMoveStage}
                         />
                       </div>
                     ))}
@@ -394,13 +569,18 @@ export function Opportunities() {
         </div>
       )}
 
-      {viewMode === 'list' && (
-        <OpportunitiesList
-          pipelineId={selectedPipeline?.id}
-          filters={filters}
-          onOpportunityClick={openOpportunityDetail}
-        />
-      )}
+      <OpportunityFilterPanel
+        isOpen={showFilterPanel}
+        filters={filters}
+        users={users}
+        departments={departments}
+        stages={boardData?.stages || []}
+        onFilterChange={(newFilters) => {
+          setFilters(newFilters);
+          setShowFilterPanel(false);
+        }}
+        onClose={() => setShowFilterPanel(false)}
+      />
 
       {showManagePipelines && user && (
         <PipelineManageModal
@@ -427,148 +607,6 @@ export function Opportunities() {
           }}
           onSave={handleOpportunitySaved}
         />
-      )}
-    </div>
-  );
-}
-
-function OpportunitiesList({
-  pipelineId,
-  filters,
-  onOpportunityClick
-}: {
-  pipelineId?: string;
-  filters: OpportunityFilters;
-  onOpportunityClick: (opp: Opportunity) => void;
-}) {
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const pageSize = 25;
-
-  useEffect(() => {
-    loadOpportunities();
-  }, [pipelineId, filters, page]);
-
-  async function loadOpportunities() {
-    try {
-      setLoading(true);
-      const result = await opportunitiesService.getOpportunities(
-        { ...filters, pipelineId },
-        page,
-        pageSize
-      );
-      setOpportunities(result.data);
-      setTotal(result.total);
-    } catch (error) {
-      console.error('Failed to load opportunities:', error);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function formatCurrency(amount: number, currency: string = 'USD') {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0
-    }).format(amount);
-  }
-
-  function getStatusBadge(status: string) {
-    const styles = {
-      open: 'bg-cyan-500/20 text-cyan-400',
-      won: 'bg-emerald-500/20 text-emerald-400',
-      lost: 'bg-red-500/20 text-red-400'
-    };
-    return styles[status as keyof typeof styles] || styles.open;
-  }
-
-  if (loading && opportunities.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin w-8 h-8 border-2 border-cyan-400 border-t-transparent rounded-full" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 overflow-auto p-4">
-      <div className="bg-slate-800 rounded-lg overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-slate-700/50">
-              <th className="text-left px-4 py-3 text-sm font-medium text-slate-300">Contact</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-slate-300">Pipeline</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-slate-300">Stage</th>
-              <th className="text-right px-4 py-3 text-sm font-medium text-slate-300">Value</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-slate-300">Status</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-slate-300">Assigned</th>
-              <th className="text-left px-4 py-3 text-sm font-medium text-slate-300">Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {opportunities.map(opp => (
-              <tr
-                key={opp.id}
-                onClick={() => onOpportunityClick(opp)}
-                className="border-t border-slate-700 hover:bg-slate-700/50 cursor-pointer"
-              >
-                <td className="px-4 py-3">
-                  <div className="text-white font-medium">
-                    {opp.contact?.first_name} {opp.contact?.last_name}
-                  </div>
-                  <div className="text-sm text-slate-400">{opp.contact?.email}</div>
-                </td>
-                <td className="px-4 py-3 text-slate-300">{opp.pipeline?.name}</td>
-                <td className="px-4 py-3 text-slate-300">{opp.stage?.name}</td>
-                <td className="px-4 py-3 text-right text-emerald-400 font-medium">
-                  {formatCurrency(Number(opp.value_amount), opp.currency)}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`px-2 py-1 rounded text-xs ${getStatusBadge(opp.status)}`}>
-                    {opp.status}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-slate-300">{opp.assigned_user?.name || '-'}</td>
-                <td className="px-4 py-3 text-slate-400 text-sm">
-                  {new Date(opp.created_at).toLocaleDateString()}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {opportunities.length === 0 && (
-          <div className="text-center py-12 text-slate-400">
-            No opportunities found
-          </div>
-        )}
-      </div>
-
-      {total > pageSize && (
-        <div className="flex items-center justify-between mt-4">
-          <div className="text-sm text-slate-400">
-            Showing {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)} of {total}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded hover:bg-slate-600 disabled:opacity-50"
-            >
-              Previous
-            </button>
-            <button
-              onClick={() => setPage(p => p + 1)}
-              disabled={page * pageSize >= total}
-              className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded hover:bg-slate-600 disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
-        </div>
       )}
     </div>
   );

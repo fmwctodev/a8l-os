@@ -9,7 +9,8 @@ import {
   ChevronDown,
   ChevronUp,
   Settings,
-  Columns
+  Columns,
+  Clock
 } from 'lucide-react';
 import type { Pipeline, PipelineStage, PipelineCustomField, Department } from '../../types';
 import * as pipelinesService from '../../services/pipelines';
@@ -43,6 +44,7 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
   });
   const [showNewFieldForm, setShowNewFieldForm] = useState(false);
   const [newOption, setNewOption] = useState('');
+  const [expandedStageId, setExpandedStageId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -192,6 +194,24 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
       await pipelinesService.reorderStages(selectedPipeline.id, stages.map(s => s.id));
     } catch (error) {
       console.error('Failed to reorder stages:', error);
+    }
+  }
+
+  async function handleUpdateAgingThreshold(stageId: string, days: number | null) {
+    if (!selectedPipeline) return;
+    setSaving(true);
+    try {
+      await pipelinesService.updateStage(stageId, { aging_threshold_days: days });
+      setSelectedPipeline({
+        ...selectedPipeline,
+        stages: (selectedPipeline.stages || []).map(s =>
+          s.id === stageId ? { ...s, aging_threshold_days: days } : s
+        )
+      });
+    } catch (error) {
+      console.error('Failed to update aging threshold:', error);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -395,71 +415,117 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
                 {activeTab === 'stages' && (
                   <div className="space-y-2">
                     {(selectedPipeline.stages || []).map((stage, index) => (
-                      <div
-                        key={stage.id}
-                        className="flex items-center gap-2 p-3 bg-slate-700/50 rounded group"
-                      >
-                        <GripVertical className="w-4 h-4 text-slate-500" />
-                        {editingStageId === stage.id ? (
-                          <div className="flex-1 flex items-center gap-2">
-                            <input
-                              type="text"
-                              value={editingStageName}
-                              onChange={(e) => setEditingStageName(e.target.value)}
-                              className="flex-1 px-2 py-1 bg-slate-600 border border-slate-500 rounded text-white text-sm"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => handleUpdateStage(stage.id, editingStageName)}
-                              className="p-1 hover:bg-slate-600 rounded"
-                            >
-                              <Check className="w-4 h-4 text-emerald-400" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setEditingStageId(null);
-                                setEditingStageName('');
-                              }}
-                              className="p-1 hover:bg-slate-600 rounded"
-                            >
-                              <X className="w-4 h-4 text-slate-400" />
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <span className="flex-1 text-white">{stage.name}</span>
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                      <div key={stage.id} className="bg-slate-700/50 rounded">
+                        <div className="flex items-center gap-2 p-3 group">
+                          <GripVertical className="w-4 h-4 text-slate-500" />
+                          {editingStageId === stage.id ? (
+                            <div className="flex-1 flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={editingStageName}
+                                onChange={(e) => setEditingStageName(e.target.value)}
+                                className="flex-1 px-2 py-1 bg-slate-600 border border-slate-500 rounded text-white text-sm"
+                                autoFocus
+                              />
                               <button
-                                onClick={() => handleMoveStage(stage.id, 'up')}
-                                disabled={index === 0}
-                                className="p-1 hover:bg-slate-600 rounded disabled:opacity-30"
+                                onClick={() => handleUpdateStage(stage.id, editingStageName)}
+                                className="p-1 hover:bg-slate-600 rounded"
                               >
-                                <ChevronUp className="w-4 h-4 text-slate-400" />
-                              </button>
-                              <button
-                                onClick={() => handleMoveStage(stage.id, 'down')}
-                                disabled={index === (selectedPipeline.stages?.length || 0) - 1}
-                                className="p-1 hover:bg-slate-600 rounded disabled:opacity-30"
-                              >
-                                <ChevronDown className="w-4 h-4 text-slate-400" />
+                                <Check className="w-4 h-4 text-emerald-400" />
                               </button>
                               <button
                                 onClick={() => {
-                                  setEditingStageId(stage.id);
-                                  setEditingStageName(stage.name);
+                                  setEditingStageId(null);
+                                  setEditingStageName('');
                                 }}
                                 className="p-1 hover:bg-slate-600 rounded"
                               >
-                                <Edit2 className="w-4 h-4 text-slate-400" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteStage(stage.id)}
-                                className="p-1 hover:bg-slate-600 rounded"
-                              >
-                                <Trash2 className="w-4 h-4 text-red-400" />
+                                <X className="w-4 h-4 text-slate-400" />
                               </button>
                             </div>
-                          </>
+                          ) : (
+                            <>
+                              <div className="flex-1">
+                                <span className="text-white">{stage.name}</span>
+                                {stage.aging_threshold_days && (
+                                  <span className="ml-2 text-xs text-amber-400">
+                                    <Clock className="w-3 h-3 inline mr-1" />
+                                    {stage.aging_threshold_days}d
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                                <button
+                                  onClick={() => setExpandedStageId(expandedStageId === stage.id ? null : stage.id)}
+                                  className={`p-1 hover:bg-slate-600 rounded ${expandedStageId === stage.id ? 'bg-slate-600' : ''}`}
+                                  title="Stage settings"
+                                >
+                                  <Settings className="w-4 h-4 text-slate-400" />
+                                </button>
+                                <button
+                                  onClick={() => handleMoveStage(stage.id, 'up')}
+                                  disabled={index === 0}
+                                  className="p-1 hover:bg-slate-600 rounded disabled:opacity-30"
+                                >
+                                  <ChevronUp className="w-4 h-4 text-slate-400" />
+                                </button>
+                                <button
+                                  onClick={() => handleMoveStage(stage.id, 'down')}
+                                  disabled={index === (selectedPipeline.stages?.length || 0) - 1}
+                                  className="p-1 hover:bg-slate-600 rounded disabled:opacity-30"
+                                >
+                                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingStageId(stage.id);
+                                    setEditingStageName(stage.name);
+                                  }}
+                                  className="p-1 hover:bg-slate-600 rounded"
+                                >
+                                  <Edit2 className="w-4 h-4 text-slate-400" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteStage(stage.id)}
+                                  className="p-1 hover:bg-slate-600 rounded"
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-400" />
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        {expandedStageId === stage.id && (
+                          <div className="px-3 pb-3 pt-1 border-t border-slate-600">
+                            <div className="flex items-center gap-3">
+                              <label className="text-sm text-slate-400 whitespace-nowrap">
+                                Stale after
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={stage.aging_threshold_days || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value ? parseInt(e.target.value, 10) : null;
+                                  handleUpdateAgingThreshold(stage.id, val);
+                                }}
+                                placeholder="No limit"
+                                className="w-24 px-2 py-1 bg-slate-600 border border-slate-500 rounded text-white text-sm"
+                              />
+                              <span className="text-sm text-slate-400">days</span>
+                              {stage.aging_threshold_days && (
+                                <button
+                                  onClick={() => handleUpdateAgingThreshold(stage.id, null)}
+                                  className="text-xs text-slate-500 hover:text-slate-300"
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Opportunities in this stage longer than this will show an aging warning
+                            </p>
+                          </div>
                         )}
                       </div>
                     ))}

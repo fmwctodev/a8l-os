@@ -1765,6 +1765,7 @@ export interface PipelineStage {
   pipeline_id: string;
   name: string;
   sort_order: number;
+  aging_threshold_days: number | null;
   created_at: string;
   updated_at: string;
   opportunities_count?: number;
@@ -1787,6 +1788,8 @@ export interface Opportunity {
   created_by: string;
   closed_at: string | null;
   lost_reason: string | null;
+  lost_reason_id: string | null;
+  stage_changed_at: string | null;
   created_at: string;
   updated_at: string;
   contact?: Contact;
@@ -1794,7 +1797,18 @@ export interface Opportunity {
   stage?: PipelineStage;
   assigned_user?: User | null;
   department?: Department | null;
+  lost_reason_ref?: LostReason | null;
   custom_field_values?: OpportunityCustomFieldValue[];
+}
+
+export interface LostReason {
+  id: string;
+  org_id: string;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export type PipelineCustomFieldType = 'text' | 'number' | 'date' | 'dropdown' | 'multi_select' | 'boolean';

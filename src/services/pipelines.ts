@@ -160,6 +160,7 @@ export async function createStage(stage: {
 export async function updateStage(id: string, updates: {
   name?: string;
   sort_order?: number;
+  aging_threshold_days?: number | null;
 }): Promise<PipelineStage> {
   const { data, error } = await supabase
     .from('pipeline_stages')

@@ -1,14 +1,22 @@
-import { DollarSign, User, Tag } from 'lucide-react';
-import type { Opportunity } from '../../types';
+import { DollarSign, User, Tag, Clock, AlertTriangle } from 'lucide-react';
+import type { Opportunity, PipelineStage } from '../../types';
 import { normalizeTags } from '../../utils/tagNormalization';
 
 interface OpportunityCardProps {
   opportunity: Opportunity;
   onClick: () => void;
   isDragging?: boolean;
+  stage?: PipelineStage;
+  canDrag?: boolean;
 }
 
-export function OpportunityCard({ opportunity, onClick, isDragging }: OpportunityCardProps) {
+export function OpportunityCard({
+  opportunity,
+  onClick,
+  isDragging,
+  stage,
+  canDrag = true
+}: OpportunityCardProps) {
   const contact = opportunity.contact;
   const contactName = contact
     ? `${contact.first_name} ${contact.last_name}`.trim()
@@ -28,13 +36,36 @@ export function OpportunityCard({ opportunity, onClick, isDragging }: Opportunit
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'won':
-        return 'bg-emerald-500/20 text-emerald-400';
+        return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
       case 'lost':
-        return 'bg-red-500/20 text-red-400';
+        return 'bg-red-500/20 text-red-400 border-red-500/30';
       default:
-        return 'bg-cyan-500/20 text-cyan-400';
+        return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
     }
   };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'won':
+        return 'Won';
+      case 'lost':
+        return 'Lost';
+      default:
+        return 'Open';
+    }
+  };
+
+  const getDaysInStage = () => {
+    const stageDate = opportunity.stage_changed_at || opportunity.created_at;
+    const now = new Date();
+    const then = new Date(stageDate);
+    const diff = now.getTime() - then.getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24));
+  };
+
+  const daysInStage = getDaysInStage();
+  const agingThreshold = stage?.aging_threshold_days;
+  const isAging = agingThreshold && daysInStage > agingThreshold && opportunity.status === 'open';
 
   const timeAgo = (date: string) => {
     const now = new Date();
@@ -48,20 +79,20 @@ export function OpportunityCard({ opportunity, onClick, isDragging }: Opportunit
     return `${Math.floor(days / 30)}mo ago`;
   };
 
+  const isDraggable = canDrag && opportunity.status === 'open';
+
   return (
     <div
       onClick={onClick}
-      className={`bg-slate-700/50 rounded-lg p-3 cursor-pointer hover:bg-slate-700 transition-all border border-slate-600/50 ${
+      className={`bg-slate-700/50 rounded-lg p-3 transition-all border border-slate-600/50 ${
         isDragging ? 'opacity-50 shadow-xl' : ''
-      }`}
+      } ${isDraggable ? 'cursor-grab active:cursor-grabbing hover:bg-slate-700' : 'cursor-pointer hover:bg-slate-700/70'}`}
     >
       <div className="flex items-start justify-between mb-2">
         <h4 className="text-white font-medium truncate flex-1">{contactName}</h4>
-        {opportunity.status !== 'open' && (
-          <span className={`ml-2 px-1.5 py-0.5 rounded text-xs ${getStatusColor(opportunity.status)}`}>
-            {opportunity.status}
-          </span>
-        )}
+        <span className={`ml-2 px-1.5 py-0.5 rounded text-xs border ${getStatusColor(opportunity.status)}`}>
+          {getStatusLabel(opportunity.status)}
+        </span>
       </div>
 
       <div className="flex items-center gap-2 text-sm text-slate-400 mb-2">
@@ -96,9 +127,29 @@ export function OpportunityCard({ opportunity, onClick, isDragging }: Opportunit
         </div>
       )}
 
-      <div className="text-xs text-slate-500">
-        Updated {timeAgo(opportunity.updated_at)}
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-slate-500">
+          Updated {timeAgo(opportunity.updated_at)}
+        </span>
+        {isAging && (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
+            <AlertTriangle className="w-3 h-3" />
+            {daysInStage}d in stage
+          </span>
+        )}
+        {!isAging && opportunity.status === 'open' && daysInStage > 0 && (
+          <span className="flex items-center gap-1 text-slate-500">
+            <Clock className="w-3 h-3" />
+            {daysInStage}d
+          </span>
+        )}
       </div>
+
+      {!isDraggable && opportunity.status !== 'open' && (
+        <div className="mt-2 pt-2 border-t border-slate-600/50 text-xs text-slate-500 italic">
+          {opportunity.status === 'won' ? 'Deal closed - won' : 'Deal closed - lost'}
+        </div>
+      )}
     </div>
   );
 }

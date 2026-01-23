@@ -33,6 +33,7 @@ const OPPORTUNITY_SELECT = `
   stage:pipeline_stages(*),
   assigned_user:users(*),
   department:departments(*),
+  lost_reason_ref:lost_reasons(*),
   custom_field_values:opportunity_custom_field_values(
     *,
     custom_field:pipeline_custom_fields(*)
@@ -382,7 +383,8 @@ export async function closeOpportunity(
   id: string,
   status: 'won' | 'lost',
   actorUserId: string,
-  lostReason?: string
+  lostReasonId?: string,
+  lostReasonText?: string
 ): Promise<Opportunity> {
   const existing = await getOpportunityById(id);
   if (!existing) throw new Error('Opportunity not found');
@@ -392,8 +394,13 @@ export async function closeOpportunity(
     closed_at: new Date().toISOString()
   };
 
-  if (status === 'lost' && lostReason) {
-    updateData.lost_reason = lostReason;
+  if (status === 'lost') {
+    if (lostReasonId) {
+      updateData.lost_reason_id = lostReasonId;
+    }
+    if (lostReasonText) {
+      updateData.lost_reason = lostReasonText;
+    }
   }
 
   const { data, error } = await supabase
@@ -410,11 +417,12 @@ export async function closeOpportunity(
     opportunity_id: id,
     contact_id: existing.contact_id,
     event_type: 'status_changed',
-    summary: `Opportunity marked as ${status}${lostReason ? `: ${lostReason}` : ''}`,
+    summary: `Opportunity marked as ${status}${lostReasonText ? `: ${lostReasonText}` : ''}`,
     payload: {
       from_status: existing.status,
       to_status: status,
-      lost_reason: lostReason
+      lost_reason_id: lostReasonId,
+      lost_reason: lostReasonText
     },
     actor_user_id: actorUserId
   });
@@ -592,4 +600,81 @@ export async function getCustomFieldValues(opportunityId: string): Promise<Oppor
 
   if (error) throw error;
   return data || [];
+}
+
+export async function bulkAssignOwner(
+  ids: string[],
+  assignedUserId: string | null,
+  actorUserId: string
+): Promise<void> {
+  for (const id of ids) {
+    await updateOpportunity(id, { assigned_user_id: assignedUserId }, actorUserId);
+  }
+}
+
+export async function bulkChangeStage(
+  ids: string[],
+  stageId: string,
+  actorUserId: string
+): Promise<void> {
+  for (const id of ids) {
+    await moveOpportunityToStage(id, stageId, actorUserId);
+  }
+}
+
+export async function bulkClose(
+  ids: string[],
+  status: 'won' | 'lost',
+  actorUserId: string,
+  lostReasonId?: string,
+  lostReasonText?: string
+): Promise<void> {
+  for (const id of ids) {
+    await closeOpportunity(id, status, actorUserId, lostReasonId, lostReasonText);
+  }
+}
+
+export async function exportOpportunitiesToCSV(
+  filters: OpportunityFilters = {}
+): Promise<string> {
+  const { data } = await getOpportunities(filters, 1, 10000);
+
+  const headers = [
+    'Contact Name',
+    'Email',
+    'Phone',
+    'Pipeline',
+    'Stage',
+    'Status',
+    'Value',
+    'Currency',
+    'Owner',
+    'Source',
+    'Close Date',
+    'Created At',
+    'Lost Reason'
+  ];
+
+  const rows = data.map(opp => [
+    opp.contact ? `${opp.contact.first_name} ${opp.contact.last_name}` : '',
+    opp.contact?.email || '',
+    opp.contact?.phone || '',
+    opp.pipeline?.name || '',
+    opp.stage?.name || '',
+    opp.status,
+    opp.value_amount.toString(),
+    opp.currency,
+    opp.assigned_user?.name || 'Unassigned',
+    opp.source || '',
+    opp.close_date || '',
+    opp.created_at,
+    opp.lost_reason || ''
+  ]);
+
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.map(cell => `"${(cell || '').replace(/"/g, '""')}"`).join(','))
+  ].join('\n');
+
+  return csvContent;
 }

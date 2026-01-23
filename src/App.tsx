@@ -15,6 +15,7 @@ import { Calendars } from './pages/modules/Calendars';
 import { Contacts } from './pages/modules/Contacts';
 import { ContactDetail } from './pages/modules/ContactDetail';
 import { Opportunities } from './pages/modules/Opportunities';
+import { OpportunitiesListPage } from './pages/modules/OpportunitiesListPage';
 import { OpportunityDetail } from './pages/modules/OpportunityDetail';
 import { Payments } from './pages/modules/Payments';
 import { InvoiceDetail } from './pages/modules/InvoiceDetail';
@@ -131,6 +132,14 @@ function App() {
                 element={
                   <ProtectedRoute permission="opportunities.view" featureFlag="opportunities">
                     <Opportunities />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/opportunities/list"
+                element={
+                  <ProtectedRoute permission="opportunities.view" featureFlag="opportunities">
+                    <OpportunitiesListPage />
                   </ProtectedRoute>
                 }
               />

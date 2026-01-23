@@ -21,6 +21,8 @@ import {
   CreditCard,
   Send,
   Copy,
+  MoreVertical,
+  Link as LinkIcon,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermission } from '../../hooks/usePermission';
@@ -46,6 +48,7 @@ import { isFeatureEnabled } from '../../services/featureFlags';
 import { getAttachmentCount } from '../../services/fileAttachments';
 import { OpportunityModal } from '../../components/opportunities/OpportunityModal';
 import { CreateInvoiceModal } from '../../components/payments/CreateInvoiceModal';
+import { CloseLostModal } from '../../components/opportunities/CloseLostModal';
 import OpportunityFilesTab from '../../components/opportunities/OpportunityFilesTab';
 import { ScoreWidget } from '../../components/scoring/ScoreWidget';
 
@@ -97,14 +100,15 @@ export function OpportunityDetail() {
   const [filesCount, setFilesCount] = useState(0);
 
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [showWonModal, setShowWonModal] = useState(false);
+  const [showLostModal, setShowLostModal] = useState(false);
   const [showCreateInvoice, setShowCreateInvoice] = useState(false);
-  const [closeStatus, setCloseStatus] = useState<'won' | 'lost'>('won');
-  const [lostReason, setLostReason] = useState('');
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [newNote, setNewNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [savingTask, setSavingTask] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -184,20 +188,51 @@ export function OpportunityDetail() {
     }
   }
 
-  async function handleClose() {
+  async function handleMarkWon() {
     if (!opportunity || !user) return;
     try {
       const updated = await opportunitiesService.closeOpportunity(
         opportunity.id,
-        closeStatus,
-        user.id,
-        closeStatus === 'lost' ? lostReason : undefined
+        'won',
+        user.id
       );
       setOpportunity(updated);
-      setShowCloseModal(false);
-      setLostReason('');
+      setShowWonModal(false);
     } catch (error) {
-      console.error('Failed to close opportunity:', error);
+      console.error('Failed to mark as won:', error);
+    }
+  }
+
+  async function handleMarkLost(lostReasonId: string, lostReasonText: string, notes?: string) {
+    if (!opportunity || !user) return;
+    const reasonWithNotes = notes ? `${lostReasonText}: ${notes}` : lostReasonText;
+    const updated = await opportunitiesService.closeOpportunity(
+      opportunity.id,
+      'lost',
+      user.id,
+      lostReasonId,
+      reasonWithNotes
+    );
+    setOpportunity(updated);
+    setShowLostModal(false);
+  }
+
+  async function handleCopyLink() {
+    const url = window.location.href;
+    await navigator.clipboard.writeText(url);
+    setCopySuccess(true);
+    setTimeout(() => setCopySuccess(false), 2000);
+    setShowMoreMenu(false);
+  }
+
+  async function handleDelete() {
+    if (!opportunity) return;
+    if (!confirm('Are you sure you want to delete this opportunity? This action cannot be undone.')) return;
+    try {
+      await opportunitiesService.deleteOpportunity(opportunity.id);
+      navigate('/opportunities');
+    } catch (error) {
+      console.error('Failed to delete opportunity:', error);
     }
   }
 
@@ -372,20 +407,14 @@ export function OpportunityDetail() {
             {opportunity.status === 'open' && canClose && (
               <>
                 <button
-                  onClick={() => {
-                    setCloseStatus('won');
-                    setShowCloseModal(true);
-                  }}
+                  onClick={() => setShowWonModal(true)}
                   className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
                 >
                   <Trophy className="w-4 h-4" />
                   Won
                 </button>
                 <button
-                  onClick={() => {
-                    setCloseStatus('lost');
-                    setShowCloseModal(true);
-                  }}
+                  onClick={() => setShowLostModal(true)}
                   className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
                 >
                   <XCircle className="w-4 h-4" />
@@ -411,6 +440,40 @@ export function OpportunityDetail() {
                 Edit
               </button>
             )}
+            <div className="relative">
+              <button
+                onClick={() => setShowMoreMenu(!showMoreMenu)}
+                className="p-2 hover:bg-slate-700 rounded-lg"
+              >
+                <MoreVertical className="w-5 h-5 text-slate-400" />
+              </button>
+              {showMoreMenu && (
+                <>
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowMoreMenu(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-slate-700 border border-slate-600 rounded-lg shadow-xl z-20 py-1">
+                    <button
+                      onClick={handleCopyLink}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-slate-300 hover:bg-slate-600"
+                    >
+                      <LinkIcon className="w-4 h-4" />
+                      {copySuccess ? 'Copied!' : 'Copy Link'}
+                    </button>
+                    {canEdit && (
+                      <button
+                        onClick={handleDelete}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-400 hover:bg-slate-600"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Delete Opportunity
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -847,51 +910,52 @@ export function OpportunityDetail() {
         />
       )}
 
-      {showCloseModal && (
+      {showWonModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-xl w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold text-white mb-4">
-              Mark as {closeStatus === 'won' ? 'Won' : 'Lost'}
-            </h2>
-
-            {closeStatus === 'lost' && (
-              <div className="mb-4">
-                <label className="block text-sm text-slate-400 mb-1">
-                  Reason (optional)
-                </label>
-                <textarea
-                  value={lostReason}
-                  onChange={(e) => setLostReason(e.target.value)}
-                  placeholder="Why was this opportunity lost?"
-                  rows={3}
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white resize-none"
-                />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                <Trophy className="w-5 h-5 text-emerald-400" />
               </div>
-            )}
+              <div>
+                <h2 className="text-lg font-semibold text-white">Mark as Won</h2>
+                <p className="text-sm text-slate-400">Congratulations on closing this deal!</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-700/50 rounded-lg mb-4">
+              <div className="text-white font-medium">{contactName}</div>
+              <div className="flex items-center gap-2 text-emerald-400 mt-1">
+                <DollarSign className="w-4 h-4" />
+                {formatCurrency(Number(opportunity.value_amount), opportunity.currency)}
+              </div>
+            </div>
 
             <div className="flex gap-3">
               <button
-                onClick={() => {
-                  setShowCloseModal(false);
-                  setLostReason('');
-                }}
-                className="flex-1 px-4 py-2 bg-slate-700 text-slate-300 rounded hover:bg-slate-600"
+                onClick={() => setShowWonModal(false)}
+                className="flex-1 px-4 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600"
               >
                 Cancel
               </button>
               <button
-                onClick={handleClose}
-                className={`flex-1 px-4 py-2 text-white rounded ${
-                  closeStatus === 'won'
-                    ? 'bg-emerald-600 hover:bg-emerald-700'
-                    : 'bg-red-600 hover:bg-red-700'
-                }`}
+                onClick={handleMarkWon}
+                className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-2"
               >
-                Confirm {closeStatus === 'won' ? 'Won' : 'Lost'}
+                <Trophy className="w-4 h-4" />
+                Confirm Won
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {showLostModal && (
+        <CloseLostModal
+          opportunity={opportunity}
+          onClose={() => setShowLostModal(false)}
+          onConfirm={handleMarkLost}
+        />
       )}
 
       {showCreateInvoice && opportunity && (
