@@ -111,29 +111,29 @@ export function ConversationFilters({ filters, onChange, onClose }: Conversation
     filters.search;
 
   return (
-    <div className="border-b border-gray-200 bg-gray-50 p-4 space-y-4">
+    <div className="border-b border-slate-700 bg-slate-800/50 p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-gray-900">Filters</h3>
+        <h3 className="text-sm font-medium text-white">Filters</h3>
         <div className="flex items-center gap-2">
           {hasActiveFilters && (
             <button
               onClick={handleClearAll}
-              className="text-xs text-blue-600 hover:text-blue-700"
+              className="text-xs text-cyan-400 hover:text-cyan-300"
             >
               Clear all
             </button>
           )}
           <button
             onClick={onClose}
-            className="p-1 rounded hover:bg-gray-200"
+            className="p-1 rounded hover:bg-slate-700"
           >
-            <X size={16} className="text-gray-500" />
+            <X size={16} className="text-slate-400" />
           </button>
         </div>
       </div>
 
       <div className="relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
         <input
           type="text"
           value={searchQuery}
@@ -141,12 +141,12 @@ export function ConversationFilters({ filters, onChange, onClose }: Conversation
           onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
           onBlur={handleSearchSubmit}
           placeholder="Search contacts..."
-          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full pl-9 pr-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
         />
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-2">Channel</label>
+        <label className="block text-xs font-medium text-slate-400 mb-2">Channel</label>
         <div className="flex flex-wrap gap-2">
           {CHANNELS.map((channel) => {
             const isSelected = filters.channels?.includes(channel.value);
@@ -156,8 +156,8 @@ export function ConversationFilters({ filters, onChange, onClose }: Conversation
                 onClick={() => handleChannelToggle(channel.value)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full border transition-colors ${
                   isSelected
-                    ? 'bg-blue-50 border-blue-200 text-blue-700'
-                    : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                    ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400'
+                    : 'bg-slate-700 border-slate-600 text-slate-300 hover:border-slate-500'
                 }`}
               >
                 {channel.icon}
@@ -169,7 +169,7 @@ export function ConversationFilters({ filters, onChange, onClose }: Conversation
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-2">Status</label>
+        <label className="block text-xs font-medium text-slate-400 mb-2">Status</label>
         <div className="flex flex-wrap gap-2">
           {STATUSES.map((status) => {
             const isSelected = filters.status?.includes(status.value);
@@ -179,8 +179,8 @@ export function ConversationFilters({ filters, onChange, onClose }: Conversation
                 onClick={() => handleStatusToggle(status.value)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full border transition-colors ${
                   isSelected
-                    ? 'bg-blue-50 border-blue-200 text-blue-700'
-                    : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                    ? 'bg-cyan-500/20 border-cyan-500/50 text-cyan-400'
+                    : 'bg-slate-700 border-slate-600 text-slate-300 hover:border-slate-500'
                 }`}
               >
                 <span className={`w-2 h-2 rounded-full ${status.color}`} />
@@ -192,11 +192,11 @@ export function ConversationFilters({ filters, onChange, onClose }: Conversation
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-2">Assigned to</label>
+        <label className="block text-xs font-medium text-slate-400 mb-2">Assigned to</label>
         <select
           value={filters.assignedUserId || ''}
           onChange={(e) => handleAssignedUserChange(e.target.value)}
-          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
         >
           <option value="">All users</option>
           <option value="unassigned">Unassigned</option>
@@ -210,11 +210,11 @@ export function ConversationFilters({ filters, onChange, onClose }: Conversation
 
       {departments.length > 1 && (
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-2">Department</label>
+          <label className="block text-xs font-medium text-slate-400 mb-2">Department</label>
           <select
             value={filters.departmentId || ''}
             onChange={(e) => handleDepartmentChange(e.target.value)}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
           >
             <option value="">All departments</option>
             {departments.map((dept) => (

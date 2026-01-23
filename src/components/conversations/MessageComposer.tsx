@@ -65,8 +65,8 @@ export function MessageComposer({
 
   if (disabled) {
     return (
-      <div className="p-4 border-t border-gray-200 bg-gray-50">
-        <div className="text-center text-gray-500 text-sm py-2">
+      <div className="p-4 border-t border-slate-700 bg-slate-800/50">
+        <div className="text-center text-slate-400 text-sm py-2">
           This conversation is closed. Reopen it to send messages.
         </div>
       </div>
@@ -75,8 +75,8 @@ export function MessageComposer({
 
   if (availableChannels.length === 0) {
     return (
-      <div className="p-4 border-t border-gray-200 bg-gray-50">
-        <div className="text-center text-gray-500 text-sm py-2">
+      <div className="p-4 border-t border-slate-700 bg-slate-800/50">
+        <div className="text-center text-slate-400 text-sm py-2">
           No contact channels available. Add a phone number or email to the contact to send messages.
         </div>
       </div>
@@ -84,7 +84,7 @@ export function MessageComposer({
   }
 
   return (
-    <div className="p-4 border-t border-gray-200 bg-white">
+    <div className="p-4 border-t border-slate-700 bg-slate-800">
       {showSubject && (
         <div className="mb-3">
           <input
@@ -92,7 +92,7 @@ export function MessageComposer({
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
             placeholder="Subject..."
-            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
           />
         </div>
       )}
@@ -101,10 +101,10 @@ export function MessageComposer({
         <div className="relative">
           <button
             onClick={() => setShowChannelMenu(!showChannelMenu)}
-            className="flex items-center gap-2 px-3 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-3 py-2.5 border border-slate-600 rounded-lg hover:bg-slate-700 transition-colors"
           >
             <ChannelIcon channel={selectedChannel} />
-            <ChevronDown size={14} className="text-gray-400" />
+            <ChevronDown size={14} className="text-slate-500" />
           </button>
 
           {canUseAI && contact && (
@@ -124,7 +124,7 @@ export function MessageComposer({
                 className="fixed inset-0 z-10"
                 onClick={() => setShowChannelMenu(false)}
               />
-              <div className="absolute bottom-full left-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg z-20 min-w-[200px]">
+              <div className="absolute bottom-full left-0 mb-2 bg-slate-800 border border-slate-600 rounded-lg shadow-lg z-20 min-w-[200px]">
                 {availableChannels.map((channel) => (
                   <button
                     key={channel.channel}
@@ -132,16 +132,16 @@ export function MessageComposer({
                       onChannelChange(channel.channel);
                       setShowChannelMenu(false);
                     }}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
-                      channel.channel === selectedChannel ? 'bg-blue-50' : ''
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-700 first:rounded-t-lg last:rounded-b-lg ${
+                      channel.channel === selectedChannel ? 'bg-slate-700' : ''
                     }`}
                   >
                     <ChannelIcon channel={channel.channel} />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gray-900 capitalize">
+                      <div className="text-sm font-medium text-white capitalize">
                         {channel.channel}
                       </div>
-                      <div className="text-xs text-gray-500 truncate">
+                      <div className="text-xs text-slate-400 truncate">
                         {channel.identifier}
                       </div>
                     </div>
@@ -160,12 +160,12 @@ export function MessageComposer({
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
             rows={1}
-            className="w-full px-4 py-2.5 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
             style={{ maxHeight: '120px' }}
           />
 
           {smsInfo && body.length > 0 && (
-            <div className="absolute right-3 bottom-2 text-xs text-gray-400">
+            <div className="absolute right-3 bottom-2 text-xs text-slate-500">
               {body.length} / {smsInfo.segments} segment{smsInfo.segments !== 1 ? 's' : ''}
             </div>
           )}
@@ -174,7 +174,7 @@ export function MessageComposer({
         <button
           onClick={handleSubmit}
           disabled={!body.trim() || sending}
-          className="p-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="p-3 bg-cyan-600 text-white rounded-lg hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {sending ? (
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -185,7 +185,7 @@ export function MessageComposer({
       </div>
 
       {selectedChannelConfig && (
-        <div className="mt-2 text-xs text-gray-400">
+        <div className="mt-2 text-xs text-slate-500">
           Sending via {selectedChannel} to {selectedChannelConfig.identifier}
         </div>
       )}
@@ -212,7 +212,7 @@ export function MessageComposer({
 }
 
 function ChannelIcon({ channel }: { channel: MessageChannel }) {
-  const iconClass = "w-5 h-5 text-gray-600";
+  const iconClass = "w-5 h-5 text-slate-400";
 
   switch (channel) {
     case 'sms':

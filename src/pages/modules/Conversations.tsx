@@ -92,17 +92,17 @@ export function Conversations() {
   ).length;
 
   return (
-    <div className="h-[calc(100vh-64px)] flex">
-      <div className="w-80 border-r border-gray-200 flex flex-col bg-white">
-        <div className="p-4 border-b border-gray-200">
+    <div className="h-[calc(100vh-64px)] flex bg-slate-900">
+      <div className="w-80 border-r border-slate-700 flex flex-col bg-slate-800">
+        <div className="p-4 border-b border-slate-700">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-gray-900">Conversations</h2>
+            <h2 className="text-lg font-semibold text-white">Conversations</h2>
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`p-2 rounded-lg transition-colors ${
                 showFilters || activeFilterCount > 0
-                  ? 'bg-blue-100 text-blue-600'
-                  : 'hover:bg-gray-100 text-gray-500'
+                  ? 'bg-cyan-500/20 text-cyan-400'
+                  : 'hover:bg-slate-700 text-slate-400'
               }`}
             >
               <Filter size={18} />
@@ -117,8 +117,8 @@ export function Conversations() {
               onClick={() => handleQuickFilter('all')}
               className={`flex-1 px-3 py-1.5 text-sm rounded-lg transition-colors ${
                 Object.keys(filters).length === 0
-                  ? 'bg-gray-900 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-slate-600 text-white'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
               }`}
             >
               All
@@ -127,8 +127,8 @@ export function Conversations() {
               onClick={() => handleQuickFilter('unread')}
               className={`flex-1 px-3 py-1.5 text-sm rounded-lg transition-colors ${
                 filters.unreadOnly
-                  ? 'bg-gray-900 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-slate-600 text-white'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
               }`}
             >
               Unread
@@ -137,8 +137,8 @@ export function Conversations() {
               onClick={() => handleQuickFilter('mine')}
               className={`flex-1 px-3 py-1.5 text-sm rounded-lg transition-colors ${
                 filters.assignedUserId === user?.id
-                  ? 'bg-gray-900 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-slate-600 text-white'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
               }`}
             >
               Mine
@@ -165,7 +165,7 @@ export function Conversations() {
         />
       </div>
 
-      <div className="flex-1 flex flex-col bg-gray-50">
+      <div className="flex-1 flex flex-col bg-slate-900">
         {selectedConversation ? (
           <MessageThread
             conversation={selectedConversation}
@@ -176,13 +176,13 @@ export function Conversations() {
         ) : (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                <MessageSquare className="w-8 h-8 text-gray-400" />
+              <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
+                <MessageSquare className="w-8 h-8 text-slate-500" />
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-1">
+              <h3 className="text-lg font-medium text-white mb-1">
                 Select a conversation
               </h3>
-              <p className="text-gray-500">
+              <p className="text-slate-400">
                 Choose a conversation from the list to view messages
               </p>
             </div>
@@ -191,7 +191,7 @@ export function Conversations() {
       </div>
 
       {selectedConversation && showContactPanel && (
-        <div className="w-80 border-l border-gray-200 bg-white overflow-y-auto">
+        <div className="w-80 border-l border-slate-700 bg-slate-800 overflow-y-auto">
           <ContactPanel
             conversation={selectedConversation}
             onClose={() => setShowContactPanel(false)}

@@ -122,10 +122,10 @@ export function MessageThread({
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {loading ? (
           <div className="flex items-center justify-center h-full">
-            <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full" />
+            <div className="animate-spin w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full" />
           </div>
         ) : threadItems.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-500">
+          <div className="flex items-center justify-center h-full text-slate-400">
             No messages yet. Start the conversation!
           </div>
         ) : (
@@ -168,9 +168,9 @@ export function MessageThread({
 function DaySeparator({ date }: { date: string }) {
   return (
     <div className="flex items-center gap-4 my-4">
-      <div className="flex-1 h-px bg-gray-200" />
-      <span className="text-xs text-gray-500 font-medium">{date}</span>
-      <div className="flex-1 h-px bg-gray-200" />
+      <div className="flex-1 h-px bg-slate-700" />
+      <span className="text-xs text-slate-500 font-medium">{date}</span>
+      <div className="flex-1 h-px bg-slate-700" />
     </div>
   );
 }
@@ -193,7 +193,7 @@ function SystemEventItem({ event }: { event: InboxEvent }) {
 
   return (
     <div className="flex items-center justify-center my-2">
-      <span className="text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+      <span className="text-xs text-slate-400 bg-slate-700 px-3 py-1 rounded-full">
         {getEventText()} - {formatTime(event.created_at)}
       </span>
     </div>
