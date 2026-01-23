@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Users,
   MessageSquare,
@@ -31,11 +31,18 @@ import {
   BookAppointmentDrawer,
   RunAgentDrawer,
 } from '../components/dashboard';
+import { SystemDashboard } from './SystemDashboard';
 
 export function Dashboard() {
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const mode = searchParams.get('mode');
   const [dateRange, setDateRange] = useState<DateRange>(getDateRangePresets()[1]);
+
+  if (isSuperAdmin && mode === 'system') {
+    return <SystemDashboard />;
+  }
   const [refreshing, setRefreshing] = useState(false);
 
   const [createContactOpen, setCreateContactOpen] = useState(false);
@@ -99,6 +106,19 @@ export function Dashboard() {
           <p className="text-slate-400 mt-1">Here's what's happening today.</p>
         </div>
         <div className="flex items-center gap-3">
+          {isSuperAdmin && (
+            <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg p-1">
+              <button className="px-3 py-1.5 text-sm text-white bg-slate-700 rounded">
+                User Dashboard
+              </button>
+              <button
+                onClick={() => setSearchParams({ mode: 'system' })}
+                className="px-3 py-1.5 text-sm text-slate-400 hover:text-white transition-colors rounded"
+              >
+                System Dashboard
+              </button>
+            </div>
+          )}
           <DateRangeSelector value={dateRange} onChange={setDateRange} />
           <button
             onClick={handleRefresh}
