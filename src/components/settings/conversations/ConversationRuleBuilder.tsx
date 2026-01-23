@@ -41,7 +41,7 @@ import type {
   RuleConditionOperator,
   RuleActionType,
   User,
-  Tag,
+  Tag as TagType,
   Snippet,
   AIAgent,
   Department,
@@ -130,7 +130,7 @@ export function ConversationRuleBuilder({ rule, onClose, onSave }: ConversationR
   const [continueEvaluation, setContinueEvaluation] = useState(rule?.continue_evaluation ?? false);
 
   const [users, setUsers] = useState<User[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]);
+  const [tags, setTags] = useState<TagType[]>([]);
   const [snippets, setSnippets] = useState<Snippet[]>([]);
   const [agents, setAgents] = useState<AIAgent[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
