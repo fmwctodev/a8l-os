@@ -78,6 +78,61 @@ export async function createPipeline(pipeline: {
   return data;
 }
 
+export async function createPipelineWithStages(pipeline: {
+  org_id: string;
+  name: string;
+  department_id?: string | null;
+  stages: { name: string; aging_threshold_days?: number | null }[];
+}): Promise<Pipeline> {
+  const { data: maxSort } = await supabase
+    .from('pipelines')
+    .select('sort_order')
+    .eq('org_id', pipeline.org_id)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: pipelineData, error: pipelineError } = await supabase
+    .from('pipelines')
+    .insert({
+      org_id: pipeline.org_id,
+      name: pipeline.name,
+      department_id: pipeline.department_id || null,
+      sort_order: (maxSort?.sort_order ?? -1) + 1
+    })
+    .select()
+    .single();
+
+  if (pipelineError) throw pipelineError;
+
+  if (pipeline.stages.length > 0) {
+    const stagesToInsert = pipeline.stages.map((stage, index) => ({
+      org_id: pipeline.org_id,
+      pipeline_id: pipelineData.id,
+      name: stage.name,
+      sort_order: index,
+      aging_threshold_days: stage.aging_threshold_days || null
+    }));
+
+    const { data: stagesData, error: stagesError } = await supabase
+      .from('pipeline_stages')
+      .insert(stagesToInsert)
+      .select();
+
+    if (stagesError) {
+      await supabase.from('pipelines').delete().eq('id', pipelineData.id);
+      throw stagesError;
+    }
+
+    return {
+      ...pipelineData,
+      stages: stagesData
+    };
+  }
+
+  return { ...pipelineData, stages: [] };
+}
+
 export async function updatePipeline(id: string, updates: {
   name?: string;
   department_id?: string | null;
