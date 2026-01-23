@@ -118,11 +118,11 @@ const settingsNavItems: SettingsNavItem[] = [
     requiresPermission: 'settings.manage',
   },
   {
-    name: 'Branding',
-    path: '/settings/branding',
+    name: 'Brandboard',
+    path: '/settings/brandboard',
     icon: Palette,
-    implemented: false,
-    requiresPermission: 'settings.manage',
+    implemented: true,
+    requiresPermission: 'brandboard.view',
   },
   {
     name: 'Domain',

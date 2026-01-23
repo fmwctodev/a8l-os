@@ -122,7 +122,8 @@ export type PermissionKey =
   | 'phone.routing.manage' | 'phone.test.run' | 'phone.compliance.manage'
   | 'custom_fields.view' | 'custom_fields.manage' | 'custom_fields.groups.manage'
   | 'integrations.view' | 'integrations.manage' | 'integrations.manage_user'
-  | 'integrations.webhooks.manage' | 'integrations.logs.view';
+  | 'integrations.webhooks.manage' | 'integrations.logs.view'
+  | 'brandboard.view' | 'brandboard.manage' | 'brandboard.activate';
 
 export interface InviteStaffInput {
   first_name: string;
@@ -3292,3 +3293,248 @@ export const WEBHOOK_EVENT_LABELS: Record<WebhookEventType, string> = {
   survey_submitted: 'Survey Submitted',
   score_updated: 'Score Updated',
 };
+
+export type BrandLogoSource = 'drive' | 'url' | 'upload';
+export type BrandLogoLabel = 'primary' | 'secondary' | 'icon' | 'light' | 'dark';
+export type BrandLogoVariant = 'light' | 'dark';
+export type BrandColorKey = 'primary' | 'secondary' | 'accent' | 'background' | 'text';
+export type ToneSliderKey = 'formality' | 'friendliness' | 'energy' | 'confidence';
+export type BrandUsageEntityType = 'ai_agent' | 'email_template' | 'proposal' | 'invoice' | 'document' | 'social_post';
+
+export interface BrandLogo {
+  source_type: BrandLogoSource;
+  drive_file_id?: string;
+  url?: string;
+  storage_path?: string;
+  label: BrandLogoLabel;
+  variant?: BrandLogoVariant;
+}
+
+export interface BrandColor {
+  hex: string;
+  name?: string;
+}
+
+export interface BrandFont {
+  name: string;
+  source?: 'google' | 'system' | 'custom';
+}
+
+export interface BrandKitColors {
+  primary?: BrandColor;
+  secondary?: BrandColor;
+  accent?: BrandColor;
+  background?: BrandColor;
+  text?: BrandColor;
+}
+
+export interface BrandKitFonts {
+  primary?: BrandFont;
+  secondary?: BrandFont;
+}
+
+export interface BrandKit {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string | null;
+  active: boolean;
+  archived_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by_user?: User | null;
+  latest_version?: BrandKitVersion | null;
+}
+
+export interface BrandKitVersion {
+  id: string;
+  brand_kit_id: string;
+  version_number: number;
+  logos: BrandLogo[];
+  colors: BrandKitColors;
+  fonts: BrandKitFonts;
+  imagery_refs: string[];
+  created_by: string | null;
+  created_at: string;
+  created_by_user?: User | null;
+}
+
+export interface BrandKitWithVersion extends BrandKit {
+  latest_version: BrandKitVersion;
+}
+
+export interface ToneSettings {
+  formality: number;
+  friendliness: number;
+  energy: number;
+  confidence: number;
+}
+
+export interface BrandVoiceExamples {
+  email?: string;
+  sms?: string;
+  longform?: string;
+  social?: string;
+}
+
+export interface BrandVoice {
+  id: string;
+  org_id: string;
+  name: string;
+  summary: string | null;
+  active: boolean;
+  archived_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by_user?: User | null;
+  latest_version?: BrandVoiceVersion | null;
+}
+
+export interface BrandVoiceVersion {
+  id: string;
+  brand_voice_id: string;
+  version_number: number;
+  tone_settings: ToneSettings;
+  dos: string[];
+  donts: string[];
+  vocabulary_preferred: string[];
+  vocabulary_prohibited: string[];
+  formatting_rules: string | null;
+  examples: BrandVoiceExamples;
+  ai_prompt_template: string | null;
+  ai_system_prompt: string | null;
+  created_by: string | null;
+  created_at: string;
+  created_by_user?: User | null;
+}
+
+export interface BrandVoiceWithVersion extends BrandVoice {
+  latest_version: BrandVoiceVersion;
+}
+
+export interface BrandUsage {
+  id: string;
+  org_id: string;
+  brand_type: 'kit' | 'voice';
+  brand_id: string;
+  entity_type: BrandUsageEntityType;
+  entity_id: string;
+  entity_name: string | null;
+  last_used_at: string;
+  created_at: string;
+}
+
+export interface BrandUsageStats {
+  kit_usages: number;
+  voice_usages: number;
+  ai_agents: number;
+  email_templates: number;
+  proposals: number;
+  invoices: number;
+  documents: number;
+  social_posts: number;
+}
+
+export interface CreateBrandKitInput {
+  name: string;
+  description?: string;
+  logos?: BrandLogo[];
+  colors?: BrandKitColors;
+  fonts?: BrandKitFonts;
+  imagery_refs?: string[];
+}
+
+export interface UpdateBrandKitInput {
+  name?: string;
+  description?: string;
+  logos?: BrandLogo[];
+  colors?: BrandKitColors;
+  fonts?: BrandKitFonts;
+  imagery_refs?: string[];
+}
+
+export interface CreateBrandVoiceInput {
+  name: string;
+  summary?: string;
+  tone_settings?: ToneSettings;
+  dos?: string[];
+  donts?: string[];
+  vocabulary_preferred?: string[];
+  vocabulary_prohibited?: string[];
+  formatting_rules?: string;
+  examples?: BrandVoiceExamples;
+  ai_prompt_template?: string;
+}
+
+export interface UpdateBrandVoiceInput {
+  name?: string;
+  summary?: string;
+  tone_settings?: ToneSettings;
+  dos?: string[];
+  donts?: string[];
+  vocabulary_preferred?: string[];
+  vocabulary_prohibited?: string[];
+  formatting_rules?: string;
+  examples?: BrandVoiceExamples;
+  ai_prompt_template?: string;
+}
+
+export interface BrandKitFilters {
+  search?: string;
+  active?: boolean;
+  includeArchived?: boolean;
+}
+
+export interface BrandVoiceFilters {
+  search?: string;
+  active?: boolean;
+  includeArchived?: boolean;
+}
+
+export interface BrandUsageFilters {
+  brandType?: 'kit' | 'voice';
+  brandId?: string;
+  entityType?: BrandUsageEntityType;
+}
+
+export const TONE_SLIDER_LABELS: Record<ToneSliderKey, { low: string; high: string }> = {
+  formality: { low: 'Casual', high: 'Formal' },
+  friendliness: { low: 'Direct', high: 'Warm' },
+  energy: { low: 'Calm', high: 'Energetic' },
+  confidence: { low: 'Humble', high: 'Assertive' },
+};
+
+export const BRAND_USAGE_ENTITY_LABELS: Record<BrandUsageEntityType, string> = {
+  ai_agent: 'AI Agent',
+  email_template: 'Email Template',
+  proposal: 'Proposal',
+  invoice: 'Invoice',
+  document: 'Document',
+  social_post: 'Social Post',
+};
+
+export const DEFAULT_AI_PROMPT_TEMPLATE = `You are an AI assistant representing {{company_name}}.
+
+COMMUNICATION STYLE:
+- Formality Level: {{formality_description}}
+- Tone: {{tone_description}}
+- Energy: {{energy_description}}
+- Confidence: {{confidence_description}}
+
+WRITING GUIDELINES:
+DO:
+{{dos_list}}
+
+DO NOT:
+{{donts_list}}
+
+VOCABULARY:
+Preferred phrases: {{preferred_phrases}}
+Avoid these phrases: {{prohibited_phrases}}
+
+FORMATTING:
+{{formatting_rules}}
+
+When communicating, ensure all messages reflect our brand voice. Be {{tone_adjectives}} while maintaining {{formality_adjective}} language.`;

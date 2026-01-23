@@ -47,8 +47,9 @@ import { CustomFieldsSettingsPage } from './pages/settings/CustomFieldsSettingsP
 import { SecretsSettingsPage } from './pages/settings/SecretsSettingsPage';
 import ScoringSettingsPage from './pages/settings/ScoringSettingsPage';
 import { IntegrationsSettingsPage } from './pages/settings/IntegrationsSettingsPage';
+import { BrandboardSettingsPage } from './pages/settings/BrandboardSettingsPage';
 import { SettingsPlaceholder } from './pages/settings/SettingsPlaceholder';
-import { Bell, Shield, CreditCard, Palette, Globe } from 'lucide-react';
+import { Bell, Shield, CreditCard, Globe } from 'lucide-react';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
 import { BookingPage } from './pages/public/BookingPage';
 import { PublicFormPage } from './pages/public/PublicFormPage';
@@ -430,14 +431,10 @@ function App() {
                 }
               />
               <Route
-                path="branding"
+                path="brandboard"
                 element={
-                  <ProtectedRoute permission="settings.manage">
-                    <SettingsPlaceholder
-                      title="Branding"
-                      description="Customize your organization's branding and appearance"
-                      icon={Palette}
-                    />
+                  <ProtectedRoute permission="brandboard.view" featureFlag="brandboard">
+                    <BrandboardSettingsPage />
                   </ProtectedRoute>
                 }
               />
