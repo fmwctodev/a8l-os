@@ -273,18 +273,27 @@ export async function getContactChannels(
     channels.push({ channel: 'email', identifier: contact.email });
   }
 
-  const { data: webchatSession } = await supabase
-    .from('webchat_sessions')
-    .select('id')
-    .eq('organization_id', contact.organization_id)
-    .or(`visitor_email.ilike.${contact.email},conversation_id.in.(
-      select id from conversations where contact_id = '${contact.id}'
-    )`)
-    .limit(1)
-    .maybeSingle();
+  try {
+    const { data: conversations } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('contact_id', contact.id)
+      .limit(10);
 
-  if (webchatSession) {
-    channels.push({ channel: 'webchat', identifier: contact.id });
+    if (conversations && conversations.length > 0) {
+      const conversationIds = conversations.map(c => c.id);
+      const { data: webchatSession } = await supabase
+        .from('webchat_sessions')
+        .select('id')
+        .in('conversation_id', conversationIds)
+        .limit(1)
+        .maybeSingle();
+
+      if (webchatSession) {
+        channels.push({ channel: 'webchat', identifier: contact.id });
+      }
+    }
+  } catch {
   }
 
   return channels;
