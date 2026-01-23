@@ -101,6 +101,8 @@ export type PermissionKey =
   | 'invoices.create' | 'invoices.send' | 'invoices.void'
   | 'products.manage'
   | 'ai_agents.view' | 'ai_agents.run' | 'ai_agents.manage' | 'ai_agents.memory.reset'
+  | 'ai.settings.view' | 'ai.settings.manage' | 'ai.models.manage' | 'ai.voices.manage'
+  | 'ai.knowledge.manage' | 'ai.prompts.manage'
   | 'marketing.view' | 'marketing.manage'
   | 'marketing.forms.view' | 'marketing.forms.manage' | 'marketing.forms.publish'
   | 'marketing.surveys.view' | 'marketing.surveys.manage' | 'marketing.surveys.publish'
@@ -2109,3 +2111,482 @@ export interface DriveConnectionStatus {
   tokenExpired: boolean;
   lastSyncAt: string | null;
 }
+
+export type LLMProviderType = 'openai' | 'anthropic' | 'google' | 'custom';
+
+export interface LLMProvider {
+  id: string;
+  org_id: string;
+  provider: LLMProviderType;
+  api_key_encrypted: string;
+  base_url: string | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LLMModel {
+  id: string;
+  org_id: string;
+  provider_id: string;
+  model_key: string;
+  display_name: string;
+  enabled: boolean;
+  is_default: boolean;
+  context_window: number | null;
+  metadata: {
+    cost_per_1k_input?: number;
+    cost_per_1k_output?: number;
+    capabilities?: string[];
+  };
+  created_at: string;
+  updated_at: string;
+  provider?: LLMProvider;
+}
+
+export interface ElevenLabsConnection {
+  id: string;
+  org_id: string;
+  api_key_encrypted: string;
+  enabled: boolean;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ElevenLabsVoiceMetadata {
+  accent?: string;
+  age?: string;
+  gender?: string;
+  use_case?: string;
+  description?: string;
+  preview_url?: string;
+  labels?: Record<string, string>;
+}
+
+export interface ElevenLabsVoice {
+  id: string;
+  org_id: string;
+  voice_id: string;
+  voice_name: string;
+  enabled: boolean;
+  is_default: boolean;
+  metadata: ElevenLabsVoiceMetadata;
+  created_at: string;
+  updated_at: string;
+}
+
+export type KnowledgeStatus = 'active' | 'inactive';
+
+export interface KnowledgeCollection {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string | null;
+  status: KnowledgeStatus;
+  apply_to_all_agents: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by_user?: User | null;
+  latest_version?: KnowledgeVersion | null;
+  agent_count?: number;
+}
+
+export interface KnowledgeVersion {
+  id: string;
+  collection_id: string;
+  version_number: number;
+  body_text: string | null;
+  drive_file_ids: string[] | null;
+  created_by: string | null;
+  created_at: string;
+  created_by_user?: User | null;
+}
+
+export interface KnowledgeEmbedding {
+  id: string;
+  collection_id: string;
+  version_id: string;
+  chunk_index: number;
+  chunk_text: string;
+  created_at: string;
+}
+
+export interface KnowledgeSearchResult {
+  collection_id: string;
+  collection_name: string;
+  chunk_text: string;
+  similarity: number;
+}
+
+export type PromptStatus = 'active' | 'inactive';
+export type PromptCategory =
+  | 'lead_qualification'
+  | 'appointment_booking'
+  | 'follow_up'
+  | 'objection_handling'
+  | 'internal_ops'
+  | 'custom';
+
+export interface PromptTemplate {
+  id: string;
+  org_id: string;
+  name: string;
+  category: PromptCategory;
+  status: PromptStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by_user?: User | null;
+  latest_version?: PromptTemplateVersion | null;
+  agent_count?: number;
+}
+
+export interface PromptTemplateVersion {
+  id: string;
+  template_id: string;
+  version_number: number;
+  body: string;
+  variables: string[];
+  created_by: string | null;
+  created_at: string;
+  created_by_user?: User | null;
+}
+
+export interface AgentKnowledgeLink {
+  agent_id: string;
+  collection_id: string;
+  created_at: string;
+  collection?: KnowledgeCollection;
+}
+
+export interface AgentPromptLink {
+  agent_id: string;
+  template_id: string;
+  sort_order: number;
+  created_at: string;
+  template?: PromptTemplate;
+}
+
+export interface AIAgentSettingsDefaults {
+  org_id: string;
+  default_model_id: string | null;
+  default_allowed_tools: AIAgentToolName[];
+  require_human_approval_default: boolean;
+  max_outbound_per_run_default: number;
+  created_at: string;
+  updated_at: string;
+  default_model?: LLMModel | null;
+}
+
+export interface AIAgentWithSettings extends AIAgent {
+  model_id: string | null;
+  require_human_approval: boolean;
+  max_outbound_per_run: number;
+  enable_memory: boolean;
+  model?: LLMModel | null;
+  knowledge_links?: AgentKnowledgeLink[];
+  prompt_links?: AgentPromptLink[];
+}
+
+export interface LLMProviderFilters {
+  enabled?: boolean;
+}
+
+export interface LLMModelFilters {
+  providerId?: string;
+  enabled?: boolean;
+  search?: string;
+}
+
+export interface KnowledgeCollectionFilters {
+  status?: KnowledgeStatus;
+  applyToAllAgents?: boolean;
+  search?: string;
+}
+
+export interface PromptTemplateFilters {
+  status?: PromptStatus;
+  category?: PromptCategory;
+  search?: string;
+}
+
+export interface CreateLLMProviderInput {
+  provider: LLMProviderType;
+  api_key: string;
+  base_url?: string;
+  enabled?: boolean;
+}
+
+export interface UpdateLLMProviderInput {
+  api_key?: string;
+  base_url?: string;
+  enabled?: boolean;
+}
+
+export interface CreateLLMModelInput {
+  provider_id: string;
+  model_key: string;
+  display_name: string;
+  enabled?: boolean;
+  is_default?: boolean;
+  context_window?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateLLMModelInput {
+  display_name?: string;
+  enabled?: boolean;
+  is_default?: boolean;
+  context_window?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CreateKnowledgeCollectionInput {
+  name: string;
+  description?: string;
+  status?: KnowledgeStatus;
+  apply_to_all_agents?: boolean;
+  body_text?: string;
+  drive_file_ids?: string[];
+}
+
+export interface UpdateKnowledgeCollectionInput {
+  name?: string;
+  description?: string;
+  status?: KnowledgeStatus;
+  apply_to_all_agents?: boolean;
+}
+
+export interface CreateKnowledgeVersionInput {
+  body_text?: string;
+  drive_file_ids?: string[];
+}
+
+export interface CreatePromptTemplateInput {
+  name: string;
+  category: PromptCategory;
+  status?: PromptStatus;
+  body: string;
+}
+
+export interface UpdatePromptTemplateInput {
+  name?: string;
+  category?: PromptCategory;
+  status?: PromptStatus;
+}
+
+export interface CreatePromptVersionInput {
+  body: string;
+}
+
+export interface UpdateAIAgentSettingsDefaultsInput {
+  default_model_id?: string | null;
+  default_allowed_tools?: AIAgentToolName[];
+  require_human_approval_default?: boolean;
+  max_outbound_per_run_default?: number;
+}
+
+export interface CreateAIAgentInput {
+  name: string;
+  description?: string;
+  system_prompt: string;
+  allowed_tools?: AIAgentToolName[];
+  allowed_channels?: AIAgentChannel[];
+  temperature?: number;
+  max_tokens?: number;
+  enabled?: boolean;
+  model_id?: string;
+  require_human_approval?: boolean;
+  max_outbound_per_run?: number;
+  enable_memory?: boolean;
+  knowledge_collection_ids?: string[];
+  prompt_template_ids?: string[];
+}
+
+export interface UpdateAIAgentInput {
+  name?: string;
+  description?: string;
+  system_prompt?: string;
+  allowed_tools?: AIAgentToolName[];
+  allowed_channels?: AIAgentChannel[];
+  temperature?: number;
+  max_tokens?: number;
+  enabled?: boolean;
+  model_id?: string | null;
+  require_human_approval?: boolean;
+  max_outbound_per_run?: number;
+  enable_memory?: boolean;
+  knowledge_collection_ids?: string[];
+  prompt_template_ids?: string[];
+}
+
+export interface AIToolDefinition {
+  name: AIAgentToolName;
+  displayName: string;
+  description: string;
+  category: 'read' | 'write' | 'calendar' | 'communication';
+  parameters: AIToolParameter[];
+}
+
+export interface AIToolParameter {
+  name: string;
+  type: 'string' | 'number' | 'boolean' | 'object' | 'array';
+  description: string;
+  required: boolean;
+}
+
+export const AI_TOOL_DEFINITIONS: AIToolDefinition[] = [
+  {
+    name: 'get_contact',
+    displayName: 'Get Contact Info',
+    description: 'Retrieve contact details including name, email, phone, and custom fields',
+    category: 'read',
+    parameters: [
+      { name: 'contact_id', type: 'string', description: 'The contact ID', required: true }
+    ]
+  },
+  {
+    name: 'get_timeline',
+    displayName: 'Get Contact Timeline',
+    description: 'Retrieve the activity timeline for a contact',
+    category: 'read',
+    parameters: [
+      { name: 'contact_id', type: 'string', description: 'The contact ID', required: true },
+      { name: 'limit', type: 'number', description: 'Max number of events', required: false }
+    ]
+  },
+  {
+    name: 'get_conversation_history',
+    displayName: 'Get Conversation History',
+    description: 'Retrieve message history from conversations with a contact',
+    category: 'read',
+    parameters: [
+      { name: 'contact_id', type: 'string', description: 'The contact ID', required: true },
+      { name: 'limit', type: 'number', description: 'Max number of messages', required: false }
+    ]
+  },
+  {
+    name: 'get_appointment_history',
+    displayName: 'Get Appointment History',
+    description: 'Retrieve past and upcoming appointments for a contact',
+    category: 'read',
+    parameters: [
+      { name: 'contact_id', type: 'string', description: 'The contact ID', required: true }
+    ]
+  },
+  {
+    name: 'add_note',
+    displayName: 'Add Note',
+    description: 'Add a note to a contact record',
+    category: 'write',
+    parameters: [
+      { name: 'contact_id', type: 'string', description: 'The contact ID', required: true },
+      { name: 'content', type: 'string', description: 'The note content', required: true }
+    ]
+  },
+  {
+    name: 'update_field',
+    displayName: 'Update Contact Field',
+    description: 'Update a field on the contact record',
+    category: 'write',
+    parameters: [
+      { name: 'contact_id', type: 'string', description: 'The contact ID', required: true },
+      { name: 'field', type: 'string', description: 'Field name to update', required: true },
+      { name: 'value', type: 'string', description: 'New value', required: true }
+    ]
+  },
+  {
+    name: 'add_tag',
+    displayName: 'Add Tag',
+    description: 'Add a tag to a contact',
+    category: 'write',
+    parameters: [
+      { name: 'contact_id', type: 'string', description: 'The contact ID', required: true },
+      { name: 'tag_id', type: 'string', description: 'The tag ID to add', required: true }
+    ]
+  },
+  {
+    name: 'remove_tag',
+    displayName: 'Remove Tag',
+    description: 'Remove a tag from a contact',
+    category: 'write',
+    parameters: [
+      { name: 'contact_id', type: 'string', description: 'The contact ID', required: true },
+      { name: 'tag_id', type: 'string', description: 'The tag ID to remove', required: true }
+    ]
+  },
+  {
+    name: 'assign_owner',
+    displayName: 'Assign Owner',
+    description: 'Assign a user as the owner of a contact',
+    category: 'write',
+    parameters: [
+      { name: 'contact_id', type: 'string', description: 'The contact ID', required: true },
+      { name: 'user_id', type: 'string', description: 'The user ID to assign', required: true }
+    ]
+  },
+  {
+    name: 'create_appointment',
+    displayName: 'Create Appointment',
+    description: 'Schedule an appointment with a contact',
+    category: 'calendar',
+    parameters: [
+      { name: 'contact_id', type: 'string', description: 'The contact ID', required: true },
+      { name: 'calendar_id', type: 'string', description: 'The calendar ID', required: true },
+      { name: 'appointment_type_id', type: 'string', description: 'The appointment type', required: true },
+      { name: 'start_time', type: 'string', description: 'Start time in ISO format', required: true }
+    ]
+  },
+  {
+    name: 'send_sms',
+    displayName: 'Send SMS',
+    description: 'Send an SMS message to a contact',
+    category: 'communication',
+    parameters: [
+      { name: 'contact_id', type: 'string', description: 'The contact ID', required: true },
+      { name: 'body', type: 'string', description: 'Message content', required: true }
+    ]
+  },
+  {
+    name: 'send_email',
+    displayName: 'Send Email',
+    description: 'Send an email to a contact',
+    category: 'communication',
+    parameters: [
+      { name: 'contact_id', type: 'string', description: 'The contact ID', required: true },
+      { name: 'subject', type: 'string', description: 'Email subject', required: true },
+      { name: 'body', type: 'string', description: 'Email body', required: true }
+    ]
+  }
+];
+
+export const PROMPT_CATEGORY_LABELS: Record<PromptCategory, string> = {
+  lead_qualification: 'Lead Qualification',
+  appointment_booking: 'Appointment Booking',
+  follow_up: 'Follow-Up',
+  objection_handling: 'Objection Handling',
+  internal_ops: 'Internal Operations',
+  custom: 'Custom'
+};
+
+export const LLM_PROVIDER_LABELS: Record<LLMProviderType, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  google: 'Google AI',
+  custom: 'Custom'
+};
+
+export const COMMON_PROMPT_VARIABLES = [
+  { key: 'contact_name', description: 'Full name of the contact' },
+  { key: 'contact_first_name', description: 'First name of the contact' },
+  { key: 'contact_email', description: 'Email address of the contact' },
+  { key: 'contact_phone', description: 'Phone number of the contact' },
+  { key: 'contact_company', description: 'Company name of the contact' },
+  { key: 'last_message', description: 'Content of the last message' },
+  { key: 'conversation_summary', description: 'Summary of conversation history' },
+  { key: 'agent_name', description: 'Name of the AI agent' },
+  { key: 'current_date', description: 'Current date' },
+  { key: 'current_time', description: 'Current time' }
+];

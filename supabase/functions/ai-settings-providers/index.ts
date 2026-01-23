@@ -1,0 +1,172 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+};
+
+interface RequestPayload {
+  action: "test-connection";
+  org_id: string;
+  provider_id: string;
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
+  try {
+    const payload: RequestPayload = await req.json();
+    const { action, org_id, provider_id } = payload;
+
+    if (!action || !org_id || !provider_id) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Missing required fields" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
+
+    const { data: provider, error: providerError } = await supabaseAdmin
+      .from("llm_providers")
+      .select("*")
+      .eq("id", provider_id)
+      .eq("org_id", org_id)
+      .single();
+
+    if (providerError || !provider) {
+      return new Response(
+        JSON.stringify({ success: false, error: "Provider not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (action === "test-connection") {
+      const result = await testProviderConnection(provider);
+      return new Response(
+        JSON.stringify(result),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({ success: false, error: "Unknown action" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    console.error("Error in ai-settings-providers:", error);
+    return new Response(
+      JSON.stringify({ success: false, error: error instanceof Error ? error.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
+
+interface Provider {
+  provider: string;
+  api_key_encrypted: string;
+  base_url: string | null;
+}
+
+async function testProviderConnection(provider: Provider): Promise<{ success: boolean; error?: string }> {
+  const { provider: providerType, api_key_encrypted: apiKey, base_url: baseUrl } = provider;
+
+  try {
+    switch (providerType) {
+      case "openai":
+        return await testOpenAI(apiKey, baseUrl);
+      case "anthropic":
+        return await testAnthropic(apiKey, baseUrl);
+      case "google":
+        return await testGoogle(apiKey);
+      default:
+        return { success: false, error: `Unknown provider type: ${providerType}` };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Connection test failed",
+    };
+  }
+}
+
+async function testOpenAI(apiKey: string, baseUrl: string | null): Promise<{ success: boolean; error?: string }> {
+  const url = baseUrl ? `${baseUrl}/v1/models` : "https://api.openai.com/v1/models";
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    return {
+      success: false,
+      error: errorData.error?.message || `API returned status ${response.status}`,
+    };
+  }
+
+  return { success: true };
+}
+
+async function testAnthropic(apiKey: string, baseUrl: string | null): Promise<{ success: boolean; error?: string }> {
+  const url = baseUrl ? `${baseUrl}/v1/messages` : "https://api.anthropic.com/v1/messages";
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-3-haiku-20240307",
+      max_tokens: 1,
+      messages: [{ role: "user", content: "test" }],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      return { success: false, error: "Invalid API key" };
+    }
+    return {
+      success: false,
+      error: errorData.error?.message || `API returned status ${response.status}`,
+    };
+  }
+
+  return { success: true };
+}
+
+async function testGoogle(apiKey: string): Promise<{ success: boolean; error?: string }> {
+  const url = `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    return {
+      success: false,
+      error: errorData.error?.message || `API returned status ${response.status}`,
+    };
+  }
+
+  return { success: true };
+}

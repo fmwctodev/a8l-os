@@ -5,6 +5,7 @@ import {
   Building2,
   Users,
   Calendar,
+  Bot,
   Bell,
   Shield,
   CreditCard,
@@ -49,6 +50,13 @@ const settingsNavItems: SettingsNavItem[] = [
     icon: Calendar,
     implemented: true,
     requiresPermission: 'calendars.view',
+  },
+  {
+    name: 'AI Agents',
+    path: '/settings/ai-agents',
+    icon: Bot,
+    implemented: true,
+    requiresPermission: 'ai.settings.view',
   },
   {
     name: 'Notifications',

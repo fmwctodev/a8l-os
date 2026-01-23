@@ -41,6 +41,7 @@ import { MyProfilePage } from './pages/settings/MyProfilePage';
 import { MyStaffPage } from './pages/settings/MyStaffPage';
 import { OrganizationSettingsPage } from './pages/settings/OrganizationSettingsPage';
 import { CalendarsSettingsPage } from './pages/settings/CalendarsSettingsPage';
+import { AIAgentsSettingsPage } from './pages/settings/AIAgentsSettingsPage';
 import { SettingsPlaceholder } from './pages/settings/SettingsPlaceholder';
 import { Bell, Shield, CreditCard, Palette, Globe, Zap } from 'lucide-react';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
@@ -340,6 +341,14 @@ function App() {
                 element={
                   <ProtectedRoute permission="calendars.view" featureFlag="calendars">
                     <CalendarsSettingsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="ai-agents"
+                element={
+                  <ProtectedRoute permission="ai.settings.view" featureFlag="ai_agents">
+                    <AIAgentsSettingsPage />
                   </ProtectedRoute>
                 }
               />
