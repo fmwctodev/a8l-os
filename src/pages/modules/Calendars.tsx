@@ -19,6 +19,7 @@ import {
   Trash2,
   Settings,
   Check,
+  Eye,
 } from 'lucide-react';
 import { CreateCalendarModal } from '../../components/calendars/CreateCalendarModal';
 
@@ -230,6 +231,7 @@ export function Calendars() {
                       key={calendar.id}
                       calendar={calendar}
                       onNavigate={() => navigate(`/calendars/${calendar.id}`)}
+                      onViewCalendar={() => navigate(`/calendars/${calendar.id}/view`)}
                       onDelete={() => handleDelete(calendar.id)}
                       onCopyLink={() => copyBookingLink(calendar)}
                       canManage={canManage}
@@ -254,6 +256,7 @@ export function Calendars() {
                       key={calendar.id}
                       calendar={calendar}
                       onNavigate={() => navigate(`/calendars/${calendar.id}`)}
+                      onViewCalendar={() => navigate(`/calendars/${calendar.id}/view`)}
                       onDelete={() => handleDelete(calendar.id)}
                       onCopyLink={() => copyBookingLink(calendar)}
                       canManage={canManage}
@@ -287,6 +290,7 @@ export function Calendars() {
 interface CalendarCardProps {
   calendar: Calendar;
   onNavigate: () => void;
+  onViewCalendar: () => void;
   onDelete: () => void;
   onCopyLink: () => void;
   canManage: boolean;
@@ -298,6 +302,7 @@ interface CalendarCardProps {
 function CalendarCard({
   calendar,
   onNavigate,
+  onViewCalendar,
   onDelete,
   onCopyLink,
   canManage,
@@ -312,7 +317,7 @@ function CalendarCard({
   return (
     <div
       className="bg-slate-800/50 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors cursor-pointer group"
-      onClick={onNavigate}
+      onClick={onViewCalendar}
     >
       <div className="p-4">
         <div className="flex items-start justify-between mb-3">
@@ -351,6 +356,16 @@ function CalendarCard({
               </button>
               {isMenuOpen && (
                 <div className="absolute right-0 top-8 w-44 bg-slate-800 rounded-lg border border-slate-700 shadow-xl z-10">
+                  <button
+                    onClick={() => {
+                      setMenuOpenId(null);
+                      onViewCalendar();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
+                  >
+                    <Eye className="w-4 h-4" />
+                    View Calendar
+                  </button>
                   <button
                     onClick={() => {
                       setMenuOpenId(null);

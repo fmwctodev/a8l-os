@@ -75,6 +75,70 @@ export async function getAppointments(
   return data || [];
 }
 
+export async function getVisibleAppointments(
+  organizationId: string,
+  currentUser: User,
+  filters: AppointmentFilters = {}
+): Promise<Appointment[]> {
+  const { data: userWithRole } = await supabase
+    .from('users')
+    .select('role:roles(name, hierarchy_level)')
+    .eq('id', currentUser.id)
+    .maybeSingle();
+
+  const roleName = userWithRole?.role?.name?.toLowerCase() || 'user';
+  const isAdmin = roleName === 'superadmin' || roleName === 'admin';
+  const isManager = roleName === 'manager';
+
+  let query = supabase
+    .from('appointments')
+    .select(`
+      *,
+      calendar:calendars(id, name, slug, type, department_id, owner_user_id),
+      appointment_type:appointment_types(id, name, duration_minutes, location_type, location_value),
+      contact:contacts(id, first_name, last_name, email, phone),
+      assigned_user:users!appointments_assigned_user_id_fkey(id, name, email, avatar_url)
+    `)
+    .eq('org_id', organizationId)
+    .order('start_at_utc', { ascending: true });
+
+  if (filters.calendarId) {
+    query = query.eq('calendar_id', filters.calendarId);
+  }
+
+  if (filters.status && filters.status.length > 0) {
+    query = query.in('status', filters.status);
+  }
+
+  if (filters.startDate) {
+    query = query.gte('start_at_utc', filters.startDate);
+  }
+
+  if (filters.endDate) {
+    query = query.lte('start_at_utc', filters.endDate);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  if (!data) return [];
+
+  if (isAdmin) {
+    return data;
+  }
+
+  if (isManager && currentUser.department_id) {
+    return data.filter((apt) => {
+      if (apt.assigned_user_id === currentUser.id) return true;
+      const calendar = apt.calendar as { department_id?: string | null } | null;
+      if (calendar?.department_id === currentUser.department_id) return true;
+      return false;
+    });
+  }
+
+  return data.filter((apt) => apt.assigned_user_id === currentUser.id);
+}
+
 export async function getAppointmentById(id: string): Promise<Appointment | null> {
   const { data, error } = await supabase
     .from('appointments')

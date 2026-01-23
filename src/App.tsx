@@ -52,6 +52,7 @@ import ScoringSettingsPage from './pages/settings/ScoringSettingsPage';
 import { IntegrationsSettingsPage } from './pages/settings/IntegrationsSettingsPage';
 import { BrandboardSettingsPage } from './pages/settings/BrandboardSettingsPage';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
+import { CalendarViewPage } from './pages/modules/CalendarViewPage';
 import { BookingPage } from './pages/public/BookingPage';
 import { PublicFormPage } from './pages/public/PublicFormPage';
 import { PublicSurveyPage } from './pages/public/PublicSurveyPage';
@@ -107,6 +108,14 @@ function App() {
                 element={
                   <ProtectedRoute permission="calendars.view" featureFlag="calendars">
                     <CalendarDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/calendars/:id/view"
+                element={
+                  <ProtectedRoute permission="calendars.view" featureFlag="calendars">
+                    <CalendarViewPage />
                   </ProtectedRoute>
                 }
               />
