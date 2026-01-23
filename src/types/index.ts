@@ -116,7 +116,8 @@ export type PermissionKey =
   | 'staff.view' | 'staff.manage' | 'staff.invite' | 'staff.disable' | 'staff.reset_password'
   | 'departments.manage'
   | 'settings.view' | 'settings.manage'
-  | 'audit.view' | 'audit_logs.view';
+  | 'audit.view' | 'audit_logs.view'
+  | 'email.settings.view' | 'email.settings.manage' | 'email.send.test';
 
 export interface InviteStaffInput {
   first_name: string;
@@ -2590,3 +2591,96 @@ export const COMMON_PROMPT_VARIABLES = [
   { key: 'current_date', description: 'Current date' },
   { key: 'current_time', description: 'Current time' }
 ];
+
+export type EmailProviderStatus = 'connected' | 'disconnected';
+export type EmailDomainStatus = 'pending' | 'verified' | 'failed';
+
+export interface EmailProvider {
+  id: string;
+  org_id: string;
+  provider: string;
+  account_nickname: string | null;
+  status: EmailProviderStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailDomainDnsRecord {
+  type: string;
+  host: string;
+  value: string;
+  valid?: boolean;
+}
+
+export interface EmailDomain {
+  id: string;
+  org_id: string;
+  domain: string;
+  sendgrid_domain_id: string | null;
+  status: EmailDomainStatus;
+  dns_records: EmailDomainDnsRecord[];
+  last_checked_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailFromAddress {
+  id: string;
+  org_id: string;
+  display_name: string;
+  email: string;
+  domain_id: string | null;
+  reply_to: string | null;
+  sendgrid_sender_id: string | null;
+  is_default: boolean;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+  domain?: EmailDomain | null;
+}
+
+export interface EmailUnsubscribeGroup {
+  id: string;
+  org_id: string;
+  sendgrid_group_id: string;
+  name: string;
+  description: string | null;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailDefaults {
+  org_id: string;
+  default_from_address_id: string | null;
+  default_reply_to: string | null;
+  default_unsubscribe_group_id: string | null;
+  track_opens: boolean;
+  track_clicks: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailTestLog {
+  id: string;
+  org_id: string;
+  sent_by: string;
+  to_email: string;
+  from_address_id: string | null;
+  status: 'success' | 'failed';
+  error_message: string | null;
+  sendgrid_message_id: string | null;
+  sent_at: string;
+  from_address?: EmailFromAddress | null;
+  sent_by_user?: User | null;
+}
+
+export interface EmailSetupStatus {
+  isConfigured: boolean;
+  providerConnected: boolean;
+  verifiedDomainsCount: number;
+  activeFromAddressesCount: number;
+  hasDefaultFromAddress: boolean;
+  hasDefaultUnsubscribeGroup: boolean;
+  blockingReasons: string[];
+}

@@ -6,6 +6,7 @@ import {
   Users,
   Calendar,
   Bot,
+  Mail,
   Bell,
   Shield,
   CreditCard,
@@ -57,6 +58,13 @@ const settingsNavItems: SettingsNavItem[] = [
     icon: Bot,
     implemented: true,
     requiresPermission: 'ai.settings.view',
+  },
+  {
+    name: 'Email Services',
+    path: '/settings/email-services',
+    icon: Mail,
+    implemented: true,
+    requiresPermission: 'email.settings.view',
   },
   {
     name: 'Notifications',

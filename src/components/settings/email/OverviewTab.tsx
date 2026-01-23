@@ -1,0 +1,258 @@
+import { useState, useEffect } from 'react';
+import { CheckCircle, XCircle, AlertTriangle, Mail, Globe, AtSign, Send, ArrowRight } from 'lucide-react';
+import { useAuth } from '../../../contexts/AuthContext';
+import { getEmailSetupStatus, getTestEmailLogs } from '../../../services/emailSend';
+import { getProvider } from '../../../services/emailProviders';
+import type { EmailSetupStatus, EmailTestLog } from '../../../types';
+
+interface OverviewTabProps {
+  onNavigate: (tab: 'providers' | 'domains' | 'from-addresses' | 'test') => void;
+}
+
+export function OverviewTab({ onNavigate }: OverviewTabProps) {
+  const { user, hasPermission } = useAuth();
+  const [status, setStatus] = useState<EmailSetupStatus | null>(null);
+  const [providerNickname, setProviderNickname] = useState<string | null>(null);
+  const [lastTestLog, setLastTestLog] = useState<EmailTestLog | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const isAdmin = hasPermission('email.settings.manage');
+  const canTest = hasPermission('email.send.test');
+
+  useEffect(() => {
+    loadData();
+  }, [user?.org_id]);
+
+  const loadData = async () => {
+    if (!user?.org_id) return;
+    try {
+      const [statusData, provider, testLogs] = await Promise.all([
+        getEmailSetupStatus(),
+        getProvider(user.org_id),
+        getTestEmailLogs(user.org_id, 1),
+      ]);
+      setStatus(statusData);
+      setProviderNickname(provider?.account_nickname || null);
+      setLastTestLog(testLogs[0] || null);
+    } catch (error) {
+      console.error('Failed to load email status:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    );
+  }
+
+  if (!status) {
+    return (
+      <div className="text-center py-12 text-gray-500">
+        Unable to load email configuration status
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {!status.isConfigured && (
+        <div className="rounded-lg bg-red-50 border border-red-200 p-4">
+          <div className="flex">
+            <AlertTriangle className="h-5 w-5 text-red-400 mr-3 flex-shrink-0" />
+            <div>
+              <h3 className="text-sm font-medium text-red-800">Email Sending Blocked</h3>
+              <div className="mt-2 text-sm text-red-700">
+                <p>The following issues are preventing email sending:</p>
+                <ul className="list-disc list-inside mt-1 space-y-1">
+                  {status.blockingReasons.map((reason, index) => (
+                    <li key={index}>{reason}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="p-5">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                {status.providerConnected ? (
+                  <CheckCircle className="h-8 w-8 text-green-500" />
+                ) : (
+                  <XCircle className="h-8 w-8 text-red-500" />
+                )}
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Provider</dt>
+                  <dd className="flex items-baseline">
+                    <div className="text-lg font-semibold text-gray-900">
+                      {status.providerConnected ? 'Connected' : 'Not Connected'}
+                    </div>
+                  </dd>
+                  {providerNickname && (
+                    <dd className="text-sm text-gray-500">{providerNickname}</dd>
+                  )}
+                </dl>
+              </div>
+            </div>
+          </div>
+          {isAdmin && !status.providerConnected && (
+            <div className="bg-gray-50 px-5 py-3">
+              <button
+                onClick={() => onNavigate('providers')}
+                className="text-sm font-medium text-blue-600 hover:text-blue-500 flex items-center"
+              >
+                Connect SendGrid <ArrowRight className="ml-1 h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="p-5">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <Globe className={`h-8 w-8 ${status.verifiedDomainsCount > 0 ? 'text-green-500' : 'text-gray-400'}`} />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Verified Domains</dt>
+                  <dd className="text-lg font-semibold text-gray-900">
+                    {status.verifiedDomainsCount}
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+          {isAdmin && status.verifiedDomainsCount === 0 && (
+            <div className="bg-gray-50 px-5 py-3">
+              <button
+                onClick={() => onNavigate('domains')}
+                className="text-sm font-medium text-blue-600 hover:text-blue-500 flex items-center"
+              >
+                Add Domain <ArrowRight className="ml-1 h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="p-5">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <AtSign className={`h-8 w-8 ${status.activeFromAddressesCount > 0 ? 'text-green-500' : 'text-gray-400'}`} />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">From Addresses</dt>
+                  <dd className="text-lg font-semibold text-gray-900">
+                    {status.activeFromAddressesCount}
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+          {isAdmin && status.activeFromAddressesCount === 0 && (
+            <div className="bg-gray-50 px-5 py-3">
+              <button
+                onClick={() => onNavigate('from-addresses')}
+                className="text-sm font-medium text-blue-600 hover:text-blue-500 flex items-center"
+              >
+                Add Address <ArrowRight className="ml-1 h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="p-5">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <Send className={`h-8 w-8 ${status.isConfigured ? 'text-green-500' : 'text-gray-400'}`} />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">Ready to Send</dt>
+                  <dd className="text-lg font-semibold text-gray-900">
+                    {status.isConfigured ? 'Yes' : 'No'}
+                  </dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+          {canTest && status.isConfigured && (
+            <div className="bg-gray-50 px-5 py-3">
+              <button
+                onClick={() => onNavigate('test')}
+                className="text-sm font-medium text-blue-600 hover:text-blue-500 flex items-center"
+              >
+                Send Test <ArrowRight className="ml-1 h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {lastTestLog && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Last Test Email</h3>
+          <div className="flex items-center space-x-4">
+            {lastTestLog.status === 'success' ? (
+              <CheckCircle className="h-5 w-5 text-green-500" />
+            ) : (
+              <XCircle className="h-5 w-5 text-red-500" />
+            )}
+            <div>
+              <p className="text-sm text-gray-900">
+                Sent to <span className="font-medium">{lastTestLog.to_email}</span>
+              </p>
+              <p className="text-sm text-gray-500">
+                {new Date(lastTestLog.sent_at).toLocaleString()}
+                {lastTestLog.status === 'failed' && lastTestLog.error_message && (
+                  <span className="text-red-600 ml-2">- {lastTestLog.error_message}</span>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white shadow rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Email Integration Usage</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Once configured, email sending is used by the following features:
+        </p>
+        <ul className="space-y-3">
+          <li className="flex items-center text-sm text-gray-700">
+            <Mail className="h-5 w-5 mr-3 text-gray-400" />
+            <span><strong>Conversations</strong> - Send emails directly to contacts</span>
+          </li>
+          <li className="flex items-center text-sm text-gray-700">
+            <Mail className="h-5 w-5 mr-3 text-gray-400" />
+            <span><strong>Workflows</strong> - Automated email actions in workflows</span>
+          </li>
+          <li className="flex items-center text-sm text-gray-700">
+            <Mail className="h-5 w-5 mr-3 text-gray-400" />
+            <span><strong>AI Agents</strong> - Send emails via AI agent tools</span>
+          </li>
+          <li className="flex items-center text-sm text-gray-700">
+            <Mail className="h-5 w-5 mr-3 text-gray-400" />
+            <span><strong>Reputation</strong> - Send review request emails</span>
+          </li>
+          <li className="flex items-center text-sm text-gray-700">
+            <Mail className="h-5 w-5 mr-3 text-gray-400" />
+            <span><strong>Reports</strong> - Scheduled report delivery</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  );
+}
