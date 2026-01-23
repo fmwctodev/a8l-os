@@ -53,8 +53,16 @@ export async function getAppointments(
     query = query.eq('calendar_id', filters.calendarId);
   }
 
+  if (filters.calendarIds && filters.calendarIds.length > 0) {
+    query = query.in('calendar_id', filters.calendarIds);
+  }
+
   if (filters.assignedUserId) {
     query = query.eq('assigned_user_id', filters.assignedUserId);
+  }
+
+  if (filters.userIds && filters.userIds.length > 0) {
+    query = query.in('assigned_user_id', filters.userIds);
   }
 
   if (filters.status && filters.status.length > 0) {
@@ -104,6 +112,14 @@ export async function getVisibleAppointments(
 
   if (filters.calendarId) {
     query = query.eq('calendar_id', filters.calendarId);
+  }
+
+  if (filters.calendarIds && filters.calendarIds.length > 0) {
+    query = query.in('calendar_id', filters.calendarIds);
+  }
+
+  if (filters.userIds && filters.userIds.length > 0) {
+    query = query.in('assigned_user_id', filters.userIds);
   }
 
   if (filters.status && filters.status.length > 0) {

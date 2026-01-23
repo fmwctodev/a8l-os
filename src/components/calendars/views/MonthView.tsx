@@ -14,7 +14,7 @@ const MAX_VISIBLE_APPOINTMENTS = 3;
 
 export function MonthView({ date, appointments, onAppointmentClick, onDayClick }: MonthViewProps) {
   const monthGrid = useMemo(() => getMonthGrid(date), [date]);
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   const appointmentsByDay = useMemo(() => {
     const grouped: Record<string, Appointment[]> = {};

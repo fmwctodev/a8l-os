@@ -18,17 +18,21 @@ import { addDays, formatDateString } from '../../../utils/calendarViewUtils';
 
 interface NewAppointmentModalProps {
   calendar: Calendar;
+  calendars?: Calendar[];
   preselectedDate?: Date;
   onClose: () => void;
   onSuccess: () => void;
 }
 
 export function NewAppointmentModal({
-  calendar,
+  calendar: initialCalendar,
+  calendars,
   preselectedDate,
   onClose,
   onSuccess,
 }: NewAppointmentModalProps) {
+  const [selectedCalendarId, setSelectedCalendarId] = useState(initialCalendar.id);
+  const calendar = calendars?.find(c => c.id === selectedCalendarId) || initialCalendar;
   const { user: currentUser } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -103,11 +107,14 @@ export function NewAppointmentModal({
           getContacts(currentUser.organization_id, {}),
         ]);
 
-        setAppointmentTypes(types.filter((t) => t.active));
+        const activeTypes = types.filter((t) => t.active);
+        setAppointmentTypes(activeTypes);
         setContacts(contactsData);
 
-        if (types.length > 0) {
-          setSelectedTypeId(types[0].id);
+        if (activeTypes.length > 0 && !selectedTypeId) {
+          setSelectedTypeId(activeTypes[0].id);
+        } else if (activeTypes.length > 0 && !activeTypes.some(t => t.id === selectedTypeId)) {
+          setSelectedTypeId(activeTypes[0].id);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load data');
@@ -117,7 +124,7 @@ export function NewAppointmentModal({
     };
 
     loadInitialData();
-  }, [calendar.id, currentUser?.organization_id]);
+  }, [calendar.id, currentUser?.organization_id, selectedTypeId]);
 
   useEffect(() => {
     const loadSlots = async () => {
@@ -242,6 +249,30 @@ export function NewAppointmentModal({
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-2 text-red-400 text-sm">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 {error}
+              </div>
+            )}
+
+            {calendars && calendars.length > 1 && (
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Calendar
+                </label>
+                <select
+                  value={selectedCalendarId}
+                  onChange={(e) => {
+                    setSelectedCalendarId(e.target.value);
+                    setSelectedTypeId('');
+                    setSelectedSlot(null);
+                  }}
+                  className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  required
+                >
+                  {calendars.map((cal) => (
+                    <option key={cal.id} value={cal.id}>
+                      {cal.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
 

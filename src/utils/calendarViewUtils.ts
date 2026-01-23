@@ -36,8 +36,8 @@ export function getEndOfDay(date: Date): Date {
 export function getStartOfWeek(date: Date): Date {
   const result = new Date(date);
   const day = result.getDay();
-  const diff = result.getDate() - day;
-  result.setDate(diff);
+  const diff = day === 0 ? -6 : 1 - day;
+  result.setDate(result.getDate() + diff);
   result.setHours(0, 0, 0, 0);
   return result;
 }
@@ -102,7 +102,7 @@ export function generateTimeSlots(startHour: number = 6, endHour: number = 22): 
 export function getWeekDays(date: Date): WeekDay[] {
   const startOfWeek = getStartOfWeek(date);
   const today = new Date();
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   return Array.from({ length: 7 }, (_, i) => {
     const currentDate = addDays(startOfWeek, i);

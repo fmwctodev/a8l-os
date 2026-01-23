@@ -768,12 +768,44 @@ export interface CalendarFilters {
 
 export interface AppointmentFilters {
   calendarId?: string;
+  calendarIds?: string[];
   assignedUserId?: string;
+  userIds?: string[];
   departmentId?: string;
   status?: AppointmentStatus[];
   startDate?: string;
   endDate?: string;
 }
+
+export interface BlockedSlot {
+  id: string;
+  org_id: string;
+  calendar_id: string;
+  user_id: string | null;
+  title: string;
+  start_at_utc: string;
+  end_at_utc: string;
+  all_day: boolean;
+  recurring: boolean;
+  recurrence_rule: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  calendar?: Calendar;
+  user?: User | null;
+  created_by_user?: User | null;
+}
+
+export interface BlockedSlotFilters {
+  calendarId?: string;
+  calendarIds?: string[];
+  userId?: string;
+  userIds?: string[];
+  startDate?: string;
+  endDate?: string;
+}
+
+export type CalendarViewFilter = 'all' | 'appointments' | 'blocked_slots';
 
 export type WorkflowStatus = 'draft' | 'published' | 'archived';
 export type EnrollmentStatus = 'active' | 'completed' | 'stopped' | 'errored';
