@@ -1,5 +1,6 @@
 import { DollarSign, User, Tag } from 'lucide-react';
 import type { Opportunity } from '../../types';
+import { normalizeTags } from '../../utils/tagNormalization';
 
 interface OpportunityCardProps {
   opportunity: Opportunity;
@@ -13,7 +14,7 @@ export function OpportunityCard({ opportunity, onClick, isDragging }: Opportunit
     ? `${contact.first_name} ${contact.last_name}`.trim()
     : 'Unknown Contact';
 
-  const tags = (contact as any)?.tags?.map((t: any) => t.tag).filter(Boolean) || [];
+  const tags = normalizeTags((contact as any)?.tags);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
