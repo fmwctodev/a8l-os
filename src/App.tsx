@@ -17,6 +17,8 @@ import { ContactDetail } from './pages/modules/ContactDetail';
 import { Opportunities } from './pages/modules/Opportunities';
 import { OpportunitiesListPage } from './pages/modules/OpportunitiesListPage';
 import { OpportunityDetail } from './pages/modules/OpportunityDetail';
+import { PipelinesPage } from './pages/modules/PipelinesPage';
+import { OpportunitiesLayout } from './layouts/OpportunitiesLayout';
 import { Payments } from './pages/modules/Payments';
 import { InvoiceDetail } from './pages/modules/InvoiceDetail';
 import { AIAgents } from './pages/modules/AIAgents';
@@ -131,18 +133,14 @@ function App() {
                 path="/opportunities"
                 element={
                   <ProtectedRoute permission="opportunities.view" featureFlag="opportunities">
-                    <Opportunities />
+                    <OpportunitiesLayout />
                   </ProtectedRoute>
                 }
-              />
-              <Route
-                path="/opportunities/list"
-                element={
-                  <ProtectedRoute permission="opportunities.view" featureFlag="opportunities">
-                    <OpportunitiesListPage />
-                  </ProtectedRoute>
-                }
-              />
+              >
+                <Route index element={<Opportunities />} />
+                <Route path="list" element={<OpportunitiesListPage />} />
+                <Route path="pipelines" element={<PipelinesPage />} />
+              </Route>
               <Route
                 path="/opportunities/:id"
                 element={

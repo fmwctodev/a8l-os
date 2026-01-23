@@ -1,0 +1,51 @@
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Target, GitBranch } from 'lucide-react';
+
+const tabs = [
+  { path: '/opportunities', label: 'Opportunities', icon: Target, exact: true },
+  { path: '/opportunities/pipelines', label: 'Pipelines', icon: GitBranch },
+];
+
+export function OpportunitiesLayout() {
+  const location = useLocation();
+
+  const isActiveTab = (path: string, exact?: boolean) => {
+    if (exact) {
+      return location.pathname === path || location.pathname === '/opportunities/list';
+    }
+    return location.pathname.startsWith(path);
+  };
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="flex-none border-b border-slate-700 bg-slate-800/50">
+        <div className="px-6 pt-4">
+          <h1 className="text-xl font-semibold text-white mb-4">Opportunities</h1>
+          <nav className="flex gap-1">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const active = isActiveTab(tab.path, tab.exact);
+              return (
+                <NavLink
+                  key={tab.path}
+                  to={tab.path}
+                  className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
+                    active
+                      ? 'bg-slate-900 text-white border-t border-l border-r border-slate-700'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {tab.label}
+                </NavLink>
+              );
+            })}
+          </nav>
+        </div>
+      </div>
+      <div className="flex-1 overflow-hidden">
+        <Outlet />
+      </div>
+    </div>
+  );
+}
