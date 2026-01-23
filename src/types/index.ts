@@ -123,7 +123,9 @@ export type PermissionKey =
   | 'custom_fields.view' | 'custom_fields.manage' | 'custom_fields.groups.manage'
   | 'integrations.view' | 'integrations.manage' | 'integrations.manage_user'
   | 'integrations.webhooks.manage' | 'integrations.logs.view'
-  | 'brandboard.view' | 'brandboard.manage' | 'brandboard.activate';
+  | 'brandboard.view' | 'brandboard.manage' | 'brandboard.activate'
+  | 'snippets.view' | 'snippets.create' | 'snippets.manage' | 'snippets.system.manage'
+  | 'conversation_rules.view' | 'conversation_rules.manage';
 
 export interface InviteStaffInput {
   first_name: string;
@@ -432,6 +434,142 @@ export interface ConversationFilters {
   assignedUserId?: string | null;
   departmentId?: string;
   unreadOnly?: boolean;
+  search?: string;
+}
+
+export type SnippetScope = 'personal' | 'team' | 'system';
+
+export interface Snippet {
+  id: string;
+  organization_id: string;
+  created_by_user_id: string;
+  name: string;
+  content: string;
+  channel_support: MessageChannel[];
+  scope: SnippetScope;
+  department_id: string | null;
+  is_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by_user?: User;
+  department?: Department | null;
+}
+
+export interface SnippetFilters {
+  scope?: SnippetScope;
+  channel?: MessageChannel;
+  search?: string;
+  departmentId?: string;
+}
+
+export type AIDraftStatus = 'pending' | 'approved' | 'rejected' | 'superseded';
+export type AIDraftTriggerType = 'manual' | 'auto';
+
+export interface AIDraft {
+  id: string;
+  organization_id: string;
+  conversation_id: string;
+  contact_id: string;
+  agent_id: string | null;
+  draft_content: string;
+  draft_channel: MessageChannel;
+  draft_subject: string | null;
+  status: AIDraftStatus;
+  trigger_type: AIDraftTriggerType;
+  triggered_by_rule_id: string | null;
+  context_message_id: string | null;
+  version: number;
+  rejection_reason: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+  updated_at: string;
+  agent?: AIAgent | null;
+  triggered_by_rule?: ConversationRule | null;
+  approved_by_user?: User | null;
+}
+
+export type RuleTriggerType =
+  | 'incoming_message'
+  | 'new_conversation'
+  | 'conversation_reopened'
+  | 'no_reply_timeout'
+  | 'channel_message';
+
+export type RuleConditionOperator =
+  | 'equals'
+  | 'not_equals'
+  | 'contains'
+  | 'not_contains'
+  | 'is_empty'
+  | 'is_not_empty'
+  | 'greater_than'
+  | 'less_than';
+
+export interface RuleCondition {
+  id: string;
+  field: string;
+  operator: RuleConditionOperator;
+  value: string | number | boolean | null;
+}
+
+export type RuleActionType =
+  | 'assign_user'
+  | 'assign_roundrobin'
+  | 'add_tag'
+  | 'remove_tag'
+  | 'close_conversation'
+  | 'send_snippet'
+  | 'generate_ai_draft'
+  | 'notify_user'
+  | 'create_task';
+
+export interface RuleAction {
+  id: string;
+  action_type: RuleActionType;
+  config: Record<string, unknown>;
+}
+
+export interface ConversationRule {
+  id: string;
+  organization_id: string;
+  name: string;
+  trigger_type: RuleTriggerType;
+  conditions: RuleCondition[];
+  actions: RuleAction[];
+  priority: number;
+  cooldown_minutes: number;
+  max_triggers_per_day: number;
+  continue_evaluation: boolean;
+  is_enabled: boolean;
+  last_triggered_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConversationRuleLog {
+  id: string;
+  rule_id: string;
+  conversation_id: string;
+  trigger_time: string;
+  action_results: RuleActionResult[];
+  success: boolean;
+  error_message: string | null;
+  created_at: string;
+  rule?: ConversationRule;
+  conversation?: Conversation;
+}
+
+export interface RuleActionResult {
+  action_type: RuleActionType;
+  success: boolean;
+  result?: unknown;
+  error?: string;
+}
+
+export interface ConversationRuleFilters {
+  triggerType?: RuleTriggerType;
+  isEnabled?: boolean;
   search?: string;
 }
 

@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Phone, Mail, PhoneCall, MessageCircle, ChevronDown, Bot } from 'lucide-react';
+import { Send, Phone, Mail, PhoneCall, MessageCircle, ChevronDown, Bot, FileText } from 'lucide-react';
 import { calculateSMSSegments } from '../../services/channels/twilio';
 import { useAuth } from '../../contexts/AuthContext';
 import { AskAIModal } from './AskAIModal';
+import { SnippetPicker } from './SnippetPicker';
 import type { MessageChannel, Contact, Conversation } from '../../types';
 
 interface MessageComposerProps {
@@ -33,9 +34,11 @@ export function MessageComposer({
   const [subject, setSubject] = useState('');
   const [showChannelMenu, setShowChannelMenu] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
+  const [showSnippetPicker, setShowSnippetPicker] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const canUseAI = hasPermission('ai_agents.run') && isFeatureEnabled('ai_agents');
+  const canUseSnippets = hasPermission('snippets.view') && isFeatureEnabled('snippets');
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -57,6 +60,32 @@ export function MessageComposer({
       e.preventDefault();
       handleSubmit();
     }
+    if (e.key === 'Escape' && showSnippetPicker) {
+      setShowSnippetPicker(false);
+    }
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 's') {
+      e.preventDefault();
+      if (canUseSnippets) {
+        setShowSnippetPicker(true);
+      }
+    }
+  };
+
+  const handleSnippetSelect = (content: string) => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newBody = body.slice(0, start) + content + body.slice(end);
+      setBody(newBody);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + content.length, start + content.length);
+      }, 0);
+    } else {
+      setBody(body + content);
+    }
+    setShowSnippetPicker(false);
   };
 
   const smsInfo = selectedChannel === 'sms' ? calculateSMSSegments(body) : null;
@@ -98,7 +127,7 @@ export function MessageComposer({
       )}
 
       <div className="flex items-end gap-3">
-        <div className="relative">
+        <div className="relative flex items-center gap-1">
           <button
             onClick={() => setShowChannelMenu(!showChannelMenu)}
             className="flex items-center gap-2 px-3 py-2.5 border border-slate-600 rounded-lg hover:bg-slate-700 transition-colors"
@@ -107,15 +136,36 @@ export function MessageComposer({
             <ChevronDown size={14} className="text-slate-500" />
           </button>
 
-          {canUseAI && contact && (
+          {canUseSnippets && (
             <button
-              onClick={() => setShowAIModal(true)}
-              className="absolute -top-10 left-0 flex items-center gap-1 px-2 py-1.5 text-xs bg-gradient-to-r from-cyan-500 to-teal-600 text-white rounded-lg hover:from-cyan-600 hover:to-teal-700 transition-colors"
-              title="Ask AI Assistant"
+              onClick={() => setShowSnippetPicker(!showSnippetPicker)}
+              className="p-2.5 border border-slate-600 rounded-lg hover:bg-slate-700 transition-colors"
+              title="Insert Snippet (Cmd+Shift+S)"
             >
-              <Bot size={14} />
-              Ask AI
+              <FileText size={20} className="text-slate-400" />
             </button>
+          )}
+
+          <div className="absolute -top-10 left-0 flex gap-1">
+            {canUseAI && contact && (
+              <button
+                onClick={() => setShowAIModal(true)}
+                className="flex items-center gap-1 px-2 py-1.5 text-xs bg-gradient-to-r from-cyan-500 to-teal-600 text-white rounded-lg hover:from-cyan-600 hover:to-teal-700 transition-colors"
+                title="Ask AI Assistant"
+              >
+                <Bot size={14} />
+                Ask AI
+              </button>
+            )}
+          </div>
+
+          {showSnippetPicker && (
+            <SnippetPicker
+              channel={selectedChannel}
+              contact={contact}
+              onSelect={handleSnippetSelect}
+              onClose={() => setShowSnippetPicker(false)}
+            />
           )}
 
           {showChannelMenu && (

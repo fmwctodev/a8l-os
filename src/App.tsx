@@ -42,6 +42,7 @@ import { MyProfilePage } from './pages/settings/MyProfilePage';
 import { MyStaffPage } from './pages/settings/MyStaffPage';
 import { OrganizationSettingsPage } from './pages/settings/OrganizationSettingsPage';
 import { CalendarsSettingsPage } from './pages/settings/CalendarsSettingsPage';
+import { ConversationsSettingsPage } from './pages/settings/ConversationsSettingsPage';
 import { AIAgentsSettingsPage } from './pages/settings/AIAgentsSettingsPage';
 import { EmailServicesSettingsPage } from './pages/settings/EmailServicesSettingsPage';
 import PhoneSystemSettingsPage from './pages/settings/PhoneSystemSettingsPage';
@@ -341,6 +342,14 @@ function App() {
                   element={
                     <ProtectedRoute permission="users.view">
                       <MyStaffPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="conversations"
+                  element={
+                    <ProtectedRoute permission="snippets.view" featureFlag="snippets">
+                      <ConversationsSettingsPage />
                     </ProtectedRoute>
                   }
                 />

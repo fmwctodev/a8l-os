@@ -13,6 +13,7 @@ import {
   LayoutList,
   Key,
   Target,
+  MessageSquare,
   LucideIcon,
 } from 'lucide-react';
 
@@ -59,6 +60,12 @@ const settingsNavSections: SettingsNavSection[] = [
   {
     title: 'Communication',
     items: [
+      {
+        name: 'Conversations',
+        path: '/settings/conversations',
+        icon: MessageSquare,
+        requiresPermission: 'snippets.view',
+      },
       {
         name: 'Calendars',
         path: '/settings/calendars',
