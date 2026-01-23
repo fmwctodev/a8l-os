@@ -45,6 +45,7 @@ import { AIAgentsSettingsPage } from './pages/settings/AIAgentsSettingsPage';
 import { EmailServicesSettingsPage } from './pages/settings/EmailServicesSettingsPage';
 import PhoneSystemSettingsPage from './pages/settings/PhoneSystemSettingsPage';
 import { CustomFieldsSettingsPage } from './pages/settings/CustomFieldsSettingsPage';
+import { SecretsSettingsPage } from './pages/settings/SecretsSettingsPage';
 import { SettingsPlaceholder } from './pages/settings/SettingsPlaceholder';
 import { Bell, Shield, CreditCard, Palette, Globe, Zap } from 'lucide-react';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
@@ -376,6 +377,14 @@ function App() {
                 element={
                   <ProtectedRoute permission="custom_fields.view">
                     <CustomFieldsSettingsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="secrets"
+                element={
+                  <ProtectedRoute permission="secrets.view" featureFlag="secrets_management">
+                    <SecretsSettingsPage />
                   </ProtectedRoute>
                 }
               />

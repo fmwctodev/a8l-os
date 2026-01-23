@@ -15,6 +15,7 @@ import {
   Globe,
   Zap,
   LayoutList,
+  Key,
   LucideIcon,
 } from 'lucide-react';
 
@@ -81,6 +82,13 @@ const settingsNavItems: SettingsNavItem[] = [
     icon: LayoutList,
     implemented: true,
     requiresPermission: 'custom_fields.view',
+  },
+  {
+    name: 'API Keys & Secrets',
+    path: '/settings/secrets',
+    icon: Key,
+    implemented: true,
+    requiresPermission: 'secrets.view',
   },
   {
     name: 'Notifications',
