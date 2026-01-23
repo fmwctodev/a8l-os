@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Search, Plus, User as UserIcon } from 'lucide-react';
+import { X, Search, Plus, User as UserIcon, ArrowLeft } from 'lucide-react';
 import type {
   Opportunity,
   Pipeline,
@@ -8,7 +8,7 @@ import type {
   User,
   PipelineCustomField
 } from '../../types';
-import { getContacts } from '../../services/contacts';
+import { getContacts, createContact } from '../../services/contacts';
 import { getUsers } from '../../services/users';
 import * as pipelinesService from '../../services/pipelines';
 import * as opportunitiesService from '../../services/opportunities';
@@ -44,6 +44,14 @@ export function OpportunityModal({
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactSearch, setContactSearch] = useState('');
   const [showContactDropdown, setShowContactDropdown] = useState(false);
+  const [showNewContactForm, setShowNewContactForm] = useState(false);
+  const [creatingContact, setCreatingContact] = useState(false);
+  const [newContactData, setNewContactData] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: ''
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -141,8 +149,8 @@ export function OpportunityModal({
 
   async function searchContacts() {
     try {
-      const result = await getContacts({ search: contactSearch }, 1, 10);
-      setContacts(result.data);
+      const result = await getContacts(orgId, { search: contactSearch });
+      setContacts(result);
     } catch (error) {
       console.error('Failed to search contacts:', error);
     }
@@ -169,6 +177,48 @@ export function OpportunityModal({
     }));
     setContactSearch('');
     setShowContactDropdown(false);
+    setShowNewContactForm(false);
+  }
+
+  function openNewContactForm() {
+    setShowNewContactForm(true);
+    setShowContactDropdown(false);
+    setNewContactData({
+      first_name: contactSearch,
+      last_name: '',
+      email: '',
+      phone: ''
+    });
+  }
+
+  function cancelNewContactForm() {
+    setShowNewContactForm(false);
+    setNewContactData({ first_name: '', last_name: '', email: '', phone: '' });
+  }
+
+  async function handleCreateContact() {
+    if (!newContactData.first_name.trim()) return;
+
+    setCreatingContact(true);
+    try {
+      const newContact = await createContact(
+        orgId,
+        {
+          department_id: currentUser.department_id,
+          owner_id: currentUser.id,
+          first_name: newContactData.first_name.trim(),
+          last_name: newContactData.last_name.trim() || undefined,
+          email: newContactData.email.trim() || null,
+          phone: newContactData.phone.trim() || null
+        },
+        currentUser
+      );
+      selectContact(newContact);
+    } catch (error) {
+      console.error('Failed to create contact:', error);
+    } finally {
+      setCreatingContact(false);
+    }
   }
 
   function handleCustomFieldChange(fieldKey: string, value: unknown) {
@@ -277,6 +327,79 @@ export function OpportunityModal({
                   </button>
                 )}
               </div>
+            ) : showNewContactForm ? (
+              <div className="bg-slate-700 border border-slate-600 rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={cancelNewContactForm}
+                    className="p-1 hover:bg-slate-600 rounded"
+                  >
+                    <ArrowLeft className="w-4 h-4 text-slate-400" />
+                  </button>
+                  <span className="text-sm font-medium text-white">New Contact</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">First Name *</label>
+                    <input
+                      type="text"
+                      value={newContactData.first_name}
+                      onChange={(e) => setNewContactData(prev => ({ ...prev, first_name: e.target.value }))}
+                      placeholder="First name"
+                      className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded text-white text-sm"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Last Name</label>
+                    <input
+                      type="text"
+                      value={newContactData.last_name}
+                      onChange={(e) => setNewContactData(prev => ({ ...prev, last_name: e.target.value }))}
+                      placeholder="Last name"
+                      className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded text-white text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={newContactData.email}
+                    onChange={(e) => setNewContactData(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="email@example.com"
+                    className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    value={newContactData.phone}
+                    onChange={(e) => setNewContactData(prev => ({ ...prev, phone: e.target.value }))}
+                    placeholder="+1 (555) 000-0000"
+                    className="w-full px-3 py-2 bg-slate-600 border border-slate-500 rounded text-white text-sm"
+                  />
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={cancelNewContactForm}
+                    className="flex-1 px-3 py-2 bg-slate-600 text-slate-300 rounded text-sm hover:bg-slate-500"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreateContact}
+                    disabled={creatingContact || !newContactData.first_name.trim()}
+                    className="flex-1 px-3 py-2 bg-cyan-600 text-white rounded text-sm hover:bg-cyan-700 disabled:opacity-50"
+                  >
+                    {creatingContact ? 'Creating...' : 'Create & Select'}
+                  </button>
+                </div>
+              </div>
             ) : (
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -291,8 +414,8 @@ export function OpportunityModal({
                   placeholder="Search contacts..."
                   className="w-full pl-10 pr-4 py-2 bg-slate-700 border border-slate-600 rounded text-white"
                 />
-                {showContactDropdown && contacts.length > 0 && (
-                  <div className="absolute z-20 w-full mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                {showContactDropdown && contactSearch.length >= 2 && (
+                  <div className="absolute z-20 w-full mt-1 bg-slate-700 border border-slate-600 rounded-lg shadow-xl max-h-60 overflow-y-auto">
                     {contacts.map(contact => (
                       <button
                         key={contact.id}
@@ -309,6 +432,19 @@ export function OpportunityModal({
                         </div>
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      onClick={openNewContactForm}
+                      className="w-full px-4 py-3 text-left hover:bg-slate-600 flex items-center gap-3 border-t border-slate-600"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-cyan-600/20 flex items-center justify-center">
+                        <Plus className="w-4 h-4 text-cyan-400" />
+                      </div>
+                      <div>
+                        <div className="text-cyan-400 font-medium">Create new contact</div>
+                        <div className="text-sm text-slate-400">Add "{contactSearch}" as a new contact</div>
+                      </div>
+                    </button>
                   </div>
                 )}
               </div>
