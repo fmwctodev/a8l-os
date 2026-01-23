@@ -28,14 +28,14 @@ export function MessageComposer({
   contact,
   conversation,
 }: MessageComposerProps) {
-  const { hasPermission, hasFeatureAccess } = useAuth();
+  const { hasPermission, isFeatureEnabled } = useAuth();
   const [body, setBody] = useState('');
   const [subject, setSubject] = useState('');
   const [showChannelMenu, setShowChannelMenu] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const canUseAI = hasPermission('ai_agents.run') && hasFeatureAccess('ai_agents');
+  const canUseAI = hasPermission('ai_agents.run') && isFeatureEnabled('ai_agents');
 
   useEffect(() => {
     if (textareaRef.current) {

@@ -29,7 +29,7 @@ interface ContactPanelProps {
 type TabId = 'overview' | 'opportunities' | 'appointments' | 'files' | 'notes';
 
 export function ContactPanel({ conversation, onClose }: ContactPanelProps) {
-  const { hasPermission, hasFeatureAccess } = useAuth();
+  const { hasPermission, isFeatureEnabled } = useAuth();
   const contact = conversation.contact as Contact | undefined;
 
   const [activeTab, setActiveTab] = useState<TabId>('overview');
@@ -39,9 +39,9 @@ export function ContactPanel({ conversation, onClose }: ContactPanelProps) {
   } | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
 
-  const canViewAI = hasPermission('ai_agents.view') && hasFeatureAccess('ai_agents');
-  const canViewOpportunities = hasPermission('opportunities.view') && hasFeatureAccess('opportunities');
-  const canViewCalendars = hasPermission('calendars.view') && hasFeatureAccess('calendars');
+  const canViewAI = hasPermission('ai_agents.view') && isFeatureEnabled('ai_agents');
+  const canViewOpportunities = hasPermission('opportunities.view') && isFeatureEnabled('opportunities');
+  const canViewCalendars = hasPermission('calendars.view') && isFeatureEnabled('calendars');
 
   useEffect(() => {
     async function loadAIInsights() {

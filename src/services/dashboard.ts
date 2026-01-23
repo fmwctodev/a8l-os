@@ -12,7 +12,6 @@ export interface DashboardStats {
 export interface AssignedConversation {
   id: string;
   contact_id: string;
-  channel: string;
   status: string;
   unread_count: number;
   last_message_at: string;
@@ -41,8 +40,8 @@ export interface TaskDue {
 
 export interface UpcomingAppointment {
   id: string;
-  start_time: string;
-  end_time: string;
+  start_at_utc: string;
+  end_at_utc: string;
   status: string;
   contact_id: string;
   calendar_id: string;
@@ -97,16 +96,16 @@ export async function getDashboardStats(
       supabase
         .from('opportunities')
         .select('id', { count: 'exact', head: true })
-        .eq('organization_id', organizationId)
-        .in('status', ['open', 'in_progress']),
+        .eq('org_id', organizationId)
+        .in('status', ['open', 'qualified', 'proposal']),
 
       supabase
         .from('appointments')
-        .select('id, start_time', { count: 'exact' })
-        .eq('organization_id', organizationId)
-        .gte('start_time', now)
+        .select('id, start_at_utc', { count: 'exact' })
+        .eq('org_id', organizationId)
+        .gte('start_at_utc', now)
         .in('status', ['scheduled', 'confirmed'])
-        .order('start_time', { ascending: true })
+        .order('start_at_utc', { ascending: true })
         .limit(1),
     ]);
 
@@ -120,7 +119,7 @@ export async function getDashboardStats(
         unreadConversations: unreadCount,
         activeOpportunities: opportunitiesRes.count || 0,
         upcomingAppointments: appointmentsRes.count || 0,
-        nextAppointmentTime: nextAppointment?.start_time || null,
+        nextAppointmentTime: nextAppointment?.start_at_utc || null,
       },
       error: null,
     };
@@ -139,14 +138,13 @@ export async function getAssignedConversations(
     .select(`
       id,
       contact_id,
-      channel,
       status,
       unread_count,
       last_message_at,
       contact:contacts!conversations_contact_id_fkey(id, first_name, last_name, email, phone)
     `)
     .eq('organization_id', organizationId)
-    .eq('assigned_to', userId)
+    .eq('assigned_user_id', userId)
     .in('status', ['open', 'pending'])
     .order('last_message_at', { ascending: false })
     .limit(limit);
@@ -171,16 +169,19 @@ export async function getUserTasksDue(
       priority,
       status,
       contact_id,
-      contact:contacts!contact_tasks_contact_id_fkey(id, first_name, last_name)
+      contact:contacts!contact_tasks_contact_id_fkey(id, first_name, last_name, organization_id)
     `)
-    .eq('organization_id', organizationId)
-    .eq('assigned_to', userId)
+    .eq('assigned_to_user_id', userId)
     .eq('status', 'pending')
     .order('due_date', { ascending: true })
     .limit(limit);
 
+  const filteredData = (data || []).filter(
+    (task) => (task.contact as { organization_id?: string })?.organization_id === organizationId
+  );
+
   return {
-    data: (data as unknown as TaskDue[]) || [],
+    data: filteredData as unknown as TaskDue[],
     error: error ? new Error(error.message) : null,
   };
 }
@@ -196,8 +197,8 @@ export async function getNextAppointments(
     .from('appointments')
     .select(`
       id,
-      start_time,
-      end_time,
+      start_at_utc,
+      end_at_utc,
       status,
       contact_id,
       calendar_id,
@@ -206,11 +207,11 @@ export async function getNextAppointments(
       calendar:calendars!appointments_calendar_id_fkey(id, name),
       appointment_type:appointment_types!appointments_appointment_type_id_fkey(id, name, color)
     `)
-    .eq('organization_id', organizationId)
-    .eq('assigned_to', userId)
-    .gte('start_time', now)
+    .eq('org_id', organizationId)
+    .eq('assigned_user_id', userId)
+    .gte('start_at_utc', now)
     .in('status', ['scheduled', 'confirmed'])
-    .order('start_time', { ascending: true })
+    .order('start_at_utc', { ascending: true })
     .limit(limit);
 
   return {
@@ -226,26 +227,34 @@ export async function getSystemHealthStatus(
     const [channelsRes, calendarRes, paymentsRes] = await Promise.all([
       supabase
         .from('channel_configurations')
-        .select('id, status')
+        .select('id, is_active')
         .eq('organization_id', organizationId)
         .eq('channel_type', 'sms')
         .maybeSingle(),
 
       supabase
         .from('google_calendar_connections')
-        .select('id, status')
-        .eq('organization_id', organizationId)
+        .select('id')
+        .eq('org_id', organizationId)
         .maybeSingle(),
 
       supabase
         .from('integration_connections')
         .select('id, status')
-        .eq('organization_id', organizationId)
-        .eq('integration_slug', 'quickbooks')
+        .eq('org_id', organizationId)
         .maybeSingle(),
     ]);
 
-    const getStatus = (data: { status?: string } | null): SystemHealthStatus['messaging'] => {
+    const getMessagingStatus = (data: { is_active?: boolean } | null): SystemHealthStatus['messaging'] => {
+      if (!data) return 'disconnected';
+      return data.is_active ? 'connected' : 'disconnected';
+    };
+
+    const getCalendarStatus = (data: { id?: string } | null): SystemHealthStatus['calendar'] => {
+      return data ? 'connected' : 'disconnected';
+    };
+
+    const getPaymentsStatus = (data: { status?: string } | null): SystemHealthStatus['payments'] => {
       if (!data) return 'disconnected';
       if (data.status === 'active' || data.status === 'connected') return 'connected';
       if (data.status === 'error' || data.status === 'failed') return 'degraded';
@@ -254,9 +263,9 @@ export async function getSystemHealthStatus(
 
     return {
       data: {
-        messaging: getStatus(channelsRes.data),
-        calendar: getStatus(calendarRes.data),
-        payments: getStatus(paymentsRes.data),
+        messaging: getMessagingStatus(channelsRes.data),
+        calendar: getCalendarStatus(calendarRes.data),
+        payments: getPaymentsStatus(paymentsRes.data),
       },
       error: null,
     };
