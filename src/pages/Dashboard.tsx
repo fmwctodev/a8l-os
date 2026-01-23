@@ -39,12 +39,7 @@ export function Dashboard() {
   const [searchParams, setSearchParams] = useSearchParams();
   const mode = searchParams.get('mode');
   const [dateRange, setDateRange] = useState<DateRange>(getDateRangePresets()[1]);
-
-  if (isSuperAdmin && mode === 'system') {
-    return <SystemDashboard />;
-  }
   const [refreshing, setRefreshing] = useState(false);
-
   const [createContactOpen, setCreateContactOpen] = useState(false);
   const [composeMessageOpen, setComposeMessageOpen] = useState(false);
   const [createOpportunityOpen, setCreateOpportunityOpen] = useState(false);
@@ -71,6 +66,10 @@ export function Dashboard() {
   const canCreateInvoice = usePermission('invoices.create');
   const canCreateAppointment = usePermission('appointments.create');
   const canRunAgent = usePermission('ai_agents.run');
+
+  if (isSuperAdmin && mode === 'system') {
+    return <SystemDashboard />;
+  }
 
   async function handleRefresh() {
     setRefreshing(true);
