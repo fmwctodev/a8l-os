@@ -120,7 +120,9 @@ export type PermissionKey =
   | 'email.settings.view' | 'email.settings.manage' | 'email.send.test'
   | 'phone.settings.view' | 'phone.settings.manage' | 'phone.numbers.manage'
   | 'phone.routing.manage' | 'phone.test.run' | 'phone.compliance.manage'
-  | 'custom_fields.view' | 'custom_fields.manage' | 'custom_fields.groups.manage';
+  | 'custom_fields.view' | 'custom_fields.manage' | 'custom_fields.groups.manage'
+  | 'integrations.view' | 'integrations.manage' | 'integrations.manage_user'
+  | 'integrations.webhooks.manage' | 'integrations.logs.view';
 
 export interface InviteStaffInput {
   first_name: string;
@@ -3010,4 +3012,283 @@ export const CUSTOM_FIELD_TYPE_LABELS: Record<CustomFieldType, string> = {
   email: 'Email Address',
   url: 'URL',
   file: 'File Upload',
+};
+
+export type IntegrationCategory = 'Advertising' | 'CRM_Data' | 'Calendars' | 'Email' | 'Phone' | 'Payments' | 'Storage' | 'AI_LLM' | 'Other';
+export type IntegrationScope = 'global' | 'user';
+export type IntegrationConnectionType = 'oauth' | 'api_key' | 'webhook';
+export type IntegrationConnectionStatus = 'connected' | 'disconnected' | 'error';
+export type IntegrationHealthStatus = 'healthy' | 'degraded' | 'down' | 'unknown';
+export type IntegrationLogAction = 'connect' | 'disconnect' | 'enable' | 'disable' | 'test' | 'sync' | 'error' | 'token_refresh';
+
+export interface OAuthConfig {
+  scopes?: string[];
+  auth_url?: string;
+  token_url?: string;
+}
+
+export interface ApiKeyFieldConfig {
+  name: string;
+  label: string;
+  required: boolean;
+  secret?: boolean;
+}
+
+export interface ApiKeyConfig {
+  fields?: ApiKeyFieldConfig[];
+  validation_pattern?: string;
+  test_endpoint?: string;
+}
+
+export interface Integration {
+  id: string;
+  org_id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  icon_url: string | null;
+  category: IntegrationCategory;
+  scope: IntegrationScope;
+  connection_type: IntegrationConnectionType;
+  oauth_config: OAuthConfig | null;
+  api_key_config: ApiKeyConfig | null;
+  docs_url: string | null;
+  settings_path: string | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  connection?: IntegrationConnection | null;
+  usage?: ModuleIntegrationRequirement[];
+  health?: IntegrationHealth;
+}
+
+export interface IntegrationConnection {
+  id: string;
+  integration_id: string;
+  org_id: string;
+  user_id: string | null;
+  status: IntegrationConnectionStatus;
+  credentials_encrypted: string | null;
+  credentials_iv: string | null;
+  access_token_encrypted: string | null;
+  refresh_token_encrypted: string | null;
+  token_expires_at: string | null;
+  account_info: IntegrationAccountInfo | null;
+  error_message: string | null;
+  connected_at: string | null;
+  connected_by: string | null;
+  updated_at: string;
+  connected_by_user?: User | null;
+}
+
+export interface IntegrationAccountInfo {
+  email?: string;
+  name?: string;
+  avatar?: string;
+  company_name?: string;
+  [key: string]: unknown;
+}
+
+export interface OAuthState {
+  id: string;
+  org_id: string;
+  user_id: string;
+  integration_key: string;
+  state_token: string;
+  redirect_uri: string;
+  scope_requested: string | null;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface ModuleIntegrationRequirement {
+  id: string;
+  org_id: string;
+  module_key: string;
+  integration_key: string;
+  is_required: boolean;
+  feature_description: string | null;
+  created_at: string;
+}
+
+export interface IntegrationLog {
+  id: string;
+  integration_id: string | null;
+  org_id: string;
+  user_id: string | null;
+  action: IntegrationLogAction;
+  status: 'success' | 'failure';
+  error_message: string | null;
+  request_meta: Record<string, unknown> | null;
+  created_at: string;
+  integration?: Integration | null;
+  user?: User | null;
+}
+
+export interface IntegrationHealth {
+  status: IntegrationHealthStatus;
+  last_success_at: string | null;
+  last_error_at: string | null;
+  error_count_24h: number;
+  success_rate: number;
+}
+
+export type WebhookEventType =
+  | 'contact_created'
+  | 'contact_updated'
+  | 'contact_deleted'
+  | 'opportunity_created'
+  | 'opportunity_stage_changed'
+  | 'opportunity_won'
+  | 'opportunity_lost'
+  | 'appointment_booked'
+  | 'appointment_cancelled'
+  | 'message_received'
+  | 'message_sent'
+  | 'payment_completed'
+  | 'invoice_created'
+  | 'form_submitted'
+  | 'survey_submitted'
+  | 'score_updated';
+
+export type WebhookDeliveryStatus = 'pending' | 'delivered' | 'failed';
+
+export interface OutgoingWebhook {
+  id: string;
+  org_id: string;
+  name: string;
+  url: string;
+  events: WebhookEventType[];
+  signing_secret_encrypted: string;
+  signing_secret_iv: string;
+  headers: Record<string, string>;
+  enabled: boolean;
+  retry_count: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  created_by_user?: User | null;
+  health?: WebhookHealth;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  webhook_id: string;
+  org_id: string;
+  event_type: WebhookEventType;
+  event_id: string | null;
+  payload: Record<string, unknown>;
+  status: WebhookDeliveryStatus;
+  response_code: number | null;
+  response_body: string | null;
+  attempts: number;
+  next_retry_at: string | null;
+  created_at: string;
+  delivered_at: string | null;
+}
+
+export interface WebhookHealth {
+  total_deliveries: number;
+  successful_deliveries: number;
+  failed_deliveries: number;
+  pending_deliveries: number;
+  success_rate: number;
+  last_success: string | null;
+  last_failure: string | null;
+}
+
+export interface IntegrationFilters {
+  category?: IntegrationCategory;
+  scope?: IntegrationScope;
+  connectionType?: IntegrationConnectionType;
+  connected?: boolean;
+  enabled?: boolean;
+  search?: string;
+}
+
+export interface IntegrationLogFilters {
+  integrationId?: string;
+  action?: IntegrationLogAction[];
+  status?: ('success' | 'failure')[];
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface WebhookFilters {
+  enabled?: boolean;
+  search?: string;
+}
+
+export interface WebhookDeliveryFilters {
+  webhookId?: string;
+  status?: WebhookDeliveryStatus[];
+  eventType?: WebhookEventType[];
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface IntegrationStats {
+  totalIntegrations: number;
+  connectedIntegrations: number;
+  userIntegrations: number;
+  healthyIntegrations: number;
+  degradedIntegrations: number;
+}
+
+export interface InitiateOAuthResponse {
+  authorization_url: string;
+  state_token: string;
+}
+
+export interface ConnectApiKeyInput {
+  integration_key: string;
+  credentials: Record<string, string>;
+}
+
+export interface CreateWebhookInput {
+  name: string;
+  url: string;
+  events: WebhookEventType[];
+  headers?: Record<string, string>;
+  retry_count?: number;
+}
+
+export interface UpdateWebhookInput {
+  name?: string;
+  url?: string;
+  events?: WebhookEventType[];
+  headers?: Record<string, string>;
+  enabled?: boolean;
+  retry_count?: number;
+}
+
+export const INTEGRATION_CATEGORY_LABELS: Record<IntegrationCategory, string> = {
+  Advertising: 'Advertising',
+  CRM_Data: 'CRM & Data',
+  Calendars: 'Calendars',
+  Email: 'Email',
+  Phone: 'Phone',
+  Payments: 'Payments',
+  Storage: 'Storage',
+  AI_LLM: 'AI & LLM',
+  Other: 'Other',
+};
+
+export const WEBHOOK_EVENT_LABELS: Record<WebhookEventType, string> = {
+  contact_created: 'Contact Created',
+  contact_updated: 'Contact Updated',
+  contact_deleted: 'Contact Deleted',
+  opportunity_created: 'Opportunity Created',
+  opportunity_stage_changed: 'Opportunity Stage Changed',
+  opportunity_won: 'Opportunity Won',
+  opportunity_lost: 'Opportunity Lost',
+  appointment_booked: 'Appointment Booked',
+  appointment_cancelled: 'Appointment Cancelled',
+  message_received: 'Message Received',
+  message_sent: 'Message Sent',
+  payment_completed: 'Payment Completed',
+  invoice_created: 'Invoice Created',
+  form_submitted: 'Form Submitted',
+  survey_submitted: 'Survey Submitted',
+  score_updated: 'Score Updated',
 };

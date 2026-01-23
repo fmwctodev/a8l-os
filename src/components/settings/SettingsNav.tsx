@@ -135,7 +135,8 @@ const settingsNavItems: SettingsNavItem[] = [
     name: 'Integrations',
     path: '/settings/integrations',
     icon: Zap,
-    implemented: false,
+    implemented: true,
+    requiresPermission: 'integrations.view',
   },
 ];
 

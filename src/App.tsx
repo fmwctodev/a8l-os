@@ -33,7 +33,6 @@ import { Reporting } from './pages/modules/Reporting';
 import { ReportBuilder } from './pages/modules/ReportBuilder';
 import { ReportView } from './pages/modules/ReportView';
 import { UsersPage } from './pages/admin/Users';
-import { SettingsPage } from './pages/admin/Settings';
 import { AuditLogsPage } from './pages/admin/AuditLogs';
 import { ChannelSettings } from './pages/admin/ChannelSettings';
 import { SettingsLayout } from './layouts/SettingsLayout';
@@ -47,8 +46,9 @@ import PhoneSystemSettingsPage from './pages/settings/PhoneSystemSettingsPage';
 import { CustomFieldsSettingsPage } from './pages/settings/CustomFieldsSettingsPage';
 import { SecretsSettingsPage } from './pages/settings/SecretsSettingsPage';
 import ScoringSettingsPage from './pages/settings/ScoringSettingsPage';
+import { IntegrationsSettingsPage } from './pages/settings/IntegrationsSettingsPage';
 import { SettingsPlaceholder } from './pages/settings/SettingsPlaceholder';
-import { Bell, Shield, CreditCard, Palette, Globe, Zap } from 'lucide-react';
+import { Bell, Shield, CreditCard, Palette, Globe } from 'lucide-react';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
 import { BookingPage } from './pages/public/BookingPage';
 import { PublicFormPage } from './pages/public/PublicFormPage';
@@ -456,11 +456,9 @@ function App() {
               <Route
                 path="integrations"
                 element={
-                  <SettingsPlaceholder
-                    title="Integrations"
-                    description="Manage third-party integrations and API connections"
-                    icon={Zap}
-                  />
+                  <ProtectedRoute permission="integrations.view" featureFlag="integrations">
+                    <IntegrationsSettingsPage />
+                  </ProtectedRoute>
                 }
               />
             </Route>
