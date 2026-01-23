@@ -169,6 +169,8 @@ export interface Contact {
   created_at: string;
   updated_at: string;
   created_by_user_id: string | null;
+  last_activity_at: string | null;
+  lead_score: number;
   owner?: User | null;
   department?: Department | null;
   tags?: Tag[];

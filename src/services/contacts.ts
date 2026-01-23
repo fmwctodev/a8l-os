@@ -11,6 +11,12 @@ export interface ContactFilters {
   ownerId?: string;
   tagIds?: string[];
   source?: string;
+  leadScoreMin?: number;
+  leadScoreMax?: number;
+  createdAfter?: string;
+  createdBefore?: string;
+  sortBy?: 'name' | 'created_at' | 'last_activity_at' | 'lead_score';
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface CreateContactData {
@@ -39,6 +45,10 @@ export async function getContacts(
   organizationId: string,
   filters: ContactFilters = {}
 ): Promise<Contact[]> {
+  const sortBy = filters.sortBy || 'created_at';
+  const sortOrder = filters.sortOrder || 'desc';
+  const ascending = sortOrder === 'asc';
+
   let query = supabase
     .from('contacts')
     .select(`
@@ -48,8 +58,17 @@ export async function getContacts(
       tags:contact_tags(tag:tags(*))
     `)
     .eq('organization_id', organizationId)
-    .is('merged_into_contact_id', null)
-    .order('created_at', { ascending: false });
+    .is('merged_into_contact_id', null);
+
+  if (sortBy === 'name') {
+    query = query.order('last_name', { ascending }).order('first_name', { ascending });
+  } else if (sortBy === 'last_activity_at') {
+    query = query.order('last_activity_at', { ascending, nullsFirst: false });
+  } else if (sortBy === 'lead_score') {
+    query = query.order('lead_score', { ascending });
+  } else {
+    query = query.order('created_at', { ascending });
+  }
 
   if (filters.status) {
     query = query.eq('status', filters.status);
@@ -67,6 +86,22 @@ export async function getContacts(
 
   if (filters.source) {
     query = query.eq('source', filters.source);
+  }
+
+  if (filters.leadScoreMin !== undefined) {
+    query = query.gte('lead_score', filters.leadScoreMin);
+  }
+
+  if (filters.leadScoreMax !== undefined) {
+    query = query.lte('lead_score', filters.leadScoreMax);
+  }
+
+  if (filters.createdAfter) {
+    query = query.gte('created_at', filters.createdAfter);
+  }
+
+  if (filters.createdBefore) {
+    query = query.lte('created_at', filters.createdBefore);
   }
 
   if (filters.search) {
@@ -264,6 +299,99 @@ export async function bulkDeleteContacts(ids: string[], currentUser: User): Prom
   for (const id of ids) {
     await deleteContact(id, currentUser);
   }
+}
+
+export async function bulkAssignOwner(
+  ids: string[],
+  ownerId: string | null,
+  currentUser: User
+): Promise<void> {
+  const { error } = await supabase
+    .from('contacts')
+    .update({
+      owner_id: ownerId,
+      updated_at: new Date().toISOString(),
+    })
+    .in('id', ids);
+
+  if (error) throw error;
+
+  const ownerName = ownerId ? 'new owner' : 'unassigned';
+  for (const id of ids) {
+    await addTimelineEvent(id, currentUser.id, 'owner_changed', {
+      new_owner_id: ownerId,
+      changed_by: currentUser.name,
+    });
+  }
+
+  await logAudit({
+    userId: currentUser.id,
+    action: 'bulk_assign_owner',
+    entityType: 'contact',
+    entityId: null,
+    afterState: { contact_ids: ids, owner_id: ownerId },
+  });
+}
+
+export async function bulkAddTag(
+  ids: string[],
+  tagId: string,
+  currentUser: User
+): Promise<void> {
+  const inserts = ids.map((contactId) => ({
+    contact_id: contactId,
+    tag_id: tagId,
+  }));
+
+  const { error } = await supabase
+    .from('contact_tags')
+    .upsert(inserts, { onConflict: 'contact_id,tag_id' });
+
+  if (error) throw error;
+
+  for (const id of ids) {
+    await addTimelineEvent(id, currentUser.id, 'tag_added', {
+      tag_id: tagId,
+      added_by: currentUser.name,
+    });
+  }
+
+  await logAudit({
+    userId: currentUser.id,
+    action: 'bulk_add_tag',
+    entityType: 'contact',
+    entityId: null,
+    afterState: { contact_ids: ids, tag_id: tagId },
+  });
+}
+
+export async function bulkRemoveTag(
+  ids: string[],
+  tagId: string,
+  currentUser: User
+): Promise<void> {
+  const { error } = await supabase
+    .from('contact_tags')
+    .delete()
+    .in('contact_id', ids)
+    .eq('tag_id', tagId);
+
+  if (error) throw error;
+
+  for (const id of ids) {
+    await addTimelineEvent(id, currentUser.id, 'tag_removed', {
+      tag_id: tagId,
+      removed_by: currentUser.name,
+    });
+  }
+
+  await logAudit({
+    userId: currentUser.id,
+    action: 'bulk_remove_tag',
+    entityType: 'contact',
+    entityId: null,
+    afterState: { contact_ids: ids, tag_id: tagId },
+  });
 }
 
 export async function mergeContacts(

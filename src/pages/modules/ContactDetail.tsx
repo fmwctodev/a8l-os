@@ -1,15 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getContactById, updateContact, deleteContact, archiveContact, restoreContact } from '../../services/contacts';
+import { getContactById, deleteContact, archiveContact, restoreContact } from '../../services/contacts';
 import { getContactNotes } from '../../services/contactNotes';
 import { getContactTasks } from '../../services/contactTasks';
-import { getContactTimeline } from '../../services/contactTimeline';
+import { getAggregatedTimeline, type AggregatedTimelineEvent } from '../../services/contactTimeline';
 import { getTags, addTagToContact, removeTagFromContact } from '../../services/tags';
 import { getCustomFields, getContactCustomFieldValues } from '../../services/customFields';
 import { getDepartments } from '../../services/departments';
 import { getUsers } from '../../services/users';
-import type { Contact, ContactNote, ContactTask, ContactTimelineEvent, Tag, CustomField, ContactCustomFieldValue, Department, User } from '../../types';
+import type { Contact, ContactNote, ContactTask, Tag, CustomField, ContactCustomFieldValue, Department, User } from '../../types';
 import {
   ArrowLeft,
   Loader2,
@@ -27,15 +27,18 @@ import {
   MoreVertical,
   Plus,
   X,
+  Clock,
 } from 'lucide-react';
 import { ContactModal } from '../../components/contacts/ContactModal';
 import { ContactOverviewTab } from '../../components/contacts/ContactOverviewTab';
 import { ContactNotesTab } from '../../components/contacts/ContactNotesTab';
 import { ContactTasksTab } from '../../components/contacts/ContactTasksTab';
-import { ContactTimelineTab } from '../../components/contacts/ContactTimelineTab';
 import { ContactPaymentsTab } from '../../components/contacts/ContactPaymentsTab';
 import ContactFilesTab from '../../components/contacts/ContactFilesTab';
 import { ScoreWidget } from '../../components/scoring/ScoreWidget';
+import { ContactQuickActions } from '../../components/contacts/ContactQuickActions';
+import { VirtualizedTimeline } from '../../components/contacts/VirtualizedTimeline';
+import { LeadScoreBadge } from '../../components/contacts/LeadScoreBadge';
 import { isFeatureEnabled } from '../../services/featureFlags';
 import { getAttachmentCount } from '../../services/fileAttachments';
 
@@ -49,7 +52,7 @@ export function ContactDetail() {
   const [contact, setContact] = useState<Contact | null>(null);
   const [notes, setNotes] = useState<ContactNote[]>([]);
   const [tasks, setTasks] = useState<ContactTask[]>([]);
-  const [timeline, setTimeline] = useState<ContactTimelineEvent[]>([]);
+  const [aggregatedTimeline, setAggregatedTimeline] = useState<AggregatedTimelineEvent[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [customFieldValues, setCustomFieldValues] = useState<ContactCustomFieldValue[]>([]);
@@ -58,12 +61,17 @@ export function ContactDetail() {
 
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [isLoading, setIsLoading] = useState(true);
+  const [isTimelineLoading, setIsTimelineLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
   const [mediaEnabled, setMediaEnabled] = useState(false);
   const [scoringEnabled, setScoringEnabled] = useState(false);
+  const [reputationEnabled, setReputationEnabled] = useState(false);
+  const [conversationsEnabled, setConversationsEnabled] = useState(false);
+  const [calendarsEnabled, setCalendarsEnabled] = useState(false);
+  const [opportunitiesEnabled, setOpportunitiesEnabled] = useState(false);
   const [filesCount, setFilesCount] = useState(0);
 
   const canEdit = hasPermission('contacts.edit');
@@ -71,6 +79,11 @@ export function ContactDetail() {
   const canViewMedia = hasPermission('media.view');
   const canDelete = hasPermission('contacts.delete');
   const canAdjustScore = hasPermission('scoring.adjust');
+  const canSendMessage = hasPermission('conversations.send');
+  const canCreateOpportunity = hasPermission('opportunities.create');
+  const canBookAppointment = hasPermission('appointments.create');
+  const canCreateInvoice = hasPermission('invoices.create');
+  const canRequestReview = hasPermission('reputation.request');
   const isAdmin = isSuperAdmin || currentUser?.role?.hierarchy_level === 2;
 
   const loadContact = useCallback(async () => {
@@ -80,7 +93,20 @@ export function ContactDetail() {
       setIsLoading(true);
       setError(null);
 
-      const [contactData, tagsData, customFieldsData, departmentsData, usersData, paymentsFlag, mediaFlag, scoringFlag] = await Promise.all([
+      const [
+        contactData,
+        tagsData,
+        customFieldsData,
+        departmentsData,
+        usersData,
+        paymentsFlag,
+        mediaFlag,
+        scoringFlag,
+        reputationFlag,
+        conversationsFlag,
+        calendarsFlag,
+        opportunitiesFlag,
+      ] = await Promise.all([
         getContactById(id),
         getTags(currentUser.organization_id),
         getCustomFields(currentUser.organization_id),
@@ -89,10 +115,18 @@ export function ContactDetail() {
         isFeatureEnabled('payments'),
         isFeatureEnabled('media'),
         isFeatureEnabled('scoring_management'),
+        isFeatureEnabled('reputation'),
+        isFeatureEnabled('conversations'),
+        isFeatureEnabled('calendars'),
+        isFeatureEnabled('opportunities'),
       ]);
       setPaymentsEnabled(paymentsFlag);
       setMediaEnabled(mediaFlag);
       setScoringEnabled(scoringFlag);
+      setReputationEnabled(reputationFlag);
+      setConversationsEnabled(conversationsFlag);
+      setCalendarsEnabled(calendarsFlag);
+      setOpportunitiesEnabled(opportunitiesFlag);
 
       if (!contactData) {
         setError('Contact not found');
@@ -105,19 +139,22 @@ export function ContactDetail() {
       setDepartments(departmentsData);
       setUsers(usersData);
 
-      const [notesData, tasksData, timelineData, fieldValues, attachmentCount] = await Promise.all([
+      const [notesData, tasksData, fieldValues, attachmentCount] = await Promise.all([
         getContactNotes(id),
         getContactTasks(id),
-        getContactTimeline(id),
         getContactCustomFieldValues(id),
         mediaFlag ? getAttachmentCount('contacts', id) : 0,
       ]);
 
       setNotes(notesData);
       setTasks(tasksData);
-      setTimeline(timelineData);
       setCustomFieldValues(fieldValues);
       setFilesCount(attachmentCount);
+
+      setIsTimelineLoading(true);
+      const timelineData = await getAggregatedTimeline(id);
+      setAggregatedTimeline(timelineData);
+      setIsTimelineLoading(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load contact');
     } finally {
@@ -192,16 +229,32 @@ export function ContactDetail() {
     if (!id) return;
     const notesData = await getContactNotes(id);
     setNotes(notesData);
-    const timelineData = await getContactTimeline(id);
-    setTimeline(timelineData);
+    const timelineData = await getAggregatedTimeline(id);
+    setAggregatedTimeline(timelineData);
   };
 
   const refreshTasks = async () => {
     if (!id) return;
     const tasksData = await getContactTasks(id);
     setTasks(tasksData);
-    const timelineData = await getContactTimeline(id);
-    setTimeline(timelineData);
+    const timelineData = await getAggregatedTimeline(id);
+    setAggregatedTimeline(timelineData);
+  };
+
+  const formatRelativeTime = (date: string | null): string => {
+    if (!date) return 'Never';
+    const now = new Date();
+    const d = new Date(date);
+    const diffMs = now.getTime() - d.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return d.toLocaleDateString();
   };
 
   if (isLoading) {
@@ -231,7 +284,7 @@ export function ContactDetail() {
     { id: 'overview', label: 'Overview' },
     { id: 'notes', label: 'Notes', count: notes.length },
     { id: 'tasks', label: 'Tasks', count: tasks.filter((t) => t.status !== 'completed').length },
-    { id: 'timeline', label: 'Timeline' },
+    { id: 'timeline', label: 'Timeline', count: aggregatedTimeline.length },
     ...(paymentsEnabled && canViewPayments ? [{ id: 'payments' as const, label: 'Payments' }] : []),
     ...(mediaEnabled && canViewMedia ? [{ id: 'files' as const, label: 'Files', count: filesCount }] : []),
   ];
@@ -257,6 +310,7 @@ export function ContactDetail() {
                 Archived
               </span>
             )}
+            <LeadScoreBadge score={contact.lead_score || 0} size="md" />
           </div>
           {contact.job_title && contact.company && (
             <p className="text-slate-400 mt-1">
@@ -386,6 +440,12 @@ export function ContactDetail() {
                 </div>
               )}
               <div className="flex items-center gap-3 p-2">
+                <Clock className="w-4 h-4 text-slate-500" />
+                <span className="text-sm text-slate-300">
+                  Last activity: {formatRelativeTime(contact.last_activity_at)}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 p-2">
                 <Calendar className="w-4 h-4 text-slate-500" />
                 <span className="text-sm text-slate-300">
                   Added {new Date(contact.created_at).toLocaleDateString()}
@@ -393,6 +453,19 @@ export function ContactDetail() {
               </div>
             </div>
           </div>
+
+          {contact.status === 'active' && (
+            <ContactQuickActions
+              contact={contact}
+              onRefresh={loadContact}
+              canSendMessage={canSendMessage && conversationsEnabled}
+              canCall={!!contact.phone}
+              canCreateOpportunity={canCreateOpportunity && opportunitiesEnabled}
+              canBookAppointment={canBookAppointment && calendarsEnabled}
+              canCreateInvoice={canCreateInvoice && paymentsEnabled}
+              canRequestReview={canRequestReview && reputationEnabled}
+            />
+          )}
 
           {scoringEnabled && (
             <ScoreWidget
@@ -453,12 +526,12 @@ export function ContactDetail() {
         <div className="lg:col-span-2">
           <div className="bg-slate-900 rounded-xl border border-slate-800">
             <div className="border-b border-slate-800">
-              <div className="flex gap-1 p-1">
+              <div className="flex gap-1 p-1 overflow-x-auto">
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                       activeTab === tab.id
                         ? 'bg-slate-800 text-white'
                         : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
@@ -499,7 +572,10 @@ export function ContactDetail() {
                 />
               )}
               {activeTab === 'timeline' && (
-                <ContactTimelineTab timeline={timeline} />
+                <VirtualizedTimeline
+                  events={aggregatedTimeline}
+                  isLoading={isTimelineLoading}
+                />
               )}
               {activeTab === 'payments' && (
                 <ContactPaymentsTab contactId={contact.id} />
