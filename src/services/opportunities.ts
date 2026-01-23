@@ -269,22 +269,30 @@ export async function createOpportunity(
   if (error) throw error;
 
   if (customFieldValues && Object.keys(customFieldValues).length > 0) {
-    await saveCustomFieldValues(data.id, opportunity.org_id, customFieldValues);
+    try {
+      await saveCustomFieldValues(data.id, opportunity.org_id, customFieldValues);
+    } catch (cfError) {
+      console.error('Failed to save custom field values:', cfError);
+    }
   }
 
-  await createTimelineEvent({
-    org_id: opportunity.org_id,
-    opportunity_id: data.id,
-    contact_id: opportunity.contact_id,
-    event_type: 'opportunity_created',
-    summary: 'Opportunity created',
-    payload: {
-      pipeline_id: opportunity.pipeline_id,
-      stage_id: opportunity.stage_id,
-      value_amount: opportunity.value_amount ?? 0
-    },
-    actor_user_id: opportunity.created_by
-  });
+  try {
+    await createTimelineEvent({
+      org_id: opportunity.org_id,
+      opportunity_id: data.id,
+      contact_id: opportunity.contact_id,
+      event_type: 'opportunity_created',
+      summary: 'Opportunity created',
+      payload: {
+        pipeline_id: opportunity.pipeline_id,
+        stage_id: opportunity.stage_id,
+        value_amount: opportunity.value_amount ?? 0
+      },
+      actor_user_id: opportunity.created_by
+    });
+  } catch (timelineError) {
+    console.error('Failed to create timeline event:', timelineError);
+  }
 
   return normalizeOpportunityTags(data);
 }
@@ -316,74 +324,82 @@ export async function updateOpportunity(
 
   if (error) throw error;
 
-  if (updates.pipeline_id && updates.pipeline_id !== existing.pipeline_id) {
-    await createTimelineEvent({
-      org_id: existing.org_id,
-      opportunity_id: id,
-      contact_id: existing.contact_id,
-      event_type: 'pipeline_changed',
-      summary: `Pipeline changed from "${existing.pipeline?.name}" to "${data.pipeline?.name}"`,
-      payload: {
-        from_pipeline_id: existing.pipeline_id,
-        to_pipeline_id: updates.pipeline_id,
-        from_pipeline_name: existing.pipeline?.name,
-        to_pipeline_name: data.pipeline?.name
-      },
-      actor_user_id: actorUserId
-    });
-  }
+  try {
+    if (updates.pipeline_id && updates.pipeline_id !== existing.pipeline_id) {
+      await createTimelineEvent({
+        org_id: existing.org_id,
+        opportunity_id: id,
+        contact_id: existing.contact_id,
+        event_type: 'pipeline_changed',
+        summary: `Pipeline changed from "${existing.pipeline?.name}" to "${data.pipeline?.name}"`,
+        payload: {
+          from_pipeline_id: existing.pipeline_id,
+          to_pipeline_id: updates.pipeline_id,
+          from_pipeline_name: existing.pipeline?.name,
+          to_pipeline_name: data.pipeline?.name
+        },
+        actor_user_id: actorUserId
+      });
+    }
 
-  if (updates.stage_id && updates.stage_id !== existing.stage_id) {
-    await createTimelineEvent({
-      org_id: existing.org_id,
-      opportunity_id: id,
-      contact_id: existing.contact_id,
-      event_type: 'stage_changed',
-      summary: `Stage changed from "${existing.stage?.name}" to "${data.stage?.name}"`,
-      payload: {
-        from_stage_id: existing.stage_id,
-        to_stage_id: updates.stage_id,
-        from_stage_name: existing.stage?.name,
-        to_stage_name: data.stage?.name
-      },
-      actor_user_id: actorUserId
-    });
-  }
+    if (updates.stage_id && updates.stage_id !== existing.stage_id) {
+      await createTimelineEvent({
+        org_id: existing.org_id,
+        opportunity_id: id,
+        contact_id: existing.contact_id,
+        event_type: 'stage_changed',
+        summary: `Stage changed from "${existing.stage?.name}" to "${data.stage?.name}"`,
+        payload: {
+          from_stage_id: existing.stage_id,
+          to_stage_id: updates.stage_id,
+          from_stage_name: existing.stage?.name,
+          to_stage_name: data.stage?.name
+        },
+        actor_user_id: actorUserId
+      });
+    }
 
-  if (updates.assigned_user_id !== undefined && updates.assigned_user_id !== existing.assigned_user_id) {
-    await createTimelineEvent({
-      org_id: existing.org_id,
-      opportunity_id: id,
-      contact_id: existing.contact_id,
-      event_type: 'assigned_changed',
-      summary: `Assignment changed`,
-      payload: {
-        from_user_id: existing.assigned_user_id,
-        to_user_id: updates.assigned_user_id,
-        from_user_name: existing.assigned_user?.name,
-        to_user_name: data.assigned_user?.name
-      },
-      actor_user_id: actorUserId
-    });
-  }
+    if (updates.assigned_user_id !== undefined && updates.assigned_user_id !== existing.assigned_user_id) {
+      await createTimelineEvent({
+        org_id: existing.org_id,
+        opportunity_id: id,
+        contact_id: existing.contact_id,
+        event_type: 'assigned_changed',
+        summary: `Assignment changed`,
+        payload: {
+          from_user_id: existing.assigned_user_id,
+          to_user_id: updates.assigned_user_id,
+          from_user_name: existing.assigned_user?.name,
+          to_user_name: data.assigned_user?.name
+        },
+        actor_user_id: actorUserId
+      });
+    }
 
-  if (updates.value_amount !== undefined && updates.value_amount !== existing.value_amount) {
-    await createTimelineEvent({
-      org_id: existing.org_id,
-      opportunity_id: id,
-      contact_id: existing.contact_id,
-      event_type: 'value_changed',
-      summary: `Value changed from $${existing.value_amount.toLocaleString()} to $${updates.value_amount.toLocaleString()}`,
-      payload: {
-        from_value: existing.value_amount,
-        to_value: updates.value_amount
-      },
-      actor_user_id: actorUserId
-    });
+    if (updates.value_amount !== undefined && updates.value_amount !== existing.value_amount) {
+      await createTimelineEvent({
+        org_id: existing.org_id,
+        opportunity_id: id,
+        contact_id: existing.contact_id,
+        event_type: 'value_changed',
+        summary: `Value changed from $${existing.value_amount.toLocaleString()} to $${updates.value_amount.toLocaleString()}`,
+        payload: {
+          from_value: existing.value_amount,
+          to_value: updates.value_amount
+        },
+        actor_user_id: actorUserId
+      });
+    }
+  } catch (timelineError) {
+    console.error('Failed to create timeline events:', timelineError);
   }
 
   if (customFieldValues && Object.keys(customFieldValues).length > 0) {
-    await saveCustomFieldValues(id, existing.org_id, customFieldValues);
+    try {
+      await saveCustomFieldValues(id, existing.org_id, customFieldValues);
+    } catch (cfError) {
+      console.error('Failed to save custom field values:', cfError);
+    }
   }
 
   return normalizeOpportunityTags(data);

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Search, Plus, User as UserIcon, ArrowLeft } from 'lucide-react';
+import { X, Search, Plus, User as UserIcon, ArrowLeft, AlertCircle } from 'lucide-react';
 import type {
   Opportunity,
   Pipeline,
@@ -54,6 +54,8 @@ export function OpportunityModal({
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState({
     contact_id: opportunity?.contact_id || preselectedContact?.id || '',
@@ -230,7 +232,24 @@ export function OpportunityModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.contact_id || !formData.pipeline_id || !formData.stage_id) return;
+    setError(null);
+    setValidationErrors({});
+
+    const errors: Record<string, string> = {};
+    if (!formData.contact_id) {
+      errors.contact = 'Please select a contact';
+    }
+    if (!formData.pipeline_id) {
+      errors.pipeline = 'Please select a pipeline';
+    }
+    if (!formData.stage_id) {
+      errors.stage = 'Please select a stage';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
 
     setSaving(true);
     try {
@@ -271,8 +290,16 @@ export function OpportunityModal({
       }
 
       onSave(result);
-    } catch (error) {
-      console.error('Failed to save opportunity:', error);
+    } catch (err) {
+      console.error('Failed to save opportunity:', err);
+      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
+      if (errorMessage.includes('permission') || errorMessage.includes('policy')) {
+        setError('You do not have permission to perform this action.');
+      } else if (errorMessage.includes('violates')) {
+        setError('Invalid data. Please check your inputs and try again.');
+      } else {
+        setError(`Failed to ${isEditing ? 'update' : 'create'} opportunity. Please try again.`);
+      }
     } finally {
       setSaving(false);
     }
@@ -301,8 +328,18 @@ export function OpportunityModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          {error && (
+            <div className="flex items-start gap-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-red-400">{error}</div>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm text-slate-400 mb-1">Contact *</label>
+            {validationErrors.contact && (
+              <p className="text-xs text-red-400 mb-1">{validationErrors.contact}</p>
+            )}
             {formData.contact ? (
               <div className="flex items-center justify-between p-3 bg-slate-700 rounded">
                 <div className="flex items-center gap-3">
@@ -455,10 +492,15 @@ export function OpportunityModal({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-slate-400 mb-1">Pipeline *</label>
+              {validationErrors.pipeline && (
+                <p className="text-xs text-red-400 mb-1">{validationErrors.pipeline}</p>
+              )}
               <select
                 value={formData.pipeline_id}
                 onChange={(e) => handlePipelineChange(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white"
+                className={`w-full px-3 py-2 bg-slate-700 border rounded text-white ${
+                  validationErrors.pipeline ? 'border-red-500' : 'border-slate-600'
+                }`}
               >
                 <option value="">Select pipeline</option>
                 {pipelines.map(p => (
@@ -469,10 +511,15 @@ export function OpportunityModal({
 
             <div>
               <label className="block text-sm text-slate-400 mb-1">Stage *</label>
+              {validationErrors.stage && (
+                <p className="text-xs text-red-400 mb-1">{validationErrors.stage}</p>
+              )}
               <select
                 value={formData.stage_id}
                 onChange={(e) => setFormData(prev => ({ ...prev, stage_id: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white"
+                className={`w-full px-3 py-2 bg-slate-700 border rounded text-white ${
+                  validationErrors.stage ? 'border-red-500' : 'border-slate-600'
+                }`}
               >
                 <option value="">Select stage</option>
                 {stages.map(s => (
