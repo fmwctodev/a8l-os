@@ -154,6 +154,8 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
       setPipelines([...pipelines, pipeline]);
       setDraftPipeline(null);
       setSelectedPipeline(pipeline);
+      setShowUnsavedWarning(false);
+      onClose();
     } catch (error) {
       console.error('Failed to save pipeline:', error);
     } finally {
