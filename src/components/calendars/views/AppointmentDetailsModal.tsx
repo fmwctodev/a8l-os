@@ -15,6 +15,7 @@ import {
   XCircle,
   AlertTriangle,
   ExternalLink,
+  Pencil,
 } from 'lucide-react';
 import type { Appointment, AppointmentStatus } from '../../../types';
 import { formatTimeRange, getStatusColor } from '../../../utils/calendarViewUtils';
@@ -23,6 +24,7 @@ interface AppointmentDetailsModalProps {
   appointment: Appointment;
   onClose: () => void;
   onStatusChange: (status: AppointmentStatus) => Promise<void>;
+  onEdit: () => void;
   canEdit: boolean;
 }
 
@@ -30,6 +32,7 @@ export function AppointmentDetailsModal({
   appointment,
   onClose,
   onStatusChange,
+  onEdit,
   canEdit,
 }: AppointmentDetailsModalProps) {
   const navigate = useNavigate();
@@ -119,12 +122,23 @@ export function AppointmentDetailsModal({
               {statusLabel[appointment.status]}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5 text-slate-400" />
-          </button>
+          <div className="flex items-center gap-2">
+            {canEdit && appointment.status === 'scheduled' && (
+              <button
+                onClick={onEdit}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:border-slate-600 transition-colors text-sm font-medium"
+              >
+                <Pencil className="w-4 h-4" />
+                Edit
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5 text-slate-400" />
+            </button>
+          </div>
         </div>
 
         <div className="p-6 space-y-6">

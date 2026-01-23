@@ -14,6 +14,7 @@ import {
   CalendarToolbar,
   AppointmentDetailsModal,
   NewAppointmentModal,
+  EditAppointmentModal,
 } from '../../components/calendars/views';
 
 export function CalendarViewPage() {
@@ -36,6 +37,8 @@ export function CalendarViewPage() {
 
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
 
   const canEdit = hasPermission('appointments.edit');
   const canCreate = hasPermission('appointments.create');
@@ -132,6 +135,20 @@ export function CalendarViewPage() {
     await loadAppointments();
   };
 
+  const handleEditClick = () => {
+    if (selectedAppointment) {
+      setEditingAppointment(selectedAppointment);
+      setSelectedAppointment(null);
+      setIsEditModalOpen(true);
+    }
+  };
+
+  const handleEditSuccess = async () => {
+    setIsEditModalOpen(false);
+    setEditingAppointment(null);
+    await loadAppointments();
+  };
+
   const handleSettingsClick = () => {
     navigate(`/settings/calendars?calendar=${id}`);
   };
@@ -222,6 +239,7 @@ export function CalendarViewPage() {
           appointment={selectedAppointment}
           onClose={() => setSelectedAppointment(null)}
           onStatusChange={handleStatusChange}
+          onEdit={handleEditClick}
           canEdit={canEdit}
         />
       )}
@@ -232,6 +250,18 @@ export function CalendarViewPage() {
           preselectedDate={currentDate}
           onClose={() => setIsNewAppointmentOpen(false)}
           onSuccess={handleNewAppointmentSuccess}
+        />
+      )}
+
+      {isEditModalOpen && editingAppointment && (
+        <EditAppointmentModal
+          calendar={calendar}
+          appointment={editingAppointment}
+          onClose={() => {
+            setIsEditModalOpen(false);
+            setEditingAppointment(null);
+          }}
+          onSuccess={handleEditSuccess}
         />
       )}
     </div>
