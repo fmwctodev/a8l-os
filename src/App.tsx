@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { SidebarProvider } from './contexts/SidebarContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { Login } from './pages/Login';
@@ -48,8 +49,6 @@ import { SecretsSettingsPage } from './pages/settings/SecretsSettingsPage';
 import ScoringSettingsPage from './pages/settings/ScoringSettingsPage';
 import { IntegrationsSettingsPage } from './pages/settings/IntegrationsSettingsPage';
 import { BrandboardSettingsPage } from './pages/settings/BrandboardSettingsPage';
-import { SettingsPlaceholder } from './pages/settings/SettingsPlaceholder';
-import { Bell, Shield, CreditCard, Globe } from 'lucide-react';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
 import { BookingPage } from './pages/public/BookingPage';
 import { PublicFormPage } from './pages/public/PublicFormPage';
@@ -60,429 +59,387 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/unauthorized" element={<Unauthorized />} />
-          <Route path="/feature-disabled" element={<FeatureDisabled />} />
-
-          <Route
-            element={
-              <ProtectedRoute>
-                <DashboardLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/profile" element={<Profile />} />
+        <SidebarProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/unauthorized" element={<Unauthorized />} />
+            <Route path="/feature-disabled" element={<FeatureDisabled />} />
 
             <Route
-              path="/conversations"
-              element={
-                <ProtectedRoute permission="conversations.view" featureFlag="conversations">
-                  <Conversations />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/conversations/:conversationId"
-              element={
-                <ProtectedRoute permission="conversations.view" featureFlag="conversations">
-                  <Conversations />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/calendars"
-              element={
-                <ProtectedRoute permission="calendars.view" featureFlag="calendars">
-                  <Calendars />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/calendars/:id"
-              element={
-                <ProtectedRoute permission="calendars.view" featureFlag="calendars">
-                  <CalendarDetail />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/contacts"
-              element={
-                <ProtectedRoute permission="contacts.view" featureFlag="contacts">
-                  <Contacts />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/contacts/:id"
-              element={
-                <ProtectedRoute permission="contacts.view" featureFlag="contacts">
-                  <ContactDetail />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/opportunities"
-              element={
-                <ProtectedRoute permission="opportunities.view" featureFlag="opportunities">
-                  <Opportunities />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/opportunities/:id"
-              element={
-                <ProtectedRoute permission="opportunities.view" featureFlag="opportunities">
-                  <OpportunityDetail />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/payments"
-              element={
-                <ProtectedRoute permission="payments.view" featureFlag="payments">
-                  <Payments />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/payments/invoices/:id"
-              element={
-                <ProtectedRoute permission="payments.view" featureFlag="payments">
-                  <InvoiceDetail />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/ai-agents"
-              element={
-                <ProtectedRoute permission="ai_agents.view" featureFlag="ai_agents">
-                  <AIAgents />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/ai-agents/:agentId"
-              element={
-                <ProtectedRoute permission="ai_agents.view" featureFlag="ai_agents">
-                  <AIAgentDetail />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/marketing"
-              element={
-                <ProtectedRoute permission="marketing.view" featureFlag="marketing">
-                  <Marketing />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/marketing/forms"
-              element={
-                <ProtectedRoute permission="marketing.forms.view" featureFlag="marketing">
-                  <MarketingForms />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/marketing/forms/new"
-              element={
-                <ProtectedRoute permission="marketing.forms.manage" featureFlag="marketing">
-                  <FormBuilder />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/marketing/forms/:id"
-              element={
-                <ProtectedRoute permission="marketing.forms.view" featureFlag="marketing">
-                  <FormBuilder />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/marketing/surveys"
-              element={
-                <ProtectedRoute permission="marketing.surveys.view" featureFlag="marketing">
-                  <MarketingSurveys />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/marketing/surveys/new"
-              element={
-                <ProtectedRoute permission="marketing.surveys.manage" featureFlag="marketing">
-                  <SurveyBuilder />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/marketing/surveys/:id"
-              element={
-                <ProtectedRoute permission="marketing.surveys.view" featureFlag="marketing">
-                  <SurveyBuilder />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/marketing/social"
-              element={
-                <ProtectedRoute permission="marketing.social.view" featureFlag="marketing">
-                  <SocialPlanner />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/automation"
-              element={
-                <ProtectedRoute permission="automation.view" featureFlag="automation">
-                  <Automation />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/automation/:id"
-              element={
-                <ProtectedRoute permission="automation.view" featureFlag="automation">
-                  <WorkflowBuilder />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/automation/:id/enrollments"
-              element={
-                <ProtectedRoute permission="automation.view" featureFlag="automation">
-                  <WorkflowEnrollments />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/media"
-              element={
-                <ProtectedRoute permission="media.view" featureFlag="media">
-                  <MediaStorage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/reputation"
-              element={
-                <ProtectedRoute permission="reputation.view" featureFlag="reputation">
-                  <Reputation />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/reporting"
-              element={
-                <ProtectedRoute permission="reporting.view" featureFlag="reporting">
-                  <Reporting />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/reporting/new"
-              element={
-                <ProtectedRoute permission="reporting.manage" featureFlag="reporting">
-                  <ReportBuilder />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/reporting/:id"
-              element={
-                <ProtectedRoute permission="reporting.view" featureFlag="reporting">
-                  <ReportView />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/reporting/:id/edit"
-              element={
-                <ProtectedRoute permission="reporting.manage" featureFlag="reporting">
-                  <ReportBuilder />
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/users"
-              element={
-                <ProtectedRoute permission="users.view">
-                  <UsersPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/settings"
               element={
                 <ProtectedRoute>
-                  <SettingsLayout />
+                  <DashboardLayout />
                 </ProtectedRoute>
               }
             >
-              <Route index element={<MyProfilePage />} />
-              <Route path="profile" element={<MyProfilePage />} />
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/profile" element={<Profile />} />
+
               <Route
-                path="organization"
+                path="/conversations"
                 element={
-                  <ProtectedRoute permission="settings.manage">
-                    <OrganizationSettingsPage />
+                  <ProtectedRoute permission="conversations.view" featureFlag="conversations">
+                    <Conversations />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="staff"
+                path="/conversations/:conversationId"
                 element={
-                  <ProtectedRoute permission="users.view">
-                    <MyStaffPage />
+                  <ProtectedRoute permission="conversations.view" featureFlag="conversations">
+                    <Conversations />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="calendars"
+                path="/calendars"
                 element={
                   <ProtectedRoute permission="calendars.view" featureFlag="calendars">
-                    <CalendarsSettingsPage />
+                    <Calendars />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="ai-agents"
+                path="/calendars/:id"
                 element={
-                  <ProtectedRoute permission="ai.settings.view" featureFlag="ai_agents">
-                    <AIAgentsSettingsPage />
+                  <ProtectedRoute permission="calendars.view" featureFlag="calendars">
+                    <CalendarDetail />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="email-services"
+                path="/contacts"
                 element={
-                  <ProtectedRoute permission="email.settings.view" featureFlag="email_services">
-                    <EmailServicesSettingsPage />
+                  <ProtectedRoute permission="contacts.view" featureFlag="contacts">
+                    <Contacts />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="phone-system"
+                path="/contacts/:id"
                 element={
-                  <ProtectedRoute permission="phone.settings.view" featureFlag="phone_services">
-                    <PhoneSystemSettingsPage />
+                  <ProtectedRoute permission="contacts.view" featureFlag="contacts">
+                    <ContactDetail />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="custom-fields"
+                path="/opportunities"
                 element={
-                  <ProtectedRoute permission="custom_fields.view">
-                    <CustomFieldsSettingsPage />
+                  <ProtectedRoute permission="opportunities.view" featureFlag="opportunities">
+                    <Opportunities />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="secrets"
+                path="/opportunities/:id"
                 element={
-                  <ProtectedRoute permission="secrets.view" featureFlag="secrets_management">
-                    <SecretsSettingsPage />
+                  <ProtectedRoute permission="opportunities.view" featureFlag="opportunities">
+                    <OpportunityDetail />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="scoring"
+                path="/payments"
                 element={
-                  <ProtectedRoute permission="scoring.view" featureFlag="scoring_management">
-                    <ScoringSettingsPage />
+                  <ProtectedRoute permission="payments.view" featureFlag="payments">
+                    <Payments />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="notifications"
+                path="/payments/invoices/:id"
                 element={
-                  <SettingsPlaceholder
-                    title="Notifications"
-                    description="Manage your notification preferences and settings"
-                    icon={Bell}
-                  />
-                }
-              />
-              <Route
-                path="security"
-                element={
-                  <SettingsPlaceholder
-                    title="Security"
-                    description="Configure security settings and authentication methods"
-                    icon={Shield}
-                  />
-                }
-              />
-              <Route
-                path="billing"
-                element={
-                  <ProtectedRoute permission="settings.manage">
-                    <SettingsPlaceholder
-                      title="Billing"
-                      description="Manage your subscription and billing information"
-                      icon={CreditCard}
-                    />
+                  <ProtectedRoute permission="payments.view" featureFlag="payments">
+                    <InvoiceDetail />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="brandboard"
+                path="/ai-agents"
                 element={
-                  <ProtectedRoute permission="brandboard.view" featureFlag="brandboard">
-                    <BrandboardSettingsPage />
+                  <ProtectedRoute permission="ai_agents.view" featureFlag="ai_agents">
+                    <AIAgents />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="domain"
+                path="/ai-agents/:agentId"
                 element={
-                  <ProtectedRoute permission="settings.manage">
-                    <SettingsPlaceholder
-                      title="Domain"
-                      description="Configure your custom domain settings"
-                      icon={Globe}
-                    />
+                  <ProtectedRoute permission="ai_agents.view" featureFlag="ai_agents">
+                    <AIAgentDetail />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="integrations"
+                path="/marketing"
                 element={
-                  <ProtectedRoute permission="integrations.view" featureFlag="integrations">
-                    <IntegrationsSettingsPage />
+                  <ProtectedRoute permission="marketing.view" featureFlag="marketing">
+                    <Marketing />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/marketing/forms"
+                element={
+                  <ProtectedRoute permission="marketing.forms.view" featureFlag="marketing">
+                    <MarketingForms />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/marketing/forms/new"
+                element={
+                  <ProtectedRoute permission="marketing.forms.manage" featureFlag="marketing">
+                    <FormBuilder />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/marketing/forms/:id"
+                element={
+                  <ProtectedRoute permission="marketing.forms.view" featureFlag="marketing">
+                    <FormBuilder />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/marketing/surveys"
+                element={
+                  <ProtectedRoute permission="marketing.surveys.view" featureFlag="marketing">
+                    <MarketingSurveys />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/marketing/surveys/new"
+                element={
+                  <ProtectedRoute permission="marketing.surveys.manage" featureFlag="marketing">
+                    <SurveyBuilder />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/marketing/surveys/:id"
+                element={
+                  <ProtectedRoute permission="marketing.surveys.view" featureFlag="marketing">
+                    <SurveyBuilder />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/marketing/social"
+                element={
+                  <ProtectedRoute permission="marketing.social.view" featureFlag="marketing">
+                    <SocialPlanner />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/automation"
+                element={
+                  <ProtectedRoute permission="automation.view" featureFlag="automation">
+                    <Automation />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/automation/:id"
+                element={
+                  <ProtectedRoute permission="automation.view" featureFlag="automation">
+                    <WorkflowBuilder />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/automation/:id/enrollments"
+                element={
+                  <ProtectedRoute permission="automation.view" featureFlag="automation">
+                    <WorkflowEnrollments />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/media"
+                element={
+                  <ProtectedRoute permission="media.view" featureFlag="media">
+                    <MediaStorage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reputation"
+                element={
+                  <ProtectedRoute permission="reputation.view" featureFlag="reputation">
+                    <Reputation />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reporting"
+                element={
+                  <ProtectedRoute permission="reporting.view" featureFlag="reporting">
+                    <Reporting />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reporting/new"
+                element={
+                  <ProtectedRoute permission="reporting.manage" featureFlag="reporting">
+                    <ReportBuilder />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reporting/:id"
+                element={
+                  <ProtectedRoute permission="reporting.view" featureFlag="reporting">
+                    <ReportView />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reporting/:id/edit"
+                element={
+                  <ProtectedRoute permission="reporting.manage" featureFlag="reporting">
+                    <ReportBuilder />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/users"
+                element={
+                  <ProtectedRoute permission="users.view">
+                    <UsersPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute>
+                    <SettingsLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<MyProfilePage />} />
+                <Route path="profile" element={<MyProfilePage />} />
+                <Route
+                  path="organization"
+                  element={
+                    <ProtectedRoute permission="settings.manage">
+                      <OrganizationSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="staff"
+                  element={
+                    <ProtectedRoute permission="users.view">
+                      <MyStaffPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="calendars"
+                  element={
+                    <ProtectedRoute permission="calendars.view" featureFlag="calendars">
+                      <CalendarsSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="ai-agents"
+                  element={
+                    <ProtectedRoute permission="ai.settings.view" featureFlag="ai_agents">
+                      <AIAgentsSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="email-services"
+                  element={
+                    <ProtectedRoute permission="email.settings.view" featureFlag="email_services">
+                      <EmailServicesSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="phone-system"
+                  element={
+                    <ProtectedRoute permission="phone.settings.view" featureFlag="phone_services">
+                      <PhoneSystemSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="custom-fields"
+                  element={
+                    <ProtectedRoute permission="custom_fields.view">
+                      <CustomFieldsSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="secrets"
+                  element={
+                    <ProtectedRoute permission="secrets.view" featureFlag="secrets_management">
+                      <SecretsSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="scoring"
+                  element={
+                    <ProtectedRoute permission="scoring.view" featureFlag="scoring_management">
+                      <ScoringSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="brandboard"
+                  element={
+                    <ProtectedRoute permission="brandboard.view" featureFlag="brandboard">
+                      <BrandboardSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="integrations"
+                  element={
+                    <ProtectedRoute permission="integrations.view" featureFlag="integrations">
+                      <IntegrationsSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+              </Route>
+              <Route
+                path="/audit-logs"
+                element={
+                  <ProtectedRoute permission="audit_logs.view">
+                    <AuditLogsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/channels"
+                element={
+                  <ProtectedRoute permission="channels.configure">
+                    <ChannelSettings />
                   </ProtectedRoute>
                 }
               />
             </Route>
-            <Route
-              path="/audit-logs"
-              element={
-                <ProtectedRoute permission="audit_logs.view">
-                  <AuditLogsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/channels"
-              element={
-                <ProtectedRoute permission="channels.configure">
-                  <ChannelSettings />
-                </ProtectedRoute>
-              }
-            />
-          </Route>
 
-          <Route path="/book/:calendarSlug/:typeSlug" element={<BookingPage />} />
-          <Route path="/f/:slug" element={<PublicFormPage />} />
-          <Route path="/s/:slug" element={<PublicSurveyPage />} />
-          <Route path="/r/:slug" element={<ReviewPage />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            <Route path="/book/:calendarSlug/:typeSlug" element={<BookingPage />} />
+            <Route path="/f/:slug" element={<PublicFormPage />} />
+            <Route path="/s/:slug" element={<PublicSurveyPage />} />
+            <Route path="/r/:slug" element={<ReviewPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </SidebarProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -26,28 +26,56 @@ export interface NavItem {
 }
 
 export interface NavSection {
+  id: string;
   title?: string;
+  collapsible?: boolean;
   items: NavItem[];
 }
 
 export const navigationConfig: NavSection[] = [
   {
+    id: 'core-operations',
+    title: 'Core Operations',
+    collapsible: true,
     items: [
       { name: 'Conversations', path: '/conversations', icon: MessageSquare, permission: 'conversations.view', featureFlag: 'conversations' },
       { name: 'Calendars', path: '/calendars', icon: Calendar, permission: 'calendars.view', featureFlag: 'calendars' },
       { name: 'Contacts', path: '/contacts', icon: Users, permission: 'contacts.view', featureFlag: 'contacts' },
       { name: 'Opportunities', path: '/opportunities', icon: Target, permission: 'opportunities.view', featureFlag: 'opportunities' },
       { name: 'Payments', path: '/payments', icon: CreditCard, permission: 'payments.view', featureFlag: 'payments' },
-      { name: 'AI Agents', path: '/ai-agents', icon: Bot, permission: 'ai_agents.view', featureFlag: 'ai_agents' },
+    ],
+  },
+  {
+    id: 'growth-marketing',
+    title: 'Growth & Marketing',
+    collapsible: true,
+    items: [
       { name: 'Marketing', path: '/marketing', icon: Megaphone, permission: 'marketing.view', featureFlag: 'marketing' },
-      { name: 'Automation', path: '/automation', icon: Workflow, permission: 'automation.view', featureFlag: 'automation' },
-      { name: 'Media Storage', path: '/media', icon: FolderOpen, permission: 'media.view', featureFlag: 'media' },
       { name: 'Reputation', path: '/reputation', icon: Star, permission: 'reputation.view', featureFlag: 'reputation' },
+    ],
+  },
+  {
+    id: 'automation-ai',
+    title: 'Automation & AI',
+    collapsible: true,
+    items: [
+      { name: 'Automation', path: '/automation', icon: Workflow, permission: 'automation.view', featureFlag: 'automation' },
+      { name: 'AI Agents', path: '/ai-agents', icon: Bot, permission: 'ai_agents.view', featureFlag: 'ai_agents' },
+    ],
+  },
+  {
+    id: 'files-analytics',
+    title: 'Files & Analytics',
+    collapsible: true,
+    items: [
+      { name: 'File Manager', path: '/media', icon: FolderOpen, permission: 'media.view', featureFlag: 'media' },
       { name: 'Reporting', path: '/reporting', icon: BarChart3, permission: 'reporting.view', featureFlag: 'reporting' },
     ],
   },
   {
+    id: 'administration',
     title: 'Administration',
+    collapsible: true,
     items: [
       { name: 'Users', path: '/users', icon: Users, permission: 'users.view' },
       { name: 'Channels', path: '/channels', icon: Radio, permission: 'channels.configure' },

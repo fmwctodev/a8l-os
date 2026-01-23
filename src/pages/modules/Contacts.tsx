@@ -12,9 +12,7 @@ import { getDepartments } from '../../services/departments';
 import { getUsers } from '../../services/users';
 import type { Contact, Tag, Department, User } from '../../types';
 import {
-  Search,
   Plus,
-  Filter,
   Download,
   Upload,
   Trash2,
@@ -25,11 +23,10 @@ import {
   Mail,
   Phone,
   Building2,
-  ChevronDown,
   X,
-  Check,
   GitMerge,
 } from 'lucide-react';
+import { PageHeader, FilterBar, EmptyState } from '../../components/layouts';
 import { ContactModal } from '../../components/contacts/ContactModal';
 import { ImportContactsModal } from '../../components/contacts/ImportContactsModal';
 import { ContactFiltersPanel } from '../../components/contacts/ContactFiltersPanel';
@@ -53,11 +50,8 @@ export function Contacts() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
-  const [showBulkActions, setShowBulkActions] = useState(false);
 
   const canCreate = hasPermission('contacts.create');
-  const canEdit = hasPermission('contacts.edit');
-  const canDelete = hasPermission('contacts.delete');
   const canExport = hasPermission('contacts.export');
   const canImport = hasPermission('contacts.import');
   const canMerge = hasPermission('contacts.merge');
@@ -167,6 +161,22 @@ export function Contacts() {
     (v) => v !== undefined && v !== '' && (!Array.isArray(v) || v.length > 0)
   ).length;
 
+  const secondaryActions = [];
+  if (canImport) {
+    secondaryActions.push({
+      label: 'Import Contacts',
+      icon: Upload,
+      onClick: () => setIsImportModalOpen(true),
+    });
+  }
+  if (canExport) {
+    secondaryActions.push({
+      label: 'Export All',
+      icon: Download,
+      onClick: handleExport,
+    });
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -187,73 +197,31 @@ export function Contacts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-white">Contacts</h1>
-          <p className="text-slate-400 mt-1">
-            {contacts.length} contact{contacts.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {canImport && (
-            <button
-              onClick={() => setIsImportModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
-            >
-              <Upload className="w-4 h-4" />
-              Import
-            </button>
-          )}
-          {canExport && (
-            <button
-              onClick={handleExport}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
-          )}
-          {canCreate && (
-            <button
-              onClick={() => setIsCreateModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-white font-medium hover:from-cyan-600 hover:to-teal-700 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add Contact
-            </button>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        title="Contacts"
+        subtitle={`${contacts.length} contact${contacts.length !== 1 ? 's' : ''}`}
+        icon={Users}
+        primaryAction={
+          canCreate
+            ? {
+                label: 'Add Contact',
+                icon: Plus,
+                onClick: () => setIsCreateModalOpen(true),
+              }
+            : undefined
+        }
+        secondaryActions={secondaryActions.length > 0 ? secondaryActions : undefined}
+      />
 
       <div className="bg-slate-900 rounded-xl border border-slate-800">
         <div className="p-4 border-b border-slate-800">
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search contacts..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-              />
-            </div>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
-                showFilters || activeFilterCount > 0
-                  ? 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400'
-                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              <Filter className="w-4 h-4" />
-              Filters
-              {activeFilterCount > 0 && (
-                <span className="px-1.5 py-0.5 text-xs rounded-full bg-cyan-500 text-white">
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
+          <FilterBar
+            searchPlaceholder="Search contacts..."
+            searchValue={searchQuery}
+            onSearchChange={setSearchQuery}
+            filterCount={activeFilterCount}
+            onFilterClick={() => setShowFilters(!showFilters)}
+          >
             {activeFilterCount > 0 && (
               <button
                 onClick={clearFilters}
@@ -262,7 +230,7 @@ export function Contacts() {
                 Clear all
               </button>
             )}
-          </div>
+          </FilterBar>
 
           {showFilters && (
             <ContactFiltersPanel
@@ -447,24 +415,23 @@ export function Contacts() {
           </table>
 
           {contacts.length === 0 && (
-            <div className="p-12 text-center">
-              <Users className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-              <p className="text-white font-medium mb-1">No contacts found</p>
-              <p className="text-slate-400 text-sm mb-6">
-                {activeFilterCount > 0
-                  ? 'Try adjusting your filters'
-                  : 'Get started by adding your first contact'}
-              </p>
-              {canCreate && activeFilterCount === 0 && (
-                <button
-                  onClick={() => setIsCreateModalOpen(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-white font-medium hover:from-cyan-600 hover:to-teal-700 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Contact
-                </button>
-              )}
-            </div>
+            <EmptyState
+              icon={Users}
+              title="No contacts found"
+              description={
+                activeFilterCount > 0
+                  ? 'Try adjusting your filters to see more results'
+                  : 'Get started by adding your first contact'
+              }
+              primaryAction={
+                canCreate && activeFilterCount === 0
+                  ? {
+                      label: 'Add Contact',
+                      onClick: () => setIsCreateModalOpen(true),
+                    }
+                  : undefined
+              }
+            />
           )}
         </div>
       </div>

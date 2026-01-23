@@ -8,11 +8,7 @@ import {
   Bot,
   Mail,
   Phone,
-  Bell,
-  Shield,
-  CreditCard,
   Palette,
-  Globe,
   Zap,
   LayoutList,
   Key,
@@ -24,119 +20,120 @@ interface SettingsNavItem {
   name: string;
   path: string;
   icon: LucideIcon;
-  implemented: boolean;
   requiresPermission?: string;
 }
 
-const settingsNavItems: SettingsNavItem[] = [
+interface SettingsNavSection {
+  title: string;
+  items: SettingsNavItem[];
+}
+
+const settingsNavSections: SettingsNavSection[] = [
   {
-    name: 'My Profile',
-    path: '/settings/profile',
-    icon: User,
-    implemented: true,
+    title: 'Personal',
+    items: [
+      {
+        name: 'My Profile',
+        path: '/settings/profile',
+        icon: User,
+      },
+    ],
   },
   {
-    name: 'Organization',
-    path: '/settings/organization',
-    icon: Building2,
-    implemented: true,
-    requiresPermission: 'settings.manage',
+    title: 'Organization',
+    items: [
+      {
+        name: 'Organization',
+        path: '/settings/organization',
+        icon: Building2,
+        requiresPermission: 'settings.manage',
+      },
+      {
+        name: 'My Staff',
+        path: '/settings/staff',
+        icon: Users,
+        requiresPermission: 'users.view',
+      },
+    ],
   },
   {
-    name: 'My Staff',
-    path: '/settings/staff',
-    icon: Users,
-    implemented: true,
-    requiresPermission: 'users.view',
+    title: 'Communication',
+    items: [
+      {
+        name: 'Calendars',
+        path: '/settings/calendars',
+        icon: Calendar,
+        requiresPermission: 'calendars.view',
+      },
+      {
+        name: 'Email Services',
+        path: '/settings/email-services',
+        icon: Mail,
+        requiresPermission: 'email.settings.view',
+      },
+      {
+        name: 'Phone System',
+        path: '/settings/phone-system',
+        icon: Phone,
+        requiresPermission: 'phone.settings.view',
+      },
+    ],
   },
   {
-    name: 'Calendars',
-    path: '/settings/calendars',
-    icon: Calendar,
-    implemented: true,
-    requiresPermission: 'calendars.view',
+    title: 'AI & Automation',
+    items: [
+      {
+        name: 'AI Agents',
+        path: '/settings/ai-agents',
+        icon: Bot,
+        requiresPermission: 'ai.settings.view',
+      },
+    ],
   },
   {
-    name: 'AI Agents',
-    path: '/settings/ai-agents',
-    icon: Bot,
-    implemented: true,
-    requiresPermission: 'ai.settings.view',
+    title: 'Data & Fields',
+    items: [
+      {
+        name: 'Custom Fields',
+        path: '/settings/custom-fields',
+        icon: LayoutList,
+        requiresPermission: 'custom_fields.view',
+      },
+      {
+        name: 'Lead Scoring',
+        path: '/settings/scoring',
+        icon: Target,
+        requiresPermission: 'scoring.view',
+      },
+    ],
   },
   {
-    name: 'Email Services',
-    path: '/settings/email-services',
-    icon: Mail,
-    implemented: true,
-    requiresPermission: 'email.settings.view',
+    title: 'Developer',
+    items: [
+      {
+        name: 'API Keys & Secrets',
+        path: '/settings/secrets',
+        icon: Key,
+        requiresPermission: 'secrets.view',
+      },
+      {
+        name: 'Integrations',
+        path: '/settings/integrations',
+        icon: Zap,
+        requiresPermission: 'integrations.view',
+      },
+    ],
   },
   {
-    name: 'Phone System',
-    path: '/settings/phone-system',
-    icon: Phone,
-    implemented: true,
-    requiresPermission: 'phone.settings.view',
-  },
-  {
-    name: 'Custom Fields',
-    path: '/settings/custom-fields',
-    icon: LayoutList,
-    implemented: true,
-    requiresPermission: 'custom_fields.view',
-  },
-  {
-    name: 'Lead Scoring',
-    path: '/settings/scoring',
-    icon: Target,
-    implemented: true,
-    requiresPermission: 'scoring.view',
-  },
-  {
-    name: 'API Keys & Secrets',
-    path: '/settings/secrets',
-    icon: Key,
-    implemented: true,
-    requiresPermission: 'secrets.view',
-  },
-  {
-    name: 'Notifications',
-    path: '/settings/notifications',
-    icon: Bell,
-    implemented: false,
-  },
-  {
-    name: 'Security',
-    path: '/settings/security',
-    icon: Shield,
-    implemented: false,
-  },
-  {
-    name: 'Billing',
-    path: '/settings/billing',
-    icon: CreditCard,
-    implemented: false,
-    requiresPermission: 'settings.manage',
-  },
-  {
-    name: 'Brandboard',
-    path: '/settings/brandboard',
-    icon: Palette,
-    implemented: true,
-    requiresPermission: 'brandboard.view',
-  },
-  {
-    name: 'Domain',
-    path: '/settings/domain',
-    icon: Globe,
-    implemented: false,
-    requiresPermission: 'settings.manage',
-  },
-  {
-    name: 'Integrations',
-    path: '/settings/integrations',
-    icon: Zap,
-    implemented: true,
-    requiresPermission: 'integrations.view',
+    title: 'Branding',
+    items: [
+      {
+        name: 'Brandboard',
+        path: '/settings/brandboard',
+        icon: Palette,
+        requiresPermission: 'brandboard.view',
+      },
+    ],
   },
 ];
 
@@ -147,40 +144,49 @@ interface SettingsNavProps {
 export function SettingsNav({ onNavigate }: SettingsNavProps) {
   const { hasPermission } = useAuth();
 
-  const visibleItems = settingsNavItems.filter((item) => {
-    if (item.requiresPermission && !hasPermission(item.requiresPermission)) {
-      return false;
-    }
-    return true;
-  });
+  const visibleSections = settingsNavSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => {
+        if (item.requiresPermission && !hasPermission(item.requiresPermission)) {
+          return false;
+        }
+        return true;
+      }),
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
-    <nav className="flex flex-col gap-1 p-4">
-      {visibleItems.map((item) => {
-        const Icon = item.icon;
-        return (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            onClick={onNavigate}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                isActive
-                  ? 'bg-gradient-to-r from-cyan-500/10 to-teal-500/10 border border-cyan-500/20 text-cyan-400'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
-              } ${!item.implemented ? 'opacity-50 cursor-not-allowed' : ''}`
-            }
-          >
-            <Icon className="w-5 h-5 flex-shrink-0" />
-            <span className="font-medium">{item.name}</span>
-            {!item.implemented && (
-              <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-400">
-                Soon
-              </span>
-            )}
-          </NavLink>
-        );
-      })}
+    <nav className="flex flex-col gap-6 p-4">
+      {visibleSections.map((section) => (
+        <div key={section.title}>
+          <h3 className="px-4 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            {section.title}
+          </h3>
+          <div className="space-y-1">
+            {section.items.map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  onClick={onNavigate}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-gradient-to-r from-cyan-500/10 to-teal-500/10 border border-cyan-500/20 text-cyan-400'
+                        : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`
+                  }
+                >
+                  <Icon className="w-5 h-5 flex-shrink-0" />
+                  <span className="font-medium">{item.name}</span>
+                </NavLink>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </nav>
   );
 }
