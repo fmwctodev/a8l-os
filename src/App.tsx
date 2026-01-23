@@ -44,6 +44,7 @@ import { CalendarsSettingsPage } from './pages/settings/CalendarsSettingsPage';
 import { AIAgentsSettingsPage } from './pages/settings/AIAgentsSettingsPage';
 import { EmailServicesSettingsPage } from './pages/settings/EmailServicesSettingsPage';
 import PhoneSystemSettingsPage from './pages/settings/PhoneSystemSettingsPage';
+import { CustomFieldsSettingsPage } from './pages/settings/CustomFieldsSettingsPage';
 import { SettingsPlaceholder } from './pages/settings/SettingsPlaceholder';
 import { Bell, Shield, CreditCard, Palette, Globe, Zap } from 'lucide-react';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
@@ -367,6 +368,14 @@ function App() {
                 element={
                   <ProtectedRoute permission="phone.settings.view" featureFlag="phone_services">
                     <PhoneSystemSettingsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="custom-fields"
+                element={
+                  <ProtectedRoute permission="custom_fields.view">
+                    <CustomFieldsSettingsPage />
                   </ProtectedRoute>
                 }
               />

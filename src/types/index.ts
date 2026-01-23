@@ -119,7 +119,8 @@ export type PermissionKey =
   | 'audit.view' | 'audit_logs.view'
   | 'email.settings.view' | 'email.settings.manage' | 'email.send.test'
   | 'phone.settings.view' | 'phone.settings.manage' | 'phone.numbers.manage'
-  | 'phone.routing.manage' | 'phone.test.run' | 'phone.compliance.manage';
+  | 'phone.routing.manage' | 'phone.test.run' | 'phone.compliance.manage'
+  | 'custom_fields.view' | 'custom_fields.manage' | 'custom_fields.groups.manage';
 
 export interface InviteStaffInput {
   first_name: string;
@@ -177,16 +178,58 @@ export interface Tag {
   created_at: string;
 }
 
+export type CustomFieldScope = 'contact' | 'opportunity';
+
+export type CustomFieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'date'
+  | 'datetime'
+  | 'select'
+  | 'multi_select'
+  | 'boolean'
+  | 'checkbox'
+  | 'radio'
+  | 'phone'
+  | 'email'
+  | 'url'
+  | 'currency'
+  | 'file';
+
+export interface CustomFieldGroup {
+  id: string;
+  organization_id: string;
+  scope: CustomFieldScope;
+  name: string;
+  sort_order: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+  fields?: CustomField[];
+}
+
 export interface CustomField {
   id: string;
   organization_id: string;
+  scope: CustomFieldScope;
+  group_id: string | null;
   name: string;
   field_key: string;
-  field_type: 'text' | 'number' | 'date' | 'select' | 'multi_select' | 'boolean';
+  field_type: CustomFieldType;
   options: string[] | null;
   is_required: boolean;
   display_order: number;
+  placeholder: string | null;
+  help_text: string | null;
+  visible_in_forms: boolean;
+  visible_in_surveys: boolean;
+  filterable: boolean;
+  active: boolean;
+  deleted_at: string | null;
   created_at: string;
+  updated_at: string;
+  group?: CustomFieldGroup | null;
 }
 
 export interface ContactCustomFieldValue {
@@ -194,6 +237,17 @@ export interface ContactCustomFieldValue {
   contact_id: string;
   custom_field_id: string;
   value: unknown;
+  custom_field?: CustomField;
+}
+
+export interface OrgOpportunityCustomFieldValue {
+  id: string;
+  organization_id: string;
+  opportunity_id: string;
+  custom_field_id: string;
+  value: unknown;
+  created_at: string;
+  updated_at: string;
   custom_field?: CustomField;
 }
 
@@ -2862,3 +2916,98 @@ export interface PhoneSettingsResponse {
   isConfigured: boolean;
   blockingReasons: string[];
 }
+
+export interface CustomFieldFilters {
+  scope?: CustomFieldScope;
+  groupId?: string | null;
+  fieldType?: CustomFieldType[];
+  active?: boolean;
+  search?: string;
+  visibleInForms?: boolean;
+  visibleInSurveys?: boolean;
+}
+
+export interface CustomFieldGroupFilters {
+  scope?: CustomFieldScope;
+  active?: boolean;
+  search?: string;
+}
+
+export interface CreateCustomFieldGroupInput {
+  scope: CustomFieldScope;
+  name: string;
+  sort_order?: number;
+}
+
+export interface UpdateCustomFieldGroupInput {
+  name?: string;
+  sort_order?: number;
+  active?: boolean;
+}
+
+export interface CreateCustomFieldInput {
+  scope: CustomFieldScope;
+  group_id?: string | null;
+  name: string;
+  field_key: string;
+  field_type: CustomFieldType;
+  options?: string[] | null;
+  is_required?: boolean;
+  display_order?: number;
+  placeholder?: string | null;
+  help_text?: string | null;
+  visible_in_forms?: boolean;
+  visible_in_surveys?: boolean;
+  filterable?: boolean;
+}
+
+export interface UpdateCustomFieldInput {
+  group_id?: string | null;
+  name?: string;
+  field_type?: CustomFieldType;
+  options?: string[] | null;
+  is_required?: boolean;
+  display_order?: number;
+  placeholder?: string | null;
+  help_text?: string | null;
+  visible_in_forms?: boolean;
+  visible_in_surveys?: boolean;
+  filterable?: boolean;
+  active?: boolean;
+}
+
+export const SAFE_TYPE_MIGRATIONS: Record<CustomFieldType, CustomFieldType[]> = {
+  text: ['textarea'],
+  textarea: ['text'],
+  number: ['currency', 'text'],
+  currency: ['number', 'text'],
+  date: ['datetime', 'text'],
+  datetime: ['date', 'text'],
+  select: ['radio', 'text'],
+  radio: ['select', 'text'],
+  multi_select: ['text'],
+  boolean: ['checkbox', 'text'],
+  checkbox: ['boolean', 'text'],
+  phone: ['text'],
+  email: ['text'],
+  url: ['text'],
+  file: [],
+};
+
+export const CUSTOM_FIELD_TYPE_LABELS: Record<CustomFieldType, string> = {
+  text: 'Single Line Text',
+  textarea: 'Multi-Line Text',
+  number: 'Number',
+  currency: 'Currency',
+  date: 'Date',
+  datetime: 'Date & Time',
+  select: 'Dropdown',
+  multi_select: 'Multi-Select',
+  boolean: 'Yes/No',
+  checkbox: 'Checkbox',
+  radio: 'Radio Buttons',
+  phone: 'Phone Number',
+  email: 'Email Address',
+  url: 'URL',
+  file: 'File Upload',
+};

@@ -14,6 +14,7 @@ import {
   Palette,
   Globe,
   Zap,
+  LayoutList,
   LucideIcon,
 } from 'lucide-react';
 
@@ -73,6 +74,13 @@ const settingsNavItems: SettingsNavItem[] = [
     icon: Phone,
     implemented: true,
     requiresPermission: 'phone.settings.view',
+  },
+  {
+    name: 'Custom Fields',
+    path: '/settings/custom-fields',
+    icon: LayoutList,
+    implemented: true,
+    requiresPermission: 'custom_fields.view',
   },
   {
     name: 'Notifications',
