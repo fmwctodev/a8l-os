@@ -1,0 +1,583 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { getInvoices, getInvoiceStats, sendInvoice, voidInvoice } from '../../services/invoices';
+import { getProducts, toggleProductActive } from '../../services/products';
+import { getQBOConnectionStatus } from '../../services/qboAuth';
+import type { Invoice, Product, InvoiceStats, InvoiceStatus, BillingType } from '../../types';
+import {
+  CreditCard,
+  Plus,
+  Search,
+  Filter,
+  MoreVertical,
+  Send,
+  Eye,
+  XCircle,
+  Loader2,
+  FileText,
+  Package,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  DollarSign,
+  Copy,
+  ExternalLink,
+  ToggleLeft,
+  ToggleRight,
+} from 'lucide-react';
+import { CreateInvoiceModal } from '../../components/payments/CreateInvoiceModal';
+import { CreateProductModal } from '../../components/payments/CreateProductModal';
+
+type TabType = 'invoices' | 'products' | 'recurring';
+
+const STATUS_STYLES: Record<InvoiceStatus, { bg: string; text: string; label: string }> = {
+  draft: { bg: 'bg-slate-500/20', text: 'text-slate-300', label: 'Draft' },
+  sent: { bg: 'bg-cyan-500/20', text: 'text-cyan-300', label: 'Sent' },
+  paid: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', label: 'Paid' },
+  overdue: { bg: 'bg-red-500/20', text: 'text-red-300', label: 'Overdue' },
+  void: { bg: 'bg-slate-700/50', text: 'text-slate-500', label: 'Void' },
+};
+
+export function Payments() {
+  const navigate = useNavigate();
+  const { user, hasPermission } = useAuth();
+  const [activeTab, setActiveTab] = useState<TabType>('invoices');
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [stats, setStats] = useState<InvoiceStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'all'>('all');
+  const [billingTypeFilter, setBillingTypeFilter] = useState<BillingType | 'all'>('all');
+  const [showActiveOnly, setShowActiveOnly] = useState(true);
+  const [showCreateInvoice, setShowCreateInvoice] = useState(false);
+  const [showCreateProduct, setShowCreateProduct] = useState(false);
+  const [qboConnected, setQboConnected] = useState(false);
+  const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+
+  const canView = hasPermission('payments.view');
+  const canManage = hasPermission('payments.manage');
+  const canCreateInvoice = hasPermission('invoices.create');
+  const canSendInvoice = hasPermission('invoices.send');
+  const canVoidInvoice = hasPermission('invoices.void');
+
+  useEffect(() => {
+    if (canView) {
+      loadData();
+      checkQBOConnection();
+    }
+  }, [user, canView]);
+
+  const loadData = async () => {
+    try {
+      setIsLoading(true);
+      const [invoiceData, productData, statsData] = await Promise.all([
+        getInvoices(),
+        getProducts(),
+        getInvoiceStats(),
+      ]);
+      setInvoices(invoiceData);
+      setProducts(productData);
+      setStats(statsData);
+    } catch (err) {
+      console.error('Failed to load data:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const checkQBOConnection = async () => {
+    try {
+      const status = await getQBOConnectionStatus();
+      setQboConnected(status.connected);
+    } catch (err) {
+      console.error('Failed to check QBO connection:', err);
+    }
+  };
+
+  const handleSendInvoice = async (invoice: Invoice) => {
+    if (!user) return;
+    try {
+      await sendInvoice(invoice.id, user);
+      loadData();
+    } catch (err) {
+      console.error('Failed to send invoice:', err);
+    }
+    setActionMenuId(null);
+  };
+
+  const handleVoidInvoice = async (invoice: Invoice) => {
+    if (!user || !confirm('Are you sure you want to void this invoice?')) return;
+    try {
+      await voidInvoice(invoice.id, user);
+      loadData();
+    } catch (err) {
+      console.error('Failed to void invoice:', err);
+    }
+    setActionMenuId(null);
+  };
+
+  const handleToggleProduct = async (product: Product) => {
+    if (!user) return;
+    try {
+      await toggleProductActive(product.id, !product.active, user);
+      loadData();
+    } catch (err) {
+      console.error('Failed to toggle product:', err);
+    }
+  };
+
+  const copyPaymentLink = (url: string) => {
+    navigator.clipboard.writeText(url);
+  };
+
+  const formatCurrency = (amount: number, currency = 'USD') => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+    }).format(amount);
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  const getContactName = (invoice: Invoice) => {
+    if (!invoice.contact) return 'Unknown';
+    return invoice.contact.company || `${invoice.contact.first_name} ${invoice.contact.last_name}`;
+  };
+
+  const filteredInvoices = invoices.filter((inv) => {
+    if (statusFilter !== 'all' && inv.status !== statusFilter) return false;
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const contactName = getContactName(inv).toLowerCase();
+      const docNum = (inv.doc_number || '').toLowerCase();
+      if (!contactName.includes(query) && !docNum.includes(query)) return false;
+    }
+    return true;
+  });
+
+  const filteredProducts = products.filter((prod) => {
+    if (showActiveOnly && !prod.active) return false;
+    if (billingTypeFilter !== 'all' && prod.billing_type !== billingTypeFilter) return false;
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      if (!prod.name.toLowerCase().includes(query) && !(prod.description || '').toLowerCase().includes(query)) return false;
+    }
+    return true;
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-white flex items-center gap-3">
+            <CreditCard className="w-7 h-7 text-emerald-400" />
+            Payments
+          </h1>
+          <p className="text-slate-400 mt-1">Manage invoices, products, and billing</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {!qboConnected && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <span>QuickBooks not connected</span>
+            </div>
+          )}
+          {activeTab === 'invoices' && canCreateInvoice && (
+            <button
+              onClick={() => setShowCreateInvoice(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-medium hover:from-emerald-600 hover:to-teal-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              New Invoice
+            </button>
+          )}
+          {activeTab === 'products' && canManage && (
+            <button
+              onClick={() => setShowCreateProduct(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-medium hover:from-emerald-600 hover:to-teal-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              New Product
+            </button>
+          )}
+        </div>
+      </div>
+
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-slate-900 rounded-xl border border-slate-800 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-cyan-500/10">
+                <FileText className="w-5 h-5 text-cyan-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-semibold text-white">{stats.totalInvoices}</p>
+                <p className="text-sm text-slate-400">Total Invoices</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-slate-900 rounded-xl border border-slate-800 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-500/10">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-semibold text-white">{formatCurrency(stats.totalPaid)}</p>
+                <p className="text-sm text-slate-400">Total Paid</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-slate-900 rounded-xl border border-slate-800 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-500/10">
+                <Clock className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-semibold text-white">{formatCurrency(stats.totalOutstanding)}</p>
+                <p className="text-sm text-slate-400">Outstanding</p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-slate-900 rounded-xl border border-slate-800 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-red-500/10">
+                <AlertCircle className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <p className="text-2xl font-semibold text-white">{stats.overdueInvoices}</p>
+                <p className="text-sm text-slate-400">Overdue</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-slate-900 rounded-xl border border-slate-800">
+        <div className="border-b border-slate-800">
+          <nav className="flex gap-1 p-2">
+            {[
+              { key: 'invoices', label: 'Invoices', icon: FileText },
+              { key: 'products', label: 'Products', icon: Package },
+              { key: 'recurring', label: 'Recurring', icon: RefreshCw },
+            ].map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key as TabType)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === key
+                    ? 'bg-slate-800 text-white'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        <div className="p-4 border-b border-slate-800">
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder={activeTab === 'invoices' ? 'Search invoices...' : 'Search products...'}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+              />
+            </div>
+            {activeTab === 'invoices' && (
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as InvoiceStatus | 'all')}
+                className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              >
+                <option value="all">All Status</option>
+                <option value="draft">Draft</option>
+                <option value="sent">Sent</option>
+                <option value="paid">Paid</option>
+                <option value="overdue">Overdue</option>
+                <option value="void">Void</option>
+              </select>
+            )}
+            {activeTab === 'products' && (
+              <>
+                <select
+                  value={billingTypeFilter}
+                  onChange={(e) => setBillingTypeFilter(e.target.value as BillingType | 'all')}
+                  className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                >
+                  <option value="all">All Types</option>
+                  <option value="one_time">One-time</option>
+                  <option value="recurring">Recurring</option>
+                </select>
+                <button
+                  onClick={() => setShowActiveOnly(!showActiveOnly)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+                    showActiveOnly
+                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                      : 'bg-slate-800 border-slate-700 text-slate-400'
+                  }`}
+                >
+                  {showActiveOnly ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                  Active only
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="p-4">
+          {activeTab === 'invoices' && (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-800">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Invoice</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Contact</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Amount</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Status</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Due Date</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Payment Link</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-slate-400">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredInvoices.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                        No invoices found
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredInvoices.map((invoice) => {
+                      const statusStyle = STATUS_STYLES[invoice.status];
+                      return (
+                        <tr
+                          key={invoice.id}
+                          className="border-b border-slate-800/50 hover:bg-slate-800/30 cursor-pointer"
+                          onClick={() => navigate(`/payments/invoices/${invoice.id}`)}
+                        >
+                          <td className="py-3 px-4">
+                            <span className="text-white font-medium">{invoice.doc_number || '-'}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-white">{getContactName(invoice)}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-white font-medium">{formatCurrency(invoice.total, invoice.currency)}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${statusStyle.bg} ${statusStyle.text}`}>
+                              {statusStyle.label}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="text-slate-300">{formatDate(invoice.due_date)}</span>
+                          </td>
+                          <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                            {invoice.payment_link_url ? (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => copyPaymentLink(invoice.payment_link_url!)}
+                                  className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                                  title="Copy link"
+                                >
+                                  <Copy className="w-4 h-4" />
+                                </button>
+                                <a
+                                  href={invoice.payment_link_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                                  title="Open payment page"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </a>
+                              </div>
+                            ) : (
+                              <span className="text-slate-500 text-sm">-</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="relative">
+                              <button
+                                onClick={() => setActionMenuId(actionMenuId === invoice.id ? null : invoice.id)}
+                                className="p-1.5 rounded hover:bg-slate-700 text-slate-400"
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </button>
+                              {actionMenuId === invoice.id && (
+                                <div className="absolute right-0 top-full mt-1 w-48 rounded-lg bg-slate-800 border border-slate-700 shadow-xl z-10">
+                                  <button
+                                    onClick={() => {
+                                      navigate(`/payments/invoices/${invoice.id}`);
+                                      setActionMenuId(null);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-4 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                    View Details
+                                  </button>
+                                  {invoice.status === 'draft' && canSendInvoice && (
+                                    <button
+                                      onClick={() => handleSendInvoice(invoice)}
+                                      className="w-full flex items-center gap-2 px-4 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
+                                    >
+                                      <Send className="w-4 h-4" />
+                                      Send Invoice
+                                    </button>
+                                  )}
+                                  {invoice.status !== 'void' && invoice.status !== 'paid' && canVoidInvoice && (
+                                    <button
+                                      onClick={() => handleVoidInvoice(invoice)}
+                                      className="w-full flex items-center gap-2 px-4 py-2 text-left text-sm text-red-400 hover:bg-slate-700"
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                      Void Invoice
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {activeTab === 'products' && (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-800">
+                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Product</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Description</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Price</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Type</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Status</th>
+                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">QBO Sync</th>
+                    <th className="text-right py-3 px-4 text-sm font-medium text-slate-400">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProducts.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                        No products found
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredProducts.map((product) => (
+                      <tr key={product.id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+                        <td className="py-3 px-4">
+                          <span className="text-white font-medium">{product.name}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="text-slate-300 text-sm line-clamp-1">{product.description || '-'}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="text-white font-medium">{formatCurrency(product.price_amount, product.currency)}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                            product.billing_type === 'recurring'
+                              ? 'bg-cyan-500/20 text-cyan-300'
+                              : 'bg-slate-500/20 text-slate-300'
+                          }`}>
+                            {product.billing_type === 'recurring' ? 'Recurring' : 'One-time'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                            product.active
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : 'bg-slate-700/50 text-slate-500'
+                          }`}>
+                            {product.active ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {product.qbo_item_id ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-400 text-sm">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Synced
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 text-sm">Not synced</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          {canManage && (
+                            <button
+                              onClick={() => handleToggleProduct(product)}
+                              className={`px-3 py-1 rounded text-sm transition-colors ${
+                                product.active
+                                  ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                  : 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                              }`}
+                            >
+                              {product.active ? 'Deactivate' : 'Activate'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {activeTab === 'recurring' && (
+            <div className="py-12 text-center text-slate-400">
+              <RefreshCw className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p>Recurring billing profiles will appear here</p>
+              <p className="text-sm mt-1">Create recurring profiles to automatically generate invoices</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showCreateInvoice && (
+        <CreateInvoiceModal
+          onClose={() => setShowCreateInvoice(false)}
+          onCreated={() => {
+            setShowCreateInvoice(false);
+            loadData();
+          }}
+        />
+      )}
+
+      {showCreateProduct && (
+        <CreateProductModal
+          onClose={() => setShowCreateProduct(false)}
+          onCreated={() => {
+            setShowCreateProduct(false);
+            loadData();
+          }}
+        />
+      )}
+    </div>
+  );
+}

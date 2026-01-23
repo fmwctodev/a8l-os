@@ -1,0 +1,385 @@
+import { useState, useEffect } from 'react';
+import {
+  Plus,
+  Search,
+  User,
+  Users,
+  MoreVertical,
+  Edit2,
+  Copy,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
+  Calendar,
+  Check,
+  X,
+} from 'lucide-react';
+import { useAuth } from '../../../contexts/AuthContext';
+import { getCalendars } from '../../../services/calendars';
+import { getDepartments } from '../../../services/departments';
+import { getUsers } from '../../../services/users';
+import type { Calendar as CalendarType, Department, User as UserType, CalendarFilters } from '../../../types';
+import { canManageCalendar, canDeleteCalendar } from '../../../utils/calendarPermissions';
+import { CalendarDrawer } from './CalendarDrawer';
+import { DeleteCalendarModal } from './DeleteCalendarModal';
+
+export function CalendarsTab() {
+  const { user } = useAuth();
+  const [calendars, setCalendars] = useState<CalendarType[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [users, setUsers] = useState<UserType[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState<CalendarFilters & { ownerId?: string; connectionStatus?: string }>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editingCalendar, setEditingCalendar] = useState<CalendarType | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingCalendar, setDeletingCalendar] = useState<CalendarType | null>(null);
+
+  useEffect(() => {
+    loadData();
+  }, [user]);
+
+  const loadData = async () => {
+    if (!user?.organization_id) return;
+
+    try {
+      setLoading(true);
+      const [calendarsData, departmentsData, usersData] = await Promise.all([
+        getCalendars(user.organization_id),
+        getDepartments(user.organization_id),
+        getUsers(user.organization_id),
+      ]);
+      setCalendars(calendarsData);
+      setDepartments(departmentsData);
+      setUsers(usersData);
+    } catch (error) {
+      console.error('Failed to load data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredCalendars = calendars.filter((calendar) => {
+    if (searchQuery && !calendar.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+      return false;
+    }
+    if (filters.type && calendar.type !== filters.type) {
+      return false;
+    }
+    if (filters.departmentId && calendar.department_id !== filters.departmentId) {
+      return false;
+    }
+    if (filters.ownerId && calendar.owner_user_id !== filters.ownerId) {
+      return false;
+    }
+    return true;
+  });
+
+  const handleCreateCalendar = () => {
+    setEditingCalendar(null);
+    setDrawerOpen(true);
+  };
+
+  const handleEditCalendar = (calendar: CalendarType) => {
+    setEditingCalendar(calendar);
+    setDrawerOpen(true);
+    setActiveMenu(null);
+  };
+
+  const handleDeleteCalendar = (calendar: CalendarType) => {
+    setDeletingCalendar(calendar);
+    setDeleteModalOpen(true);
+    setActiveMenu(null);
+  };
+
+  const handleCopyLink = (calendar: CalendarType) => {
+    const bookingUrl = `${window.location.origin}/book/${calendar.slug}`;
+    navigator.clipboard.writeText(bookingUrl);
+    setActiveMenu(null);
+  };
+
+  const handleDrawerClose = () => {
+    setDrawerOpen(false);
+    setEditingCalendar(null);
+  };
+
+  const handleDrawerSave = () => {
+    loadData();
+    handleDrawerClose();
+  };
+
+  const handleDeleteConfirm = () => {
+    loadData();
+    setDeleteModalOpen(false);
+    setDeletingCalendar(null);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (calendars.length === 0) {
+    return (
+      <>
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mb-4">
+            <Calendar className="w-8 h-8 text-slate-500" />
+          </div>
+          <h3 className="text-lg font-medium text-white mb-2">No calendars yet</h3>
+          <p className="text-slate-400 mb-6 max-w-md">
+            Create your first calendar to start accepting bookings from clients and customers.
+          </p>
+          <button
+            onClick={handleCreateCalendar}
+            className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-lg font-medium hover:from-cyan-600 hover:to-teal-600 transition-all flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Create Calendar
+          </button>
+        </div>
+
+        <CalendarDrawer
+          open={drawerOpen}
+          onClose={handleDrawerClose}
+          onSave={handleDrawerSave}
+          calendar={editingCalendar}
+          departments={departments}
+          users={users}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row gap-4 justify-between">
+          <div className="flex flex-wrap gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search calendars..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent w-64"
+              />
+            </div>
+
+            <select
+              value={filters.type || ''}
+              onChange={(e) => setFilters({ ...filters, type: e.target.value as CalendarType['type'] || undefined })}
+              className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            >
+              <option value="">All Types</option>
+              <option value="user">User</option>
+              <option value="team">Team</option>
+            </select>
+
+            <select
+              value={filters.departmentId || ''}
+              onChange={(e) => setFilters({ ...filters, departmentId: e.target.value || undefined })}
+              className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            >
+              <option value="">All Departments</option>
+              {departments.map((dept) => (
+                <option key={dept.id} value={dept.id}>
+                  {dept.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={handleCreateCalendar}
+            className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-lg font-medium hover:from-cyan-600 hover:to-teal-600 transition-all flex items-center gap-2 whitespace-nowrap"
+          >
+            <Plus className="w-4 h-4" />
+            Create Calendar
+          </button>
+        </div>
+
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700 overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-700">
+                <th className="text-left px-4 py-3 text-slate-400 font-medium text-sm">Name</th>
+                <th className="text-left px-4 py-3 text-slate-400 font-medium text-sm">Type</th>
+                <th className="text-left px-4 py-3 text-slate-400 font-medium text-sm">Department</th>
+                <th className="text-left px-4 py-3 text-slate-400 font-medium text-sm">Owner/Members</th>
+                <th className="text-left px-4 py-3 text-slate-400 font-medium text-sm">Status</th>
+                <th className="text-right px-4 py-3 text-slate-400 font-medium text-sm">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCalendars.map((calendar) => {
+                const canManage = canManageCalendar(user, calendar);
+                const canDelete = canDeleteCalendar(user, calendar);
+
+                return (
+                  <tr key={calendar.id} className="border-b border-slate-700/50 hover:bg-slate-700/30">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                            calendar.type === 'user'
+                              ? 'bg-blue-500/20 text-blue-400'
+                              : 'bg-emerald-500/20 text-emerald-400'
+                          }`}
+                        >
+                          {calendar.type === 'user' ? (
+                            <User className="w-4 h-4" />
+                          ) : (
+                            <Users className="w-4 h-4" />
+                          )}
+                        </div>
+                        <span className="text-white font-medium">{calendar.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex px-2 py-1 rounded text-xs font-medium ${
+                          calendar.type === 'user'
+                            ? 'bg-blue-500/20 text-blue-400'
+                            : 'bg-emerald-500/20 text-emerald-400'
+                        }`}
+                      >
+                        {calendar.type === 'user' ? 'User' : 'Team'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-300">
+                      {calendar.department?.name || '-'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-300">
+                      {calendar.type === 'user'
+                        ? calendar.owner?.name || '-'
+                        : `${calendar.members?.length || 0} members`}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
+                          (calendar as CalendarType & { active?: boolean }).active !== false
+                            ? 'bg-emerald-500/20 text-emerald-400'
+                            : 'bg-slate-500/20 text-slate-400'
+                        }`}
+                      >
+                        {(calendar as CalendarType & { active?: boolean }).active !== false ? (
+                          <>
+                            <Check className="w-3 h-3" />
+                            Active
+                          </>
+                        ) : (
+                          <>
+                            <X className="w-3 h-3" />
+                            Disabled
+                          </>
+                        )}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end">
+                        <div className="relative">
+                          <button
+                            onClick={() => setActiveMenu(activeMenu === calendar.id ? null : calendar.id)}
+                            className="p-1 text-slate-400 hover:text-white rounded"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+
+                          {activeMenu === calendar.id && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-10"
+                                onClick={() => setActiveMenu(null)}
+                              />
+                              <div className="absolute right-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-20 py-1">
+                                {canManage && (
+                                  <button
+                                    onClick={() => handleEditCalendar(calendar)}
+                                    className="w-full px-4 py-2 text-left text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                  >
+                                    <Edit2 className="w-4 h-4" />
+                                    Edit
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleCopyLink(calendar)}
+                                  className="w-full px-4 py-2 text-left text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                >
+                                  <Copy className="w-4 h-4" />
+                                  Copy Booking Link
+                                </button>
+                                {canManage && (
+                                  <button
+                                    onClick={() => setActiveMenu(null)}
+                                    className="w-full px-4 py-2 text-left text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                  >
+                                    {(calendar as CalendarType & { active?: boolean }).active !== false ? (
+                                      <>
+                                        <ToggleLeft className="w-4 h-4" />
+                                        Disable
+                                      </>
+                                    ) : (
+                                      <>
+                                        <ToggleRight className="w-4 h-4" />
+                                        Enable
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+                                {canDelete && (
+                                  <button
+                                    onClick={() => handleDeleteCalendar(calendar)}
+                                    className="w-full px-4 py-2 text-left text-red-400 hover:bg-slate-700 flex items-center gap-2"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                    Delete
+                                  </button>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          {filteredCalendars.length === 0 && (
+            <div className="text-center py-8 text-slate-400">
+              No calendars match your filters
+            </div>
+          )}
+        </div>
+      </div>
+
+      <CalendarDrawer
+        open={drawerOpen}
+        onClose={handleDrawerClose}
+        onSave={handleDrawerSave}
+        calendar={editingCalendar}
+        departments={departments}
+        users={users}
+      />
+
+      <DeleteCalendarModal
+        open={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setDeletingCalendar(null);
+        }}
+        onConfirm={handleDeleteConfirm}
+        calendar={deletingCalendar}
+      />
+    </>
+  );
+}
