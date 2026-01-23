@@ -292,6 +292,7 @@ export async function createOpportunity(
 export async function updateOpportunity(
   id: string,
   updates: Partial<{
+    pipeline_id: string;
     stage_id: string;
     assigned_user_id: string | null;
     department_id: string | null;
@@ -314,6 +315,23 @@ export async function updateOpportunity(
     .single();
 
   if (error) throw error;
+
+  if (updates.pipeline_id && updates.pipeline_id !== existing.pipeline_id) {
+    await createTimelineEvent({
+      org_id: existing.org_id,
+      opportunity_id: id,
+      contact_id: existing.contact_id,
+      event_type: 'pipeline_changed',
+      summary: `Pipeline changed from "${existing.pipeline?.name}" to "${data.pipeline?.name}"`,
+      payload: {
+        from_pipeline_id: existing.pipeline_id,
+        to_pipeline_id: updates.pipeline_id,
+        from_pipeline_name: existing.pipeline?.name,
+        to_pipeline_name: data.pipeline?.name
+      },
+      actor_user_id: actorUserId
+    });
+  }
 
   if (updates.stage_id && updates.stage_id !== existing.stage_id) {
     await createTimelineEvent({

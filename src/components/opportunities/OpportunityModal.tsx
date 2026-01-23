@@ -240,6 +240,7 @@ export function OpportunityModal({
         result = await opportunitiesService.updateOpportunity(
           opportunity.id,
           {
+            pipeline_id: formData.pipeline_id,
             stage_id: formData.stage_id,
             assigned_user_id: formData.assigned_user_id || null,
             value_amount: parseFloat(formData.value_amount) || 0,
@@ -457,8 +458,7 @@ export function OpportunityModal({
               <select
                 value={formData.pipeline_id}
                 onChange={(e) => handlePipelineChange(e.target.value)}
-                disabled={isEditing}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white disabled:opacity-50"
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white"
               >
                 <option value="">Select pipeline</option>
                 {pipelines.map(p => (
