@@ -78,14 +78,17 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
   const canSaveDraft = isDraftMode && draftPipeline.name.trim() && draftPipeline.stages.length > 0;
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (orgId) {
+      loadData();
+    }
+  }, [orgId]);
 
   async function loadData() {
+    if (!orgId) return;
     try {
       const [pipelinesData, departmentsData] = await Promise.all([
         pipelinesService.getPipelines(),
-        getDepartments()
+        getDepartments(orgId)
       ]);
       setPipelines(pipelinesData);
       setDepartments(departmentsData);

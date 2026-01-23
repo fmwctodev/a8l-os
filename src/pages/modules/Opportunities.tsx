@@ -92,8 +92,10 @@ export function Opportunities() {
   ].reduce((a, b) => a + (b || 0), 0);
 
   useEffect(() => {
-    loadInitialData();
-  }, []);
+    if (user?.organization_id) {
+      loadInitialData();
+    }
+  }, [user?.organization_id]);
 
   useEffect(() => {
     if (selectedPipeline) {
@@ -116,11 +118,12 @@ export function Opportunities() {
   }, []);
 
   async function loadInitialData() {
+    if (!user?.organization_id) return;
     try {
       const [pipelinesData, usersData, departmentsData] = await Promise.all([
         pipelinesService.getPipelines(),
         getUsers(),
-        getDepartments()
+        getDepartments(user.organization_id)
       ]);
       setPipelines(pipelinesData);
       setUsers(usersData);

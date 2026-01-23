@@ -81,14 +81,17 @@ export function PipelinesPage() {
   const canSaveDraft = isDraftMode && draftPipeline.name.trim() && draftPipeline.stages.length > 0;
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user?.organization_id) {
+      loadData();
+    }
+  }, [user?.organization_id]);
 
   async function loadData() {
+    if (!user?.organization_id) return;
     try {
       const [pipelinesData, departmentsData] = await Promise.all([
         pipelinesService.getPipelines(),
-        getDepartments()
+        getDepartments(user.organization_id)
       ]);
       setPipelines(pipelinesData);
       setDepartments(departmentsData);
