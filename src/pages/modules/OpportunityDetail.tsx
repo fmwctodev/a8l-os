@@ -46,6 +46,7 @@ import { getAttachmentCount } from '../../services/fileAttachments';
 import { OpportunityModal } from '../../components/opportunities/OpportunityModal';
 import { CreateInvoiceModal } from '../../components/payments/CreateInvoiceModal';
 import OpportunityFilesTab from '../../components/opportunities/OpportunityFilesTab';
+import { ScoreWidget } from '../../components/scoring/ScoreWidget';
 
 type TabType = 'details' | 'activity' | 'tasks' | 'notes' | 'invoices' | 'files';
 
@@ -66,6 +67,7 @@ export function OpportunityDetail() {
   const canViewPayments = usePermission('payments.view');
   const canCreateInvoice = usePermission('invoices.create');
   const canViewMedia = usePermission('media.view');
+  const canAdjustScore = usePermission('scoring.adjust');
 
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -78,6 +80,7 @@ export function OpportunityDetail() {
   const [activeTab, setActiveTab] = useState<TabType>('details');
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
   const [mediaEnabled, setMediaEnabled] = useState(false);
+  const [scoringEnabled, setScoringEnabled] = useState(false);
   const [filesCount, setFilesCount] = useState(0);
 
   const [showEditModal, setShowEditModal] = useState(false);
@@ -104,13 +107,15 @@ export function OpportunityDetail() {
 
   async function loadOpportunity() {
     try {
-      const [data, paymentsFlag, mediaFlag] = await Promise.all([
+      const [data, paymentsFlag, mediaFlag, scoringFlag] = await Promise.all([
         opportunitiesService.getOpportunityById(id!),
         isFeatureEnabled('payments'),
         isFeatureEnabled('media'),
+        isFeatureEnabled('scoring_management'),
       ]);
       setPaymentsEnabled(paymentsFlag);
       setMediaEnabled(mediaFlag);
+      setScoringEnabled(scoringFlag);
 
       if (!data) {
         navigate('/opportunities');
@@ -785,6 +790,28 @@ export function OpportunityDetail() {
                   <ExternalLink className="w-4 h-4" />
                   View Full Profile
                 </Link>
+
+                {scoringEnabled && (
+                  <div className="pt-4 border-t border-slate-700">
+                    <h4 className="text-xs font-medium text-slate-400 mb-2">Contact Score</h4>
+                    <ScoreWidget
+                      entityType="contact"
+                      entityId={contact.id}
+                      canAdjust={canAdjustScore}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {scoringEnabled && (
+              <div className="mt-6 pt-4 border-t border-slate-700">
+                <h3 className="text-sm font-medium text-slate-300 mb-4">Opportunity Score</h3>
+                <ScoreWidget
+                  entityType="opportunity"
+                  entityId={opportunity.id}
+                  canAdjust={canAdjustScore}
+                />
               </div>
             )}
           </div>

@@ -46,6 +46,7 @@ import { EmailServicesSettingsPage } from './pages/settings/EmailServicesSetting
 import PhoneSystemSettingsPage from './pages/settings/PhoneSystemSettingsPage';
 import { CustomFieldsSettingsPage } from './pages/settings/CustomFieldsSettingsPage';
 import { SecretsSettingsPage } from './pages/settings/SecretsSettingsPage';
+import ScoringSettingsPage from './pages/settings/ScoringSettingsPage';
 import { SettingsPlaceholder } from './pages/settings/SettingsPlaceholder';
 import { Bell, Shield, CreditCard, Palette, Globe, Zap } from 'lucide-react';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
@@ -385,6 +386,14 @@ function App() {
                 element={
                   <ProtectedRoute permission="secrets.view" featureFlag="secrets_management">
                     <SecretsSettingsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="scoring"
+                element={
+                  <ProtectedRoute permission="scoring.view" featureFlag="scoring_management">
+                    <ScoringSettingsPage />
                   </ProtectedRoute>
                 }
               />

@@ -16,6 +16,7 @@ import {
   Zap,
   LayoutList,
   Key,
+  Target,
   LucideIcon,
 } from 'lucide-react';
 
@@ -82,6 +83,13 @@ const settingsNavItems: SettingsNavItem[] = [
     icon: LayoutList,
     implemented: true,
     requiresPermission: 'custom_fields.view',
+  },
+  {
+    name: 'Lead Scoring',
+    path: '/settings/scoring',
+    icon: Target,
+    implemented: true,
+    requiresPermission: 'scoring.view',
   },
   {
     name: 'API Keys & Secrets',

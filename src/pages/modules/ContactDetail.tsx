@@ -35,6 +35,7 @@ import { ContactTasksTab } from '../../components/contacts/ContactTasksTab';
 import { ContactTimelineTab } from '../../components/contacts/ContactTimelineTab';
 import { ContactPaymentsTab } from '../../components/contacts/ContactPaymentsTab';
 import ContactFilesTab from '../../components/contacts/ContactFilesTab';
+import { ScoreWidget } from '../../components/scoring/ScoreWidget';
 import { isFeatureEnabled } from '../../services/featureFlags';
 import { getAttachmentCount } from '../../services/fileAttachments';
 
@@ -62,12 +63,14 @@ export function ContactDetail() {
   const [showActions, setShowActions] = useState(false);
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
   const [mediaEnabled, setMediaEnabled] = useState(false);
+  const [scoringEnabled, setScoringEnabled] = useState(false);
   const [filesCount, setFilesCount] = useState(0);
 
   const canEdit = hasPermission('contacts.edit');
   const canViewPayments = hasPermission('payments.view');
   const canViewMedia = hasPermission('media.view');
   const canDelete = hasPermission('contacts.delete');
+  const canAdjustScore = hasPermission('scoring.adjust');
   const isAdmin = isSuperAdmin || currentUser?.role?.hierarchy_level === 2;
 
   const loadContact = useCallback(async () => {
@@ -77,7 +80,7 @@ export function ContactDetail() {
       setIsLoading(true);
       setError(null);
 
-      const [contactData, tagsData, customFieldsData, departmentsData, usersData, paymentsFlag, mediaFlag] = await Promise.all([
+      const [contactData, tagsData, customFieldsData, departmentsData, usersData, paymentsFlag, mediaFlag, scoringFlag] = await Promise.all([
         getContactById(id),
         getTags(currentUser.organization_id),
         getCustomFields(currentUser.organization_id),
@@ -85,9 +88,11 @@ export function ContactDetail() {
         getUsers(),
         isFeatureEnabled('payments'),
         isFeatureEnabled('media'),
+        isFeatureEnabled('scoring_management'),
       ]);
       setPaymentsEnabled(paymentsFlag);
       setMediaEnabled(mediaFlag);
+      setScoringEnabled(scoringFlag);
 
       if (!contactData) {
         setError('Contact not found');
@@ -388,6 +393,14 @@ export function ContactDetail() {
               </div>
             </div>
           </div>
+
+          {scoringEnabled && (
+            <ScoreWidget
+              entityType="contact"
+              entityId={contact.id}
+              canAdjust={canAdjustScore}
+            />
+          )}
 
           <div className="bg-slate-900 rounded-xl border border-slate-800 p-4">
             <h3 className="text-sm font-medium text-slate-300 mb-3">Tags</h3>
