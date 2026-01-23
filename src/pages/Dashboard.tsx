@@ -1,195 +1,301 @@
-import { useAuth } from '../contexts/AuthContext';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Users,
   MessageSquare,
   Target,
   Calendar,
-  TrendingUp,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
+  RefreshCw,
+  UserPlus,
+  Send,
+  FileText,
+  Bot,
+  CalendarPlus,
 } from 'lucide-react';
-
-interface StatCardProps {
-  title: string;
-  value: string;
-  change?: string;
-  changeType?: 'positive' | 'negative' | 'neutral';
-  icon: React.ReactNode;
-}
-
-function StatCard({ title, value, change, changeType = 'neutral', icon }: StatCardProps) {
-  return (
-    <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm text-slate-400 mb-1">{title}</p>
-          <p className="text-2xl font-semibold text-white">{value}</p>
-          {change && (
-            <p
-              className={`text-xs mt-1 ${
-                changeType === 'positive'
-                  ? 'text-emerald-400'
-                  : changeType === 'negative'
-                  ? 'text-red-400'
-                  : 'text-slate-400'
-              }`}
-            >
-              {change}
-            </p>
-          )}
-        </div>
-        <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center">
-          {icon}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface ActivityItemProps {
-  title: string;
-  description: string;
-  time: string;
-  icon: React.ReactNode;
-  iconBg: string;
-}
-
-function ActivityItem({ title, description, time, icon, iconBg }: ActivityItemProps) {
-  return (
-    <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-800/50 transition-colors">
-      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${iconBg}`}>
-        {icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-white font-medium">{title}</p>
-        <p className="text-xs text-slate-400 truncate">{description}</p>
-      </div>
-      <span className="text-xs text-slate-500 flex-shrink-0">{time}</span>
-    </div>
-  );
-}
+import { useAuth } from '../contexts/AuthContext';
+import { useDashboardData } from '../hooks/useDashboardData';
+import { getGreeting, getDateRangePresets, type DateRange } from '../services/dashboard';
+import { usePermission } from '../hooks/usePermission';
+import {
+  StatCard,
+  QuickActionButton,
+  QueuePanel,
+  AppointmentsList,
+  ActivityFeed,
+  SystemHealthIndicator,
+  DateRangeSelector,
+  CreateContactDrawer,
+  ComposeMessageDrawer,
+  CreateOpportunityDrawer,
+  CreateInvoiceDrawer,
+  BookAppointmentDrawer,
+  RunAgentDrawer,
+} from '../components/dashboard';
 
 export function Dashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const [dateRange, setDateRange] = useState<DateRange>(getDateRangePresets()[1]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const greeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  };
+  const [createContactOpen, setCreateContactOpen] = useState(false);
+  const [composeMessageOpen, setComposeMessageOpen] = useState(false);
+  const [createOpportunityOpen, setCreateOpportunityOpen] = useState(false);
+  const [createInvoiceOpen, setCreateInvoiceOpen] = useState(false);
+  const [bookAppointmentOpen, setBookAppointmentOpen] = useState(false);
+  const [runAgentOpen, setRunAgentOpen] = useState(false);
+
+  const {
+    stats,
+    conversations,
+    tasks,
+    appointments,
+    activity,
+    systemHealth,
+    loading,
+    activityFilter,
+    setActivityFilter,
+    refetch,
+  } = useDashboardData(dateRange);
+
+  const canCreateContact = usePermission('contacts.create');
+  const canSendMessage = usePermission('conversations.send');
+  const canCreateOpportunity = usePermission('opportunities.create');
+  const canCreateInvoice = usePermission('invoices.create');
+  const canCreateAppointment = usePermission('appointments.create');
+  const canRunAgent = usePermission('ai_agents.run');
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await refetch();
+    setTimeout(() => setRefreshing(false), 500);
+  }
+
+  function handleDrawerSuccess() {
+    refetch();
+  }
+
+  function formatNextAppointment(): string | undefined {
+    if (!stats?.nextAppointmentTime) return undefined;
+    const date = new Date(stats.nextAppointmentTime);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const isTomorrow =
+      date.toDateString() === new Date(now.getTime() + 86400000).toDateString();
+
+    const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (isToday) return `Next: Today ${time}`;
+    if (isTomorrow) return `Next: Tomorrow ${time}`;
+    return `Next: ${date.toLocaleDateString([], { weekday: 'short' })} ${time}`;
+  }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-white">
-          {greeting()}, {user?.name?.split(' ')[0]}
-        </h1>
-        <p className="text-slate-400 mt-1">Here's what's happening with your CRM today.</p>
+    <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-white">
+            {getGreeting()}, {user?.name?.split(' ')[0]}
+          </h1>
+          <p className="text-slate-400 mt-1">Here's what's happening today.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <DateRangeSelector value={dateRange} onChange={setDateRange} />
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-2 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white hover:bg-slate-700 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Contacts"
-          value="--"
-          change="Module not active"
-          changeType="neutral"
-          icon={<Users className="w-5 h-5 text-cyan-400" />}
+          value={stats?.totalContacts ?? '--'}
+          icon={Users}
+          accentColor="cyan"
+          onClick={() => navigate('/contacts')}
+          isLoading={loading.stats}
         />
         <StatCard
           title="Open Conversations"
-          value="--"
-          change="Module not active"
-          changeType="neutral"
-          icon={<MessageSquare className="w-5 h-5 text-teal-400" />}
+          value={stats?.openConversations ?? '--'}
+          sublabel={
+            stats?.unreadConversations
+              ? `${stats.unreadConversations} unread`
+              : undefined
+          }
+          icon={MessageSquare}
+          accentColor="teal"
+          onClick={() =>
+            navigate(
+              stats?.unreadConversations
+                ? '/conversations?filter=unread'
+                : '/conversations'
+            )
+          }
+          isLoading={loading.stats}
         />
         <StatCard
           title="Active Opportunities"
-          value="--"
-          change="Module not active"
-          changeType="neutral"
-          icon={<Target className="w-5 h-5 text-amber-400" />}
+          value={stats?.activeOpportunities ?? '--'}
+          icon={Target}
+          accentColor="amber"
+          onClick={() => navigate('/opportunities')}
+          isLoading={loading.stats}
         />
         <StatCard
           title="Upcoming Appointments"
-          value="--"
-          change="Module not active"
-          changeType="neutral"
-          icon={<Calendar className="w-5 h-5 text-rose-400" />}
+          value={stats?.upcomingAppointments ?? '--'}
+          sublabel={formatNextAppointment()}
+          icon={Calendar}
+          accentColor="rose"
+          onClick={() => navigate('/calendars')}
+          isLoading={loading.stats}
         />
       </div>
 
+      <div>
+        <h2 className="text-sm font-medium text-slate-400 mb-3">Quick Actions</h2>
+        <div className="flex flex-wrap gap-3">
+          <QuickActionButton
+            icon={UserPlus}
+            label="Add Contact"
+            onClick={() => setCreateContactOpen(true)}
+            disabled={!canCreateContact}
+            iconColor="text-cyan-400"
+          />
+          <QuickActionButton
+            icon={Send}
+            label="New Message"
+            onClick={() => setComposeMessageOpen(true)}
+            disabled={!canSendMessage}
+            iconColor="text-teal-400"
+          />
+          <QuickActionButton
+            icon={Target}
+            label="Create Opportunity"
+            onClick={() => setCreateOpportunityOpen(true)}
+            disabled={!canCreateOpportunity}
+            iconColor="text-amber-400"
+          />
+          <QuickActionButton
+            icon={FileText}
+            label="Create Invoice"
+            onClick={() => setCreateInvoiceOpen(true)}
+            disabled={!canCreateInvoice}
+            iconColor="text-emerald-400"
+          />
+          <QuickActionButton
+            icon={CalendarPlus}
+            label="Book Appointment"
+            onClick={() => setBookAppointmentOpen(true)}
+            disabled={!canCreateAppointment}
+            iconColor="text-rose-400"
+          />
+          <QuickActionButton
+            icon={Bot}
+            label="Run AI Agent"
+            onClick={() => setRunAgentOpen(true)}
+            disabled={!canRunAgent}
+            iconColor="text-violet-400"
+          />
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
-          <h2 className="text-lg font-semibold text-white mb-4">Recent Activity</h2>
-          <div className="space-y-1">
-            <ActivityItem
-              title="System Initialized"
-              description="Autom8ion Lab OS is ready for configuration"
-              time="Just now"
-              icon={<CheckCircle2 className="w-4 h-4 text-emerald-400" />}
-              iconBg="bg-emerald-500/10"
-            />
-            <ActivityItem
-              title="Modules Pending"
-              description="Feature modules are awaiting activation"
-              time="Just now"
-              icon={<Clock className="w-4 h-4 text-amber-400" />}
-              iconBg="bg-amber-500/10"
-            />
-            <ActivityItem
-              title="Welcome"
-              description={`${user?.name} logged in as ${user?.role?.name}`}
-              time="Just now"
-              icon={<TrendingUp className="w-4 h-4 text-cyan-400" />}
-              iconBg="bg-cyan-500/10"
-            />
-          </div>
-        </div>
+        <QueuePanel
+          conversations={conversations}
+          tasks={tasks}
+          onConversationClick={(conv) => navigate(`/conversations?id=${conv.id}`)}
+          onTaskClick={(task) => navigate(`/contacts/${task.contact_id}`)}
+          isLoading={loading.conversations || loading.tasks}
+        />
+        <AppointmentsList appointments={appointments} isLoading={loading.appointments} />
+      </div>
 
-        <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
-          <h2 className="text-lg font-semibold text-white mb-4">System Status</h2>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="text-sm text-white">Database</span>
-              </div>
-              <span className="text-xs text-emerald-400">Connected</span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="text-sm text-white">Authentication</span>
-              </div>
-              <span className="text-xs text-emerald-400">Active</span>
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-amber-400" />
-                <span className="text-sm text-white">Feature Modules</span>
-              </div>
-              <span className="text-xs text-amber-400">Pending Setup</span>
-            </div>
-          </div>
+      <ActivityFeed
+        events={activity}
+        activeFilter={activityFilter}
+        onFilterChange={setActivityFilter}
+        onItemClick={(event) => {
+          switch (event.entity_type) {
+            case 'contact':
+              navigate(`/contacts/${event.entity_id}`);
+              break;
+            case 'conversation':
+              navigate(`/conversations?id=${event.entity_id}`);
+              break;
+            case 'opportunity':
+              navigate(`/opportunities/${event.entity_id}`);
+              break;
+            case 'appointment':
+              navigate(`/calendars`);
+              break;
+            case 'invoice':
+              navigate(`/payments/invoices/${event.entity_id}`);
+              break;
+            default:
+              break;
+          }
+        }}
+        isLoading={loading.activity}
+      />
+
+      <div>
+        <h2 className="text-sm font-medium text-slate-400 mb-3">System Status</h2>
+        <div className="flex flex-wrap gap-3">
+          <SystemHealthIndicator
+            label="Messaging"
+            status={systemHealth.messaging}
+            onClick={() => navigate('/settings/integrations')}
+          />
+          <SystemHealthIndicator
+            label="Calendar Sync"
+            status={systemHealth.calendar}
+            onClick={() => navigate('/settings/calendars')}
+          />
+          <SystemHealthIndicator
+            label="Payments"
+            status={systemHealth.payments}
+            onClick={() => navigate('/settings/integrations')}
+          />
         </div>
       </div>
 
-      <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
-        <div className="flex items-start gap-4">
-          <div className="w-10 h-10 rounded-lg bg-cyan-500/10 flex items-center justify-center flex-shrink-0">
-            <AlertCircle className="w-5 h-5 text-cyan-400" />
-          </div>
-          <div>
-            <h3 className="text-white font-medium">Phase 0 Complete</h3>
-            <p className="text-sm text-slate-400 mt-1">
-              The core CRM foundation is ready. Feature modules (Contacts, Conversations, Calendars, etc.)
-              are not yet implemented. Enable them via feature flags when ready to build.
-            </p>
-          </div>
-        </div>
-      </div>
+      <CreateContactDrawer
+        open={createContactOpen}
+        onClose={() => setCreateContactOpen(false)}
+        onSuccess={handleDrawerSuccess}
+      />
+      <ComposeMessageDrawer
+        open={composeMessageOpen}
+        onClose={() => setComposeMessageOpen(false)}
+        onSuccess={handleDrawerSuccess}
+      />
+      <CreateOpportunityDrawer
+        open={createOpportunityOpen}
+        onClose={() => setCreateOpportunityOpen(false)}
+        onSuccess={handleDrawerSuccess}
+      />
+      <CreateInvoiceDrawer
+        open={createInvoiceOpen}
+        onClose={() => setCreateInvoiceOpen(false)}
+        onSuccess={handleDrawerSuccess}
+      />
+      <BookAppointmentDrawer
+        open={bookAppointmentOpen}
+        onClose={() => setBookAppointmentOpen(false)}
+        onSuccess={handleDrawerSuccess}
+      />
+      <RunAgentDrawer
+        open={runAgentOpen}
+        onClose={() => setRunAgentOpen(false)}
+        onSuccess={handleDrawerSuccess}
+      />
     </div>
   );
 }
