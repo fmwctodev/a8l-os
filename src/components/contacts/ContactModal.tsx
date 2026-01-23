@@ -5,6 +5,23 @@ import { addTagToContact, removeTagFromContact, createTag, getRandomTagColor } f
 import type { Contact, Tag, Department, User } from '../../types';
 import { X, Loader2, Plus } from 'lucide-react';
 
+function getTagIds(rawTags: unknown): string[] {
+  if (!rawTags || !Array.isArray(rawTags)) return [];
+  return rawTags
+    .map((item) => {
+      if (item && typeof item === 'object') {
+        if ('tag' in item && item.tag && typeof item.tag === 'object' && 'id' in item.tag) {
+          return item.tag.id as string;
+        }
+        if ('id' in item) {
+          return item.id as string;
+        }
+      }
+      return null;
+    })
+    .filter((id): id is string => typeof id === 'string');
+}
+
 interface ContactModalProps {
   contact?: Contact;
   departments: Department[];
@@ -44,7 +61,7 @@ export function ContactModal({
   });
 
   const [selectedTags, setSelectedTags] = useState<string[]>(
-    contact?.tags?.map((t) => t.id) || []
+    getTagIds(contact?.tags)
   );
   const [newTagName, setNewTagName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,7 +92,7 @@ export function ContactModal({
       if (isEditing && contact) {
         savedContact = await updateContact(contact.id, formData, currentUser);
 
-        const currentTagIds = contact.tags?.map((t) => t.id) || [];
+        const currentTagIds = getTagIds(contact.tags);
         const tagsToAdd = selectedTags.filter((id) => !currentTagIds.includes(id));
         const tagsToRemove = currentTagIds.filter((id) => !selectedTags.includes(id));
 

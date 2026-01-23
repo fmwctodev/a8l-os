@@ -10,6 +10,19 @@ import type {
 } from '../types';
 import { createTimelineEvent } from './opportunityTimeline';
 
+function normalizeOpportunityTags(opportunity: Opportunity): Opportunity {
+  if (opportunity.contact && (opportunity.contact as any).tags) {
+    (opportunity.contact as any).tags = ((opportunity.contact as any).tags as Array<{ tag: unknown }>)
+      .map((ct) => ct.tag)
+      .filter(Boolean);
+  }
+  return opportunity;
+}
+
+function normalizeOpportunitiesArray(opportunities: Opportunity[]): Opportunity[] {
+  return opportunities.map(normalizeOpportunityTags);
+}
+
 const OPPORTUNITY_SELECT = `
   *,
   contact:contacts(
@@ -122,7 +135,7 @@ export async function getOpportunities(
   }
 
   return {
-    data: opportunities,
+    data: normalizeOpportunitiesArray(opportunities),
     total: count || 0
   };
 }
@@ -135,7 +148,7 @@ export async function getOpportunityById(id: string): Promise<Opportunity | null
     .maybeSingle();
 
   if (error) throw error;
-  return data;
+  return data ? normalizeOpportunityTags(data) : null;
 }
 
 export async function getOpportunitiesByContact(contactId: string): Promise<Opportunity[]> {
@@ -146,7 +159,7 @@ export async function getOpportunitiesByContact(contactId: string): Promise<Oppo
     .order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data || [];
+  return normalizeOpportunitiesArray(data || []);
 }
 
 export async function getBoardData(pipelineId: string, filters: OpportunityFilters = {}): Promise<OpportunityBoardData> {
@@ -202,9 +215,11 @@ export async function getBoardData(pipelineId: string, filters: OpportunityFilte
     });
   }
 
+  const normalizedOpps = normalizeOpportunitiesArray(filteredOpps);
+
   const stagesWithOpportunities = sortedStages.map((stage: any) => ({
     ...stage,
-    opportunities: filteredOpps
+    opportunities: normalizedOpps
       .filter((o: Opportunity) => o.stage_id === stage.id)
       .sort((a: Opportunity, b: Opportunity) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
   }));
@@ -270,7 +285,7 @@ export async function createOpportunity(
     actor_user_id: opportunity.created_by
   });
 
-  return data;
+  return normalizeOpportunityTags(data);
 }
 
 export async function updateOpportunity(
@@ -352,7 +367,7 @@ export async function updateOpportunity(
     await saveCustomFieldValues(id, existing.org_id, customFieldValues);
   }
 
-  return data;
+  return normalizeOpportunityTags(data);
 }
 
 export async function moveOpportunityToStage(
@@ -404,7 +419,7 @@ export async function closeOpportunity(
     actor_user_id: actorUserId
   });
 
-  return data;
+  return normalizeOpportunityTags(data);
 }
 
 export async function reopenOpportunity(
@@ -440,7 +455,7 @@ export async function reopenOpportunity(
     actor_user_id: actorUserId
   });
 
-  return data;
+  return normalizeOpportunityTags(data);
 }
 
 export async function deleteOpportunity(id: string): Promise<void> {

@@ -101,7 +101,14 @@ export async function getConversationById(id: string): Promise<Conversation | nu
     .maybeSingle();
 
   if (error) throw error;
-  return data as Conversation | null;
+  if (!data) return null;
+
+  const contact = data.contact as Record<string, unknown> | null;
+  if (contact && contact.tags) {
+    contact.tags = (contact.tags as Array<{ tag: unknown }>).map((ct) => ct.tag);
+  }
+
+  return data as Conversation;
 }
 
 export async function findOrCreateConversation(

@@ -9,6 +9,18 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getContactAIInsights } from '../../services/aiAgents';
 import type { Conversation, Contact, Tag as TagType, AIAgentMemory, AIAgentRun } from '../../types';
 
+function normalizeTagsArray(rawTags: unknown): TagType[] {
+  if (!rawTags || !Array.isArray(rawTags)) return [];
+  return rawTags
+    .map((item) => {
+      if (item && typeof item === 'object' && 'tag' in item && item.tag) {
+        return item.tag as TagType;
+      }
+      return item as TagType;
+    })
+    .filter((tag): tag is TagType => tag !== null && tag !== undefined && typeof tag?.id === 'string');
+}
+
 interface ContactPanelProps {
   conversation: Conversation;
   onClose: () => void;
@@ -64,7 +76,7 @@ export function ContactPanel({ conversation, onClose }: ContactPanelProps) {
   }
 
   const contactName = `${contact.first_name} ${contact.last_name}`.trim();
-  const tags = (contact.tags || []) as TagType[];
+  const tags = normalizeTagsArray(contact.tags);
 
   const tabs = [
     { id: 'overview' as TabId, label: 'Overview' },

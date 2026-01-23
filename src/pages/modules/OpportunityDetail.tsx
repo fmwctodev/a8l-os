@@ -33,6 +33,7 @@ import type {
   User as UserType,
   Invoice,
   InvoiceStatus,
+  Tag as TagType,
 } from '../../types';
 import * as opportunitiesService from '../../services/opportunities';
 import * as opportunityNotesService from '../../services/opportunityNotes';
@@ -47,6 +48,18 @@ import { OpportunityModal } from '../../components/opportunities/OpportunityModa
 import { CreateInvoiceModal } from '../../components/payments/CreateInvoiceModal';
 import OpportunityFilesTab from '../../components/opportunities/OpportunityFilesTab';
 import { ScoreWidget } from '../../components/scoring/ScoreWidget';
+
+function normalizeTagsArray(rawTags: unknown): TagType[] {
+  if (!rawTags || !Array.isArray(rawTags)) return [];
+  return rawTags
+    .map((item) => {
+      if (item && typeof item === 'object' && 'tag' in item && item.tag) {
+        return item.tag as TagType;
+      }
+      return item as TagType;
+    })
+    .filter((tag): tag is TagType => tag !== null && tag !== undefined && typeof tag?.id === 'string');
+}
 
 type TabType = 'details' | 'activity' | 'tasks' | 'notes' | 'invoices' | 'files';
 
@@ -766,22 +779,25 @@ export function OpportunityDetail() {
                   </div>
                 )}
 
-                {contact.tags && contact.tags.length > 0 && (
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Tags</label>
-                    <div className="flex flex-wrap gap-1">
-                      {contact.tags.map((tag: any) => (
-                        <span
-                          key={tag.id}
-                          className="px-2 py-0.5 rounded text-xs"
-                          style={{ backgroundColor: `${tag.color}20`, color: tag.color }}
-                        >
-                          {tag.name}
-                        </span>
-                      ))}
+                {(() => {
+                  const normalizedTags = normalizeTagsArray(contact.tags);
+                  return normalizedTags.length > 0 && (
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">Tags</label>
+                      <div className="flex flex-wrap gap-1">
+                        {normalizedTags.map((tag) => (
+                          <span
+                            key={tag.id}
+                            className="px-2 py-0.5 rounded text-xs"
+                            style={{ backgroundColor: `${tag.color}20`, color: tag.color }}
+                          >
+                            {tag.name}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 <Link
                   to={`/contacts/${contact.id}`}
