@@ -25,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserWithDetails | null>(null);
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   const loadUser = useCallback(async () => {
     try {
@@ -46,32 +47,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadUser]);
 
   useEffect(() => {
+    let isMounted = true;
+
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      if (!isMounted) return;
       setSession(currentSession);
       if (currentSession) {
-        loadUser().finally(() => setIsLoading(false));
+        loadUser().finally(() => {
+          if (isMounted) {
+            setIsLoading(false);
+            setIsInitialized(true);
+          }
+        });
       } else {
         setIsLoading(false);
+        setIsInitialized(true);
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
-      if (newSession) {
-        loadUser();
-      } else {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (!isMounted) return;
+
+      if (event === 'SIGNED_OUT') {
+        setSession(null);
         setUser(null);
         setFeatureFlags([]);
+        return;
+      }
+
+      setSession(newSession);
+      if (newSession && isInitialized) {
+        setIsLoading(true);
+        loadUser().finally(() => {
+          if (isMounted) setIsLoading(false);
+        });
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, [loadUser]);
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [loadUser, isInitialized]);
 
   const signIn = async (email: string, password: string) => {
-    const { session: newSession } = await authService.signIn(email, password);
-    setSession(newSession);
-    await loadUser();
+    setIsLoading(true);
+    try {
+      const { session: newSession } = await authService.signIn(email, password);
+      setSession(newSession);
+      await loadUser();
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const signOut = async () => {

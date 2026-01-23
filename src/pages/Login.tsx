@@ -45,17 +45,17 @@ export function Login() {
   const [emailError, setEmailError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const { signIn, session, isLoading: authLoading } = useAuth();
+  const { signIn, user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
 
   useEffect(() => {
-    if (!authLoading && session) {
+    if (!authLoading && user) {
       navigate(from, { replace: true });
     }
-  }, [session, authLoading, navigate, from]);
+  }, [user, authLoading, navigate, from]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,7 +71,6 @@ export function Login() {
 
     try {
       await signIn(email, password);
-      navigate(from, { replace: true });
     } catch (err) {
       setError(getErrorMessage(err));
       setPassword('');
@@ -88,7 +87,7 @@ export function Login() {
     );
   }
 
-  if (session) {
+  if (user) {
     return null;
   }
 

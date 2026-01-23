@@ -10,10 +10,10 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, permission, featureFlag }: ProtectedRouteProps) {
-  const { user, isLoading, hasPermission, isFeatureEnabled } = useAuth();
+  const { user, session, isLoading, hasPermission, isFeatureEnabled } = useAuth();
   const location = useLocation();
 
-  if (isLoading) {
+  if (isLoading || (session && !user)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900">
         <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
@@ -21,7 +21,7 @@ export function ProtectedRoute({ children, permission, featureFlag }: ProtectedR
     );
   }
 
-  if (!user) {
+  if (!session || !user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
