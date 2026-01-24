@@ -25,12 +25,12 @@ export function ProvidersTab({ onSuccess }: ProvidersTabProps) {
 
   useEffect(() => {
     loadProvider();
-  }, [user?.org_id]);
+  }, [user?.organization_id]);
 
   const loadProvider = async () => {
-    if (!user?.org_id) return;
+    if (!user?.organization_id) return;
     try {
-      const data = await getProvider(user.org_id);
+      const data = await getProvider(user.organization_id);
       setProvider(data);
     } catch (err) {
       console.error('Failed to load provider:', err);

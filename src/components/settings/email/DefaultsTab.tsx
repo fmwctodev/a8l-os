@@ -29,15 +29,15 @@ export function DefaultsTab() {
 
   useEffect(() => {
     loadData();
-  }, [user?.org_id]);
+  }, [user?.organization_id]);
 
   const loadData = async () => {
-    if (!user?.org_id) return;
+    if (!user?.organization_id) return;
     try {
       const [defaultsData, addressData, groupData] = await Promise.all([
-        getEmailDefaults(user.org_id),
-        getFromAddresses(user.org_id),
-        getUnsubscribeGroups(user.org_id),
+        getEmailDefaults(user.organization_id),
+        getFromAddresses(user.organization_id),
+        getUnsubscribeGroups(user.organization_id),
       ]);
       setDefaults(defaultsData);
       setFromAddresses(addressData);
@@ -61,14 +61,14 @@ export function DefaultsTab() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.org_id) return;
+    if (!user?.organization_id) return;
 
     setSaving(true);
     setError(null);
     setSuccess(false);
 
     try {
-      const result = await updateEmailDefaults(user.org_id, {
+      const result = await updateEmailDefaults(user.organization_id, {
         default_from_address_id: formData.default_from_address_id || null,
         default_reply_to: formData.default_reply_to || null,
         default_unsubscribe_group_id: formData.default_unsubscribe_group_id || null,

@@ -75,7 +75,7 @@ export function CreateInvoiceModal({
     if (!user) return;
     try {
       const [contactData, productData, oppData] = await Promise.all([
-        getContacts(user.org_id),
+        getContacts(user.organization_id),
         getProducts({ active: true }),
         getOpportunities({ status: ['open'] }),
       ]);
@@ -187,7 +187,7 @@ export function CreateInvoiceModal({
     setCreatingContact(true);
     try {
       const newContact = await createContact(
-        user.org_id,
+        user.organization_id,
         {
           department_id: user.department_id,
           owner_id: user.id,

@@ -28,14 +28,14 @@ export function FromAddressesTab() {
 
   useEffect(() => {
     loadData();
-  }, [user?.org_id]);
+  }, [user?.organization_id]);
 
   const loadData = async () => {
-    if (!user?.org_id) return;
+    if (!user?.organization_id) return;
     try {
       const [addressData, domainData] = await Promise.all([
-        getFromAddresses(user.org_id),
-        getDomains(user.org_id),
+        getFromAddresses(user.organization_id),
+        getDomains(user.organization_id),
       ]);
       setAddresses(addressData);
       setDomains(domainData);

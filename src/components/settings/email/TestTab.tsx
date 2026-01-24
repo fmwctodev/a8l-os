@@ -25,15 +25,15 @@ export function TestTab() {
 
   useEffect(() => {
     loadData();
-  }, [user?.org_id]);
+  }, [user?.organization_id]);
 
   const loadData = async () => {
-    if (!user?.org_id) return;
+    if (!user?.organization_id) return;
     try {
       const [statusData, addressData, logsData] = await Promise.all([
         getEmailSetupStatus(),
-        getFromAddresses(user.org_id),
-        getTestEmailLogs(user.org_id, 10),
+        getFromAddresses(user.organization_id),
+        getTestEmailLogs(user.organization_id, 10),
       ]);
       setStatus(statusData);
       setFromAddresses(addressData);

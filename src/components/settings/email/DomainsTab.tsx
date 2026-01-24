@@ -21,12 +21,12 @@ export function DomainsTab() {
 
   useEffect(() => {
     loadDomains();
-  }, [user?.org_id]);
+  }, [user?.organization_id]);
 
   const loadDomains = async () => {
-    if (!user?.org_id) return;
+    if (!user?.organization_id) return;
     try {
-      const data = await getDomains(user.org_id);
+      const data = await getDomains(user.organization_id);
       setDomains(data);
     } catch (err) {
       console.error('Failed to load domains:', err);

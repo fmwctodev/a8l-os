@@ -21,15 +21,15 @@ export function OverviewTab({ onNavigate }: OverviewTabProps) {
 
   useEffect(() => {
     loadData();
-  }, [user?.org_id]);
+  }, [user?.organization_id]);
 
   const loadData = async () => {
-    if (!user?.org_id) return;
+    if (!user?.organization_id) return;
     try {
       const [statusData, provider, testLogs] = await Promise.all([
         getEmailSetupStatus(),
-        getProvider(user.org_id),
-        getTestEmailLogs(user.org_id, 1),
+        getProvider(user.organization_id),
+        getTestEmailLogs(user.organization_id, 1),
       ]);
       setStatus(statusData);
       setProviderNickname(provider?.account_nickname || null);

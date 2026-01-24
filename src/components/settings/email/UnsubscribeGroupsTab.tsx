@@ -31,12 +31,12 @@ export function UnsubscribeGroupsTab() {
 
   useEffect(() => {
     loadGroups();
-  }, [user?.org_id]);
+  }, [user?.organization_id]);
 
   const loadGroups = async () => {
-    if (!user?.org_id) return;
+    if (!user?.organization_id) return;
     try {
-      const data = await getUnsubscribeGroups(user.org_id);
+      const data = await getUnsubscribeGroups(user.organization_id);
       setGroups(data);
     } catch (err) {
       console.error('Failed to load groups:', err);
