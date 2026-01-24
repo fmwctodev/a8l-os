@@ -5,3 +5,8 @@ export { FromAddressesTab } from './FromAddressesTab';
 export { UnsubscribeGroupsTab } from './UnsubscribeGroupsTab';
 export { DefaultsTab } from './DefaultsTab';
 export { TestTab } from './TestTab';
+export { CampaignDomainsTab } from './CampaignDomainsTab';
+export { WarmUpConfigForm } from './WarmUpConfigForm';
+export { WarmUpProgressPanel } from './WarmUpProgressPanel';
+export { AIRecommendationsPanel } from './AIRecommendationsPanel';
+export { CampaignDomainEventLog } from './CampaignDomainEventLog';

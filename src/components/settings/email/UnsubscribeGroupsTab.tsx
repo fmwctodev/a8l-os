@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, RefreshCw, Pencil, Trash2, X } from 'lucide-react';
+import { Plus, RefreshCw, Pencil, Trash2, X, Info } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
   getUnsubscribeGroups,
@@ -152,18 +152,18 @@ export function UnsubscribeGroupsTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
       </div>
     );
   }
 
   return (
     <div>
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+      <div className="bg-slate-800 border border-slate-700 rounded-lg">
+        <div className="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-medium text-gray-900">Unsubscribe Groups</h3>
-            <p className="mt-1 text-sm text-gray-500">
+            <h3 className="text-lg font-medium text-white">Unsubscribe Groups</h3>
+            <p className="mt-1 text-sm text-slate-400">
               Manage email suppression groups for compliance with email regulations
             </p>
           </div>
@@ -172,14 +172,14 @@ export function UnsubscribeGroupsTab() {
               <button
                 onClick={handleSync}
                 disabled={syncing}
-                className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                className="inline-flex items-center px-3 py-1.5 border border-slate-600 text-sm font-medium rounded-md text-slate-300 bg-slate-700 hover:bg-slate-600 disabled:opacity-50"
               >
                 <RefreshCw className={`h-4 w-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
                 Sync from SendGrid
               </button>
               <button
                 onClick={() => handleOpenModal()}
-                className="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-cyan-600 hover:bg-cyan-500"
               >
                 <Plus className="h-4 w-4 mr-1.5" />
                 Create Group
@@ -189,15 +189,15 @@ export function UnsubscribeGroupsTab() {
         </div>
 
         {error && (
-          <div className="px-6 py-3 bg-red-50 border-b border-red-100">
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="px-6 py-3 bg-red-500/10 border-b border-red-500/20">
+            <p className="text-sm text-red-400">{error}</p>
           </div>
         )}
 
         {groups.length === 0 ? (
           <div className="px-6 py-12 text-center">
-            <p className="text-gray-500">No unsubscribe groups configured</p>
-            <p className="mt-2 text-sm text-gray-400">
+            <p className="text-slate-400">No unsubscribe groups configured</p>
+            <p className="mt-2 text-sm text-slate-500">
               Sync from SendGrid to import existing groups, or create a new one
             </p>
             {isAdmin && (
@@ -205,14 +205,14 @@ export function UnsubscribeGroupsTab() {
                 <button
                   onClick={handleSync}
                   disabled={syncing}
-                  className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                  className="inline-flex items-center px-4 py-2 border border-slate-600 text-sm font-medium rounded-md text-slate-300 bg-slate-700 hover:bg-slate-600"
                 >
                   <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
                   Sync from SendGrid
                 </button>
                 <button
                   onClick={() => handleOpenModal()}
-                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-cyan-600 hover:bg-cyan-500"
                 >
                   Create New Group
                 </button>
@@ -221,38 +221,38 @@ export function UnsubscribeGroupsTab() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full">
+              <thead className="bg-slate-700/50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                     Group Name
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                     Description
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                     SendGrid ID
                   </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-6 py-3 text-center text-xs font-medium text-slate-400 uppercase tracking-wider">
                     Default
                   </th>
                   {isAdmin && (
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">
                       Actions
                     </th>
                   )}
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-slate-700">
                 {groups.map((group) => (
                   <tr key={group.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
                       {group.name}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
+                    <td className="px-6 py-4 text-sm text-slate-400 max-w-xs truncate">
                       {group.description || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-mono">
                       {group.sendgrid_group_id}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
@@ -261,21 +261,21 @@ export function UnsubscribeGroupsTab() {
                         checked={group.is_default}
                         onChange={() => handleSetDefault(group.id)}
                         disabled={!isAdmin}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 disabled:opacity-50"
+                        className="h-4 w-4 text-cyan-600 focus:ring-cyan-500 border-slate-600 bg-slate-700 disabled:opacity-50"
                       />
                     </td>
                     {isAdmin && (
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button
                           onClick={() => handleOpenModal(group)}
-                          className="text-blue-600 hover:text-blue-900 mr-3"
+                          className="text-cyan-400 hover:text-cyan-300 mr-3"
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(group.id)}
                           disabled={deleting === group.id || group.is_default}
-                          className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                          className="text-red-400 hover:text-red-300 disabled:opacity-50"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -289,41 +289,46 @@ export function UnsubscribeGroupsTab() {
         )}
       </div>
 
-      <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h4 className="text-sm font-medium text-blue-800">About Unsubscribe Groups</h4>
-        <p className="mt-1 text-sm text-blue-700">
-          Unsubscribe groups allow recipients to opt-out of specific types of emails while still receiving others.
-          All emails sent through the system will include an unsubscribe link that respects these preferences.
-          This is required for compliance with email regulations like CAN-SPAM and GDPR.
-        </p>
+      <div className="mt-6 bg-cyan-500/5 border border-cyan-500/10 rounded-lg p-4">
+        <div className="flex gap-3">
+          <Info className="h-5 w-5 text-cyan-400 flex-shrink-0" />
+          <div>
+            <h4 className="text-sm font-medium text-cyan-400">About Unsubscribe Groups</h4>
+            <p className="mt-1 text-sm text-slate-400">
+              Unsubscribe groups allow recipients to opt-out of specific types of emails while still receiving others.
+              All emails sent through the system will include an unsubscribe link that respects these preferences.
+              This is required for compliance with email regulations like CAN-SPAM and GDPR.
+            </p>
+          </div>
+        </div>
       </div>
 
       {showModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-screen items-end justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseModal} />
+            <div className="fixed inset-0 bg-black/60 transition-opacity" onClick={handleCloseModal} />
             <span className="hidden sm:inline-block sm:h-screen sm:align-middle">&#8203;</span>
-            <div className="inline-block transform overflow-hidden rounded-lg bg-white px-4 pt-5 pb-4 text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6 sm:align-middle">
+            <div className="inline-block transform overflow-hidden rounded-lg bg-slate-800 border border-slate-700 px-4 pt-5 pb-4 text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6 sm:align-middle">
               <div className="absolute top-0 right-0 pt-4 pr-4">
-                <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-500">
+                <button onClick={handleCloseModal} className="text-slate-400 hover:text-slate-300">
                   <X className="h-6 w-6" />
                 </button>
               </div>
               <form onSubmit={handleSubmit}>
-                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                <h3 className="text-lg font-medium text-white mb-4">
                   {editing ? 'Edit Unsubscribe Group' : 'Create Unsubscribe Group'}
                 </h3>
 
                 {error && (
-                  <div className="mb-4 p-3 bg-red-50 rounded-md">
-                    <p className="text-sm text-red-700">{error}</p>
+                  <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-md">
+                    <p className="text-sm text-red-400">{error}</p>
                   </div>
                 )}
 
                 <div className="space-y-4">
                   <div>
-                    <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                      Group Name <span className="text-red-500">*</span>
+                    <label htmlFor="name" className="block text-sm font-medium text-slate-300">
+                      Group Name <span className="text-red-400">*</span>
                     </label>
                     <input
                       type="text"
@@ -332,12 +337,12 @@ export function UnsubscribeGroupsTab() {
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       required
                       placeholder="Marketing Emails"
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      className="mt-1 block w-full bg-slate-900 border-slate-600 rounded-md text-white placeholder-slate-500 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm"
                     />
                   </div>
 
                   <div>
-                    <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="description" className="block text-sm font-medium text-slate-300">
                       Description
                     </label>
                     <textarea
@@ -346,9 +351,9 @@ export function UnsubscribeGroupsTab() {
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       rows={3}
                       placeholder="Promotional emails, newsletters, and marketing updates"
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      className="mt-1 block w-full bg-slate-900 border-slate-600 rounded-md text-white placeholder-slate-500 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm"
                     />
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-slate-500">
                       This description is shown to users on the unsubscribe page
                     </p>
                   </div>
@@ -358,14 +363,14 @@ export function UnsubscribeGroupsTab() {
                   <button
                     type="button"
                     onClick={handleCloseModal}
-                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    className="px-4 py-2 border border-slate-600 rounded-md text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={saving}
-                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                    className="px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50"
                   >
                     {saving ? 'Saving...' : editing ? 'Update' : 'Create Group'}
                   </button>

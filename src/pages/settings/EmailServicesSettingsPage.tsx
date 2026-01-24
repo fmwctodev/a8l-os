@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Mail, Globe, AtSign, Bell, Settings, Send, LayoutDashboard } from 'lucide-react';
+import { Mail, Globe, AtSign, Bell, Settings, Send, LayoutDashboard, Flame } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { OverviewTab } from '../../components/settings/email/OverviewTab';
 import { ProvidersTab } from '../../components/settings/email/ProvidersTab';
@@ -9,8 +9,9 @@ import { FromAddressesTab } from '../../components/settings/email/FromAddressesT
 import { UnsubscribeGroupsTab } from '../../components/settings/email/UnsubscribeGroupsTab';
 import { DefaultsTab } from '../../components/settings/email/DefaultsTab';
 import { TestTab } from '../../components/settings/email/TestTab';
+import { CampaignDomainsTab } from '../../components/settings/email/CampaignDomainsTab';
 
-type TabId = 'overview' | 'providers' | 'domains' | 'from-addresses' | 'unsubscribe-groups' | 'defaults' | 'test';
+type TabId = 'overview' | 'providers' | 'domains' | 'from-addresses' | 'campaign-domains' | 'unsubscribe-groups' | 'defaults' | 'test';
 
 interface Tab {
   id: TabId;
@@ -24,6 +25,7 @@ const tabs: Tab[] = [
   { id: 'providers', label: 'Provider', icon: Mail, adminOnly: true },
   { id: 'domains', label: 'Domains', icon: Globe },
   { id: 'from-addresses', label: 'From Addresses', icon: AtSign },
+  { id: 'campaign-domains', label: 'Campaign Domains', icon: Flame, adminOnly: true },
   { id: 'unsubscribe-groups', label: 'Unsubscribe Groups', icon: Bell },
   { id: 'defaults', label: 'Defaults', icon: Settings },
   { id: 'test', label: 'Test Email', icon: Send },
@@ -73,6 +75,8 @@ export function EmailServicesSettingsPage() {
         return <DomainsTab key={refreshKey} />;
       case 'from-addresses':
         return <FromAddressesTab key={refreshKey} />;
+      case 'campaign-domains':
+        return isAdmin ? <CampaignDomainsTab key={refreshKey} /> : null;
       case 'unsubscribe-groups':
         return <UnsubscribeGroupsTab key={refreshKey} />;
       case 'defaults':
@@ -87,14 +91,14 @@ export function EmailServicesSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Email Services</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-semibold text-white">Email Services</h1>
+        <p className="mt-1 text-sm text-slate-400">
           Configure SendGrid integration for transactional and marketing emails
         </p>
       </div>
 
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
+      <div className="border-b border-slate-700">
+        <nav className="flex gap-6 overflow-x-auto" aria-label="Tabs">
           {visibleTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -103,19 +107,15 @@ export function EmailServicesSettingsPage() {
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
                 className={`
-                  group inline-flex items-center whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium
+                  flex items-center gap-2 py-3 px-1 border-b-2 transition-colors whitespace-nowrap
                   ${isActive
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                    ? 'border-cyan-500 text-cyan-400'
+                    : 'border-transparent text-slate-400 hover:text-white hover:border-slate-600'
                   }
                 `}
               >
-                <Icon
-                  className={`mr-2 h-5 w-5 ${
-                    isActive ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500'
-                  }`}
-                />
-                {tab.label}
+                <Icon className="w-4 h-4" />
+                <span className="font-medium">{tab.label}</span>
               </button>
             );
           })}

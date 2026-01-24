@@ -118,6 +118,7 @@ export type PermissionKey =
   | 'settings.view' | 'settings.manage'
   | 'audit.view' | 'audit_logs.view'
   | 'email.settings.view' | 'email.settings.manage' | 'email.send.test'
+  | 'email.campaign_domains.view' | 'email.campaign_domains.manage'
   | 'phone.settings.view' | 'phone.settings.manage' | 'phone.numbers.manage'
   | 'phone.routing.manage' | 'phone.test.run' | 'phone.compliance.manage'
   | 'custom_fields.view' | 'custom_fields.manage' | 'custom_fields.groups.manage'
@@ -3330,6 +3331,134 @@ export interface EmailSetupStatus {
   hasDefaultFromAddress: boolean;
   hasDefaultUnsubscribeGroup: boolean;
   blockingReasons: string[];
+}
+
+export type EmailCampaignDomainStatus =
+  | 'not_configured'
+  | 'pending_verification'
+  | 'verified'
+  | 'warming_up'
+  | 'warmed'
+  | 'degraded'
+  | 'paused';
+
+export type EmailWarmupIncreaseType = 'linear' | 'smart';
+
+export type EmailCampaignDomainEventType =
+  | 'created'
+  | 'dns_verified'
+  | 'warmup_started'
+  | 'warmup_paused'
+  | 'warmup_resumed'
+  | 'warmup_completed'
+  | 'status_changed'
+  | 'auto_paused'
+  | 'ai_recommendation_applied'
+  | 'deleted';
+
+export type EmailCampaignDomainActorType = 'user' | 'system' | 'ai';
+
+export type AIRecommendationType = 'slow_down' | 'speed_up' | 'pause' | 'resume';
+
+export interface EmailCampaignDomain {
+  id: string;
+  organization_id: string;
+  domain: string;
+  friendly_label: string | null;
+  sendgrid_domain_id: string | null;
+  status: EmailCampaignDomainStatus;
+  warmup_progress_percent: number;
+  current_daily_limit: number;
+  target_daily_volume: number;
+  warmup_started_at: string | null;
+  warmup_completed_at: string | null;
+  last_synced_at: string | null;
+  dns_records: EmailDomainDnsRecord[];
+  created_at: string;
+  updated_at: string;
+  warmup_config?: EmailWarmupConfig;
+}
+
+export interface EmailWarmupConfig {
+  id: string;
+  campaign_domain_id: string;
+  start_daily_volume: number;
+  ramp_duration_days: number;
+  daily_increase_type: EmailWarmupIncreaseType;
+  pause_on_bounce_spike: boolean;
+  pause_on_spam_complaints: boolean;
+  auto_throttle_low_engagement: boolean;
+  ai_recommendations_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailWarmupDailyStat {
+  id: string;
+  campaign_domain_id: string;
+  date: string;
+  emails_sent: number;
+  emails_delivered: number;
+  bounces: number;
+  spam_complaints: number;
+  opens: number;
+  clicks: number;
+  synced_at: string;
+}
+
+export interface EmailCampaignDomainEvent {
+  id: string;
+  campaign_domain_id: string;
+  event_type: EmailCampaignDomainEventType;
+  actor_type: EmailCampaignDomainActorType;
+  actor_id: string | null;
+  reason: string | null;
+  ai_recommendation_text: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  actor?: User | null;
+}
+
+export interface EmailWarmupAIRecommendation {
+  id: string;
+  campaign_domain_id: string;
+  recommendation_type: AIRecommendationType;
+  reason: string;
+  confidence_score: number;
+  acknowledged_at: string | null;
+  applied_at: string | null;
+  dismissed_at: string | null;
+  created_at: string;
+}
+
+export interface CreateEmailCampaignDomainInput {
+  domain: string;
+  friendly_label?: string;
+  target_daily_volume?: number;
+}
+
+export interface UpdateEmailCampaignDomainInput {
+  friendly_label?: string;
+  target_daily_volume?: number;
+}
+
+export interface UpdateEmailWarmupConfigInput {
+  start_daily_volume?: number;
+  ramp_duration_days?: number;
+  daily_increase_type?: EmailWarmupIncreaseType;
+  pause_on_bounce_spike?: boolean;
+  pause_on_spam_complaints?: boolean;
+  auto_throttle_low_engagement?: boolean;
+  ai_recommendations_enabled?: boolean;
+}
+
+export interface CampaignDomainStatusSummary {
+  isReady: boolean;
+  hasWarmedDomain: boolean;
+  warmingDomainsCount: number;
+  totalDailyLimit: number;
+  blockingReasons: string[];
+  hasAIRecommendations: boolean;
 }
 
 export type PhoneProviderStatus = 'connected' | 'disconnected';
