@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   FileText,
   ClipboardList,
@@ -9,19 +9,23 @@ import {
   Users,
   Calendar,
   ArrowRight,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getFormStats } from '../../services/forms';
-import { getSurveyStats } from '../../services/surveys';
+import { getFormStats, createForm } from '../../services/forms';
+import { getSurveyStats, createSurvey } from '../../services/surveys';
 import { getSocialStats } from '../../services/socialAccounts';
 import type { FormStats, SurveyStats, SocialStats } from '../../types';
 
 export function Marketing() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [formStats, setFormStats] = useState<FormStats | null>(null);
   const [surveyStats, setSurveyStats] = useState<SurveyStats | null>(null);
   const [socialStats, setSocialStats] = useState<SocialStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [creatingForm, setCreatingForm] = useState(false);
+  const [creatingSurvey, setCreatingSurvey] = useState(false);
 
   useEffect(() => {
     if (!user?.organization_id) return;
@@ -94,6 +98,30 @@ export function Marketing() {
     },
   ];
 
+  async function handleCreateForm() {
+    if (!user?.organization_id || creatingForm) return;
+    try {
+      setCreatingForm(true);
+      const form = await createForm(user.organization_id, user.id, 'New Form');
+      navigate(`/marketing/forms/${form.id}/edit`);
+    } catch (error) {
+      console.error('Failed to create form:', error);
+      setCreatingForm(false);
+    }
+  }
+
+  async function handleCreateSurvey() {
+    if (!user?.organization_id || creatingSurvey) return;
+    try {
+      setCreatingSurvey(true);
+      const survey = await createSurvey(user.organization_id, user.id, 'New Survey');
+      navigate(`/marketing/surveys/${survey.id}/edit`);
+    } catch (error) {
+      console.error('Failed to create survey:', error);
+      setCreatingSurvey(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -163,34 +191,48 @@ export function Marketing() {
             <h3 className="font-semibold text-gray-900">Quick Actions</h3>
           </div>
           <div className="space-y-3">
-            <Link
-              to="/marketing/forms/new"
-              className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+            <button
+              onClick={handleCreateForm}
+              disabled={creatingForm}
+              className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <div className="p-2 bg-blue-100 rounded-lg">
-                <Plus className="w-4 h-4 text-blue-600" />
+                {creatingForm ? (
+                  <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
+                ) : (
+                  <Plus className="w-4 h-4 text-blue-600" />
+                )}
               </div>
-              <div>
-                <div className="font-medium text-gray-900">Create Form</div>
+              <div className="text-left">
+                <div className="font-medium text-gray-900">
+                  {creatingForm ? 'Creating...' : 'Create Form'}
+                </div>
                 <div className="text-sm text-gray-500">
                   Build a new lead capture form
                 </div>
               </div>
-            </Link>
-            <Link
-              to="/marketing/surveys/new"
-              className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50 transition-colors"
+            </button>
+            <button
+              onClick={handleCreateSurvey}
+              disabled={creatingSurvey}
+              className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-emerald-300 hover:bg-emerald-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <div className="p-2 bg-emerald-100 rounded-lg">
-                <Plus className="w-4 h-4 text-emerald-600" />
+                {creatingSurvey ? (
+                  <Loader2 className="w-4 h-4 text-emerald-600 animate-spin" />
+                ) : (
+                  <Plus className="w-4 h-4 text-emerald-600" />
+                )}
               </div>
-              <div>
-                <div className="font-medium text-gray-900">Create Survey</div>
+              <div className="text-left">
+                <div className="font-medium text-gray-900">
+                  {creatingSurvey ? 'Creating...' : 'Create Survey'}
+                </div>
                 <div className="text-sm text-gray-500">
                   Design a feedback survey
                 </div>
               </div>
-            </Link>
+            </button>
             <Link
               to="/marketing/social/new"
               className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-rose-300 hover:bg-rose-50 transition-colors"

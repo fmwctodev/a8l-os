@@ -259,6 +259,14 @@ function App() {
                 }
               />
               <Route
+                path="/marketing/forms/:id/edit"
+                element={
+                  <ProtectedRoute permission="marketing.forms.manage" featureFlag="marketing">
+                    <FormBuilder />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/marketing/surveys"
                 element={
                   <ProtectedRoute permission="marketing.surveys.view" featureFlag="marketing">
@@ -278,6 +286,14 @@ function App() {
                 path="/marketing/surveys/:id"
                 element={
                   <ProtectedRoute permission="marketing.surveys.view" featureFlag="marketing">
+                    <SurveyBuilder />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/marketing/surveys/:id/edit"
+                element={
+                  <ProtectedRoute permission="marketing.surveys.manage" featureFlag="marketing">
                     <SurveyBuilder />
                   </ProtectedRoute>
                 }
