@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, FileText, MoreVertical, Pencil, Trash2, History, X, Info } from 'lucide-react';
+import { Plus, FileText, MoreVertical, Pencil, Trash2, History, X, Info, Lock } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import * as promptsService from '../../../services/promptTemplates';
 import type {
@@ -10,9 +10,15 @@ import type {
 } from '../../../types';
 import { PROMPT_CATEGORY_LABELS, COMMON_PROMPT_VARIABLES } from '../../../types';
 
-export function PromptsSettingsTab() {
+interface PromptsSettingsTabProps {
+  isViewOnly?: boolean;
+}
+
+export function PromptsSettingsTab({ isViewOnly = false }: PromptsSettingsTabProps) {
   const { user } = useAuth();
   const orgId = user?.organization_id;
+  const isAdmin = user?.role?.name === 'SuperAdmin' || user?.role?.name === 'Admin';
+  const canEdit = isAdmin && !isViewOnly;
 
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,30 +145,45 @@ export function PromptsSettingsTab() {
               </option>
             ))}
           </select>
-          <button
-            onClick={handleCreate}
-            className="flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Create Template
-          </button>
+          {canEdit && (
+            <button
+              onClick={handleCreate}
+              className="flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Create Template
+            </button>
+          )}
         </div>
       </div>
+
+      {isViewOnly && (
+        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex items-center gap-3">
+          <Lock className="w-5 h-5 text-slate-400 shrink-0" />
+          <p className="text-slate-400 text-sm">
+            You have view-only access. Contact an administrator to make changes.
+          </p>
+        </div>
+      )}
 
       {filteredTemplates.length === 0 ? (
         <div className="text-center py-12 bg-slate-800/50 rounded-lg border border-slate-700">
           <FileText className="w-12 h-12 text-slate-600 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-white mb-2">No prompt templates</h3>
           <p className="text-slate-400 mb-4">
-            Create reusable prompts that can be attached to AI agents
+            {canEdit
+              ? 'Create reusable prompts that can be attached to AI agents'
+              : 'No prompt templates have been created yet'}
           </p>
-          <button
-            onClick={handleCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700"
-          >
-            <Plus className="w-4 h-4" />
-            Create Template
-          </button>
+          {canEdit && (
+            <button
+              onClick={handleCreate}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700"
+            >
+              <Plus className="w-4 h-4" />
+              Create Template
+            </button>
+          )}
         </div>
       ) : (
         <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
@@ -219,13 +240,15 @@ export function PromptsSettingsTab() {
 
                       {openMenuId === template.id && (
                         <div className="absolute right-0 top-full mt-1 w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
-                          <button
-                            onClick={() => handleEdit(template)}
-                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
-                          >
-                            <Pencil className="w-4 h-4" />
-                            Edit
-                          </button>
+                          {canEdit && (
+                            <button
+                              onClick={() => handleEdit(template)}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
+                            >
+                              <Pencil className="w-4 h-4" />
+                              Edit
+                            </button>
+                          )}
                           <button
                             onClick={() => handleViewHistory(template)}
                             className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
@@ -233,19 +256,23 @@ export function PromptsSettingsTab() {
                             <History className="w-4 h-4" />
                             Version History
                           </button>
-                          <button
-                            onClick={() => handleToggleStatus(template)}
-                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
-                          >
-                            {template.status === 'active' ? 'Deactivate' : 'Activate'}
-                          </button>
-                          <button
-                            onClick={() => handleDelete(template)}
-                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-slate-700 hover:text-red-300"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Delete
-                          </button>
+                          {canEdit && (
+                            <>
+                              <button
+                                onClick={() => handleToggleStatus(template)}
+                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
+                              >
+                                {template.status === 'active' ? 'Deactivate' : 'Activate'}
+                              </button>
+                              <button
+                                onClick={() => handleDelete(template)}
+                                className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-slate-700 hover:text-red-300"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                Delete
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>

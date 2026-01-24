@@ -4358,3 +4358,192 @@ FORMATTING:
 {{formatting_rules}}
 
 When communicating, ensure all messages reflect our brand voice. Be {{tone_adjectives}} while maintaining {{formality_adjective}} language.`;
+
+export type AIResponseTone = 'professional' | 'friendly' | 'casual' | 'formal' | 'empathetic';
+export type AIResponseLength = 'concise' | 'standard' | 'detailed';
+export type CustomLLMAuthMethod = 'bearer' | 'api_key_header' | 'custom';
+export type CustomLLMRequestFormat = 'openai' | 'anthropic' | 'custom';
+export type AIUsageLogStatus = 'success' | 'failed';
+export type AIVoiceTone = 'professional' | 'friendly' | 'casual' | 'warm' | 'authoritative';
+
+export interface AIUsageLimits {
+  org_id: string;
+  max_runs_per_user_day: number;
+  max_runs_per_agent_day: number;
+  cooldown_seconds: number;
+  error_threshold: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AIResponseStyleDefaults {
+  org_id: string;
+  tone: AIResponseTone;
+  formality_level: number;
+  emoji_enabled: boolean;
+  length_preference: AIResponseLength;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AIVoiceDefaults {
+  org_id: string;
+  speaking_speed: number;
+  default_tone: AIVoiceTone;
+  fallback_voice_id: string | null;
+  created_at: string;
+  updated_at: string;
+  fallback_voice?: ElevenLabsVoice | null;
+}
+
+export interface AISafetyPrompts {
+  org_id: string;
+  restricted_topics: string;
+  disallowed_outputs: string;
+  escalation_triggers: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CustomLLMProvider {
+  id: string;
+  org_id: string;
+  name: string;
+  base_url: string;
+  api_key_encrypted: string;
+  auth_method: CustomLLMAuthMethod;
+  custom_headers: Record<string, string>;
+  request_format: CustomLLMRequestFormat;
+  enabled: boolean;
+  last_tested_at: string | null;
+  last_test_success: boolean | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AIUsageLog {
+  id: string;
+  org_id: string;
+  agent_id: string | null;
+  agent_name: string;
+  user_id: string | null;
+  user_name: string | null;
+  model_key: string;
+  action_summary: string;
+  status: AIUsageLogStatus;
+  error_message: string | null;
+  duration_ms: number;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  agent?: AIAgent | null;
+  user?: User | null;
+}
+
+export interface AIUsageMetrics {
+  total_runs: number;
+  successful_runs: number;
+  failed_runs: number;
+  success_rate: number;
+  error_rate: number;
+  avg_duration_ms: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  runs_by_agent: { agent_name: string; count: number }[];
+  runs_by_model: { model_key: string; count: number }[];
+  runs_by_day: { date: string; count: number }[];
+}
+
+export interface AIUsageLogFilters {
+  startDate?: string;
+  endDate?: string;
+  agentIds?: string[];
+  userIds?: string[];
+  status?: AIUsageLogStatus;
+  search?: string;
+}
+
+export type ExportFormat = 'csv' | 'json';
+
+export interface CreateCustomLLMProviderInput {
+  name: string;
+  base_url: string;
+  api_key: string;
+  auth_method?: CustomLLMAuthMethod;
+  custom_headers?: Record<string, string>;
+  request_format?: CustomLLMRequestFormat;
+  enabled?: boolean;
+}
+
+export interface UpdateCustomLLMProviderInput {
+  name?: string;
+  base_url?: string;
+  api_key?: string;
+  auth_method?: CustomLLMAuthMethod;
+  custom_headers?: Record<string, string>;
+  request_format?: CustomLLMRequestFormat;
+  enabled?: boolean;
+}
+
+export interface UpdateAIUsageLimitsInput {
+  max_runs_per_user_day?: number;
+  max_runs_per_agent_day?: number;
+  cooldown_seconds?: number;
+  error_threshold?: number;
+}
+
+export interface UpdateAIResponseStyleDefaultsInput {
+  tone?: AIResponseTone;
+  formality_level?: number;
+  emoji_enabled?: boolean;
+  length_preference?: AIResponseLength;
+}
+
+export interface UpdateAIVoiceDefaultsInput {
+  speaking_speed?: number;
+  default_tone?: AIVoiceTone;
+  fallback_voice_id?: string | null;
+}
+
+export interface UpdateAISafetyPromptsInput {
+  restricted_topics?: string;
+  disallowed_outputs?: string;
+  escalation_triggers?: string;
+  is_active?: boolean;
+}
+
+export const AI_RESPONSE_TONE_LABELS: Record<AIResponseTone, string> = {
+  professional: 'Professional',
+  friendly: 'Friendly',
+  casual: 'Casual',
+  formal: 'Formal',
+  empathetic: 'Empathetic'
+};
+
+export const AI_RESPONSE_LENGTH_LABELS: Record<AIResponseLength, string> = {
+  concise: 'Concise',
+  standard: 'Standard',
+  detailed: 'Detailed'
+};
+
+export const AI_VOICE_TONE_LABELS: Record<AIVoiceTone, string> = {
+  professional: 'Professional',
+  friendly: 'Friendly',
+  casual: 'Casual',
+  warm: 'Warm',
+  authoritative: 'Authoritative'
+};
+
+export const CUSTOM_LLM_AUTH_METHOD_LABELS: Record<CustomLLMAuthMethod, string> = {
+  bearer: 'Bearer Token',
+  api_key_header: 'API Key Header',
+  custom: 'Custom Headers'
+};
+
+export const CUSTOM_LLM_REQUEST_FORMAT_LABELS: Record<CustomLLMRequestFormat, string> = {
+  openai: 'OpenAI Compatible',
+  anthropic: 'Anthropic Compatible',
+  custom: 'Custom Format'
+};

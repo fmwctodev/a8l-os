@@ -6,3 +6,4 @@ export { KnowledgeSettingsTab } from './KnowledgeSettingsTab';
 export { PromptsSettingsTab } from './PromptsSettingsTab';
 export { ToolsSettingsTab } from './ToolsSettingsTab';
 export { AddKnowledgeSourceModal } from './AddKnowledgeSourceModal';
+export { UsageLogsTab } from './UsageLogsTab';

@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Plus, BookOpen, MoreVertical, Pencil, Trash2, Globe, History, X } from 'lucide-react';
+import { Plus, BookOpen, MoreVertical, Pencil, Trash2, Globe, History, X, AlertTriangle, Lock } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import * as knowledgeService from '../../../services/knowledgeCollections';
 import type { KnowledgeCollection, KnowledgeVersion, KnowledgeStatus } from '../../../types';
 
-export function KnowledgeSettingsTab() {
+interface KnowledgeSettingsTabProps {
+  isSuperAdmin?: boolean;
+  isViewOnly?: boolean;
+}
+
+export function KnowledgeSettingsTab({ isSuperAdmin = false, isViewOnly = false }: KnowledgeSettingsTabProps) {
   const { user } = useAuth();
   const orgId = user?.organization_id;
+  const canEdit = isSuperAdmin && !isViewOnly;
 
   const [collections, setCollections] = useState<KnowledgeCollection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,20 +113,38 @@ export function KnowledgeSettingsTab() {
         </div>
       )}
 
+      <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4 flex items-center gap-3">
+        <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+        <p className="text-amber-400 text-sm">
+          This knowledge is shared by all agents unless overridden at the agent level.
+        </p>
+      </div>
+
+      {!canEdit && (
+        <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 flex items-center gap-3">
+          <Lock className="w-5 h-5 text-slate-400 shrink-0" />
+          <p className="text-slate-400 text-sm">
+            Only SuperAdmin users can modify global knowledge. You have read-only access.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-medium text-white">Knowledge Collections</h2>
+          <h2 className="text-lg font-medium text-white">Global Knowledge Collections</h2>
           <p className="text-sm text-slate-400">
             Create knowledge bases that AI agents can reference during conversations
           </p>
         </div>
-        <button
-          onClick={handleCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Create Collection
-        </button>
+        {canEdit && (
+          <button
+            onClick={handleCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Create Collection
+          </button>
+        )}
       </div>
 
       {collections.length === 0 ? (
@@ -128,15 +152,19 @@ export function KnowledgeSettingsTab() {
           <BookOpen className="w-12 h-12 text-slate-600 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-white mb-2">No knowledge collections</h3>
           <p className="text-slate-400 mb-4">
-            Create your first knowledge collection to give AI agents context
+            {canEdit
+              ? 'Create your first knowledge collection to give AI agents context'
+              : 'No knowledge collections have been created yet'}
           </p>
-          <button
-            onClick={handleCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700"
-          >
-            <Plus className="w-4 h-4" />
-            Create Collection
-          </button>
+          {canEdit && (
+            <button
+              onClick={handleCreate}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700"
+            >
+              <Plus className="w-4 h-4" />
+              Create Collection
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -162,13 +190,15 @@ export function KnowledgeSettingsTab() {
 
                   {openMenuId === collection.id && (
                     <div className="absolute right-0 top-full mt-1 w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
-                      <button
-                        onClick={() => handleEdit(collection)}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
-                      >
-                        <Pencil className="w-4 h-4" />
-                        Edit
-                      </button>
+                      {canEdit && (
+                        <button
+                          onClick={() => handleEdit(collection)}
+                          className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
+                        >
+                          <Pencil className="w-4 h-4" />
+                          Edit
+                        </button>
+                      )}
                       <button
                         onClick={() => handleViewHistory(collection)}
                         className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
@@ -176,19 +206,23 @@ export function KnowledgeSettingsTab() {
                         <History className="w-4 h-4" />
                         Version History
                       </button>
-                      <button
-                        onClick={() => handleToggleStatus(collection)}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
-                      >
-                        {collection.status === 'active' ? 'Deactivate' : 'Activate'}
-                      </button>
-                      <button
-                        onClick={() => handleDelete(collection)}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-slate-700 hover:text-red-300"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Delete
-                      </button>
+                      {canEdit && (
+                        <>
+                          <button
+                            onClick={() => handleToggleStatus(collection)}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
+                          >
+                            {collection.status === 'active' ? 'Deactivate' : 'Activate'}
+                          </button>
+                          <button
+                            onClick={() => handleDelete(collection)}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-slate-700 hover:text-red-300"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>

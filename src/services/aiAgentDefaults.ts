@@ -121,3 +121,32 @@ export async function applyDefaultsToNewAgent(orgId: string): Promise<NewAgentDe
     model_id: defaults.default_model_id,
   };
 }
+
+export async function getDefaultSystemPrompt(orgId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('ai_agent_settings_defaults')
+    .select('default_system_prompt')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.default_system_prompt || null;
+}
+
+export async function updateDefaultSystemPrompt(
+  orgId: string,
+  prompt: string | null
+): Promise<void> {
+  const existing = await getDefaults(orgId);
+
+  if (!existing) {
+    await createDefaults(orgId);
+  }
+
+  const { error } = await supabase
+    .from('ai_agent_settings_defaults')
+    .update({ default_system_prompt: prompt })
+    .eq('org_id', orgId);
+
+  if (error) throw error;
+}
