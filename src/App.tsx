@@ -51,7 +51,6 @@ import { AIReporting } from './pages/modules/AIReporting';
 import { ReportBuilder } from './pages/modules/ReportBuilder';
 import { ReportView } from './pages/modules/ReportView';
 import { AuditLogsPage } from './pages/admin/AuditLogs';
-import { ChannelSettings } from './pages/admin/ChannelSettings';
 import { SettingsLayout } from './layouts/SettingsLayout';
 import { MyProfilePage } from './pages/settings/MyProfilePage';
 import { MyStaffPage } from './pages/settings/MyStaffPage';
@@ -523,14 +522,6 @@ function App() {
                 element={
                   <ProtectedRoute permission="audit_logs.view">
                     <AuditLogsPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/channels"
-                element={
-                  <ProtectedRoute permission="channels.configure">
-                    <ChannelSettings />
                   </ProtectedRoute>
                 }
               />

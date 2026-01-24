@@ -1,26 +1,29 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Puzzle, Link2, Users, Webhook, History, CheckCircle, AlertCircle } from 'lucide-react';
+import { Puzzle, Building2, Link2, User, Webhook, History, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { AllIntegrationsTab } from '../../components/settings/integrations/AllIntegrationsTab';
+import { OrganizationChannelsTab } from '../../components/settings/integrations/OrganizationChannelsTab';
 import { ConnectedIntegrationsTab } from '../../components/settings/integrations/ConnectedIntegrationsTab';
-import { UserIntegrationsTab } from '../../components/settings/integrations/UserIntegrationsTab';
+import { MyAccountTab } from '../../components/settings/integrations/MyAccountTab';
 import { WebhooksTab } from '../../components/settings/integrations/WebhooksTab';
 import { IntegrationLogsTab } from '../../components/settings/integrations/IntegrationLogsTab';
 
-type TabId = 'all' | 'connected' | 'user' | 'webhooks' | 'logs';
+type TabId = 'all' | 'organization' | 'connected' | 'my-account' | 'webhooks' | 'logs';
 
 interface Tab {
   id: TabId;
   label: string;
   icon: React.ElementType;
   permission?: string;
+  requiresSuperAdmin?: boolean;
 }
 
 const tabs: Tab[] = [
   { id: 'all', label: 'All Integrations', icon: Puzzle },
+  { id: 'organization', label: 'Organization', icon: Building2, requiresSuperAdmin: true },
   { id: 'connected', label: 'Connected', icon: Link2 },
-  { id: 'user', label: 'User Integrations', icon: Users, permission: 'integrations.manage_user' },
+  { id: 'my-account', label: 'My Account', icon: User },
   { id: 'webhooks', label: 'Webhooks', icon: Webhook, permission: 'integrations.webhooks.manage' },
   { id: 'logs', label: 'Activity Logs', icon: History, permission: 'integrations.logs.view' },
 ];
@@ -30,6 +33,8 @@ export function IntegrationsSettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [refreshKey, setRefreshKey] = useState(0);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const isSuperAdmin = hasPermission('settings.manage');
 
   const successParam = searchParams.get('success');
   const errorParam = searchParams.get('error');
@@ -65,6 +70,7 @@ export function IntegrationsSettingsPage() {
   }, [notification]);
 
   const visibleTabs = tabs.filter(tab => {
+    if (tab.requiresSuperAdmin && !isSuperAdmin) return false;
     if (tab.permission && !hasPermission(tab.permission)) return false;
     return true;
   });
@@ -93,12 +99,12 @@ export function IntegrationsSettingsPage() {
     switch (activeTab) {
       case 'all':
         return <AllIntegrationsTab key={refreshKey} onSuccess={triggerRefresh} />;
+      case 'organization':
+        return isSuperAdmin ? <OrganizationChannelsTab key={refreshKey} /> : null;
       case 'connected':
         return <ConnectedIntegrationsTab key={refreshKey} onSuccess={triggerRefresh} />;
-      case 'user':
-        return hasPermission('integrations.manage_user') ? (
-          <UserIntegrationsTab key={refreshKey} />
-        ) : null;
+      case 'my-account':
+        return <MyAccountTab key={refreshKey} />;
       case 'webhooks':
         return hasPermission('integrations.webhooks.manage') ? (
           <WebhooksTab key={refreshKey} onSuccess={triggerRefresh} />
@@ -117,7 +123,7 @@ export function IntegrationsSettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Integrations</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Connect third-party services, manage OAuth connections, and configure webhooks
+          Connect third-party services, manage organization channels, and configure webhooks
         </p>
       </div>
 

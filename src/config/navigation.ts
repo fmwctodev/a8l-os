@@ -12,7 +12,6 @@ import {
   BarChart3,
   Settings,
   Shield,
-  Radio,
   FileText,
   type LucideIcon,
 } from 'lucide-react';
@@ -79,7 +78,6 @@ export const navigationConfig: NavSection[] = [
     title: 'Administration',
     collapsible: true,
     items: [
-      { name: 'Channels', path: '/channels', icon: Radio, permission: 'channels.configure' },
       { name: 'Settings', path: '/settings', icon: Settings, permission: 'settings.view' },
       { name: 'Audit Logs', path: '/audit-logs', icon: Shield, permission: 'audit_logs.view' },
     ],
