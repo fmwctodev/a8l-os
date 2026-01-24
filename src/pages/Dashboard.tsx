@@ -22,7 +22,6 @@ import {
   QueuePanel,
   AppointmentsList,
   ActivityFeed,
-  SystemHealthIndicator,
   DateRangeSelector,
   CreateContactDrawer,
   ComposeMessageDrawer,
@@ -53,7 +52,6 @@ export function Dashboard() {
     tasks,
     appointments,
     activity,
-    systemHealth,
     loading,
     activityFilter,
     setActivityFilter,
@@ -263,27 +261,6 @@ export function Dashboard() {
         }}
         isLoading={loading.activity}
       />
-
-      <div>
-        <h2 className="text-sm font-medium text-slate-400 mb-3">System Status</h2>
-        <div className="flex flex-wrap gap-3">
-          <SystemHealthIndicator
-            label="Messaging"
-            status={systemHealth.messaging}
-            onClick={() => navigate('/settings/integrations')}
-          />
-          <SystemHealthIndicator
-            label="Calendar Sync"
-            status={systemHealth.calendar}
-            onClick={() => navigate('/settings/calendars')}
-          />
-          <SystemHealthIndicator
-            label="Payments"
-            status={systemHealth.payments}
-            onClick={() => navigate('/settings/integrations')}
-          />
-        </div>
-      </div>
 
       <CreateContactDrawer
         open={createContactOpen}

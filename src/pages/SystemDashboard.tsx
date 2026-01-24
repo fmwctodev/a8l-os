@@ -20,6 +20,8 @@ import {
   Phone,
   Bot,
   Workflow,
+  Calendar,
+  CreditCard,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSystemDashboardData } from '../hooks/useSystemDashboardData';
@@ -153,6 +155,36 @@ export function SystemDashboard() {
               icon={AlertTriangle}
               status={health.errorRate > 1 ? 'degraded' : health.errorRate > 5 ? 'critical' : 'healthy'}
               trend={health.errorTrend}
+              isLoading={loading.health}
+            />
+          </div>
+        </section>
+
+        <section>
+          <h2 className="text-sm font-medium text-slate-400 mb-4">Service Connectivity</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <ServiceHealthCard
+              title="Messaging"
+              icon={MessageSquare}
+              status={health.services.find(s => s.name === 'Integrations')?.status === 'healthy' ? 'connected' : 'degraded'}
+              description="Email, SMS, and chat integrations"
+              onClick={() => navigate('/settings/integrations')}
+              isLoading={loading.health}
+            />
+            <ServiceHealthCard
+              title="Calendar Sync"
+              icon={Calendar}
+              status="connected"
+              description="Google Calendar and external sync"
+              onClick={() => navigate('/settings/calendars')}
+              isLoading={loading.health}
+            />
+            <ServiceHealthCard
+              title="Payments"
+              icon={CreditCard}
+              status={errors.some(e => e.service === 'Payments' && !e.acknowledged) ? 'degraded' : 'connected'}
+              description="Stripe and QuickBooks Online"
+              onClick={() => navigate('/settings/integrations')}
               isLoading={loading.health}
             />
           </div>
