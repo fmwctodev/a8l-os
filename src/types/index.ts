@@ -1269,7 +1269,26 @@ export type FormFieldType =
   | 'first_name' | 'last_name' | 'full_name' | 'email' | 'phone'
   | 'company' | 'website' | 'address'
   | 'text' | 'textarea' | 'number' | 'dropdown' | 'multi_select'
-  | 'checkbox' | 'date' | 'hidden' | 'consent';
+  | 'checkbox' | 'radio' | 'date' | 'hidden' | 'consent'
+  | 'file_upload' | 'divider';
+
+export interface FormFileUploadConfig {
+  maxSizeBytes: number;
+  allowedTypes: string[];
+  maxFiles: number;
+}
+
+export interface FormConditionalRule {
+  fieldId: string;
+  operator: 'equals' | 'not_equals' | 'contains' | 'is_empty' | 'is_not_empty';
+  value: string;
+}
+
+export interface FormValidationRule {
+  type: 'min_length' | 'max_length' | 'pattern' | 'min' | 'max';
+  value: string | number;
+  message?: string;
+}
 
 export interface FormFieldOption {
   label: string;
@@ -1286,11 +1305,16 @@ export interface FormField {
   type: FormFieldType;
   label: string;
   placeholder?: string;
+  helpText?: string;
   required: boolean;
   defaultValue?: string;
   options?: FormFieldOption[];
   mapping?: FormFieldMapping;
-  width?: 'full' | 'half';
+  width?: 'full' | 'half' | 'third' | 'two_thirds';
+  conditionalRules?: FormConditionalRule[];
+  validationRules?: FormValidationRule[];
+  fileUploadConfig?: FormFileUploadConfig;
+  characterLimit?: number;
 }
 
 export interface FormDefinition {
@@ -1300,6 +1324,7 @@ export interface FormDefinition {
 export interface FormSettings {
   thankYouMessage?: string;
   redirectUrl?: string;
+  successAction?: 'message' | 'redirect' | 'both';
   contactMatching: 'email_first' | 'phone_first' | 'create_new';
   fieldOverwrite: 'always' | 'only_if_empty';
   tagIds?: string[];
@@ -1307,6 +1332,23 @@ export interface FormSettings {
   departmentId?: string;
   honeypotEnabled?: boolean;
   rateLimitPerIp?: number;
+  doubleOptInEnabled?: boolean;
+  doubleOptInEmailTemplate?: string;
+  recaptchaEnabled?: boolean;
+  recaptchaVersion?: 'v2' | 'v3';
+  recaptchaSiteKey?: string;
+  notificationEmails?: string[];
+  webhookUrl?: string;
+  customCss?: string;
+  embedOptions?: {
+    width?: string;
+    height?: string;
+    borderRadius?: string;
+    showShadow?: boolean;
+    popupTrigger?: 'button' | 'scroll' | 'exit_intent' | 'time_delay';
+    popupDelay?: number;
+    scrollPercentage?: number;
+  };
 }
 
 export interface Form {
@@ -1356,7 +1398,8 @@ export interface FormSubmission {
 
 export type SurveyQuestionType =
   | 'multiple_choice' | 'multi_select' | 'short_answer' | 'long_answer'
-  | 'number' | 'date' | 'yes_no' | 'nps' | 'rating' | 'contact_capture' | 'hidden';
+  | 'number' | 'date' | 'yes_no' | 'nps' | 'rating' | 'contact_capture' | 'hidden'
+  | 'matrix' | 'ranking' | 'image_choice';
 
 export interface SurveyQuestionOption {
   id: string;
@@ -1366,10 +1409,33 @@ export interface SurveyQuestionOption {
 }
 
 export interface SurveyBranchRule {
+  id: string;
   questionId: string;
-  operator: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than';
-  value: string | number;
-  goToStepIndex: number;
+  operator: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'is_any' | 'is_empty';
+  value: string | number | string[];
+  action: 'go_to_step' | 'skip_question' | 'end_survey';
+  goToStepIndex?: number;
+  skipQuestionId?: string;
+}
+
+export interface SurveyMatrixRow {
+  id: string;
+  label: string;
+}
+
+export interface SurveyMatrixColumn {
+  id: string;
+  label: string;
+  value: string;
+  score?: number;
+}
+
+export interface SurveyImageOption {
+  id: string;
+  label: string;
+  value: string;
+  imageUrl: string;
+  score?: number;
 }
 
 export interface SurveyQuestion {
@@ -1384,6 +1450,10 @@ export interface SurveyQuestion {
   maxValue?: number;
   minLabel?: string;
   maxLabel?: string;
+  matrixRows?: SurveyMatrixRow[];
+  matrixColumns?: SurveyMatrixColumn[];
+  imageOptions?: SurveyImageOption[];
+  answerPipingVariable?: string;
 }
 
 export interface SurveyStep {
@@ -1417,6 +1487,17 @@ export interface SurveySettings {
     answerValue: string;
     tagId: string;
   }>;
+  progressBarStyle?: 'percentage' | 'steps' | 'none';
+  showBackButton?: boolean;
+  saveAndContinueEnabled?: boolean;
+  responseLimit?: number;
+  expiresAt?: string;
+  showScoreToRespondent?: boolean;
+  scoreRedirectUrls?: Array<{
+    bandLabel: string;
+    url: string;
+  }>;
+  weightedScoring?: boolean;
 }
 
 export interface Survey {
@@ -1498,6 +1579,14 @@ export interface SocialPostMedia {
   alt_text?: string;
 }
 
+export interface SocialPostLinkPreview {
+  url: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  siteName?: string;
+}
+
 export interface SocialPost {
   id: string;
   organization_id: string;
@@ -1515,11 +1604,35 @@ export interface SocialPost {
   provider_post_ids: Record<string, string>;
   attempt_count: number;
   last_error: string | null;
+  first_comment: string | null;
+  link_preview: SocialPostLinkPreview | null;
+  ai_generated: boolean;
+  ai_generation_id: string | null;
   created_at: string;
   updated_at: string;
   created_by_user?: User | null;
   approved_by_user?: User | null;
   target_accounts?: SocialAccount[];
+}
+
+export type ContentAIType =
+  | 'social_caption' | 'social_hashtags' | 'email_subject' | 'email_body'
+  | 'form_copy' | 'ad_copy' | 'headline' | 'description' | 'translation';
+
+export interface ContentAIGeneration {
+  id: string;
+  organization_id: string;
+  user_id: string | null;
+  content_type: ContentAIType;
+  platform: SocialProvider | 'twitter' | 'general' | null;
+  prompt: string;
+  context: Record<string, unknown>;
+  generated_content: string;
+  variations: string[];
+  model_used: string | null;
+  tokens_used: number;
+  generation_params: Record<string, unknown>;
+  created_at: string;
 }
 
 export interface SocialPostLog {

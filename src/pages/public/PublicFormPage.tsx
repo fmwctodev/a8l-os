@@ -1,8 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, Upload, X, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Form, FormField } from '../../types';
+
+interface UploadedFile {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  url?: string;
+  status: 'uploading' | 'uploaded' | 'error';
+  progress: number;
+}
 
 export function PublicFormPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -12,7 +22,9 @@ export function PublicFormPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<Record<string, string | string[] | boolean>>({});
+  const [fileData, setFileData] = useState<Record<string, UploadedFile[]>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   useEffect(() => {
     if (slug) loadForm();
@@ -43,16 +55,49 @@ export function PublicFormPage() {
     }
   }
 
+  function shouldShowField(field: FormField): boolean {
+    if (!field.conditionalRules || field.conditionalRules.length === 0) {
+      return true;
+    }
+
+    return field.conditionalRules.every(rule => {
+      const fieldValue = formData[rule.fieldId];
+      switch (rule.operator) {
+        case 'equals':
+          return String(fieldValue) === rule.value;
+        case 'not_equals':
+          return String(fieldValue) !== rule.value;
+        case 'contains':
+          return String(fieldValue || '').includes(rule.value);
+        case 'is_empty':
+          return fieldValue === undefined || fieldValue === '' || (Array.isArray(fieldValue) && fieldValue.length === 0);
+        case 'is_not_empty':
+          return fieldValue !== undefined && fieldValue !== '' && !(Array.isArray(fieldValue) && fieldValue.length === 0);
+        default:
+          return true;
+      }
+    });
+  }
+
   function validateForm(): boolean {
     const errors: Record<string, string> = {};
 
     if (!form) return false;
 
     for (const field of form.definition.fields) {
-      if (field.required && field.type !== 'hidden') {
-        const value = formData[field.id];
-        if (value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
-          errors[field.id] = `${field.label} is required`;
+      if (!shouldShowField(field)) continue;
+
+      if (field.required && field.type !== 'hidden' && field.type !== 'divider') {
+        if (field.type === 'file_upload') {
+          const files = fileData[field.id] || [];
+          if (files.length === 0) {
+            errors[field.id] = `${field.label} is required`;
+          }
+        } else {
+          const value = formData[field.id];
+          if (value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) {
+            errors[field.id] = `${field.label} is required`;
+          }
         }
       }
 
@@ -62,10 +107,103 @@ export function PublicFormPage() {
           errors[field.id] = 'Please enter a valid email address';
         }
       }
+
+      if (field.validationRules) {
+        const value = String(formData[field.id] || '');
+        for (const rule of field.validationRules) {
+          if (rule.type === 'minLength' && value.length < (rule.value as number)) {
+            errors[field.id] = rule.message || `Minimum ${rule.value} characters required`;
+          }
+          if (rule.type === 'maxLength' && value.length > (rule.value as number)) {
+            errors[field.id] = rule.message || `Maximum ${rule.value} characters allowed`;
+          }
+          if (rule.type === 'pattern' && !new RegExp(rule.value as string).test(value)) {
+            errors[field.id] = rule.message || 'Invalid format';
+          }
+        }
+      }
     }
 
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
+  }
+
+  async function handleFileUpload(fieldId: string, files: FileList) {
+    const field = form?.definition.fields.find(f => f.id === fieldId);
+    if (!field?.fileUploadConfig) return;
+
+    const maxFiles = field.fileUploadConfig.maxFiles || 1;
+    const maxSize = field.fileUploadConfig.maxSizeBytes || 10 * 1024 * 1024;
+    const allowedTypes = field.fileUploadConfig.allowedTypes || [];
+
+    const currentFiles = fileData[fieldId] || [];
+    const newFiles: UploadedFile[] = [];
+
+    for (const file of Array.from(files)) {
+      if (currentFiles.length + newFiles.length >= maxFiles) {
+        alert(`Maximum ${maxFiles} file(s) allowed`);
+        break;
+      }
+
+      if (file.size > maxSize) {
+        alert(`File "${file.name}" exceeds the ${Math.round(maxSize / 1024 / 1024)}MB limit`);
+        continue;
+      }
+
+      if (allowedTypes.length > 0 && !allowedTypes.some(t => file.type.includes(t) || file.name.endsWith(t))) {
+        alert(`File type not allowed: ${file.name}`);
+        continue;
+      }
+
+      const uploadFile: UploadedFile = {
+        id: crypto.randomUUID(),
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        status: 'uploading',
+        progress: 0,
+      };
+
+      newFiles.push(uploadFile);
+
+      simulateFileUpload(fieldId, uploadFile.id);
+    }
+
+    setFileData(prev => ({
+      ...prev,
+      [fieldId]: [...currentFiles, ...newFiles],
+    }));
+  }
+
+  function simulateFileUpload(fieldId: string, fileId: string) {
+    let progress = 0;
+    const interval = setInterval(() => {
+      progress += Math.random() * 30;
+      if (progress >= 100) {
+        progress = 100;
+        clearInterval(interval);
+        setFileData(prev => ({
+          ...prev,
+          [fieldId]: prev[fieldId].map(f =>
+            f.id === fileId ? { ...f, status: 'uploaded' as const, progress: 100 } : f
+          ),
+        }));
+      } else {
+        setFileData(prev => ({
+          ...prev,
+          [fieldId]: prev[fieldId].map(f =>
+            f.id === fileId ? { ...f, progress: Math.min(progress, 100) } : f
+          ),
+        }));
+      }
+    }, 200);
+  }
+
+  function removeFile(fieldId: string, fileId: string) {
+    setFileData(prev => ({
+      ...prev,
+      [fieldId]: prev[fieldId].filter(f => f.id !== fileId),
+    }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -78,7 +216,19 @@ export function PublicFormPage() {
 
       const submissionData: Record<string, unknown> = {};
       for (const field of form.definition.fields) {
-        submissionData[field.id] = formData[field.id] ?? null;
+        if (!shouldShowField(field)) continue;
+
+        if (field.type === 'file_upload') {
+          const files = fileData[field.id] || [];
+          submissionData[field.id] = files.map(f => ({
+            name: f.name,
+            size: f.size,
+            type: f.type,
+            url: f.url,
+          }));
+        } else {
+          submissionData[field.id] = formData[field.id] ?? null;
+        }
       }
 
       const response = await fetch(
@@ -139,19 +289,37 @@ export function PublicFormPage() {
           />
         );
 
+      case 'divider':
+        return (
+          <div className="py-4">
+            <hr className="border-gray-200" />
+            {field.label && (
+              <p className="text-sm text-gray-500 mt-2">{field.label}</p>
+            )}
+          </div>
+        );
+
       case 'textarea':
         return (
-          <textarea
-            value={String(formData[field.id] || '')}
-            onChange={(e) => updateField(field.id, e.target.value)}
-            placeholder={field.placeholder}
-            rows={4}
-            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-              hasError
-                ? 'border-red-300 focus:ring-red-500'
-                : 'border-gray-300 focus:ring-blue-500'
-            }`}
-          />
+          <div className="relative">
+            <textarea
+              value={String(formData[field.id] || '')}
+              onChange={(e) => updateField(field.id, e.target.value)}
+              placeholder={field.placeholder}
+              rows={4}
+              maxLength={field.characterLimit}
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                hasError
+                  ? 'border-red-300 focus:ring-red-500'
+                  : 'border-gray-300 focus:ring-blue-500'
+              }`}
+            />
+            {field.characterLimit && (
+              <div className="absolute bottom-2 right-2 text-xs text-gray-400">
+                {String(formData[field.id] || '').length}/{field.characterLimit}
+              </div>
+            )}
+          </div>
         );
 
       case 'dropdown':
@@ -172,6 +340,31 @@ export function PublicFormPage() {
               </option>
             ))}
           </select>
+        );
+
+      case 'radio':
+        return (
+          <div className="space-y-2">
+            {(field.options || []).map((opt) => (
+              <label
+                key={opt.value}
+                className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                  formData[field.id] === opt.value
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name={field.id}
+                  checked={formData[field.id] === opt.value}
+                  onChange={() => updateField(field.id, opt.value)}
+                  className="text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-gray-700">{opt.label}</span>
+              </label>
+            ))}
+          </div>
         );
 
       case 'multi_select':
@@ -209,6 +402,70 @@ export function PublicFormPage() {
             />
             <span className="text-gray-700">{field.label}</span>
           </label>
+        );
+
+      case 'file_upload':
+        const files = fileData[field.id] || [];
+        const config = field.fileUploadConfig || { maxSizeBytes: 10 * 1024 * 1024, allowedTypes: [], maxFiles: 1 };
+        return (
+          <div>
+            <input
+              ref={(el) => { fileInputRefs.current[field.id] = el; }}
+              type="file"
+              multiple={config.maxFiles > 1}
+              accept={config.allowedTypes.join(',')}
+              onChange={(e) => e.target.files && handleFileUpload(field.id, e.target.files)}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRefs.current[field.id]?.click()}
+              className={`w-full p-6 border-2 border-dashed rounded-lg text-center transition-colors ${
+                hasError
+                  ? 'border-red-300 bg-red-50'
+                  : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+              }`}
+            >
+              <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-600">
+                Click to upload or drag and drop
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                Max {Math.round(config.maxSizeBytes / 1024 / 1024)}MB
+                {config.maxFiles > 1 && ` - Up to ${config.maxFiles} files`}
+              </p>
+            </button>
+            {files.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {files.map((file) => (
+                  <div
+                    key={file.id}
+                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+                  >
+                    <FileText className="w-5 h-5 text-gray-400" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-700 truncate">{file.name}</p>
+                      {file.status === 'uploading' && (
+                        <div className="mt-1 h-1 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-blue-500 transition-all"
+                            style={{ width: `${file.progress}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeFile(field.id, file.id)}
+                      className="p-1 text-gray-400 hover:text-red-500"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         );
 
       default:
@@ -304,23 +561,30 @@ export function PublicFormPage() {
               />
             )}
 
-            {form.definition.fields.map((field) => (
-              <div
-                key={field.id}
-                className={field.width === 'half' ? 'inline-block w-1/2 pr-2 align-top' : ''}
-              >
-                {field.type !== 'hidden' && field.type !== 'checkbox' && field.type !== 'consent' && (
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {field.label}
-                    {field.required && <span className="text-red-500 ml-1">*</span>}
-                  </label>
-                )}
-                {renderField(field)}
-                {validationErrors[field.id] && (
-                  <p className="mt-1 text-sm text-red-500">{validationErrors[field.id]}</p>
-                )}
-              </div>
-            ))}
+            {form.definition.fields.map((field) => {
+              if (!shouldShowField(field)) return null;
+
+              return (
+                <div
+                  key={field.id}
+                  className={field.width === 'half' ? 'inline-block w-1/2 pr-2 align-top' : ''}
+                >
+                  {field.type !== 'hidden' && field.type !== 'checkbox' && field.type !== 'consent' && field.type !== 'divider' && (
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {field.label}
+                      {field.required && <span className="text-red-500 ml-1">*</span>}
+                    </label>
+                  )}
+                  {field.helpText && field.type !== 'divider' && (
+                    <p className="text-sm text-gray-500 mb-2">{field.helpText}</p>
+                  )}
+                  {renderField(field)}
+                  {validationErrors[field.id] && (
+                    <p className="mt-1 text-sm text-red-500">{validationErrors[field.id]}</p>
+                  )}
+                </div>
+              );
+            })}
 
             <button
               type="submit"

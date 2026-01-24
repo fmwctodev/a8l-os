@@ -17,19 +17,47 @@ import {
   Star,
   Layers,
   ArrowRight,
+  Grid3X3,
+  List,
+  Image,
+  GitBranch,
+  X,
+  Code,
+  Copy,
+  ExternalLink,
+  Clock,
+  Calendar,
 } from 'lucide-react';
 import { getSurveyById, updateSurvey, publishSurvey, unpublishSurvey } from '../../services/surveys';
-import type { Survey, SurveyQuestion, SurveyQuestionType, SurveyStep, SurveySettings } from '../../types';
+import type { Survey, SurveyQuestion, SurveyQuestionType, SurveyStep, SurveySettings, SurveyBranchRule } from '../../types';
 
-const QUESTION_TYPES: { type: SurveyQuestionType; label: string; icon: React.ElementType }[] = [
-  { type: 'short_text', label: 'Short Text', icon: Type },
-  { type: 'long_text', label: 'Long Text', icon: AlignLeft },
-  { type: 'number', label: 'Number', icon: Hash },
-  { type: 'single_choice', label: 'Single Choice', icon: ChevronDown },
-  { type: 'multiple_choice', label: 'Multiple Choice', icon: CheckSquare },
-  { type: 'rating', label: 'Rating', icon: Star },
-  { type: 'nps', label: 'NPS Score', icon: Star },
-  { type: 'opinion_scale', label: 'Opinion Scale', icon: Layers },
+interface QuestionTypeConfig {
+  type: SurveyQuestionType;
+  label: string;
+  icon: React.ElementType;
+  category: 'basic' | 'choice' | 'scale' | 'advanced';
+}
+
+const QUESTION_TYPES: QuestionTypeConfig[] = [
+  { type: 'short_answer', label: 'Short Text', icon: Type, category: 'basic' },
+  { type: 'long_answer', label: 'Long Text', icon: AlignLeft, category: 'basic' },
+  { type: 'number', label: 'Number', icon: Hash, category: 'basic' },
+  { type: 'date', label: 'Date', icon: Calendar, category: 'basic' },
+  { type: 'multiple_choice', label: 'Single Choice', icon: ChevronDown, category: 'choice' },
+  { type: 'multi_select', label: 'Multi-Select', icon: CheckSquare, category: 'choice' },
+  { type: 'yes_no', label: 'Yes/No', icon: CheckSquare, category: 'choice' },
+  { type: 'rating', label: 'Star Rating', icon: Star, category: 'scale' },
+  { type: 'nps', label: 'NPS Score', icon: Layers, category: 'scale' },
+  { type: 'matrix', label: 'Matrix Grid', icon: Grid3X3, category: 'advanced' },
+  { type: 'ranking', label: 'Ranking', icon: List, category: 'advanced' },
+  { type: 'image_choice', label: 'Image Choice', icon: Image, category: 'advanced' },
+];
+
+const QUESTION_CATEGORIES = [
+  { id: 'basic', label: 'Basic' },
+  { id: 'choice', label: 'Choice' },
+  { id: 'scale', label: 'Scale' },
+  { id: 'advanced', label: 'Advanced' },
 ];
 
 function generateId(): string {
@@ -46,6 +74,8 @@ export function SurveyBuilder() {
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [previewMode, setPreviewMode] = useState(false);
+  const [showEmbedModal, setShowEmbedModal] = useState(false);
+  const [showBranchingPanel, setShowBranchingPanel] = useState(false);
 
   useEffect(() => {
     if (id) loadSurvey();
@@ -135,32 +165,62 @@ export function SurveyBuilder() {
     const newQuestion: SurveyQuestion = {
       id: generateId(),
       type,
-      text: typeConfig?.label || 'Question',
+      label: typeConfig?.label || 'Question',
       required: false,
     };
 
-    if (type === 'single_choice' || type === 'multiple_choice') {
+    if (type === 'multiple_choice' || type === 'multi_select') {
       newQuestion.options = [
         { id: generateId(), label: 'Option 1', value: 'option_1', score: 0 },
         { id: generateId(), label: 'Option 2', value: 'option_2', score: 0 },
       ];
     }
 
+    if (type === 'yes_no') {
+      newQuestion.options = [
+        { id: generateId(), label: 'Yes', value: 'yes', score: 1 },
+        { id: generateId(), label: 'No', value: 'no', score: 0 },
+      ];
+    }
+
     if (type === 'rating') {
-      newQuestion.min = 1;
-      newQuestion.max = 5;
+      newQuestion.minValue = 1;
+      newQuestion.maxValue = 5;
     }
 
     if (type === 'nps') {
-      newQuestion.min = 0;
-      newQuestion.max = 10;
+      newQuestion.minValue = 0;
+      newQuestion.maxValue = 10;
+      newQuestion.minLabel = 'Not at all likely';
+      newQuestion.maxLabel = 'Extremely likely';
     }
 
-    if (type === 'opinion_scale') {
-      newQuestion.min = 1;
-      newQuestion.max = 5;
-      newQuestion.minLabel = 'Strongly Disagree';
-      newQuestion.maxLabel = 'Strongly Agree';
+    if (type === 'matrix') {
+      newQuestion.matrixRows = [
+        { id: generateId(), label: 'Row 1' },
+        { id: generateId(), label: 'Row 2' },
+      ];
+      newQuestion.matrixColumns = [
+        { id: generateId(), label: 'Poor', value: '1', score: 1 },
+        { id: generateId(), label: 'Fair', value: '2', score: 2 },
+        { id: generateId(), label: 'Good', value: '3', score: 3 },
+        { id: generateId(), label: 'Excellent', value: '4', score: 4 },
+      ];
+    }
+
+    if (type === 'ranking') {
+      newQuestion.options = [
+        { id: generateId(), label: 'Item 1', value: 'item_1' },
+        { id: generateId(), label: 'Item 2', value: 'item_2' },
+        { id: generateId(), label: 'Item 3', value: 'item_3' },
+      ];
+    }
+
+    if (type === 'image_choice') {
+      newQuestion.imageOptions = [
+        { id: generateId(), label: 'Option 1', value: 'option_1', imageUrl: 'https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?w=200&h=200&fit=crop' },
+        { id: generateId(), label: 'Option 2', value: 'option_2', imageUrl: 'https://images.pexels.com/photos/3184291/pexels-photo-3184291.jpeg?w=200&h=200&fit=crop' },
+      ];
     }
 
     const steps = [...survey.definition.steps];
@@ -227,6 +287,18 @@ export function SurveyBuilder() {
 
     const steps = [...survey.definition.steps];
     steps[stepIndex] = { ...steps[stepIndex], ...updates };
+
+    setSurvey({
+      ...survey,
+      definition: { ...survey.definition, steps },
+    });
+  }
+
+  function updateStepBranchRules(stepIndex: number, rules: SurveyBranchRule[]) {
+    if (!survey) return;
+
+    const steps = [...survey.definition.steps];
+    steps[stepIndex] = { ...steps[stepIndex], branchRules: rules };
 
     setSurvey({
       ...survey,
@@ -304,13 +376,31 @@ export function SurveyBuilder() {
             <Save className="w-4 h-4" />
             {saving ? 'Saving...' : 'Save'}
           </button>
+          <button
+            onClick={() => setShowBranchingPanel(!showBranchingPanel)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+              showBranchingPanel ? 'bg-green-100 text-green-700' : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            <GitBranch className="w-4 h-4" />
+            Logic
+          </button>
           {survey.status === 'published' ? (
-            <button
-              onClick={handleUnpublish}
-              className="flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors"
-            >
-              Unpublish
-            </button>
+            <>
+              <button
+                onClick={() => setShowEmbedModal(true)}
+                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <Code className="w-4 h-4" />
+                Embed
+              </button>
+              <button
+                onClick={handleUnpublish}
+                className="flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors"
+              >
+                Unpublish
+              </button>
+            </>
           ) : (
             <button
               onClick={handlePublish}
@@ -398,16 +488,24 @@ export function SurveyBuilder() {
                   <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
                     Add Question
                   </div>
-                  {QUESTION_TYPES.map((qType) => (
-                    <button
-                      key={qType.type}
-                      onClick={() => addQuestion(qType.type)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                      <qType.icon className="w-4 h-4 text-gray-400" />
-                      {qType.label}
-                    </button>
-                  ))}
+                  {QUESTION_CATEGORIES.map((category) => {
+                    const categoryQuestions = QUESTION_TYPES.filter(q => q.category === category.id);
+                    return (
+                      <div key={category.id} className="mb-3">
+                        <div className="text-xs text-gray-400 px-3 py-1">{category.label}</div>
+                        {categoryQuestions.map((qType) => (
+                          <button
+                            key={qType.type}
+                            onClick={() => addQuestion(qType.type)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                          >
+                            <qType.icon className="w-4 h-4 text-gray-400" />
+                            {qType.label}
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : (
@@ -476,7 +574,7 @@ export function SurveyBuilder() {
           )}
         </div>
 
-        {selectedQuestion && !previewMode && (
+        {selectedQuestion && !previewMode && !showBranchingPanel && (
           <div className="w-80 border-l border-gray-200 bg-white overflow-y-auto">
             <QuestionEditor
               question={selectedQuestion}
@@ -485,7 +583,23 @@ export function SurveyBuilder() {
             />
           </div>
         )}
+
+        {showBranchingPanel && currentStep && !previewMode && (
+          <div className="w-96 border-l border-gray-200 bg-white overflow-y-auto">
+            <BranchingRuleBuilder
+              step={currentStep}
+              stepIndex={activeStepIndex}
+              allSteps={survey.definition.steps}
+              onUpdateRules={(rules) => updateStepBranchRules(activeStepIndex, rules)}
+              onClose={() => setShowBranchingPanel(false)}
+            />
+          </div>
+        )}
       </div>
+
+      {showEmbedModal && survey.public_slug && (
+        <SurveyEmbedModal survey={survey} onClose={() => setShowEmbedModal(false)} />
+      )}
     </div>
   );
 }
@@ -526,7 +640,7 @@ function QuestionCard({
             <span className="text-red-500 text-sm">*</span>
           )}
         </div>
-        <div className="font-medium text-gray-900">{question.text}</div>
+        <div className="font-medium text-gray-900">{question.label}</div>
         <div className="text-sm text-gray-500 mt-1">{qType?.label}</div>
       </div>
       <button
@@ -556,27 +670,23 @@ function QuestionEditor({
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-gray-900">Question Settings</h3>
         <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-          &times;
+          <X className="w-4 h-4" />
         </button>
       </div>
 
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Question Text
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Question Text</label>
           <textarea
-            value={question.text}
-            onChange={(e) => onUpdate({ text: e.target.value })}
+            value={question.label}
+            onChange={(e) => onUpdate({ label: e.target.value })}
             rows={3}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Description (optional)
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
           <input
             type="text"
             value={question.description || ''}
@@ -593,17 +703,12 @@ function QuestionEditor({
             onChange={(e) => onUpdate({ required: e.target.checked })}
             className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
-          <label htmlFor="required" className="text-sm text-gray-700">
-            Required
-          </label>
+          <label htmlFor="required" className="text-sm text-gray-700">Required</label>
         </div>
 
-        {(question.type === 'single_choice' ||
-          question.type === 'multiple_choice') && (
+        {(question.type === 'multiple_choice' || question.type === 'multi_select' || question.type === 'ranking') && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Options
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Options</label>
             <div className="space-y-2">
               {(question.options || []).map((option, idx) => (
                 <div key={option.id} className="flex gap-2">
@@ -612,37 +717,27 @@ function QuestionEditor({
                     value={option.label}
                     onChange={(e) => {
                       const newOptions = [...(question.options || [])];
-                      newOptions[idx] = {
-                        ...option,
-                        label: e.target.value,
-                        value: e.target.value.toLowerCase().replace(/\s+/g, '_'),
-                      };
+                      newOptions[idx] = { ...option, label: e.target.value, value: e.target.value.toLowerCase().replace(/\s+/g, '_') };
                       onUpdate({ options: newOptions });
                     }}
                     placeholder="Option label"
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <input
-                    type="number"
-                    value={option.score || 0}
-                    onChange={(e) => {
-                      const newOptions = [...(question.options || [])];
-                      newOptions[idx] = {
-                        ...option,
-                        score: parseInt(e.target.value) || 0,
-                      };
-                      onUpdate({ options: newOptions });
-                    }}
-                    placeholder="Score"
-                    className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  {question.type !== 'ranking' && (
+                    <input
+                      type="number"
+                      value={option.score || 0}
+                      onChange={(e) => {
+                        const newOptions = [...(question.options || [])];
+                        newOptions[idx] = { ...option, score: parseInt(e.target.value) || 0 };
+                        onUpdate({ options: newOptions });
+                      }}
+                      placeholder="Score"
+                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  )}
                   <button
-                    onClick={() => {
-                      const newOptions = (question.options || []).filter(
-                        (_, i) => i !== idx
-                      );
-                      onUpdate({ options: newOptions });
-                    }}
+                    onClick={() => onUpdate({ options: (question.options || []).filter((_, i) => i !== idx) })}
                     className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -651,15 +746,9 @@ function QuestionEditor({
               ))}
               <button
                 onClick={() => {
-                  const newId = `opt_${Date.now()}`;
                   const newOptions = [
                     ...(question.options || []),
-                    {
-                      id: newId,
-                      label: `Option ${(question.options || []).length + 1}`,
-                      value: `option_${(question.options || []).length + 1}`,
-                      score: 0,
-                    },
+                    { id: `opt_${Date.now()}`, label: `Option ${(question.options || []).length + 1}`, value: `option_${(question.options || []).length + 1}`, score: 0 },
                   ];
                   onUpdate({ options: newOptions });
                 }}
@@ -671,44 +760,175 @@ function QuestionEditor({
           </div>
         )}
 
-        {(question.type === 'rating' ||
-          question.type === 'nps' ||
-          question.type === 'opinion_scale') && (
+        {question.type === 'image_choice' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Image Options</label>
+            <div className="space-y-3">
+              {(question.imageOptions || []).map((option, idx) => (
+                <div key={option.id} className="p-3 border border-gray-200 rounded-lg space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={option.label}
+                      onChange={(e) => {
+                        const newOptions = [...(question.imageOptions || [])];
+                        newOptions[idx] = { ...option, label: e.target.value, value: e.target.value.toLowerCase().replace(/\s+/g, '_') };
+                        onUpdate({ imageOptions: newOptions });
+                      }}
+                      placeholder="Label"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={() => onUpdate({ imageOptions: (question.imageOptions || []).filter((_, i) => i !== idx) })}
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <input
+                    type="url"
+                    value={option.imageUrl}
+                    onChange={(e) => {
+                      const newOptions = [...(question.imageOptions || [])];
+                      newOptions[idx] = { ...option, imageUrl: e.target.value };
+                      onUpdate({ imageOptions: newOptions });
+                    }}
+                    placeholder="Image URL"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  {option.imageUrl && (
+                    <img src={option.imageUrl} alt={option.label} className="w-full h-24 object-cover rounded" />
+                  )}
+                </div>
+              ))}
+              <button
+                onClick={() => {
+                  const newOptions = [
+                    ...(question.imageOptions || []),
+                    { id: `img_${Date.now()}`, label: `Option ${(question.imageOptions || []).length + 1}`, value: `option_${(question.imageOptions || []).length + 1}`, imageUrl: '' },
+                  ];
+                  onUpdate({ imageOptions: newOptions });
+                }}
+                className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              >
+                + Add Image Option
+              </button>
+            </div>
+          </div>
+        )}
+
+        {question.type === 'matrix' && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Rows (Items to rate)</label>
+              <div className="space-y-2">
+                {(question.matrixRows || []).map((row, idx) => (
+                  <div key={row.id} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={row.label}
+                      onChange={(e) => {
+                        const newRows = [...(question.matrixRows || [])];
+                        newRows[idx] = { ...row, label: e.target.value };
+                        onUpdate({ matrixRows: newRows });
+                      }}
+                      placeholder="Row label"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={() => onUpdate({ matrixRows: (question.matrixRows || []).filter((_, i) => i !== idx) })}
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => {
+                    const newRows = [...(question.matrixRows || []), { id: `row_${Date.now()}`, label: `Row ${(question.matrixRows || []).length + 1}` }];
+                    onUpdate({ matrixRows: newRows });
+                  }}
+                  className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                >
+                  + Add Row
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Columns (Rating scale)</label>
+              <div className="space-y-2">
+                {(question.matrixColumns || []).map((col, idx) => (
+                  <div key={col.id} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={col.label}
+                      onChange={(e) => {
+                        const newCols = [...(question.matrixColumns || [])];
+                        newCols[idx] = { ...col, label: e.target.value, value: e.target.value.toLowerCase().replace(/\s+/g, '_') };
+                        onUpdate({ matrixColumns: newCols });
+                      }}
+                      placeholder="Column label"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <input
+                      type="number"
+                      value={col.score || 0}
+                      onChange={(e) => {
+                        const newCols = [...(question.matrixColumns || [])];
+                        newCols[idx] = { ...col, score: parseInt(e.target.value) || 0 };
+                        onUpdate({ matrixColumns: newCols });
+                      }}
+                      placeholder="Score"
+                      className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={() => onUpdate({ matrixColumns: (question.matrixColumns || []).filter((_, i) => i !== idx) })}
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => {
+                    const newCols = [...(question.matrixColumns || []), { id: `col_${Date.now()}`, label: `Column ${(question.matrixColumns || []).length + 1}`, value: `col_${(question.matrixColumns || []).length + 1}`, score: 0 }];
+                    onUpdate({ matrixColumns: newCols });
+                  }}
+                  className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                >
+                  + Add Column
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {(question.type === 'rating' || question.type === 'nps') && (
           <>
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Min
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Min</label>
                 <input
                   type="number"
-                  value={question.min || 0}
-                  onChange={(e) =>
-                    onUpdate({ min: parseInt(e.target.value) || 0 })
-                  }
+                  value={question.minValue || 0}
+                  onChange={(e) => onUpdate({ minValue: parseInt(e.target.value) || 0 })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Max
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Max</label>
                 <input
                   type="number"
-                  value={question.max || 10}
-                  onChange={(e) =>
-                    onUpdate({ max: parseInt(e.target.value) || 10 })
-                  }
+                  value={question.maxValue || 10}
+                  onChange={(e) => onUpdate({ maxValue: parseInt(e.target.value) || 10 })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
-            {question.type === 'opinion_scale' && (
+            {question.type === 'nps' && (
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Min Label
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Min Label</label>
                   <input
                     type="text"
                     value={question.minLabel || ''}
@@ -717,9 +937,7 @@ function QuestionEditor({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Max Label
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Label</label>
                   <input
                     type="text"
                     value={question.maxLabel || ''}
@@ -743,129 +961,207 @@ function SurveySettingsPanel({
   settings: SurveySettings;
   onUpdate: (updates: Partial<SurveySettings>) => void;
 }) {
+  const [activeSection, setActiveSection] = useState<'completion' | 'behavior' | 'scoring' | 'limits'>('completion');
+
   return (
     <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Thank You Message
-        </label>
-        <textarea
-          value={settings.thankYouMessage || ''}
-          onChange={(e) => onUpdate({ thankYouMessage: e.target.value })}
-          rows={3}
-          placeholder="Thank you for completing this survey!"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Redirect URL (optional)
-        </label>
-        <input
-          type="url"
-          value={settings.redirectUrl || ''}
-          onChange={(e) => onUpdate({ redirectUrl: e.target.value })}
-          placeholder="https://..."
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="showProgress"
-          checked={settings.showProgressBar ?? true}
-          onChange={(e) => onUpdate({ showProgressBar: e.target.checked })}
-          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-        />
-        <label htmlFor="showProgress" className="text-sm text-gray-700">
-          Show progress bar
-        </label>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="allowBack"
-          checked={settings.allowBackNavigation ?? true}
-          onChange={(e) => onUpdate({ allowBackNavigation: e.target.checked })}
-          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-        />
-        <label htmlFor="allowBack" className="text-sm text-gray-700">
-          Allow back navigation
-        </label>
-      </div>
-
-      <div className="border-t border-gray-200 pt-4">
-        <div className="text-sm font-medium text-gray-700 mb-2">Score Bands</div>
-        <p className="text-xs text-gray-500 mb-3">
-          Define score ranges to categorize responses (visible only in CRM)
-        </p>
-        <div className="space-y-2">
-          {(settings.scoreBands || []).map((band, idx) => (
-            <div key={idx} className="flex gap-2 items-center">
-              <input
-                type="number"
-                value={band.minScore}
-                onChange={(e) => {
-                  const bands = [...(settings.scoreBands || [])];
-                  bands[idx] = { ...band, minScore: parseInt(e.target.value) || 0 };
-                  onUpdate({ scoreBands: bands });
-                }}
-                placeholder="Min"
-                className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <span className="text-gray-400">-</span>
-              <input
-                type="number"
-                value={band.maxScore}
-                onChange={(e) => {
-                  const bands = [...(settings.scoreBands || [])];
-                  bands[idx] = { ...band, maxScore: parseInt(e.target.value) || 0 };
-                  onUpdate({ scoreBands: bands });
-                }}
-                placeholder="Max"
-                className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <input
-                type="text"
-                value={band.label}
-                onChange={(e) => {
-                  const bands = [...(settings.scoreBands || [])];
-                  bands[idx] = { ...band, label: e.target.value };
-                  onUpdate({ scoreBands: bands });
-                }}
-                placeholder="Label"
-                className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                onClick={() => {
-                  const bands = (settings.scoreBands || []).filter(
-                    (_, i) => i !== idx
-                  );
-                  onUpdate({ scoreBands: bands });
-                }}
-                className="p-1 text-red-500 hover:bg-red-50 rounded"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+        {[
+          { id: 'completion', label: 'Done' },
+          { id: 'behavior', label: 'Flow' },
+          { id: 'scoring', label: 'Score' },
+          { id: 'limits', label: 'Limits' },
+        ].map((section) => (
           <button
-            onClick={() => {
-              const bands = [
-                ...(settings.scoreBands || []),
-                { minScore: 0, maxScore: 10, label: 'New Band' },
-              ];
-              onUpdate({ scoreBands: bands });
-            }}
-            className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            key={section.id}
+            onClick={() => setActiveSection(section.id as typeof activeSection)}
+            className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              activeSection === section.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+            }`}
           >
-            + Add Score Band
+            {section.label}
           </button>
-        </div>
+        ))}
       </div>
+
+      {activeSection === 'completion' && (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Thank You Message</label>
+            <textarea
+              value={settings.thankYouMessage || ''}
+              onChange={(e) => onUpdate({ thankYouMessage: e.target.value })}
+              rows={3}
+              placeholder="Thank you for completing this survey!"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Redirect URL (optional)</label>
+            <input
+              type="url"
+              value={settings.redirectUrl || ''}
+              onChange={(e) => onUpdate({ redirectUrl: e.target.value })}
+              placeholder="https://..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.showScoreToRespondent || false}
+              onChange={(e) => onUpdate({ showScoreToRespondent: e.target.checked })}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700">Show score to respondent</span>
+          </label>
+        </div>
+      )}
+
+      {activeSection === 'behavior' && (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Progress Bar</label>
+            <select
+              value={settings.progressBarStyle || 'percentage'}
+              onChange={(e) => onUpdate({ progressBarStyle: e.target.value as SurveySettings['progressBarStyle'] })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="percentage">Percentage Bar</option>
+              <option value="steps">Step Counter</option>
+              <option value="none">Hidden</option>
+            </select>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.showBackButton ?? true}
+              onChange={(e) => onUpdate({ showBackButton: e.target.checked })}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700">Show back button</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.saveAndContinueEnabled || false}
+              onChange={(e) => onUpdate({ saveAndContinueEnabled: e.target.checked })}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700">Save and continue later</span>
+          </label>
+          {settings.saveAndContinueEnabled && (
+            <p className="text-xs text-gray-500 ml-6">Users can save progress and receive email link to continue</p>
+          )}
+        </div>
+      )}
+
+      {activeSection === 'scoring' && (
+        <div className="space-y-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.scoringEnabled || false}
+              onChange={(e) => onUpdate({ scoringEnabled: e.target.checked })}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700">Enable scoring</span>
+          </label>
+          {settings.scoringEnabled && (
+            <>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={settings.weightedScoring || false}
+                  onChange={(e) => onUpdate({ weightedScoring: e.target.checked })}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">Weighted scoring</span>
+              </label>
+              <div className="pt-2 border-t border-gray-200">
+                <div className="text-sm font-medium text-gray-700 mb-2">Score Bands</div>
+                <div className="space-y-2">
+                  {(settings.scoreBands || []).map((band, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <input
+                        type="number"
+                        value={band.minScore}
+                        onChange={(e) => {
+                          const bands = [...(settings.scoreBands || [])];
+                          bands[idx] = { ...band, minScore: parseInt(e.target.value) || 0 };
+                          onUpdate({ scoreBands: bands });
+                        }}
+                        placeholder="Min"
+                        className="w-14 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="text-gray-400">-</span>
+                      <input
+                        type="number"
+                        value={band.maxScore}
+                        onChange={(e) => {
+                          const bands = [...(settings.scoreBands || [])];
+                          bands[idx] = { ...band, maxScore: parseInt(e.target.value) || 0 };
+                          onUpdate({ scoreBands: bands });
+                        }}
+                        placeholder="Max"
+                        className="w-14 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="text"
+                        value={band.label}
+                        onChange={(e) => {
+                          const bands = [...(settings.scoreBands || [])];
+                          bands[idx] = { ...band, label: e.target.value };
+                          onUpdate({ scoreBands: bands });
+                        }}
+                        placeholder="Label"
+                        className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <button
+                        onClick={() => onUpdate({ scoreBands: (settings.scoreBands || []).filter((_, i) => i !== idx) })}
+                        className="p-1 text-red-500 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => onUpdate({ scoreBands: [...(settings.scoreBands || []), { minScore: 0, maxScore: 10, label: 'New Band' }] })}
+                    className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  >
+                    + Add Score Band
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {activeSection === 'limits' && (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Response Limit</label>
+            <input
+              type="number"
+              value={settings.responseLimit || ''}
+              onChange={(e) => onUpdate({ responseLimit: e.target.value ? parseInt(e.target.value) : undefined })}
+              placeholder="Unlimited"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">Maximum submissions before survey closes</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Expiration Date</label>
+            <input
+              type="datetime-local"
+              value={settings.expiresAt ? settings.expiresAt.slice(0, 16) : ''}
+              onChange={(e) => onUpdate({ expiresAt: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1029,20 +1325,312 @@ function SurveyPreview({ survey }: { survey: Survey }) {
         <div className="flex justify-between mt-8">
           <button
             onClick={() => setCurrentStepIndex(Math.max(0, currentStepIndex - 1))}
-            disabled={currentStepIndex === 0 || !survey.settings.allowBackNavigation}
+            disabled={currentStepIndex === 0 || !survey.settings.showBackButton}
             className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Back
           </button>
           <button
-            onClick={() =>
-              setCurrentStepIndex(Math.min(totalSteps - 1, currentStepIndex + 1))
-            }
+            onClick={() => setCurrentStepIndex(Math.min(totalSteps - 1, currentStepIndex + 1))}
             className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             {currentStepIndex === totalSteps - 1 ? 'Submit' : 'Next'}
             {currentStepIndex < totalSteps - 1 && <ArrowRight className="w-4 h-4" />}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BranchingRuleBuilder({
+  step,
+  stepIndex,
+  allSteps,
+  onUpdateRules,
+  onClose,
+}: {
+  step: SurveyStep;
+  stepIndex: number;
+  allSteps: SurveyStep[];
+  onUpdateRules: (rules: SurveyBranchRule[]) => void;
+  onClose: () => void;
+}) {
+  const rules = step.branchRules || [];
+  const questions = step.questions;
+
+  function addRule() {
+    const newRule: SurveyBranchRule = {
+      id: generateId(),
+      questionId: questions[0]?.id || '',
+      operator: 'equals',
+      value: '',
+      action: 'go_to_step',
+      goToStepIndex: Math.min(stepIndex + 2, allSteps.length - 1),
+    };
+    onUpdateRules([...rules, newRule]);
+  }
+
+  function updateRule(ruleId: string, updates: Partial<SurveyBranchRule>) {
+    onUpdateRules(rules.map((r) => (r.id === ruleId ? { ...r, ...updates } : r)));
+  }
+
+  function removeRule(ruleId: string) {
+    onUpdateRules(rules.filter((r) => r.id !== ruleId));
+  }
+
+  return (
+    <div className="p-4">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-900">Branching Logic</h3>
+        <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="text-sm text-gray-600 mb-4">
+        <p>Step {stepIndex + 1}: {step.title}</p>
+        <p className="text-xs text-gray-500 mt-1">
+          Define rules to control which step comes next based on answers
+        </p>
+      </div>
+
+      {rules.length === 0 ? (
+        <div className="text-center py-8 bg-gray-50 rounded-lg">
+          <GitBranch className="w-10 h-10 mx-auto text-gray-300 mb-2" />
+          <p className="text-sm text-gray-500">No branching rules</p>
+          <p className="text-xs text-gray-400">Default: Go to next step</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {rules.map((rule, idx) => {
+            const sourceQuestion = questions.find((q) => q.id === rule.questionId);
+            return (
+              <div key={rule.id} className="p-4 bg-gray-50 rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-gray-500 uppercase">
+                    Rule {idx + 1}
+                  </span>
+                  <button
+                    onClick={() => removeRule(rule.id)}
+                    className="p-1 text-gray-400 hover:text-red-500"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">When answer to</label>
+                  <select
+                    value={rule.questionId}
+                    onChange={(e) => updateRule(rule.id, { questionId: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {questions.map((q) => (
+                      <option key={q.id} value={q.id}>{q.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={rule.operator}
+                    onChange={(e) => updateRule(rule.id, { operator: e.target.value as SurveyBranchRule['operator'] })}
+                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="equals">Equals</option>
+                    <option value="not_equals">Not equals</option>
+                    <option value="contains">Contains</option>
+                    <option value="greater_than">Greater than</option>
+                    <option value="less_than">Less than</option>
+                    <option value="is_any">Is any of</option>
+                    <option value="is_empty">Is empty</option>
+                  </select>
+
+                  {rule.operator !== 'is_empty' && (
+                    <>
+                      {sourceQuestion?.options ? (
+                        <select
+                          value={Array.isArray(rule.value) ? rule.value[0] : rule.value as string}
+                          onChange={(e) => updateRule(rule.id, { value: e.target.value })}
+                          className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Select...</option>
+                          {sourceQuestion.options.map((opt) => (
+                            <option key={opt.id} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={rule.value as string}
+                          onChange={(e) => updateRule(rule.id, { value: e.target.value })}
+                          placeholder="Value"
+                          className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Then</label>
+                  <select
+                    value={rule.action}
+                    onChange={(e) => updateRule(rule.id, { action: e.target.value as SurveyBranchRule['action'] })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="go_to_step">Go to step</option>
+                    <option value="skip_question">Skip question</option>
+                    <option value="end_survey">End survey</option>
+                  </select>
+                </div>
+
+                {rule.action === 'go_to_step' && (
+                  <select
+                    value={rule.goToStepIndex ?? 0}
+                    onChange={(e) => updateRule(rule.id, { goToStepIndex: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {allSteps.map((s, i) => (
+                      <option key={s.id} value={i} disabled={i <= stepIndex}>
+                        Step {i + 1}: {s.title}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {questions.length > 0 && (
+        <button
+          onClick={addRule}
+          className="w-full mt-4 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+        >
+          + Add Branching Rule
+        </button>
+      )}
+
+      {questions.length === 0 && (
+        <p className="text-xs text-gray-400 text-center mt-4">
+          Add questions to this step to create branching rules
+        </p>
+      )}
+
+      <div className="mt-6 pt-4 border-t border-gray-200">
+        <div className="text-xs text-gray-500">
+          <p className="font-medium mb-1">Default behavior:</p>
+          <p>If no rules match, survey continues to Step {Math.min(stepIndex + 2, allSteps.length)}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SurveyEmbedModal({ survey, onClose }: { survey: Survey; onClose: () => void }) {
+  const [embedType, setEmbedType] = useState<'inline' | 'popup' | 'fullpage'>('inline');
+  const [copied, setCopied] = useState(false);
+
+  const baseUrl = window.location.origin;
+  const surveyUrl = `${baseUrl}/s/${survey.public_slug}`;
+
+  const getEmbedCode = () => {
+    if (embedType === 'fullpage') {
+      return surveyUrl;
+    }
+
+    if (embedType === 'popup') {
+      return `<script src="${baseUrl}/sdk/autom8ion-surveys.js"></script>
+<script>
+  Autom8ionSurveys.popup('${survey.public_slug}', {
+    trigger: 'button',
+    buttonText: 'Take Survey'
+  });
+</script>`;
+    }
+
+    return `<script src="${baseUrl}/sdk/autom8ion-surveys.js"></script>
+<div id="autom8ion-survey-${survey.public_slug}"></div>
+<script>
+  Autom8ionSurveys.embed('${survey.public_slug}', {
+    container: '#autom8ion-survey-${survey.public_slug}',
+    onComplete: function(data) { console.log('Survey completed:', data); }
+  });
+</script>`;
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(getEmbedCode());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">Embed Survey</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Embed Type</label>
+            <div className="flex gap-2">
+              {[
+                { id: 'inline', label: 'Inline', desc: 'Embed directly in page' },
+                { id: 'popup', label: 'Popup', desc: 'Show as modal' },
+                { id: 'fullpage', label: 'Full Page', desc: 'Direct link' },
+              ].map((type) => (
+                <button
+                  key={type.id}
+                  onClick={() => setEmbedType(type.id as typeof embedType)}
+                  className={`flex-1 p-3 rounded-lg border-2 text-left transition-colors ${
+                    embedType === type.id
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="font-medium text-gray-900">{type.label}</div>
+                  <div className="text-xs text-gray-500">{type.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                {embedType === 'fullpage' ? 'Direct Link' : 'Embed Code'}
+              </label>
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1 px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              >
+                {copied ? 'Copied!' : <><Copy className="w-4 h-4" /> Copy</>}
+              </button>
+            </div>
+            <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto">
+              {getEmbedCode()}
+            </pre>
+          </div>
+
+          {embedType === 'fullpage' && (
+            <a
+              href={surveyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Open Survey
+            </a>
+          )}
         </div>
       </div>
     </div>

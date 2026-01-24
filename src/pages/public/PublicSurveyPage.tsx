@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle, AlertCircle, Loader2, ArrowLeft, ArrowRight, Star } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, ArrowLeft, ArrowRight, Star, GripVertical } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Survey, SurveyQuestion } from '../../types';
 
@@ -314,9 +314,164 @@ export function PublicSurveyPage() {
           </div>
         )}
 
+        {question.type === 'matrix' && question.matrixRows && question.matrixColumns && (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <th className="p-2 text-left"></th>
+                  {question.matrixColumns.map(col => (
+                    <th key={col.id} className="p-2 text-center text-sm text-gray-600 min-w-[80px]">
+                      {col.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {question.matrixRows.map(row => {
+                  const rowAnswer = (answer as Record<string, string>)?.[row.id];
+                  return (
+                    <tr key={row.id} className="border-t border-gray-200">
+                      <td className="p-3 text-sm text-gray-700">{row.label}</td>
+                      {question.matrixColumns!.map(col => (
+                        <td key={col.id} className="p-2 text-center">
+                          <input
+                            type="radio"
+                            name={`${question.id}-${row.id}`}
+                            checked={rowAnswer === col.value}
+                            onChange={() => {
+                              const current = (answer as Record<string, string>) || {};
+                              updateAnswer(question.id, { ...current, [row.id]: col.value });
+                            }}
+                            className="text-blue-600 focus:ring-blue-500"
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {question.type === 'ranking' && question.options && (
+          <RankingInput
+            options={question.options}
+            value={(answer as string[]) || []}
+            onChange={(newValue) => updateAnswer(question.id, newValue)}
+          />
+        )}
+
+        {question.type === 'image_choice' && question.imageOptions && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            {question.imageOptions.map(option => {
+              const isSelected = answer === option.value;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => updateAnswer(question.id, option.value)}
+                  className={`relative rounded-lg overflow-hidden border-2 transition-all ${
+                    isSelected
+                      ? 'border-blue-500 ring-2 ring-blue-200'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <img
+                    src={option.imageUrl}
+                    alt={option.label}
+                    className="w-full aspect-square object-cover"
+                  />
+                  <div className={`p-2 text-center text-sm ${
+                    isSelected ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-700'
+                  }`}>
+                    {option.label}
+                  </div>
+                  {isSelected && (
+                    <div className="absolute top-2 right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                      <CheckCircle className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {hasError && (
           <p className="mt-2 text-sm text-red-500">{validationErrors[question.id]}</p>
         )}
+      </div>
+    );
+  }
+
+  function RankingInput({
+    options,
+    value,
+    onChange,
+  }: {
+    options: { id: string; label: string; value: string }[];
+    value: string[];
+    onChange: (newValue: string[]) => void;
+  }) {
+    const [items, setItems] = useState<string[]>([]);
+    const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+
+    useEffect(() => {
+      if (value.length > 0) {
+        setItems(value);
+      } else {
+        setItems(options.map(o => o.value));
+      }
+    }, [options]);
+
+    function handleDragStart(idx: number) {
+      setDraggedIdx(idx);
+    }
+
+    function handleDragOver(e: React.DragEvent, idx: number) {
+      e.preventDefault();
+      if (draggedIdx === null || draggedIdx === idx) return;
+
+      const newItems = [...items];
+      const draggedItem = newItems[draggedIdx];
+      newItems.splice(draggedIdx, 1);
+      newItems.splice(idx, 0, draggedItem);
+      setItems(newItems);
+      setDraggedIdx(idx);
+    }
+
+    function handleDragEnd() {
+      setDraggedIdx(null);
+      onChange(items);
+    }
+
+    function getLabel(val: string): string {
+      return options.find(o => o.value === val)?.label || val;
+    }
+
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-gray-500 mb-2">Drag to reorder (1 = highest priority)</p>
+        {items.map((item, idx) => (
+          <div
+            key={item}
+            draggable
+            onDragStart={() => handleDragStart(idx)}
+            onDragOver={(e) => handleDragOver(e, idx)}
+            onDragEnd={handleDragEnd}
+            className={`flex items-center gap-3 p-3 bg-white border rounded-lg cursor-grab ${
+              draggedIdx === idx ? 'opacity-50 border-blue-500' : 'border-gray-200'
+            }`}
+          >
+            <span className="w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-sm font-medium">
+              {idx + 1}
+            </span>
+            <GripVertical className="w-4 h-4 text-gray-400" />
+            <span className="flex-1 text-gray-700">{getLabel(item)}</span>
+          </div>
+        ))}
       </div>
     );
   }

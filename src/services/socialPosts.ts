@@ -88,23 +88,44 @@ export async function createSocialPost(
     scheduledAtUtc?: string;
     scheduledTimezone?: string;
     requiresApproval?: boolean;
+    firstComment?: string;
+    linkUrl?: string;
+    aiGenerated?: boolean;
+    aiGenerationId?: string;
   }
 ): Promise<SocialPost> {
   const status: SocialPostStatus = data.scheduledAtUtc ? 'scheduled' : 'draft';
 
+  const insertData: Record<string, unknown> = {
+    organization_id: organizationId,
+    created_by: userId,
+    body: data.body,
+    media: data.media || [],
+    targets: data.targets,
+    status,
+    scheduled_at_utc: data.scheduledAtUtc || null,
+    scheduled_timezone: data.scheduledTimezone || 'UTC',
+    requires_approval: data.requiresApproval || false,
+  };
+
+  if (data.firstComment) {
+    insertData.first_comment = data.firstComment;
+  }
+
+  if (data.linkUrl) {
+    insertData.link_preview = { url: data.linkUrl };
+  }
+
+  if (data.aiGenerated) {
+    insertData.ai_generated = true;
+    if (data.aiGenerationId) {
+      insertData.ai_generation_id = data.aiGenerationId;
+    }
+  }
+
   const { data: post, error } = await supabase
     .from('social_posts')
-    .insert({
-      organization_id: organizationId,
-      created_by: userId,
-      body: data.body,
-      media: data.media || [],
-      targets: data.targets,
-      status,
-      scheduled_at_utc: data.scheduledAtUtc || null,
-      scheduled_timezone: data.scheduledTimezone || 'UTC',
-      requires_approval: data.requiresApproval || false,
-    })
+    .insert(insertData)
     .select()
     .single();
 
@@ -130,6 +151,8 @@ export async function updateSocialPost(
     scheduledAtUtc?: string;
     scheduledTimezone?: string;
     requiresApproval?: boolean;
+    firstComment?: string;
+    linkUrl?: string;
   }
 ): Promise<SocialPost> {
   const updateData: Record<string, unknown> = {};
@@ -140,6 +163,8 @@ export async function updateSocialPost(
   if (updates.scheduledAtUtc !== undefined) updateData.scheduled_at_utc = updates.scheduledAtUtc;
   if (updates.scheduledTimezone !== undefined) updateData.scheduled_timezone = updates.scheduledTimezone;
   if (updates.requiresApproval !== undefined) updateData.requires_approval = updates.requiresApproval;
+  if (updates.firstComment !== undefined) updateData.first_comment = updates.firstComment;
+  if (updates.linkUrl !== undefined) updateData.link_preview = { url: updates.linkUrl };
 
   const { data, error } = await supabase
     .from('social_posts')

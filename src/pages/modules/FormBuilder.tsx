@@ -22,28 +22,54 @@ import {
   Calendar,
   EyeOff,
   ShieldCheck,
+  Circle,
+  Upload,
+  Minus,
+  Code,
+  GitBranch,
+  X,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import { getFormById, updateForm, publishForm, unpublishForm } from '../../services/forms';
-import type { Form, FormField, FormFieldType, FormDefinition, FormSettings } from '../../types';
+import type { Form, FormField, FormFieldType, FormDefinition, FormSettings, FormConditionalRule, FormValidationRule } from '../../types';
 
-const FIELD_TYPES: { type: FormFieldType; label: string; icon: React.ElementType }[] = [
-  { type: 'first_name', label: 'First Name', icon: Type },
-  { type: 'last_name', label: 'Last Name', icon: Type },
-  { type: 'full_name', label: 'Full Name', icon: Type },
-  { type: 'email', label: 'Email', icon: Mail },
-  { type: 'phone', label: 'Phone', icon: Phone },
-  { type: 'company', label: 'Company', icon: Building2 },
-  { type: 'website', label: 'Website', icon: LinkIcon },
-  { type: 'address', label: 'Address', icon: MapPin },
-  { type: 'text', label: 'Single Line Text', icon: Type },
-  { type: 'textarea', label: 'Paragraph', icon: AlignLeft },
-  { type: 'number', label: 'Number', icon: Hash },
-  { type: 'dropdown', label: 'Dropdown', icon: ChevronDown },
-  { type: 'multi_select', label: 'Multi-Select', icon: CheckSquare },
-  { type: 'checkbox', label: 'Checkbox', icon: CheckSquare },
-  { type: 'date', label: 'Date', icon: Calendar },
-  { type: 'hidden', label: 'Hidden Field', icon: EyeOff },
-  { type: 'consent', label: 'Consent Checkbox', icon: ShieldCheck },
+interface FieldTypeConfig {
+  type: FormFieldType;
+  label: string;
+  icon: React.ElementType;
+  category: 'contact' | 'input' | 'choice' | 'layout' | 'special';
+}
+
+const FIELD_TYPES: FieldTypeConfig[] = [
+  { type: 'first_name', label: 'First Name', icon: Type, category: 'contact' },
+  { type: 'last_name', label: 'Last Name', icon: Type, category: 'contact' },
+  { type: 'full_name', label: 'Full Name', icon: Type, category: 'contact' },
+  { type: 'email', label: 'Email', icon: Mail, category: 'contact' },
+  { type: 'phone', label: 'Phone', icon: Phone, category: 'contact' },
+  { type: 'company', label: 'Company', icon: Building2, category: 'contact' },
+  { type: 'website', label: 'Website', icon: LinkIcon, category: 'contact' },
+  { type: 'address', label: 'Address', icon: MapPin, category: 'contact' },
+  { type: 'text', label: 'Single Line Text', icon: Type, category: 'input' },
+  { type: 'textarea', label: 'Paragraph', icon: AlignLeft, category: 'input' },
+  { type: 'number', label: 'Number', icon: Hash, category: 'input' },
+  { type: 'date', label: 'Date', icon: Calendar, category: 'input' },
+  { type: 'dropdown', label: 'Dropdown', icon: ChevronDown, category: 'choice' },
+  { type: 'multi_select', label: 'Multi-Select', icon: CheckSquare, category: 'choice' },
+  { type: 'checkbox', label: 'Checkbox', icon: CheckSquare, category: 'choice' },
+  { type: 'radio', label: 'Radio Buttons', icon: Circle, category: 'choice' },
+  { type: 'file_upload', label: 'File Upload', icon: Upload, category: 'special' },
+  { type: 'divider', label: 'Section Divider', icon: Minus, category: 'layout' },
+  { type: 'hidden', label: 'Hidden Field', icon: EyeOff, category: 'special' },
+  { type: 'consent', label: 'Consent Checkbox', icon: ShieldCheck, category: 'special' },
+];
+
+const FIELD_CATEGORIES = [
+  { id: 'contact', label: 'Contact Fields' },
+  { id: 'input', label: 'Input Fields' },
+  { id: 'choice', label: 'Choice Fields' },
+  { id: 'layout', label: 'Layout' },
+  { id: 'special', label: 'Special' },
 ];
 
 function generateFieldId(): string {
@@ -64,6 +90,14 @@ export function FormBuilder() {
   const [activeTab, setActiveTab] = useState<'fields' | 'settings'>('fields');
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
+  const [showEmbedModal, setShowEmbedModal] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    contact: true,
+    input: true,
+    choice: true,
+    layout: false,
+    special: false,
+  });
 
   useEffect(() => {
     if (id) loadForm();
@@ -133,16 +167,24 @@ export function FormBuilder() {
     const newField: FormField = {
       id: generateFieldId(),
       type,
-      label: getDefaultLabel(type),
+      label: type === 'divider' ? '' : getDefaultLabel(type),
       required: false,
       width: 'full',
     };
 
-    if (type === 'dropdown' || type === 'multi_select') {
+    if (type === 'dropdown' || type === 'multi_select' || type === 'radio') {
       newField.options = [
         { label: 'Option 1', value: 'option_1' },
         { label: 'Option 2', value: 'option_2' },
       ];
+    }
+
+    if (type === 'file_upload') {
+      newField.fileUploadConfig = {
+        maxSizeBytes: 10485760,
+        allowedTypes: ['image/*', 'application/pdf', '.doc', '.docx'],
+        maxFiles: 1,
+      };
     }
 
     setForm({
@@ -267,12 +309,21 @@ export function FormBuilder() {
             {saving ? 'Saving...' : 'Save'}
           </button>
           {form.status === 'published' ? (
-            <button
-              onClick={handleUnpublish}
-              className="flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors"
-            >
-              Unpublish
-            </button>
+            <>
+              <button
+                onClick={() => setShowEmbedModal(true)}
+                className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <Code className="w-4 h-4" />
+                Embed
+              </button>
+              <button
+                onClick={handleUnpublish}
+                className="flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-700 rounded-lg hover:bg-yellow-200 transition-colors"
+              >
+                Unpublish
+              </button>
+            </>
           ) : (
             <button
               onClick={handlePublish}
@@ -313,20 +364,47 @@ export function FormBuilder() {
             </div>
 
             {activeTab === 'fields' ? (
-              <div className="space-y-2">
-                <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
-                  Add Field
-                </div>
-                {FIELD_TYPES.map((field) => (
-                  <button
-                    key={field.type}
-                    onClick={() => addField(field.type)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                  >
-                    <field.icon className="w-4 h-4 text-gray-400" />
-                    {field.label}
-                  </button>
-                ))}
+              <div className="space-y-3">
+                {FIELD_CATEGORIES.map((category) => {
+                  const categoryFields = FIELD_TYPES.filter(
+                    (f) => f.category === category.id
+                  );
+                  const isExpanded = expandedCategories[category.id];
+                  return (
+                    <div key={category.id}>
+                      <button
+                        onClick={() =>
+                          setExpandedCategories((prev) => ({
+                            ...prev,
+                            [category.id]: !prev[category.id],
+                          }))
+                        }
+                        className="w-full flex items-center justify-between px-2 py-1.5 text-xs font-medium text-gray-500 uppercase tracking-wider hover:bg-gray-50 rounded"
+                      >
+                        {category.label}
+                        <ChevronDown
+                          className={`w-4 h-4 transition-transform ${
+                            isExpanded ? 'rotate-180' : ''
+                          }`}
+                        />
+                      </button>
+                      {isExpanded && (
+                        <div className="mt-1 space-y-1">
+                          {categoryFields.map((field) => (
+                            <button
+                              key={field.type}
+                              onClick={() => addField(field.type)}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                              <field.icon className="w-4 h-4 text-gray-400" />
+                              {field.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <FormSettingsPanel
@@ -378,12 +456,20 @@ export function FormBuilder() {
           <div className="w-80 border-l border-gray-200 bg-white overflow-y-auto">
             <FieldEditor
               field={selectedField}
+              allFields={form.definition.fields}
               onUpdate={(updates) => updateField(selectedField.id, updates)}
               onClose={() => setSelectedFieldId(null)}
             />
           </div>
         )}
       </div>
+
+      {showEmbedModal && form.public_slug && (
+        <EmbedModal
+          form={form}
+          onClose={() => setShowEmbedModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -453,133 +539,505 @@ function FieldCard({
 
 function FieldEditor({
   field,
+  allFields,
   onUpdate,
   onClose,
 }: {
   field: FormField;
+  allFields: FormField[];
   onUpdate: (updates: Partial<FormField>) => void;
   onClose: () => void;
 }) {
+  const [activeSection, setActiveSection] = useState<'general' | 'conditional' | 'validation'>('general');
+  const isDivider = field.type === 'divider';
+
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold text-gray-900">Field Settings</h3>
-        <button
-          onClick={onClose}
-          className="p-1 hover:bg-gray-100 rounded"
-        >
-          &times;
+        <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+          <X className="w-4 h-4" />
         </button>
       </div>
 
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Label
-          </label>
-          <input
-            type="text"
-            value={field.label}
-            onChange={(e) => onUpdate({ label: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Placeholder
-          </label>
-          <input
-            type="text"
-            value={field.placeholder || ''}
-            onChange={(e) => onUpdate({ placeholder: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="required"
-            checked={field.required}
-            onChange={(e) => onUpdate({ required: e.target.checked })}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <label htmlFor="required" className="text-sm text-gray-700">
-            Required field
-          </label>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Width
-          </label>
-          <select
-            value={field.width || 'full'}
-            onChange={(e) =>
-              onUpdate({ width: e.target.value as 'full' | 'half' })
-            }
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="full">Full Width</option>
-            <option value="half">Half Width</option>
-          </select>
-        </div>
-
-        {(field.type === 'dropdown' || field.type === 'multi_select') && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Options
-            </label>
-            <div className="space-y-2">
-              {(field.options || []).map((option, idx) => (
-                <div key={idx} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={option.label}
-                    onChange={(e) => {
-                      const newOptions = [...(field.options || [])];
-                      newOptions[idx] = {
-                        ...option,
-                        label: e.target.value,
-                        value: e.target.value.toLowerCase().replace(/\s+/g, '_'),
-                      };
-                      onUpdate({ options: newOptions });
-                    }}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button
-                    onClick={() => {
-                      const newOptions = (field.options || []).filter(
-                        (_, i) => i !== idx
-                      );
-                      onUpdate({ options: newOptions });
-                    }}
-                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-              <button
-                onClick={() => {
-                  const newOptions = [
-                    ...(field.options || []),
-                    {
-                      label: `Option ${(field.options || []).length + 1}`,
-                      value: `option_${(field.options || []).length + 1}`,
-                    },
-                  ];
-                  onUpdate({ options: newOptions });
-                }}
-                className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-              >
-                + Add Option
-              </button>
-            </div>
-          </div>
+      <div className="flex gap-1 mb-4 p-1 bg-gray-100 rounded-lg">
+        <button
+          onClick={() => setActiveSection('general')}
+          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+            activeSection === 'general' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          General
+        </button>
+        {!isDivider && (
+          <>
+            <button
+              onClick={() => setActiveSection('conditional')}
+              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                activeSection === 'conditional' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <GitBranch className="w-3 h-3 inline mr-1" />
+              Logic
+            </button>
+            <button
+              onClick={() => setActiveSection('validation')}
+              className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                activeSection === 'validation' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Rules
+            </button>
+          </>
         )}
       </div>
+
+      {activeSection === 'general' && (
+        <div className="space-y-4">
+          {!isDivider && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Label</label>
+                <input
+                  type="text"
+                  value={field.label}
+                  onChange={(e) => onUpdate({ label: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Help Text</label>
+                <input
+                  type="text"
+                  value={field.helpText || ''}
+                  onChange={(e) => onUpdate({ helpText: e.target.value })}
+                  placeholder="Optional description"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {field.type !== 'checkbox' && field.type !== 'consent' && field.type !== 'file_upload' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Placeholder</label>
+                  <input
+                    type="text"
+                    value={field.placeholder || ''}
+                    onChange={(e) => onUpdate({ placeholder: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="required"
+                  checked={field.required}
+                  onChange={(e) => onUpdate({ required: e.target.checked })}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <label htmlFor="required" className="text-sm text-gray-700">Required field</label>
+              </div>
+            </>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Width</label>
+            <select
+              value={field.width || 'full'}
+              onChange={(e) => onUpdate({ width: e.target.value as FormField['width'] })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="full">Full Width</option>
+              <option value="two_thirds">2/3 Width</option>
+              <option value="half">Half Width</option>
+              <option value="third">1/3 Width</option>
+            </select>
+          </div>
+
+          {(field.type === 'dropdown' || field.type === 'multi_select' || field.type === 'radio') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Options</label>
+              <div className="space-y-2">
+                {(field.options || []).map((option, idx) => (
+                  <div key={idx} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={option.label}
+                      onChange={(e) => {
+                        const newOptions = [...(field.options || [])];
+                        newOptions[idx] = {
+                          ...option,
+                          label: e.target.value,
+                          value: e.target.value.toLowerCase().replace(/\s+/g, '_'),
+                        };
+                        onUpdate({ options: newOptions });
+                      }}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={() => {
+                        const newOptions = (field.options || []).filter((_, i) => i !== idx);
+                        onUpdate({ options: newOptions });
+                      }}
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => {
+                    const newOptions = [
+                      ...(field.options || []),
+                      { label: `Option ${(field.options || []).length + 1}`, value: `option_${(field.options || []).length + 1}` },
+                    ];
+                    onUpdate({ options: newOptions });
+                  }}
+                  className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                >
+                  + Add Option
+                </button>
+              </div>
+            </div>
+          )}
+
+          {field.type === 'file_upload' && (
+            <FileUploadSettings field={field} onUpdate={onUpdate} />
+          )}
+
+          {(field.type === 'text' || field.type === 'textarea') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Character Limit</label>
+              <input
+                type="number"
+                value={field.characterLimit || ''}
+                onChange={(e) => onUpdate({ characterLimit: e.target.value ? parseInt(e.target.value) : undefined })}
+                placeholder="No limit"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeSection === 'conditional' && (
+        <ConditionalLogicEditor field={field} allFields={allFields} onUpdate={onUpdate} />
+      )}
+
+      {activeSection === 'validation' && (
+        <ValidationRulesEditor field={field} onUpdate={onUpdate} />
+      )}
+    </div>
+  );
+}
+
+function FileUploadSettings({
+  field,
+  onUpdate,
+}: {
+  field: FormField;
+  onUpdate: (updates: Partial<FormField>) => void;
+}) {
+  const config = field.fileUploadConfig || {
+    maxSizeBytes: 10485760,
+    allowedTypes: ['image/*', 'application/pdf'],
+    maxFiles: 1,
+  };
+
+  const sizeInMB = Math.round(config.maxSizeBytes / 1048576);
+
+  return (
+    <div className="space-y-4 pt-2 border-t border-gray-200">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Max File Size (MB)</label>
+        <select
+          value={sizeInMB}
+          onChange={(e) =>
+            onUpdate({
+              fileUploadConfig: { ...config, maxSizeBytes: parseInt(e.target.value) * 1048576 },
+            })
+          }
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value={5}>5 MB</option>
+          <option value={10}>10 MB</option>
+          <option value={25}>25 MB</option>
+          <option value={50}>50 MB</option>
+          <option value={100}>100 MB</option>
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Max Files</label>
+        <input
+          type="number"
+          min={1}
+          max={10}
+          value={config.maxFiles}
+          onChange={(e) =>
+            onUpdate({
+              fileUploadConfig: { ...config, maxFiles: parseInt(e.target.value) || 1 },
+            })
+          }
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Allowed File Types</label>
+        <div className="space-y-2">
+          {['image/*', 'application/pdf', '.doc,.docx', '.xls,.xlsx', 'video/*', 'audio/*'].map((type) => (
+            <label key={type} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={config.allowedTypes.includes(type)}
+                onChange={(e) => {
+                  const newTypes = e.target.checked
+                    ? [...config.allowedTypes, type]
+                    : config.allowedTypes.filter((t) => t !== type);
+                  onUpdate({ fileUploadConfig: { ...config, allowedTypes: newTypes } });
+                }}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              {type === 'image/*' && 'Images'}
+              {type === 'application/pdf' && 'PDF'}
+              {type === '.doc,.docx' && 'Word Documents'}
+              {type === '.xls,.xlsx' && 'Excel Files'}
+              {type === 'video/*' && 'Videos'}
+              {type === 'audio/*' && 'Audio'}
+            </label>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConditionalLogicEditor({
+  field,
+  allFields,
+  onUpdate,
+}: {
+  field: FormField;
+  allFields: FormField[];
+  onUpdate: (updates: Partial<FormField>) => void;
+}) {
+  const rules = field.conditionalRules || [];
+  const otherFields = allFields.filter(
+    (f) => f.id !== field.id && f.type !== 'divider' && f.type !== 'hidden'
+  );
+
+  function addRule() {
+    const newRule: FormConditionalRule = {
+      fieldId: otherFields[0]?.id || '',
+      operator: 'equals',
+      value: '',
+    };
+    onUpdate({ conditionalRules: [...rules, newRule] });
+  }
+
+  function updateRule(index: number, updates: Partial<FormConditionalRule>) {
+    const newRules = [...rules];
+    newRules[index] = { ...newRules[index], ...updates };
+    onUpdate({ conditionalRules: newRules });
+  }
+
+  function removeRule(index: number) {
+    onUpdate({ conditionalRules: rules.filter((_, i) => i !== index) });
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-gray-600">
+        Show this field only when the following conditions are met:
+      </p>
+
+      {rules.length === 0 ? (
+        <div className="text-center py-6 bg-gray-50 rounded-lg">
+          <GitBranch className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+          <p className="text-sm text-gray-500">No conditions set</p>
+          <p className="text-xs text-gray-400">Field is always visible</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {rules.map((rule, idx) => {
+            const sourceField = otherFields.find((f) => f.id === rule.fieldId);
+            return (
+              <div key={idx} className="p-3 bg-gray-50 rounded-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-gray-500">
+                    {idx === 0 ? 'IF' : 'AND'}
+                  </span>
+                  <button
+                    onClick={() => removeRule(idx)}
+                    className="p-1 text-gray-400 hover:text-red-500"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <select
+                  value={rule.fieldId}
+                  onChange={(e) => updateRule(idx, { fieldId: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {otherFields.map((f) => (
+                    <option key={f.id} value={f.id}>{f.label}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={rule.operator}
+                  onChange={(e) => updateRule(idx, { operator: e.target.value as FormConditionalRule['operator'] })}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="equals">Equals</option>
+                  <option value="not_equals">Does not equal</option>
+                  <option value="contains">Contains</option>
+                  <option value="is_empty">Is empty</option>
+                  <option value="is_not_empty">Is not empty</option>
+                </select>
+
+                {rule.operator !== 'is_empty' && rule.operator !== 'is_not_empty' && (
+                  <>
+                    {sourceField?.options ? (
+                      <select
+                        value={rule.value}
+                        onChange={(e) => updateRule(idx, { value: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select value...</option>
+                        {sourceField.options.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={rule.value}
+                        onChange={(e) => updateRule(idx, { value: e.target.value })}
+                        placeholder="Value"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {otherFields.length > 0 && (
+        <button
+          onClick={addRule}
+          className="w-full px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+        >
+          + Add Condition
+        </button>
+      )}
+
+      {otherFields.length === 0 && (
+        <p className="text-xs text-gray-400 text-center">
+          Add more fields to create conditions
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ValidationRulesEditor({
+  field,
+  onUpdate,
+}: {
+  field: FormField;
+  onUpdate: (updates: Partial<FormField>) => void;
+}) {
+  const rules = field.validationRules || [];
+  const fieldType = field.type;
+
+  const availableRules: { type: FormValidationRule['type']; label: string }[] = [];
+  if (fieldType === 'text' || fieldType === 'textarea') {
+    availableRules.push({ type: 'min_length', label: 'Minimum Length' });
+    availableRules.push({ type: 'max_length', label: 'Maximum Length' });
+    availableRules.push({ type: 'pattern', label: 'Regex Pattern' });
+  }
+  if (fieldType === 'number') {
+    availableRules.push({ type: 'min', label: 'Minimum Value' });
+    availableRules.push({ type: 'max', label: 'Maximum Value' });
+  }
+
+  function addRule(type: FormValidationRule['type']) {
+    const newRule: FormValidationRule = { type, value: '' };
+    onUpdate({ validationRules: [...rules, newRule] });
+  }
+
+  function updateRule(index: number, updates: Partial<FormValidationRule>) {
+    const newRules = [...rules];
+    newRules[index] = { ...newRules[index], ...updates };
+    onUpdate({ validationRules: newRules });
+  }
+
+  function removeRule(index: number) {
+    onUpdate({ validationRules: rules.filter((_, i) => i !== index) });
+  }
+
+  if (availableRules.length === 0) {
+    return (
+      <div className="text-center py-6 bg-gray-50 rounded-lg">
+        <p className="text-sm text-gray-500">No validation rules available for this field type</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {rules.map((rule, idx) => (
+        <div key={idx} className="p-3 bg-gray-50 rounded-lg space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">
+              {availableRules.find((r) => r.type === rule.type)?.label}
+            </span>
+            <button onClick={() => removeRule(idx)} className="p-1 text-gray-400 hover:text-red-500">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <input
+            type={rule.type === 'pattern' ? 'text' : 'number'}
+            value={rule.value}
+            onChange={(e) => updateRule(idx, { value: rule.type === 'pattern' ? e.target.value : parseInt(e.target.value) })}
+            placeholder={rule.type === 'pattern' ? '^[a-zA-Z]+$' : '0'}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <input
+            type="text"
+            value={rule.message || ''}
+            onChange={(e) => updateRule(idx, { message: e.target.value })}
+            placeholder="Custom error message (optional)"
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      ))}
+
+      {availableRules.filter((r) => !rules.some((rule) => rule.type === r.type)).length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Add Rule</label>
+          <select
+            value=""
+            onChange={(e) => e.target.value && addRule(e.target.value as FormValidationRule['type'])}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Select rule type...</option>
+            {availableRules
+              .filter((r) => !rules.some((rule) => rule.type === r.type))
+              .map((r) => (
+                <option key={r.type} value={r.type}>{r.label}</option>
+              ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 }
@@ -591,160 +1049,421 @@ function FormSettingsPanel({
   settings: FormSettings;
   onUpdate: (updates: Partial<FormSettings>) => void;
 }) {
+  const [activeSection, setActiveSection] = useState<'submission' | 'contacts' | 'spam' | 'notifications'>('submission');
+
   return (
     <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Thank You Message
-        </label>
-        <textarea
-          value={settings.thankYouMessage || ''}
-          onChange={(e) => onUpdate({ thankYouMessage: e.target.value })}
-          rows={3}
-          placeholder="Thank you for your submission!"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+        {[
+          { id: 'submission', label: 'Submit' },
+          { id: 'contacts', label: 'Contacts' },
+          { id: 'spam', label: 'Spam' },
+          { id: 'notifications', label: 'Notify' },
+        ].map((section) => (
+          <button
+            key={section.id}
+            onClick={() => setActiveSection(section.id as typeof activeSection)}
+            className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              activeSection === section.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            {section.label}
+          </button>
+        ))}
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Redirect URL (optional)
-        </label>
-        <input
-          type="url"
-          value={settings.redirectUrl || ''}
-          onChange={(e) => onUpdate({ redirectUrl: e.target.value })}
-          placeholder="https://..."
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
+      {activeSection === 'submission' && (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Success Action</label>
+            <select
+              value={settings.successAction || 'message'}
+              onChange={(e) => onUpdate({ successAction: e.target.value as FormSettings['successAction'] })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="message">Show message</option>
+              <option value="redirect">Redirect to URL</option>
+              <option value="both">Show message, then redirect</option>
+            </select>
+          </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Contact Matching
-        </label>
-        <select
-          value={settings.contactMatching}
-          onChange={(e) =>
-            onUpdate({
-              contactMatching: e.target.value as FormSettings['contactMatching'],
-            })
-          }
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="email_first">Match by Email first</option>
-          <option value="phone_first">Match by Phone first</option>
-          <option value="create_new">Always create new</option>
-        </select>
-      </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Thank You Message</label>
+            <textarea
+              value={settings.thankYouMessage || ''}
+              onChange={(e) => onUpdate({ thankYouMessage: e.target.value })}
+              rows={3}
+              placeholder="Thank you for your submission!"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Field Overwrite
-        </label>
-        <select
-          value={settings.fieldOverwrite}
-          onChange={(e) =>
-            onUpdate({
-              fieldOverwrite: e.target.value as FormSettings['fieldOverwrite'],
-            })
-          }
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="always">Always overwrite</option>
-          <option value="only_if_empty">Only if empty</option>
-        </select>
-      </div>
+          {(settings.successAction === 'redirect' || settings.successAction === 'both') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Redirect URL</label>
+              <input
+                type="url"
+                value={settings.redirectUrl || ''}
+                onChange={(e) => onUpdate({ redirectUrl: e.target.value })}
+                placeholder="https://..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="honeypot"
-          checked={settings.honeypotEnabled ?? true}
-          onChange={(e) => onUpdate({ honeypotEnabled: e.target.checked })}
-          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-        />
-        <label htmlFor="honeypot" className="text-sm text-gray-700">
-          Enable spam protection
-        </label>
-      </div>
+      {activeSection === 'contacts' && (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Contact Matching</label>
+            <select
+              value={settings.contactMatching}
+              onChange={(e) => onUpdate({ contactMatching: e.target.value as FormSettings['contactMatching'] })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="email_first">Match by Email first</option>
+              <option value="phone_first">Match by Phone first</option>
+              <option value="create_new">Always create new</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Field Overwrite</label>
+            <select
+              value={settings.fieldOverwrite}
+              onChange={(e) => onUpdate({ fieldOverwrite: e.target.value as FormSettings['fieldOverwrite'] })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="always">Always overwrite</option>
+              <option value="only_if_empty">Only if empty</option>
+            </select>
+          </div>
+
+          <div className="pt-2 border-t border-gray-200">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.doubleOptInEnabled || false}
+                onChange={(e) => onUpdate({ doubleOptInEnabled: e.target.checked })}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700">Enable double opt-in</span>
+            </label>
+            <p className="text-xs text-gray-500 mt-1 ml-6">
+              Send confirmation email before creating contact
+            </p>
+          </div>
+        </div>
+      )}
+
+      {activeSection === 'spam' && (
+        <div className="space-y-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.honeypotEnabled ?? true}
+              onChange={(e) => onUpdate({ honeypotEnabled: e.target.checked })}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700">Honeypot field</span>
+          </label>
+
+          <div className="pt-2 border-t border-gray-200">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.recaptchaEnabled || false}
+                onChange={(e) => onUpdate({ recaptchaEnabled: e.target.checked })}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700">Enable reCAPTCHA</span>
+            </label>
+
+            {settings.recaptchaEnabled && (
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Version</label>
+                  <select
+                    value={settings.recaptchaVersion || 'v2'}
+                    onChange={(e) => onUpdate({ recaptchaVersion: e.target.value as 'v2' | 'v3' })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="v2">reCAPTCHA v2 (checkbox)</option>
+                    <option value="v3">reCAPTCHA v3 (invisible)</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="pt-2 border-t border-gray-200">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Rate Limit (per IP)</label>
+            <select
+              value={settings.rateLimitPerIp || 0}
+              onChange={(e) => onUpdate({ rateLimitPerIp: parseInt(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value={0}>No limit</option>
+              <option value={1}>1 per hour</option>
+              <option value={3}>3 per hour</option>
+              <option value={5}>5 per hour</option>
+              <option value={10}>10 per hour</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {activeSection === 'notifications' && (
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notification Emails</label>
+            <textarea
+              value={(settings.notificationEmails || []).join('\n')}
+              onChange={(e) => onUpdate({
+                notificationEmails: e.target.value.split('\n').filter(Boolean)
+              })}
+              rows={3}
+              placeholder="email@example.com&#10;another@example.com"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">One email per line</p>
+          </div>
+
+          <div className="pt-2 border-t border-gray-200">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
+            <input
+              type="url"
+              value={settings.webhookUrl || ''}
+              onChange={(e) => onUpdate({ webhookUrl: e.target.value })}
+              placeholder="https://..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">POST submission data to this URL</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function FormPreview({ form }: { form: Form }) {
+  const getWidthClass = (width: FormField['width']) => {
+    switch (width) {
+      case 'third': return 'w-1/3 inline-block align-top pr-2';
+      case 'half': return 'w-1/2 inline-block align-top pr-2';
+      case 'two_thirds': return 'w-2/3 inline-block align-top pr-2';
+      default: return 'w-full';
+    }
+  };
+
   return (
     <div className="max-w-xl mx-auto">
       <div className="bg-white rounded-xl border border-gray-200 p-8">
-        <h2 className="text-2xl font-semibold text-gray-900 mb-2">
-          {form.name}
-        </h2>
-        {form.description && (
-          <p className="text-gray-500 mb-6">{form.description}</p>
-        )}
+        <h2 className="text-2xl font-semibold text-gray-900 mb-2">{form.name}</h2>
+        {form.description && <p className="text-gray-500 mb-6">{form.description}</p>}
 
         <div className="space-y-4">
           {form.definition.fields.map((field) => (
-            <div
-              key={field.id}
-              className={field.width === 'half' ? 'w-1/2 inline-block pr-2' : ''}
-            >
-              {field.type !== 'hidden' && (
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {field.label}
-                  {field.required && <span className="text-red-500 ml-1">*</span>}
-                </label>
-              )}
-
-              {field.type === 'textarea' ? (
-                <textarea
-                  placeholder={field.placeholder}
-                  rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              ) : field.type === 'dropdown' ? (
-                <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">{field.placeholder || 'Select...'}</option>
-                  {(field.options || []).map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              ) : field.type === 'checkbox' || field.type === 'consent' ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-gray-700">{field.label}</span>
+            <div key={field.id} className={getWidthClass(field.width)}>
+              {field.type === 'divider' ? (
+                <div className="py-4">
+                  <hr className="border-gray-200" />
+                  {field.label && (
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mt-4">{field.label}</p>
+                  )}
                 </div>
               ) : field.type === 'hidden' ? null : (
-                <input
-                  type={
-                    field.type === 'email'
-                      ? 'email'
-                      : field.type === 'phone'
-                      ? 'tel'
-                      : field.type === 'number'
-                      ? 'number'
-                      : field.type === 'date'
-                      ? 'date'
-                      : 'text'
-                  }
-                  placeholder={field.placeholder}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+                <>
+                  {field.type !== 'checkbox' && field.type !== 'consent' && (
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {field.label}
+                      {field.required && <span className="text-red-500 ml-1">*</span>}
+                    </label>
+                  )}
+                  {field.helpText && (
+                    <p className="text-xs text-gray-500 mb-1">{field.helpText}</p>
+                  )}
+
+                  {field.type === 'textarea' ? (
+                    <textarea
+                      placeholder={field.placeholder}
+                      rows={4}
+                      maxLength={field.characterLimit}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  ) : field.type === 'dropdown' ? (
+                    <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">{field.placeholder || 'Select...'}</option>
+                      {(field.options || []).map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  ) : field.type === 'radio' ? (
+                    <div className="space-y-2">
+                      {(field.options || []).map((opt) => (
+                        <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={field.id}
+                            value={opt.value}
+                            className="text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-700">{opt.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : field.type === 'multi_select' ? (
+                    <div className="space-y-2">
+                      {(field.options || []).map((opt) => (
+                        <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                          <span className="text-sm text-gray-700">{opt.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : field.type === 'checkbox' || field.type === 'consent' ? (
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mt-0.5" />
+                      <span className="text-sm text-gray-700">{field.label}</span>
+                    </label>
+                  ) : field.type === 'file_upload' ? (
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer">
+                      <Upload className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+                      <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Max {Math.round((field.fileUploadConfig?.maxSizeBytes || 10485760) / 1048576)}MB
+                      </p>
+                    </div>
+                  ) : (
+                    <input
+                      type={
+                        field.type === 'email' ? 'email' :
+                        field.type === 'phone' ? 'tel' :
+                        field.type === 'number' ? 'number' :
+                        field.type === 'date' ? 'date' :
+                        'text'
+                      }
+                      placeholder={field.placeholder}
+                      maxLength={field.characterLimit}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  )}
+                </>
               )}
             </div>
           ))}
 
-          <button
-            type="button"
-            className="w-full px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-          >
+          <button type="button" className="w-full px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
             Submit
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmbedModal({ form, onClose }: { form: Form; onClose: () => void }) {
+  const [embedType, setEmbedType] = useState<'inline' | 'popup' | 'fullpage'>('inline');
+  const [copied, setCopied] = useState(false);
+
+  const baseUrl = window.location.origin;
+  const formUrl = `${baseUrl}/f/${form.public_slug}`;
+
+  const getEmbedCode = () => {
+    if (embedType === 'fullpage') {
+      return formUrl;
+    }
+
+    if (embedType === 'popup') {
+      return `<script src="${baseUrl}/sdk/autom8ion-forms.js"></script>
+<script>
+  Autom8ionForms.popup('${form.public_slug}', {
+    trigger: '${form.settings.embedOptions?.popupTrigger || 'button'}',
+    delay: ${form.settings.embedOptions?.popupDelay || 5000}
+  });
+</script>`;
+    }
+
+    return `<script src="${baseUrl}/sdk/autom8ion-forms.js"></script>
+<div id="autom8ion-form-${form.public_slug}"></div>
+<script>
+  Autom8ionForms.embed('${form.public_slug}', {
+    container: '#autom8ion-form-${form.public_slug}',
+    onSubmit: function(data) { console.log('Form submitted:', data); }
+  });
+</script>`;
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(getEmbedCode());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">Embed Form</h2>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Embed Type</label>
+            <div className="flex gap-2">
+              {[
+                { id: 'inline', label: 'Inline', desc: 'Embed directly in page' },
+                { id: 'popup', label: 'Popup', desc: 'Show as modal' },
+                { id: 'fullpage', label: 'Full Page', desc: 'Direct link' },
+              ].map((type) => (
+                <button
+                  key={type.id}
+                  onClick={() => setEmbedType(type.id as typeof embedType)}
+                  className={`flex-1 p-3 rounded-lg border-2 text-left transition-colors ${
+                    embedType === type.id
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="font-medium text-gray-900">{type.label}</div>
+                  <div className="text-xs text-gray-500">{type.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700">
+                {embedType === 'fullpage' ? 'Direct Link' : 'Embed Code'}
+              </label>
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1 px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              >
+                {copied ? 'Copied!' : <><Copy className="w-4 h-4" /> Copy</>}
+              </button>
+            </div>
+            <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto">
+              {getEmbedCode()}
+            </pre>
+          </div>
+
+          {embedType === 'fullpage' && (
+            <a
+              href={formUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Open Form
+            </a>
+          )}
         </div>
       </div>
     </div>

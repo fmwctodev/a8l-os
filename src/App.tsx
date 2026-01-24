@@ -39,6 +39,8 @@ import { FormBuilder } from './pages/modules/FormBuilder';
 import { MarketingSurveys } from './pages/modules/MarketingSurveys';
 import { SurveyBuilder } from './pages/modules/SurveyBuilder';
 import { SocialPlanner } from './pages/modules/SocialPlanner';
+import { PostComposer } from './pages/modules/PostComposer';
+import { SocialCalendar } from './pages/modules/SocialCalendar';
 import { Automation } from './pages/modules/Automation';
 import { WorkflowBuilder } from './pages/modules/WorkflowBuilder';
 import { WorkflowEnrollments } from './pages/modules/WorkflowEnrollments';
@@ -285,6 +287,30 @@ function App() {
                 element={
                   <ProtectedRoute permission="marketing.social.view" featureFlag="marketing">
                     <SocialPlanner />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/marketing/social/new"
+                element={
+                  <ProtectedRoute permission="marketing.social.manage" featureFlag="marketing">
+                    <PostComposer />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/marketing/social/:id/edit"
+                element={
+                  <ProtectedRoute permission="marketing.social.manage" featureFlag="marketing">
+                    <PostComposer />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/marketing/social/calendar"
+                element={
+                  <ProtectedRoute permission="marketing.social.view" featureFlag="marketing">
+                    <SocialCalendar />
                   </ProtectedRoute>
                 }
               />
