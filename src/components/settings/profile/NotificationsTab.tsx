@@ -1,99 +1,180 @@
-import { useState, useEffect } from 'react';
-import { Save, Loader2, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Loader2, Check } from 'lucide-react';
+import { useAuth } from '../../../contexts/AuthContext';
+import { getNotificationPreferences, upsertNotificationPreference } from '../../../services/profile';
 
-interface NotificationPreference {
+interface NotificationPreferenceUI {
   eventType: string;
   label: string;
   description: string;
   email: boolean;
   push: boolean;
-  sms: boolean;
   inApp: boolean;
 }
 
-const defaultPreferences: NotificationPreference[] = [
+const notificationEvents = [
   {
-    eventType: 'new_message',
-    label: 'New Messages',
-    description: 'When you receive a new message from a contact',
-    email: true,
-    push: true,
-    sms: false,
-    inApp: true,
-  },
-  {
-    eventType: 'new_contact',
-    label: 'New Contacts',
-    description: 'When a new contact is created',
-    email: true,
-    push: false,
-    sms: false,
-    inApp: true,
-  },
-  {
-    eventType: 'appointment_reminder',
-    label: 'Appointment Reminders',
-    description: 'Reminders for upcoming appointments',
-    email: true,
-    push: true,
-    sms: true,
-    inApp: true,
+    eventType: 'conversation_assigned',
+    label: 'New Conversation Assigned',
+    description: 'When a conversation is assigned to you',
   },
   {
     eventType: 'task_assigned',
-    label: 'Task Assignments',
+    label: 'New Task Assigned',
     description: 'When a task is assigned to you',
-    email: true,
-    push: true,
-    sms: false,
-    inApp: true,
   },
   {
-    eventType: 'mention',
-    label: 'Mentions',
-    description: 'When someone mentions you in a note or comment',
-    email: true,
-    push: true,
-    sms: false,
-    inApp: true,
+    eventType: 'appointment_booked',
+    label: 'Appointment Booked',
+    description: 'When someone books an appointment with you',
   },
   {
-    eventType: 'workflow_complete',
-    label: 'Workflow Completion',
-    description: 'When an automation workflow completes',
-    email: false,
-    push: false,
-    sms: false,
-    inApp: true,
+    eventType: 'review_received',
+    label: 'Review Received',
+    description: 'When a new review is submitted',
+  },
+  {
+    eventType: 'ai_draft_ready',
+    label: 'AI Draft Ready',
+    description: 'When an AI agent completes a draft response',
+  },
+  {
+    eventType: 'system_alert',
+    label: 'System Alerts',
+    description: 'Important system notifications and updates',
   },
 ];
 
+const defaultValues: Omit<NotificationPreferenceUI, 'eventType' | 'label' | 'description'> = {
+  email: true,
+  push: true,
+  inApp: true,
+};
+
+interface ToggleProps {
+  checked: boolean;
+  onChange: () => void;
+  saving: boolean;
+  saved: boolean;
+}
+
+function NotificationToggle({ checked, onChange, saving, saved }: ToggleProps) {
+  return (
+    <div className="relative inline-flex items-center">
+      <button
+        type="button"
+        onClick={onChange}
+        disabled={saving}
+        className={`
+          relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+          ${checked ? 'bg-cyan-500' : 'bg-slate-700'}
+          ${saving ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+        `}
+      >
+        <span
+          className={`
+            inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+            ${checked ? 'translate-x-6' : 'translate-x-1'}
+          `}
+        />
+      </button>
+      {saving && (
+        <Loader2 className="w-3 h-3 text-slate-400 animate-spin absolute -right-5" />
+      )}
+      {saved && (
+        <Check className="w-3 h-3 text-emerald-400 absolute -right-5" />
+      )}
+    </div>
+  );
+}
+
 export function NotificationsTab() {
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [preferences, setPreferences] = useState<NotificationPreference[]>(defaultPreferences);
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
+  const [savingCell, setSavingCell] = useState<string | null>(null);
+  const [savedCell, setSavedCell] = useState<string | null>(null);
+  const [preferences, setPreferences] = useState<NotificationPreferenceUI[]>([]);
 
-  const handleToggle = (index: number, channel: 'email' | 'push' | 'sms' | 'inApp') => {
-    const updated = [...preferences];
-    updated[index][channel] = !updated[index][channel];
-    setPreferences(updated);
-  };
+  useEffect(() => {
+    async function loadPreferences() {
+      if (!user) return;
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    setSaveSuccess(false);
+      try {
+        const dbPrefs = await getNotificationPreferences(user.id);
+
+        const merged = notificationEvents.map(event => {
+          const existing = dbPrefs.find(p => p.event_type === event.eventType);
+          return {
+            ...event,
+            email: existing?.email_enabled ?? defaultValues.email,
+            push: existing?.push_enabled ?? defaultValues.push,
+            inApp: existing?.in_app_enabled ?? defaultValues.inApp,
+          };
+        });
+
+        setPreferences(merged);
+      } catch (error) {
+        console.error('Failed to load notification preferences:', error);
+        setPreferences(notificationEvents.map(e => ({ ...e, ...defaultValues })));
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadPreferences();
+  }, [user]);
+
+  const handleToggle = useCallback(async (
+    eventType: string,
+    channel: 'email' | 'push' | 'inApp'
+  ) => {
+    if (!user) return;
+
+    const cellKey = `${eventType}-${channel}`;
+    const prefIndex = preferences.findIndex(p => p.eventType === eventType);
+    if (prefIndex === -1) return;
+
+    const pref = preferences[prefIndex];
+    const newValue = !pref[channel];
+
+    setPreferences(prev => {
+      const updated = [...prev];
+      updated[prefIndex] = { ...pref, [channel]: newValue };
+      return updated;
+    });
+
+    setSavingCell(cellKey);
+    setSavedCell(null);
 
     try {
-      // TODO: Implement notification preferences update service
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      await upsertNotificationPreference(user.id, eventType, {
+        email_enabled: channel === 'email' ? newValue : pref.email,
+        push_enabled: channel === 'push' ? newValue : pref.push,
+        sms_enabled: false,
+        in_app_enabled: channel === 'inApp' ? newValue : pref.inApp,
+      });
+
+      setSavedCell(cellKey);
+      setTimeout(() => setSavedCell(null), 1500);
     } catch (error) {
-      console.error('Failed to save notification preferences:', error);
+      console.error('Failed to save notification preference:', error);
+      setPreferences(prev => {
+        const updated = [...prev];
+        updated[prefIndex] = { ...pref, [channel]: !newValue };
+        return updated;
+      });
     } finally {
-      setIsSaving(false);
+      setSavingCell(null);
     }
-  };
+  }, [user, preferences]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -103,24 +184,21 @@ export function NotificationsTab() {
             <thead>
               <tr className="border-b border-slate-800">
                 <th className="text-left p-4 text-sm font-semibold text-white">
-                  Event Type
+                  Notification Type
                 </th>
-                <th className="text-center p-4 text-sm font-semibold text-white w-24">
+                <th className="text-center p-4 text-sm font-semibold text-white w-28">
                   Email
                 </th>
-                <th className="text-center p-4 text-sm font-semibold text-white w-24">
+                <th className="text-center p-4 text-sm font-semibold text-white w-28">
                   Push
                 </th>
-                <th className="text-center p-4 text-sm font-semibold text-white w-24">
-                  SMS
-                </th>
-                <th className="text-center p-4 text-sm font-semibold text-white w-24">
+                <th className="text-center p-4 text-sm font-semibold text-white w-28">
                   In-App
                 </th>
               </tr>
             </thead>
             <tbody>
-              {preferences.map((pref, index) => (
+              {preferences.map((pref) => (
                 <tr key={pref.eventType} className="border-b border-slate-800 last:border-0">
                   <td className="p-4">
                     <div>
@@ -129,44 +207,34 @@ export function NotificationsTab() {
                     </div>
                   </td>
                   <td className="text-center p-4">
-                    <label className="inline-flex items-center justify-center cursor-pointer">
-                      <input
-                        type="checkbox"
+                    <div className="flex justify-center">
+                      <NotificationToggle
                         checked={pref.email}
-                        onChange={() => handleToggle(index, 'email')}
-                        className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-2 focus:ring-cyan-500 focus:ring-offset-0 cursor-pointer"
+                        onChange={() => handleToggle(pref.eventType, 'email')}
+                        saving={savingCell === `${pref.eventType}-email`}
+                        saved={savedCell === `${pref.eventType}-email`}
                       />
-                    </label>
+                    </div>
                   </td>
                   <td className="text-center p-4">
-                    <label className="inline-flex items-center justify-center cursor-pointer">
-                      <input
-                        type="checkbox"
+                    <div className="flex justify-center">
+                      <NotificationToggle
                         checked={pref.push}
-                        onChange={() => handleToggle(index, 'push')}
-                        className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-2 focus:ring-cyan-500 focus:ring-offset-0 cursor-pointer"
+                        onChange={() => handleToggle(pref.eventType, 'push')}
+                        saving={savingCell === `${pref.eventType}-push`}
+                        saved={savedCell === `${pref.eventType}-push`}
                       />
-                    </label>
+                    </div>
                   </td>
                   <td className="text-center p-4">
-                    <label className="inline-flex items-center justify-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={pref.sms}
-                        onChange={() => handleToggle(index, 'sms')}
-                        className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-2 focus:ring-cyan-500 focus:ring-offset-0 cursor-pointer"
-                      />
-                    </label>
-                  </td>
-                  <td className="text-center p-4">
-                    <label className="inline-flex items-center justify-center cursor-pointer">
-                      <input
-                        type="checkbox"
+                    <div className="flex justify-center">
+                      <NotificationToggle
                         checked={pref.inApp}
-                        onChange={() => handleToggle(index, 'inApp')}
-                        className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-2 focus:ring-cyan-500 focus:ring-offset-0 cursor-pointer"
+                        onChange={() => handleToggle(pref.eventType, 'inApp')}
+                        saving={savingCell === `${pref.eventType}-inApp`}
+                        saved={savedCell === `${pref.eventType}-inApp`}
                       />
-                    </label>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -175,22 +243,9 @@ export function NotificationsTab() {
         </div>
       </div>
 
-      <div className="flex justify-end">
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-white font-medium hover:from-cyan-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {isSaving ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : saveSuccess ? (
-            <CheckCircle2 className="w-4 h-4" />
-          ) : (
-            <Save className="w-4 h-4" />
-          )}
-          {saveSuccess ? 'Saved' : 'Save Changes'}
-        </button>
-      </div>
+      <p className="text-sm text-slate-500 text-center">
+        Changes are saved automatically
+      </p>
     </div>
   );
 }

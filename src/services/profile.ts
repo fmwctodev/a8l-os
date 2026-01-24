@@ -10,6 +10,7 @@ export interface UserPreferences {
   date_format: string;
   time_format: string;
   language: string;
+  theme: 'light' | 'dark' | 'system';
   created_at: string;
   updated_at: string;
 }
@@ -182,12 +183,98 @@ export async function disconnectAccount(
 }
 
 export async function changePassword(
-  currentPassword: string,
   newPassword: string
 ): Promise<void> {
   const { error } = await supabase.auth.updateUser({
     password: newPassword,
   });
 
+  if (error) throw error;
+}
+
+export async function verifyCurrentPassword(email: string, password: string): Promise<boolean> {
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+  return !error;
+}
+
+export async function uploadProfilePhoto(
+  userId: string,
+  file: File
+): Promise<string> {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${userId}/${Date.now()}.${fileExt}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('profile-photos')
+    .upload(fileName, file, {
+      cacheControl: '3600',
+      upsert: true,
+    });
+
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage
+    .from('profile-photos')
+    .getPublicUrl(fileName);
+
+  return data.publicUrl;
+}
+
+export async function deleteProfilePhoto(userId: string, photoUrl: string): Promise<void> {
+  const urlParts = photoUrl.split('/profile-photos/');
+  if (urlParts.length < 2) return;
+
+  const filePath = urlParts[1];
+
+  const { error } = await supabase.storage
+    .from('profile-photos')
+    .remove([filePath]);
+
+  if (error) throw error;
+}
+
+export interface UserSession {
+  id: string;
+  user_id: string;
+  device: string;
+  ip_address: string;
+  location: string | null;
+  last_active_at: string;
+  created_at: string;
+  is_current: boolean;
+}
+
+export async function getUserSessions(userId: string): Promise<UserSession[]> {
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session) return [];
+
+  return [{
+    id: session.access_token.slice(-16),
+    user_id: userId,
+    device: detectDevice(),
+    ip_address: 'Current Session',
+    location: null,
+    last_active_at: new Date().toISOString(),
+    created_at: new Date(session.expires_at! * 1000 - 3600000).toISOString(),
+    is_current: true,
+  }];
+}
+
+function detectDevice(): string {
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua)) return 'iOS Device';
+  if (/Android/.test(ua)) return 'Android Device';
+  if (/Windows/.test(ua)) return 'Windows PC';
+  if (/Mac/.test(ua)) return 'Mac';
+  if (/Linux/.test(ua)) return 'Linux';
+  return 'Unknown Device';
+}
+
+export async function revokeAllOtherSessions(): Promise<void> {
+  const { error } = await supabase.auth.refreshSession();
   if (error) throw error;
 }

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { SidebarProvider } from './contexts/SidebarContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { Login } from './pages/Login';
@@ -76,8 +77,9 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <SidebarProvider>
-          <Routes>
+        <ThemeProvider>
+          <SidebarProvider>
+            <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/unauthorized" element={<Unauthorized />} />
@@ -533,8 +535,9 @@ function App() {
             <Route path="/r/:slug" element={<ReviewPage />} />
             <Route path="/p/:token" element={<PublicProposalPage />} />
             <Route path="*" element={<NotFound />} />
-          </Routes>
-        </SidebarProvider>
+            </Routes>
+          </SidebarProvider>
+        </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>
   );
