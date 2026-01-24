@@ -50,7 +50,7 @@ const settingsNavSections: SettingsNavSection[] = [
         requiresPermission: 'settings.manage',
       },
       {
-        name: 'My Staff',
+        name: 'Staff Management',
         path: '/settings/staff',
         icon: Users,
         requiresPermission: 'users.view',

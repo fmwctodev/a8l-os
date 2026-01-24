@@ -45,6 +45,8 @@ export function MyStaffPage() {
   const canInvite = hasPermission('staff.invite') || isSuperAdmin;
   const canManageDepartments = hasPermission('departments.manage') || isSuperAdmin;
   const isManager = user?.role?.name === 'Manager';
+  const isAdmin = user?.role?.name === 'Admin';
+  const canViewStaffActivity = isSuperAdmin || isAdmin;
 
   useEffect(() => {
     loadData();
@@ -164,7 +166,7 @@ export function MyStaffPage() {
     <div className="max-w-6xl">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-white">My Staff</h2>
+          <h2 className="text-xl font-semibold text-white">Staff Management</h2>
           <p className="text-slate-400 mt-1">
             {isManager ? 'Manage your department team members' : 'Manage your organization team'}
           </p>
@@ -424,7 +426,7 @@ export function MyStaffPage() {
           roles={roles}
           onClose={() => setSelectedMember(null)}
           onUpdate={loadData}
-          onViewActivity={isSuperAdmin ? () => handleViewActivity(selectedMember) : undefined}
+          onViewActivity={canViewStaffActivity ? () => handleViewActivity(selectedMember) : undefined}
         />
       )}
 

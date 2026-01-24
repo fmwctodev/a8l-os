@@ -50,7 +50,6 @@ import { Reporting } from './pages/modules/Reporting';
 import { AIReporting } from './pages/modules/AIReporting';
 import { ReportBuilder } from './pages/modules/ReportBuilder';
 import { ReportView } from './pages/modules/ReportView';
-import { UsersPage } from './pages/admin/Users';
 import { AuditLogsPage } from './pages/admin/AuditLogs';
 import { ChannelSettings } from './pages/admin/ChannelSettings';
 import { SettingsLayout } from './layouts/SettingsLayout';
@@ -412,14 +411,6 @@ function App() {
                 }
               />
 
-              <Route
-                path="/users"
-                element={
-                  <ProtectedRoute permission="users.view">
-                    <UsersPage />
-                  </ProtectedRoute>
-                }
-              />
               <Route
                 path="/settings"
                 element={

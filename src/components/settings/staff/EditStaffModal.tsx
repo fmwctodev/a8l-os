@@ -83,7 +83,8 @@ export function EditStaffModal({
   const canManage = hasPermission('staff.manage') || isSuperAdmin;
   const canDisable = hasPermission('staff.disable') || isSuperAdmin;
   const canResetPassword = hasPermission('staff.reset_password') || isSuperAdmin;
-  const canViewActivity = isSuperAdmin;
+  const isAdmin = user?.role?.name === 'Admin';
+  const canViewActivity = isSuperAdmin || isAdmin;
 
   const canEditRole =
     isSuperAdmin || (canManage && memberHierarchy > currentUserHierarchy);

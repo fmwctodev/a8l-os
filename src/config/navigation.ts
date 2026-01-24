@@ -79,7 +79,6 @@ export const navigationConfig: NavSection[] = [
     title: 'Administration',
     collapsible: true,
     items: [
-      { name: 'Users', path: '/users', icon: Users, permission: 'users.view' },
       { name: 'Channels', path: '/channels', icon: Radio, permission: 'channels.configure' },
       { name: 'Settings', path: '/settings', icon: Settings, permission: 'settings.view' },
       { name: 'Audit Logs', path: '/audit-logs', icon: Shield, permission: 'audit_logs.view' },
