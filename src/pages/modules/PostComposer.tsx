@@ -348,7 +348,7 @@ export function PostComposer() {
             <ArrowLeft className="w-5 h-5 text-gray-500" />
           </Link>
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">
+            <h1 className="text-2xl font-semibold text-white">
               {isEdit ? 'Edit Post' : 'Create Post'}
             </h1>
             <p className="text-sm text-gray-500">

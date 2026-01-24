@@ -162,7 +162,7 @@ export function MarketingForms() {
             <ArrowLeft className="w-5 h-5 text-gray-500" />
           </Link>
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Forms</h1>
+            <h1 className="text-2xl font-semibold text-white">Forms</h1>
             <p className="text-sm text-gray-500">
               Create and manage lead capture forms
             </p>
