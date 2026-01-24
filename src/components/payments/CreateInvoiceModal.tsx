@@ -81,7 +81,7 @@ export function CreateInvoiceModal({
       ]);
       setContacts(contactData);
       setProducts(productData);
-      setOpportunities(oppData);
+      setOpportunities(oppData.data || []);
     } catch (err) {
       console.error('Failed to load data:', err);
     } finally {
