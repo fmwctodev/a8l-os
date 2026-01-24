@@ -402,3 +402,151 @@ export async function getStaffStats(organizationId: string) {
 
   return stats;
 }
+
+export async function bulkEnableUsers(userIds: string[], currentUser: User): Promise<number> {
+  let successCount = 0;
+
+  for (const userId of userIds) {
+    try {
+      await enableUser(userId, currentUser);
+      successCount++;
+    } catch (err) {
+      console.error(`Failed to enable user ${userId}:`, err);
+    }
+  }
+
+  return successCount;
+}
+
+export async function bulkDisableUsers(userIds: string[], currentUser: User): Promise<number> {
+  let successCount = 0;
+
+  for (const userId of userIds) {
+    if (userId === currentUser.id) continue;
+    try {
+      await disableUser(userId, currentUser);
+      successCount++;
+    } catch (err) {
+      console.error(`Failed to disable user ${userId}:`, err);
+    }
+  }
+
+  return successCount;
+}
+
+export async function bulkAssignDepartment(
+  userIds: string[],
+  departmentId: string | null,
+  currentUser: User
+): Promise<number> {
+  let successCount = 0;
+
+  for (const userId of userIds) {
+    try {
+      await updateUser(userId, { department_id: departmentId }, currentUser);
+      successCount++;
+    } catch (err) {
+      console.error(`Failed to assign department for user ${userId}:`, err);
+    }
+  }
+
+  return successCount;
+}
+
+export interface StaffExportRow {
+  name: string;
+  email: string;
+  role: string;
+  department: string;
+  status: string;
+  phone: string;
+  timezone: string;
+  last_active: string;
+  joined_date: string;
+  invited_by: string;
+  disabled_at: string;
+  disabled_by: string;
+}
+
+export async function exportStaffList(organizationId: string): Promise<StaffExportRow[]> {
+  const { data, error } = await supabase
+    .from('users')
+    .select(`
+      *,
+      role:roles(name),
+      department:departments(name),
+      invited_by_user:users!users_invited_by_fkey(name),
+      disabled_by_user:users!users_disabled_by_fkey(name)
+    `)
+    .eq('organization_id', organizationId)
+    .order('name');
+
+  if (error) throw error;
+
+  return (data || []).map((user) => ({
+    name: user.name || '',
+    email: user.email || '',
+    role: user.role?.name || '',
+    department: user.department?.name || 'No Department',
+    status: user.status || '',
+    phone: user.phone || '',
+    timezone: user.timezone || '',
+    last_active: user.last_sign_in_at
+      ? new Date(user.last_sign_in_at).toLocaleString()
+      : 'Never',
+    joined_date: user.created_at
+      ? new Date(user.created_at).toLocaleDateString()
+      : '',
+    invited_by: user.invited_by_user?.name || '',
+    disabled_at: user.disabled_at
+      ? new Date(user.disabled_at).toLocaleString()
+      : '',
+    disabled_by: user.disabled_by_user?.name || '',
+  }));
+}
+
+export function generateCSV(rows: StaffExportRow[]): string {
+  const headers = [
+    'Name',
+    'Email',
+    'Role',
+    'Department',
+    'Status',
+    'Phone',
+    'Timezone',
+    'Last Active',
+    'Joined Date',
+    'Invited By',
+    'Disabled At',
+    'Disabled By',
+  ];
+
+  const escapeCSV = (value: string) => {
+    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+  };
+
+  const csvRows = [
+    headers.join(','),
+    ...rows.map((row) =>
+      [
+        escapeCSV(row.name),
+        escapeCSV(row.email),
+        escapeCSV(row.role),
+        escapeCSV(row.department),
+        escapeCSV(row.status),
+        escapeCSV(row.phone),
+        escapeCSV(row.timezone),
+        escapeCSV(row.last_active),
+        escapeCSV(row.joined_date),
+        escapeCSV(row.invited_by),
+        escapeCSV(row.disabled_at),
+        escapeCSV(row.disabled_by),
+      ].join(',')
+    ),
+  ];
+
+  return csvRows.join('\n');
+}

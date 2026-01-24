@@ -147,6 +147,25 @@ export interface StaffFilters {
   department_id?: string;
 }
 
+export interface UserPermissionOverride {
+  id: string;
+  user_id: string;
+  permission_id: string;
+  granted: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  notes: string | null;
+  permission?: Permission;
+}
+
+export interface InviteStaffInputWithPermissions extends InviteStaffInput {
+  permission_overrides?: Array<{
+    permission_id: string;
+    granted: boolean;
+  }>;
+}
+
 export interface Contact {
   id: string;
   organization_id: string;

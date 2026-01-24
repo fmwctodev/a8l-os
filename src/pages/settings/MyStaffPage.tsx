@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getUsers, getUsersByDepartment, getStaffStats } from '../../services/users';
+import {
+  getUsers,
+  getUsersByDepartment,
+  getStaffStats,
+  bulkEnableUsers,
+  bulkDisableUsers,
+  bulkAssignDepartment,
+  exportStaffList,
+  generateCSV,
+} from '../../services/users';
 import { getDepartments } from '../../services/departments';
 import { getRoles } from '../../services/roles';
 import {
@@ -13,10 +22,12 @@ import {
   UserCheck,
   UserX,
   Mail,
+  Download,
 } from 'lucide-react';
-import { InviteStaffModal } from '../../components/settings/staff/InviteStaffModal';
-import { EditStaffModal } from '../../components/settings/staff/EditStaffModal';
-import { StaffActivityModal } from '../../components/settings/staff/StaffActivityModal';
+import { StaffTable } from '../../components/settings/staff/StaffTable';
+import { BulkActionsToolbar } from '../../components/settings/staff/BulkActionsToolbar';
+import { InviteUserDrawer } from '../../components/settings/staff/InviteUserDrawer';
+import { UserDetailDrawer } from '../../components/settings/staff/UserDetailDrawer';
 import { DepartmentsModal } from '../../components/settings/staff/DepartmentsModal';
 import type { User, Department, Role, UserStatus } from '../../types';
 
@@ -35,18 +46,16 @@ export function MyStaffPage() {
   const [showFilters, setShowFilters] = useState(false);
 
   const [selectedMember, setSelectedMember] = useState<User | null>(null);
-  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showInviteDrawer, setShowInviteDrawer] = useState(false);
   const [showDepartmentsModal, setShowDepartmentsModal] = useState(false);
-  const [showActivityModal, setShowActivityModal] = useState(false);
-  const [activityMember, setActivityMember] = useState<User | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const [stats, setStats] = useState({ total: 0, active: 0, invited: 0, disabled: 0 });
 
   const canInvite = hasPermission('staff.invite') || isSuperAdmin;
   const canManageDepartments = hasPermission('departments.manage') || isSuperAdmin;
+  const canDisable = hasPermission('staff.disable') || isSuperAdmin;
   const isManager = user?.role?.name === 'Manager';
-  const isAdmin = user?.role?.name === 'Admin';
-  const canViewStaffActivity = isSuperAdmin || isAdmin;
 
   useEffect(() => {
     loadData();
@@ -75,6 +84,7 @@ export function MyStaffPage() {
       setDepartments(depsData);
       setRoles(rolesData);
       setStats(statsData);
+      setSelectedIds([]);
     } catch (error) {
       console.error('Failed to load staff data:', error);
     } finally {
@@ -88,8 +98,7 @@ export function MyStaffPage() {
       member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       member.email.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesStatus =
-      statusFilter === 'all' || member.status === statusFilter;
+    const matchesStatus = statusFilter === 'all' || member.status === statusFilter;
 
     const matchesDepartment =
       departmentFilter === 'all' || member.department_id === departmentFilter;
@@ -99,59 +108,44 @@ export function MyStaffPage() {
     return matchesSearch && matchesStatus && matchesDepartment && matchesRole;
   });
 
-  const getDepartmentName = (departmentId: string | null) => {
-    if (!departmentId) return 'No Department';
-    const dept = departments.find((d) => d.id === departmentId);
-    return dept?.name || 'Unknown';
+  const selectedUsers = staffMembers.filter((m) => selectedIds.includes(m.id));
+
+  const handleBulkEnable = async () => {
+    if (!user) return;
+    await bulkEnableUsers(selectedIds, user);
+    await loadData();
   };
 
-  const getRoleName = (roleId: string) => {
-    const role = roles.find((r) => r.id === roleId);
-    return role?.name || 'Unknown';
+  const handleBulkDisable = async () => {
+    if (!user) return;
+    await bulkDisableUsers(selectedIds, user);
+    await loadData();
   };
 
-  const getStatusConfig = (status: string) => {
-    switch (status) {
-      case 'active':
-        return {
-          color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-          icon: UserCheck,
-        };
-      case 'disabled':
-        return {
-          color: 'bg-red-500/10 text-red-400 border-red-500/20',
-          icon: UserX,
-        };
-      case 'invited':
-        return {
-          color: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-          icon: Mail,
-        };
-      default:
-        return {
-          color: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
-          icon: UsersIcon,
-        };
+  const handleBulkAssignDepartment = async (departmentId: string | null) => {
+    if (!user) return;
+    await bulkAssignDepartment(selectedIds, departmentId, user);
+    await loadData();
+  };
+
+  const handleExport = async () => {
+    if (!user?.organization_id) return;
+
+    try {
+      const rows = await exportStaffList(user.organization_id);
+      const csv = generateCSV(rows);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `staff-export-${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Failed to export staff:', error);
     }
-  };
-
-  const formatLastLogin = (dateStr: string | null) => {
-    if (!dateStr) return 'Never';
-    const date = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return 'Today';
-    if (diffDays === 1) return 'Yesterday';
-    if (diffDays < 7) return `${diffDays} days ago`;
-    return date.toLocaleDateString();
-  };
-
-  const handleViewActivity = (member: User) => {
-    setActivityMember(member);
-    setShowActivityModal(true);
-    setSelectedMember(null);
   };
 
   if (isLoading) {
@@ -163,15 +157,20 @@ export function MyStaffPage() {
   }
 
   return (
-    <div className="max-w-6xl">
+    <div className="max-w-7xl">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-white">Staff Management</h2>
-          <p className="text-slate-400 mt-1">
-            {isManager ? 'Manage your department team members' : 'Manage your organization team'}
-          </p>
+          <h2 className="text-xl font-semibold text-white">My Staff</h2>
+          <p className="text-slate-400 mt-1">Manage users and permissions</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleExport}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors font-medium"
+          >
+            <Download className="w-4 h-4" />
+            Export
+          </button>
           {canManageDepartments && (
             <button
               onClick={() => setShowDepartmentsModal(true)}
@@ -183,11 +182,11 @@ export function MyStaffPage() {
           )}
           {canInvite && (
             <button
-              onClick={() => setShowInviteModal(true)}
+              onClick={() => setShowInviteDrawer(true)}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-500 transition-colors font-medium"
             >
               <UserPlus className="w-4 h-4" />
-              Add Staff
+              Invite User
             </button>
           )}
         </div>
@@ -305,146 +304,56 @@ export function MyStaffPage() {
           )}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-800">
-                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3">
-                  Name
-                </th>
-                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3 hidden md:table-cell">
-                  Email
-                </th>
-                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3">
-                  Role
-                </th>
-                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3 hidden lg:table-cell">
-                  Department
-                </th>
-                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3">
-                  Status
-                </th>
-                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-4 py-3 hidden xl:table-cell">
-                  Last Login
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {filteredStaff.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center">
-                    <UsersIcon className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                    <p className="text-slate-400">No staff members found</p>
-                  </td>
-                </tr>
-              ) : (
-                filteredStaff.map((member) => {
-                  const statusConfig = getStatusConfig(member.status);
-                  const StatusIcon = statusConfig.icon;
-                  const isCurrentUser = member.id === user?.id;
+        <BulkActionsToolbar
+          selectedCount={selectedIds.length}
+          selectedUsers={selectedUsers}
+          departments={departments}
+          onClearSelection={() => setSelectedIds([])}
+          onBulkEnable={handleBulkEnable}
+          onBulkDisable={handleBulkDisable}
+          onBulkAssignDepartment={handleBulkAssignDepartment}
+          onExport={handleExport}
+          canDisable={canDisable}
+        />
 
-                  return (
-                    <tr
-                      key={member.id}
-                      onClick={() => setSelectedMember(member)}
-                      className="hover:bg-slate-800/50 transition-colors cursor-pointer"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-white font-semibold flex-shrink-0">
-                            {member.name.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="text-white font-medium truncate">{member.name}</p>
-                              {isCurrentUser && (
-                                <span className="text-xs px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-                                  You
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-slate-500 truncate md:hidden">
-                              {member.email}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        <p className="text-slate-300 truncate max-w-[200px]">{member.email}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-slate-300">{getRoleName(member.role_id)}</span>
-                      </td>
-                      <td className="px-4 py-3 hidden lg:table-cell">
-                        <span className="text-sm text-slate-400">
-                          {getDepartmentName(member.department_id)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border ${statusConfig.color}`}
-                        >
-                          <StatusIcon className="w-3 h-3" />
-                          {member.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 hidden xl:table-cell">
-                        <span className="text-sm text-slate-500">
-                          {formatLastLogin(member.last_sign_in_at)}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+        <StaffTable
+          staff={filteredStaff}
+          departments={departments}
+          roles={roles}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          onRowClick={(member) => setSelectedMember(member)}
+          currentUserId={user?.id}
+        />
 
         {filteredStaff.length > 0 && (
           <div className="p-4 border-t border-slate-800">
             <p className="text-sm text-slate-500">
-              Showing {filteredStaff.length} of {staffMembers.length} staff members
+              Showing {filteredStaff.length} of {staffMembers.length} users
             </p>
           </div>
         )}
       </div>
 
-      {showInviteModal && (
-        <InviteStaffModal
-          departments={departments}
-          roles={roles}
-          onClose={() => setShowInviteModal(false)}
-          onSuccess={loadData}
-        />
-      )}
+      <InviteUserDrawer
+        isOpen={showInviteDrawer}
+        onClose={() => setShowInviteDrawer(false)}
+        onSuccess={loadData}
+        departments={departments}
+        roles={roles}
+      />
 
-      {selectedMember && (
-        <EditStaffModal
-          member={selectedMember}
-          departments={departments}
-          roles={roles}
-          onClose={() => setSelectedMember(null)}
-          onUpdate={loadData}
-          onViewActivity={canViewStaffActivity ? () => handleViewActivity(selectedMember) : undefined}
-        />
-      )}
-
-      {showActivityModal && activityMember && (
-        <StaffActivityModal
-          member={activityMember}
-          onClose={() => {
-            setShowActivityModal(false);
-            setActivityMember(null);
-          }}
-        />
-      )}
+      <UserDetailDrawer
+        isOpen={!!selectedMember}
+        onClose={() => setSelectedMember(null)}
+        member={selectedMember}
+        departments={departments}
+        roles={roles}
+        onUpdate={loadData}
+      />
 
       {showDepartmentsModal && (
-        <DepartmentsModal
-          onClose={() => setShowDepartmentsModal(false)}
-          onUpdate={loadData}
-        />
+        <DepartmentsModal onClose={() => setShowDepartmentsModal(false)} onUpdate={loadData} />
       )}
     </div>
   );
