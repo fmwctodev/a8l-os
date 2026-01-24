@@ -18,8 +18,10 @@ import {
   softDeleteCustomField,
   duplicateCustomField,
   toggleCustomFieldActive,
+  getFieldValueCount,
 } from '../../../services/customFields';
 import { deleteCustomFieldGroup } from '../../../services/customFieldGroups';
+import { DependencyWarningModal } from './DependencyWarningModal';
 
 interface FieldGroupsPanelProps {
   scope: CustomFieldScope;
@@ -32,6 +34,7 @@ interface FieldGroupsPanelProps {
 }
 
 export function FieldGroupsPanel({
+  scope,
   groups,
   ungroupedFields,
   canManage,
@@ -45,6 +48,9 @@ export function FieldGroupsPanel({
   );
   const [fieldMenuOpen, setFieldMenuOpen] = useState<string | null>(null);
   const [groupMenuOpen, setGroupMenuOpen] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CustomField | null>(null);
+  const [deleteValueCount, setDeleteValueCount] = useState(0);
+  const [deleting, setDeleting] = useState(false);
 
   function toggleGroupExpanded(groupId: string) {
     const newExpanded = new Set(expandedGroups);
@@ -56,17 +62,27 @@ export function FieldGroupsPanel({
     setExpandedGroups(newExpanded);
   }
 
-  async function handleDeleteField(field: CustomField) {
-    if (!user || !confirm(`Are you sure you want to delete "${field.name}"?`)) return;
+  async function handleDeleteClick(field: CustomField) {
+    setFieldMenuOpen(null);
+    const count = await getFieldValueCount(field.id, scope);
+    setDeleteValueCount(count);
+    setDeleteTarget(field);
+  }
 
+  async function handleConfirmDelete() {
+    if (!user || !deleteTarget) return;
+
+    setDeleting(true);
     try {
-      await softDeleteCustomField(field.id, user);
+      await softDeleteCustomField(deleteTarget.id, user);
       onRefresh();
     } catch (err) {
       console.error('Failed to delete field:', err);
       alert('Failed to delete field');
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
     }
-    setFieldMenuOpen(null);
   }
 
   async function handleDuplicateField(field: CustomField) {
@@ -122,31 +138,31 @@ export function FieldGroupsPanel({
     return (
       <div
         key={field.id}
-        className={`flex items-center justify-between px-4 py-3 border-b border-slate-100 last:border-b-0 ${
+        className={`flex items-center justify-between px-4 py-3 border-b border-slate-700 last:border-b-0 hover:bg-slate-700/30 transition-colors ${
           !field.active ? 'opacity-50' : ''
         }`}
       >
         <div className="flex items-center gap-3">
           {canManage && (
-            <GripVertical className="w-4 h-4 text-slate-300 cursor-move" />
+            <GripVertical className="w-4 h-4 text-slate-600 cursor-move hover:text-slate-400" />
           )}
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-medium text-slate-900">{field.name}</span>
+              <span className="font-medium text-white">{field.name}</span>
               {field.is_required && (
-                <span className="px-1.5 py-0.5 text-xs font-medium text-red-700 bg-red-50 rounded">
+                <span className="px-1.5 py-0.5 text-xs font-medium text-red-400 bg-red-500/20 rounded">
                   Required
                 </span>
               )}
               {!field.active && (
-                <span className="px-1.5 py-0.5 text-xs font-medium text-slate-500 bg-slate-100 rounded">
+                <span className="px-1.5 py-0.5 text-xs font-medium text-slate-400 bg-slate-600 rounded">
                   Inactive
                 </span>
               )}
             </div>
             <div className="flex items-center gap-3 mt-0.5 text-sm text-slate-500">
-              <span className="font-mono text-xs">{field.field_key}</span>
-              <span className="text-slate-300">|</span>
+              <span className="font-mono text-xs text-slate-400">{field.field_key}</span>
+              <span className="text-slate-600">|</span>
               <span>{CUSTOM_FIELD_TYPE_LABELS[field.field_type]}</span>
             </div>
           </div>
@@ -155,7 +171,7 @@ export function FieldGroupsPanel({
           <div className="relative">
             <button
               onClick={() => setFieldMenuOpen(fieldMenuOpen === field.id ? null : field.id)}
-              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded transition-colors"
+              className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-700 rounded transition-colors"
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
@@ -165,27 +181,27 @@ export function FieldGroupsPanel({
                   className="fixed inset-0 z-40"
                   onClick={() => setFieldMenuOpen(null)}
                 />
-                <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
+                <div className="absolute right-0 top-full mt-1 w-40 bg-slate-800 rounded-lg shadow-lg border border-slate-600 py-1 z-50">
                   <button
                     onClick={() => {
                       onEditField(field);
                       setFieldMenuOpen(null);
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
                   >
                     <Edit className="w-4 h-4" />
                     Edit
                   </button>
                   <button
                     onClick={() => handleDuplicateField(field)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
                   >
                     <Copy className="w-4 h-4" />
                     Duplicate
                   </button>
                   <button
                     onClick={() => handleToggleFieldActive(field)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
                   >
                     {field.active ? (
                       <>
@@ -199,10 +215,10 @@ export function FieldGroupsPanel({
                       </>
                     )}
                   </button>
-                  <hr className="my-1 border-slate-200" />
+                  <hr className="my-1 border-slate-700" />
                   <button
-                    onClick={() => handleDeleteField(field)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                    onClick={() => handleDeleteClick(field)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10"
                   >
                     <Trash2 className="w-4 h-4" />
                     Delete
@@ -221,28 +237,28 @@ export function FieldGroupsPanel({
     const fields = group.fields || [];
 
     return (
-      <div key={group.id} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+      <div key={group.id} className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
         <div
-          className="flex items-center justify-between px-4 py-3 bg-slate-50 cursor-pointer"
+          className="flex items-center justify-between px-4 py-3 bg-slate-700/50 cursor-pointer hover:bg-slate-700/70 transition-colors"
           onClick={() => toggleGroupExpanded(group.id)}
         >
           <div className="flex items-center gap-3">
             {canManage && (
-              <GripVertical className="w-4 h-4 text-slate-300 cursor-move" />
+              <GripVertical className="w-4 h-4 text-slate-500 cursor-move hover:text-slate-300" />
             )}
             {isExpanded ? (
               <ChevronDown className="w-4 h-4 text-slate-400" />
             ) : (
               <ChevronRight className="w-4 h-4 text-slate-400" />
             )}
-            <span className="font-medium text-slate-900">{group.name}</span>
+            <span className="font-medium text-white">{group.name}</span>
             <span className="text-sm text-slate-500">({fields.length} fields)</span>
           </div>
           {canManage && (
             <div className="relative" onClick={(e) => e.stopPropagation()}>
               <button
                 onClick={() => setGroupMenuOpen(groupMenuOpen === group.id ? null : group.id)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded transition-colors"
+                className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-600 rounded transition-colors"
               >
                 <MoreHorizontal className="w-4 h-4" />
               </button>
@@ -252,21 +268,21 @@ export function FieldGroupsPanel({
                     className="fixed inset-0 z-40"
                     onClick={() => setGroupMenuOpen(null)}
                   />
-                  <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
+                  <div className="absolute right-0 top-full mt-1 w-40 bg-slate-800 rounded-lg shadow-lg border border-slate-600 py-1 z-50">
                     <button
                       onClick={() => {
                         onEditGroup(group);
                         setGroupMenuOpen(null);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
                     >
                       <Edit className="w-4 h-4" />
                       Edit Group
                     </button>
-                    <hr className="my-1 border-slate-200" />
+                    <hr className="my-1 border-slate-700" />
                     <button
                       onClick={() => handleDeleteGroup(group)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10"
                     >
                       <Trash2 className="w-4 h-4" />
                       Delete Group
@@ -296,14 +312,14 @@ export function FieldGroupsPanel({
 
   if (!hasAnyFields && groups.length === 0) {
     return (
-      <div className="bg-white rounded-lg border border-slate-200 p-12 text-center">
+      <div className="bg-slate-800 rounded-lg border border-slate-700 p-12 text-center">
         <div className="flex justify-center mb-4">
-          <div className="p-4 bg-slate-100 rounded-full">
+          <div className="p-4 bg-slate-700 rounded-full">
             <FolderOpen className="w-8 h-8 text-slate-400" />
           </div>
         </div>
-        <h3 className="text-lg font-medium text-slate-900 mb-2">No custom fields yet</h3>
-        <p className="text-slate-500 mb-6 max-w-md mx-auto">
+        <h3 className="text-lg font-medium text-white mb-2">No custom fields yet</h3>
+        <p className="text-slate-400 mb-6 max-w-md mx-auto">
           Create custom fields to capture additional information specific to your business needs.
         </p>
       </div>
@@ -311,20 +327,32 @@ export function FieldGroupsPanel({
   }
 
   return (
-    <div className="space-y-4">
-      {groups.map(renderGroup)}
+    <>
+      <div className="space-y-4">
+        {groups.map(renderGroup)}
 
-      {ungroupedFields.length > 0 && (
-        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
-          <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
-            <span className="font-medium text-slate-500">Ungrouped Fields</span>
-            <span className="text-sm text-slate-400 ml-2">
-              ({ungroupedFields.length} fields)
-            </span>
+        {ungroupedFields.length > 0 && (
+          <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+            <div className="px-4 py-3 bg-slate-700/50 border-b border-slate-700">
+              <span className="font-medium text-slate-400">Ungrouped Fields</span>
+              <span className="text-sm text-slate-500 ml-2">
+                ({ungroupedFields.length} fields)
+              </span>
+            </div>
+            <div>{ungroupedFields.map(renderField)}</div>
           </div>
-          <div>{ungroupedFields.map(renderField)}</div>
-        </div>
+        )}
+      </div>
+
+      {deleteTarget && (
+        <DependencyWarningModal
+          field={deleteTarget}
+          valueCount={deleteValueCount}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+          deleting={deleting}
+        />
       )}
-    </div>
+    </>
   );
 }

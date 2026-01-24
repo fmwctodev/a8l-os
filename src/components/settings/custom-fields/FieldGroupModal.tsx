@@ -56,15 +56,15 @@ export function FieldGroupModal({ scope, group, onClose, onSaved }: FieldGroupMo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-          <h2 className="text-lg font-semibold text-slate-900">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-slate-800 rounded-xl shadow-xl w-full max-w-md border border-slate-700">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+          <h2 className="text-lg font-semibold text-white">
             {isEditing ? 'Edit Field Group' : 'Create Field Group'}
           </h2>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -72,15 +72,15 @@ export function FieldGroupModal({ scope, group, onClose, onSaved }: FieldGroupMo
 
         <form onSubmit={handleSubmit} className="p-6">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-red-700">
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-2 text-red-400">
               <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
               <span className="text-sm">{error}</span>
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Group Name <span className="text-red-500">*</span>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              Group Name <span className="text-red-400">*</span>
             </label>
             <input
               type="text"
@@ -88,7 +88,7 @@ export function FieldGroupModal({ scope, group, onClose, onSaved }: FieldGroupMo
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g., Lead Qualification"
               autoFocus
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
             />
             <p className="mt-1 text-xs text-slate-500">
               Groups help organize related custom fields together
@@ -96,18 +96,18 @@ export function FieldGroupModal({ scope, group, onClose, onSaved }: FieldGroupMo
           </div>
         </form>
 
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-200 bg-slate-50">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-700 bg-slate-900/50">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
+            className="px-4 py-2 text-sm font-medium text-slate-300 border border-slate-600 rounded-lg hover:bg-slate-700 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="px-4 py-2 text-sm font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 disabled:opacity-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-cyan-500 to-teal-600 rounded-lg hover:from-cyan-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             {saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Group'}
           </button>

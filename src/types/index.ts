@@ -254,7 +254,11 @@ export interface CustomField {
   help_text: string | null;
   visible_in_forms: boolean;
   visible_in_surveys: boolean;
+  visible_in_automations: boolean;
+  visible_in_reporting: boolean;
   filterable: boolean;
+  read_only: boolean;
+  show_in_list_view: boolean;
   active: boolean;
   deleted_at: string | null;
   created_at: string;
@@ -3678,7 +3682,11 @@ export interface CreateCustomFieldInput {
   help_text?: string | null;
   visible_in_forms?: boolean;
   visible_in_surveys?: boolean;
+  visible_in_automations?: boolean;
+  visible_in_reporting?: boolean;
   filterable?: boolean;
+  read_only?: boolean;
+  show_in_list_view?: boolean;
 }
 
 export interface UpdateCustomFieldInput {
@@ -3692,7 +3700,11 @@ export interface UpdateCustomFieldInput {
   help_text?: string | null;
   visible_in_forms?: boolean;
   visible_in_surveys?: boolean;
+  visible_in_automations?: boolean;
+  visible_in_reporting?: boolean;
   filterable?: boolean;
+  read_only?: boolean;
+  show_in_list_view?: boolean;
   active?: boolean;
 }
 

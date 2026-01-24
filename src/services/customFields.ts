@@ -99,7 +99,11 @@ export async function createCustomField(
       help_text: input.help_text,
       visible_in_forms: input.visible_in_forms ?? true,
       visible_in_surveys: input.visible_in_surveys ?? true,
+      visible_in_automations: input.visible_in_automations ?? true,
+      visible_in_reporting: input.visible_in_reporting ?? true,
       filterable: input.filterable ?? true,
+      read_only: input.read_only ?? false,
+      show_in_list_view: input.show_in_list_view ?? false,
     })
     .select()
     .single();
@@ -223,7 +227,11 @@ export async function duplicateCustomField(
       help_text: original.help_text,
       visible_in_forms: original.visible_in_forms,
       visible_in_surveys: original.visible_in_surveys,
+      visible_in_automations: original.visible_in_automations,
+      visible_in_reporting: original.visible_in_reporting,
       filterable: original.filterable,
+      read_only: original.read_only,
+      show_in_list_view: original.show_in_list_view,
     })
     .select()
     .single();
