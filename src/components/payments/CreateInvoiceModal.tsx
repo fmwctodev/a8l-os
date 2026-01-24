@@ -57,8 +57,10 @@ export function CreateInvoiceModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user) {
+      loadData();
+    }
+  }, [user]);
 
   useEffect(() => {
     if (selectedContactId) {
@@ -70,9 +72,10 @@ export function CreateInvoiceModal({
   }, [selectedContactId, opportunities]);
 
   const loadData = async () => {
+    if (!user) return;
     try {
       const [contactData, productData, oppData] = await Promise.all([
-        getContacts(),
+        getContacts(user.org_id),
         getProducts({ active: true }),
         getOpportunities({ status: ['open'] }),
       ]);
