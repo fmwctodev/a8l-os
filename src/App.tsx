@@ -26,6 +26,13 @@ import { ProposalDetail } from './pages/modules/ProposalDetail';
 import { ProposalBuilder } from './pages/modules/ProposalBuilder';
 import { AIAgents } from './pages/modules/AIAgents';
 import { AIAgentDetail } from './pages/modules/AIAgentDetail';
+import { AIAgentsLayout } from './layouts/AIAgentsLayout';
+import { AIAgentsGettingStarted } from './pages/modules/AIAgentsGettingStarted';
+import { AIAgentsVoice } from './pages/modules/AIAgentsVoice';
+import { AIAgentsConversation } from './pages/modules/AIAgentsConversation';
+import { AIAgentsKnowledge } from './pages/modules/AIAgentsKnowledge';
+import { AIAgentsTemplates } from './pages/modules/AIAgentsTemplates';
+import { AIAgentsContent } from './pages/modules/AIAgentsContent';
 import { Marketing } from './pages/modules/Marketing';
 import { MarketingForms } from './pages/modules/MarketingForms';
 import { FormBuilder } from './pages/modules/FormBuilder';
@@ -197,10 +204,18 @@ function App() {
                 path="/ai-agents"
                 element={
                   <ProtectedRoute permission="ai_agents.view" featureFlag="ai_agents">
-                    <AIAgents />
+                    <AIAgentsLayout />
                   </ProtectedRoute>
                 }
-              />
+              >
+                <Route index element={<AIAgentsGettingStarted />} />
+                <Route path="getting-started" element={<AIAgentsGettingStarted />} />
+                <Route path="voice" element={<AIAgentsVoice />} />
+                <Route path="conversation" element={<AIAgentsConversation />} />
+                <Route path="knowledge" element={<AIAgentsKnowledge />} />
+                <Route path="templates" element={<AIAgentsTemplates />} />
+                <Route path="content" element={<AIAgentsContent />} />
+              </Route>
               <Route
                 path="/ai-agents/:agentId"
                 element={

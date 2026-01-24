@@ -1143,6 +1143,8 @@ export type AIAgentToolName =
 
 export type AIAgentChannel = 'sms' | 'email' | 'internal_note';
 
+export type AIAgentType = 'conversation' | 'voice';
+
 export interface AIAgent {
   id: string;
   org_id: string;
@@ -1154,6 +1156,16 @@ export interface AIAgent {
   temperature: number;
   max_tokens: number;
   enabled: boolean;
+  agent_type: AIAgentType;
+  voice_provider: string | null;
+  voice_id: string | null;
+  speaking_speed: number | null;
+  voice_tone: string | null;
+  requires_approval: boolean;
+  auto_reply_enabled: boolean;
+  cooldown_minutes: number | null;
+  max_messages_per_day: number | null;
+  per_channel_rules: Record<string, unknown> | null;
   created_by_user_id: string | null;
   created_at: string;
   updated_at: string;
@@ -1231,6 +1243,7 @@ export interface AIAgentToolCall {
 export interface AIAgentFilters {
   enabled?: boolean;
   search?: string;
+  agentType?: AIAgentType;
 }
 
 export interface AIAgentRunFilters {
@@ -2652,6 +2665,16 @@ export interface CreateAIAgentInput {
   enable_memory?: boolean;
   knowledge_collection_ids?: string[];
   prompt_template_ids?: string[];
+  agent_type?: AIAgentType;
+  voice_provider?: string;
+  voice_id?: string;
+  speaking_speed?: number;
+  voice_tone?: string;
+  requires_approval?: boolean;
+  auto_reply_enabled?: boolean;
+  cooldown_minutes?: number;
+  max_messages_per_day?: number;
+  per_channel_rules?: Record<string, unknown>;
 }
 
 export interface UpdateAIAgentInput {
@@ -2669,6 +2692,102 @@ export interface UpdateAIAgentInput {
   enable_memory?: boolean;
   knowledge_collection_ids?: string[];
   prompt_template_ids?: string[];
+  agent_type?: AIAgentType;
+  voice_provider?: string;
+  voice_id?: string;
+  speaking_speed?: number;
+  voice_tone?: string;
+  requires_approval?: boolean;
+  auto_reply_enabled?: boolean;
+  cooldown_minutes?: number;
+  max_messages_per_day?: number;
+  per_channel_rules?: Record<string, unknown>;
+}
+
+export type AgentKnowledgeSourceType = 'website' | 'faq' | 'table' | 'rich_text' | 'file_upload';
+export type AgentKnowledgeSourceStatus = 'active' | 'processing' | 'error' | 'inactive';
+
+export interface AgentKnowledgeSource {
+  id: string;
+  org_id: string;
+  agent_id: string | null;
+  source_type: AgentKnowledgeSourceType;
+  source_name: string;
+  source_config: Record<string, unknown>;
+  chunk_size: number;
+  refresh_frequency: string | null;
+  status: AgentKnowledgeSourceStatus;
+  last_embedded_at: string | null;
+  embedding_count: number;
+  error_message: string | null;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by_user?: User | null;
+  agent?: AIAgent | null;
+}
+
+export interface CreateAgentKnowledgeSourceInput {
+  agentId?: string;
+  sourceType: AgentKnowledgeSourceType;
+  sourceName: string;
+  sourceConfig?: Record<string, unknown>;
+  chunkSize?: number;
+  refreshFrequency?: string;
+}
+
+export interface UpdateAgentKnowledgeSourceInput {
+  sourceName?: string;
+  sourceConfig?: Record<string, unknown>;
+  chunkSize?: number;
+  refreshFrequency?: string;
+  status?: AgentKnowledgeSourceStatus;
+}
+
+export interface AgentKnowledgeSourceFilters {
+  agentId?: string;
+  sourceType?: AgentKnowledgeSourceType;
+  status?: AgentKnowledgeSourceStatus;
+  search?: string;
+}
+
+export interface AgentTemplate {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string | null;
+  agent_type: AIAgentType;
+  use_case: string | null;
+  template_config: Record<string, unknown>;
+  times_used: number;
+  is_public: boolean;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by_user?: User | null;
+}
+
+export interface CreateAgentTemplateInput {
+  name: string;
+  description?: string;
+  agentType: AIAgentType;
+  useCase?: string;
+  templateConfig: Record<string, unknown>;
+  isPublic?: boolean;
+}
+
+export interface UpdateAgentTemplateInput {
+  name?: string;
+  description?: string;
+  useCase?: string;
+  templateConfig?: Record<string, unknown>;
+  isPublic?: boolean;
+}
+
+export interface AgentTemplateFilters {
+  agentType?: AIAgentType;
+  useCase?: string;
+  search?: string;
 }
 
 export interface AIToolDefinition {
