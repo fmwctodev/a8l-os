@@ -227,11 +227,17 @@ export type CustomFieldType =
   | 'currency'
   | 'file';
 
+export interface FieldOptionItem {
+  label: string;
+  value: string;
+}
+
 export interface CustomFieldGroup {
   id: string;
   organization_id: string;
   scope: CustomFieldScope;
   name: string;
+  description: string | null;
   sort_order: number;
   active: boolean;
   created_at: string;
@@ -248,6 +254,8 @@ export interface CustomField {
   field_key: string;
   field_type: CustomFieldType;
   options: string[] | null;
+  option_items: FieldOptionItem[] | null;
+  default_value: unknown;
   is_required: boolean;
   display_order: number;
   placeholder: string | null;
@@ -259,6 +267,8 @@ export interface CustomField {
   filterable: boolean;
   read_only: boolean;
   show_in_list_view: boolean;
+  show_in_detail_view: boolean;
+  allow_duplicate_values: boolean;
   active: boolean;
   deleted_at: string | null;
   created_at: string;
@@ -3660,11 +3670,13 @@ export interface CustomFieldGroupFilters {
 export interface CreateCustomFieldGroupInput {
   scope: CustomFieldScope;
   name: string;
+  description?: string | null;
   sort_order?: number;
 }
 
 export interface UpdateCustomFieldGroupInput {
   name?: string;
+  description?: string | null;
   sort_order?: number;
   active?: boolean;
 }
@@ -3676,6 +3688,8 @@ export interface CreateCustomFieldInput {
   field_key: string;
   field_type: CustomFieldType;
   options?: string[] | null;
+  option_items?: FieldOptionItem[] | null;
+  default_value?: unknown;
   is_required?: boolean;
   display_order?: number;
   placeholder?: string | null;
@@ -3687,6 +3701,8 @@ export interface CreateCustomFieldInput {
   filterable?: boolean;
   read_only?: boolean;
   show_in_list_view?: boolean;
+  show_in_detail_view?: boolean;
+  allow_duplicate_values?: boolean;
 }
 
 export interface UpdateCustomFieldInput {
@@ -3694,6 +3710,8 @@ export interface UpdateCustomFieldInput {
   name?: string;
   field_type?: CustomFieldType;
   options?: string[] | null;
+  option_items?: FieldOptionItem[] | null;
+  default_value?: unknown;
   is_required?: boolean;
   display_order?: number;
   placeholder?: string | null;
@@ -3705,6 +3723,8 @@ export interface UpdateCustomFieldInput {
   filterable?: boolean;
   read_only?: boolean;
   show_in_list_view?: boolean;
+  show_in_detail_view?: boolean;
+  allow_duplicate_values?: boolean;
   active?: boolean;
 }
 

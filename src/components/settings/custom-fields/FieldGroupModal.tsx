@@ -19,6 +19,7 @@ export function FieldGroupModal({ scope, group, onClose, onSaved }: FieldGroupMo
   const isEditing = !!group;
 
   const [name, setName] = useState(group?.name || '');
+  const [description, setDescription] = useState(group?.description || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -37,11 +38,15 @@ export function FieldGroupModal({ scope, group, onClose, onSaved }: FieldGroupMo
 
     try {
       if (isEditing) {
-        await updateCustomFieldGroup(group!.id, { name: name.trim() }, user);
+        await updateCustomFieldGroup(
+          group!.id,
+          { name: name.trim(), description: description.trim() || null },
+          user
+        );
       } else {
         await createCustomFieldGroup(
           user.organization_id,
-          { scope, name: name.trim() },
+          { scope, name: name.trim(), description: description.trim() || undefined },
           user
         );
       }
@@ -78,21 +83,36 @@ export function FieldGroupModal({ scope, group, onClose, onSaved }: FieldGroupMo
             </div>
           )}
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">
-              Group Name <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., Lead Qualification"
-              autoFocus
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-            />
-            <p className="mt-1 text-xs text-slate-500">
-              Groups help organize related custom fields together
-            </p>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Group Name <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g., Lead Qualification"
+                autoFocus
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Groups help organize related custom fields together
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Description
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional description for this group..."
+                rows={2}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none"
+              />
+            </div>
           </div>
         </form>
 

@@ -86,6 +86,7 @@ export async function createCustomFieldGroup(
       organization_id: organizationId,
       scope: input.scope,
       name: input.name,
+      description: input.description ?? null,
       sort_order: input.sort_order ?? 0,
     })
     .select()
@@ -197,4 +198,46 @@ export async function getGroupFieldCount(groupId: string): Promise<number> {
 
   if (error) throw error;
   return count || 0;
+}
+
+const DEFAULT_GROUPS: Record<CustomFieldScope, { name: string; description: string }[]> = {
+  contact: [
+    { name: 'Contact Information', description: 'Primary contact details and identifiers' },
+    { name: 'Additional Information', description: 'Extended contact attributes and preferences' },
+  ],
+  opportunity: [
+    { name: 'Deal Information', description: 'Core deal and transaction details' },
+    { name: 'Custom Deal Data', description: 'Organization-specific opportunity fields' },
+  ],
+};
+
+export async function ensureDefaultGroups(
+  organizationId: string,
+  scope: CustomFieldScope,
+  currentUser: User
+): Promise<CustomFieldGroup[]> {
+  const existing = await getCustomFieldGroups(organizationId, { scope });
+
+  if (existing.length > 0) {
+    return existing;
+  }
+
+  const defaults = DEFAULT_GROUPS[scope];
+  const created: CustomFieldGroup[] = [];
+
+  for (let i = 0; i < defaults.length; i++) {
+    const group = await createCustomFieldGroup(
+      organizationId,
+      {
+        scope,
+        name: defaults[i].name,
+        description: defaults[i].description,
+        sort_order: i,
+      },
+      currentUser
+    );
+    created.push(group);
+  }
+
+  return created;
 }

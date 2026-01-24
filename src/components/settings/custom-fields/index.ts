@@ -5,3 +5,7 @@ export { FieldEditorDrawer } from './FieldEditorDrawer';
 export { FieldTypeSelector } from './FieldTypeSelector';
 export { OptionListEditor } from './OptionListEditor';
 export { DependencyWarningModal } from './DependencyWarningModal';
+export { FieldGroupSidebar } from './FieldGroupSidebar';
+export { FieldListPanel } from './FieldListPanel';
+export { MoveToGroupModal } from './MoveToGroupModal';
+export { BulkActionsBar, BulkDeleteConfirmModal } from './BulkActionsBar';

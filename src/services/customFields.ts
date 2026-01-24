@@ -93,6 +93,8 @@ export async function createCustomField(
       field_key: input.field_key,
       field_type: input.field_type,
       options: input.options,
+      option_items: input.option_items,
+      default_value: input.default_value,
       is_required: input.is_required ?? false,
       display_order: input.display_order ?? 0,
       placeholder: input.placeholder,
@@ -104,6 +106,8 @@ export async function createCustomField(
       filterable: input.filterable ?? true,
       read_only: input.read_only ?? false,
       show_in_list_view: input.show_in_list_view ?? false,
+      show_in_detail_view: input.show_in_detail_view ?? true,
+      allow_duplicate_values: input.allow_duplicate_values ?? true,
     })
     .select()
     .single();
@@ -221,6 +225,8 @@ export async function duplicateCustomField(
       field_key: newFieldKey,
       field_type: original.field_type,
       options: original.options,
+      option_items: original.option_items,
+      default_value: original.default_value,
       is_required: false,
       display_order: original.display_order + 1,
       placeholder: original.placeholder,
@@ -232,6 +238,8 @@ export async function duplicateCustomField(
       filterable: original.filterable,
       read_only: original.read_only,
       show_in_list_view: original.show_in_list_view,
+      show_in_detail_view: original.show_in_detail_view,
+      allow_duplicate_values: original.allow_duplicate_values,
     })
     .select()
     .single();
@@ -294,7 +302,96 @@ export async function moveFieldToGroup(
   groupId: string | null,
   currentUser: User
 ): Promise<CustomField> {
-  return updateCustomField(fieldId, { group_id: groupId }, currentUser);
+  const { data: maxOrderRow } = await supabase
+    .from('custom_fields')
+    .select('display_order')
+    .eq('group_id', groupId)
+    .is('deleted_at', null)
+    .order('display_order', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const newOrder = (maxOrderRow?.display_order ?? -1) + 1;
+
+  return updateCustomField(
+    fieldId,
+    { group_id: groupId, display_order: newOrder },
+    currentUser
+  );
+}
+
+export async function bulkMoveFields(
+  fieldIds: string[],
+  groupId: string | null,
+  currentUser: User
+): Promise<void> {
+  const { data: maxOrderRow } = await supabase
+    .from('custom_fields')
+    .select('display_order')
+    .eq('group_id', groupId)
+    .is('deleted_at', null)
+    .order('display_order', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let nextOrder = (maxOrderRow?.display_order ?? -1) + 1;
+
+  for (const fieldId of fieldIds) {
+    await supabase
+      .from('custom_fields')
+      .update({ group_id: groupId, display_order: nextOrder })
+      .eq('id', fieldId);
+    nextOrder++;
+  }
+
+  await logAudit({
+    userId: currentUser.id,
+    action: 'bulk_move',
+    entityType: 'custom_fields',
+    entityId: groupId || 'ungrouped',
+    afterState: { fieldIds, targetGroupId: groupId },
+  });
+}
+
+export async function bulkDeleteFields(
+  fieldIds: string[],
+  currentUser: User
+): Promise<void> {
+  const { error } = await supabase
+    .from('custom_fields')
+    .update({ deleted_at: new Date().toISOString(), active: false })
+    .in('id', fieldIds);
+
+  if (error) throw error;
+
+  await logAudit({
+    userId: currentUser.id,
+    action: 'bulk_delete',
+    entityType: 'custom_fields',
+    entityId: 'batch',
+    afterState: { fieldIds },
+  });
+}
+
+export async function bulkToggleFieldsActive(
+  fieldIds: string[],
+  active: boolean,
+  currentUser: User
+): Promise<void> {
+  const { error } = await supabase
+    .from('custom_fields')
+    .update({ active })
+    .in('id', fieldIds);
+
+  if (error) throw error;
+
+  await logAudit({
+    userId: currentUser.id,
+    action: active ? 'bulk_enable' : 'bulk_disable',
+    entityType: 'custom_fields',
+    entityId: 'batch',
+    afterState: { fieldIds, active },
+  });
 }
 
 export function canMigrateFieldType(

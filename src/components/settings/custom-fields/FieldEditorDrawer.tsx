@@ -84,6 +84,8 @@ export function FieldEditorDrawer({
   const [readOnly, setReadOnly] = useState(field?.read_only || false);
   const [placeholder, setPlaceholder] = useState(field?.placeholder || '');
   const [showInListView, setShowInListView] = useState(field?.show_in_list_view || false);
+  const [showInDetailView, setShowInDetailView] = useState(field?.show_in_detail_view ?? true);
+  const [allowDuplicateValues, setAllowDuplicateValues] = useState(field?.allow_duplicate_values ?? true);
   const [visibleInForms, setVisibleInForms] = useState(field?.visible_in_forms ?? true);
   const [visibleInSurveys, setVisibleInSurveys] = useState(field?.visible_in_surveys ?? true);
   const [visibleInAutomations, setVisibleInAutomations] = useState(field?.visible_in_automations ?? true);
@@ -174,6 +176,8 @@ export function FieldEditorDrawer({
             visible_in_reporting: visibleInReporting,
             read_only: readOnly,
             show_in_list_view: showInListView,
+            show_in_detail_view: showInDetailView,
+            allow_duplicate_values: allowDuplicateValues,
           },
           user
         );
@@ -194,6 +198,8 @@ export function FieldEditorDrawer({
           visible_in_reporting: visibleInReporting,
           read_only: readOnly,
           show_in_list_view: showInListView,
+          show_in_detail_view: showInDetailView,
+          allow_duplicate_values: allowDuplicateValues,
         };
         await createCustomField(user.organization_id, input, user);
       }
@@ -401,6 +407,32 @@ export function FieldEditorDrawer({
                     <div>
                       <span className="text-sm text-white">Show in list views</span>
                       <p className="text-xs text-slate-500">Display as column in {scope} list</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showInDetailView}
+                      onChange={(e) => setShowInDetailView(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-slate-900"
+                    />
+                    <div>
+                      <span className="text-sm text-white">Show in detail view</span>
+                      <p className="text-xs text-slate-500">Display in {scope} overview/detail panel</p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={allowDuplicateValues}
+                      onChange={(e) => setAllowDuplicateValues(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-slate-900"
+                    />
+                    <div>
+                      <span className="text-sm text-white">Allow duplicate values</span>
+                      <p className="text-xs text-slate-500">Multiple records can have the same value</p>
                     </div>
                   </label>
                 </div>
