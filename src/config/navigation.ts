@@ -13,6 +13,7 @@ import {
   Settings,
   Shield,
   Radio,
+  FileText,
   type LucideIcon,
 } from 'lucide-react';
 import type { PermissionKey } from '../types';
@@ -43,6 +44,7 @@ export const navigationConfig: NavSection[] = [
       { name: 'Contacts', path: '/contacts', icon: Users, permission: 'contacts.view', featureFlag: 'contacts' },
       { name: 'Opportunities', path: '/opportunities', icon: Target, permission: 'opportunities.view', featureFlag: 'opportunities' },
       { name: 'Payments', path: '/payments', icon: CreditCard, permission: 'payments.view', featureFlag: 'payments' },
+      { name: 'Proposals', path: '/proposals', icon: FileText, permission: 'proposals.view', featureFlag: 'proposals' },
     ],
   },
   {

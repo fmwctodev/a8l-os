@@ -21,6 +21,9 @@ import { PipelinesPage } from './pages/modules/PipelinesPage';
 import { OpportunitiesLayout } from './layouts/OpportunitiesLayout';
 import { Payments } from './pages/modules/Payments';
 import { InvoiceDetail } from './pages/modules/InvoiceDetail';
+import { Proposals } from './pages/modules/Proposals';
+import { ProposalDetail } from './pages/modules/ProposalDetail';
+import { ProposalBuilder } from './pages/modules/ProposalBuilder';
 import { AIAgents } from './pages/modules/AIAgents';
 import { AIAgentDetail } from './pages/modules/AIAgentDetail';
 import { Marketing } from './pages/modules/Marketing';
@@ -162,6 +165,30 @@ function App() {
                 element={
                   <ProtectedRoute permission="payments.view" featureFlag="payments">
                     <InvoiceDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/proposals"
+                element={
+                  <ProtectedRoute permission="proposals.view" featureFlag="proposals">
+                    <Proposals />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/proposals/:id"
+                element={
+                  <ProtectedRoute permission="proposals.view" featureFlag="proposals">
+                    <ProposalDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/proposals/:id/build"
+                element={
+                  <ProtectedRoute permission="proposals.edit" featureFlag="proposals">
+                    <ProposalBuilder />
                   </ProtectedRoute>
                 }
               />

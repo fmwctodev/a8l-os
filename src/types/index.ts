@@ -125,7 +125,10 @@ export type PermissionKey =
   | 'integrations.webhooks.manage' | 'integrations.logs.view'
   | 'brandboard.view' | 'brandboard.manage' | 'brandboard.activate'
   | 'snippets.view' | 'snippets.create' | 'snippets.manage' | 'snippets.system.manage'
-  | 'conversation_rules.view' | 'conversation_rules.manage';
+  | 'conversation_rules.view' | 'conversation_rules.manage'
+  | 'proposals.view' | 'proposals.create' | 'proposals.edit' | 'proposals.send'
+  | 'proposals.delete' | 'proposals.ai_generate' | 'proposal_templates.manage'
+  | 'meetings.view' | 'meetings.import' | 'meetings.edit' | 'meetings.delete';
 
 export interface InviteStaffInput {
   first_name: string;
@@ -3700,6 +3703,244 @@ export const BRAND_USAGE_ENTITY_LABELS: Record<BrandUsageEntityType, string> = {
   document: 'Document',
   social_post: 'Social Post',
 };
+
+export type ProposalStatus = 'draft' | 'sent' | 'viewed' | 'accepted' | 'rejected' | 'expired';
+export type ProposalSectionType = 'intro' | 'scope' | 'deliverables' | 'timeline' | 'pricing' | 'terms' | 'custom';
+export type ProposalActivityType = 'created' | 'updated' | 'sent' | 'viewed' | 'commented' | 'status_changed' | 'ai_generated';
+export type MeetingSource = 'google_meet' | 'zoom' | 'teams' | 'other';
+
+export interface ProposalTemplate {
+  id: string;
+  org_id: string;
+  name: string;
+  description: string | null;
+  content: string;
+  category: string | null;
+  is_default: boolean;
+  variables: ProposalTemplateVariable[];
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  created_by_user?: User;
+}
+
+export interface ProposalTemplateVariable {
+  key: string;
+  label: string;
+  type: 'text' | 'textarea' | 'number' | 'date' | 'select';
+  options?: string[];
+}
+
+export interface Proposal {
+  id: string;
+  org_id: string;
+  contact_id: string;
+  opportunity_id: string | null;
+  title: string;
+  status: ProposalStatus;
+  content: string;
+  summary: string | null;
+  total_value: number;
+  currency: string;
+  valid_until: string | null;
+  sent_at: string | null;
+  viewed_at: string | null;
+  responded_at: string | null;
+  created_by: string;
+  assigned_user_id: string | null;
+  template_id: string | null;
+  ai_context: ProposalAIContext;
+  public_token: string;
+  created_at: string;
+  updated_at: string;
+  contact?: Contact;
+  opportunity?: Opportunity | null;
+  created_by_user?: User;
+  assigned_user?: User | null;
+  template?: ProposalTemplate | null;
+  line_items?: ProposalLineItem[];
+  sections?: ProposalSection[];
+  meeting_contexts?: ProposalMeetingContext[];
+}
+
+export interface ProposalAIContext {
+  meetings_used?: string[];
+  contact_history_included?: boolean;
+  opportunity_data_included?: boolean;
+  custom_instructions?: string;
+  generated_at?: string;
+}
+
+export interface ProposalLineItem {
+  id: string;
+  org_id: string;
+  proposal_id: string;
+  product_id: string | null;
+  name: string;
+  description: string | null;
+  quantity: number;
+  unit_price: number;
+  discount_percent: number;
+  sort_order: number;
+  created_at: string;
+  product?: Product | null;
+}
+
+export interface ProposalSection {
+  id: string;
+  org_id: string;
+  proposal_id: string;
+  title: string;
+  content: string;
+  section_type: ProposalSectionType;
+  sort_order: number;
+  ai_generated: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProposalComment {
+  id: string;
+  org_id: string;
+  proposal_id: string;
+  user_id: string | null;
+  is_client_comment: boolean;
+  client_name: string | null;
+  content: string;
+  created_at: string;
+  user?: User | null;
+}
+
+export interface ProposalActivity {
+  id: string;
+  org_id: string;
+  proposal_id: string;
+  activity_type: ProposalActivityType;
+  description: string;
+  metadata: Record<string, unknown>;
+  actor_user_id: string | null;
+  created_at: string;
+  actor?: User | null;
+}
+
+export interface ProposalFilters {
+  status?: ProposalStatus[];
+  contactId?: string;
+  opportunityId?: string;
+  assignedUserId?: string;
+  createdAfter?: string;
+  createdBefore?: string;
+  search?: string;
+}
+
+export interface ProposalStats {
+  totalProposals: number;
+  draftCount: number;
+  sentCount: number;
+  viewedCount: number;
+  acceptedCount: number;
+  rejectedCount: number;
+  totalValue: number;
+  acceptedValue: number;
+  conversionRate: number;
+}
+
+export interface MeetingParticipant {
+  name: string;
+  email: string;
+  role?: string;
+}
+
+export interface MeetingActionItem {
+  description: string;
+  assignee?: string;
+  due_date?: string;
+  completed?: boolean;
+}
+
+export interface MeetingTranscription {
+  id: string;
+  org_id: string;
+  contact_id: string | null;
+  meeting_source: MeetingSource;
+  external_meeting_id: string | null;
+  meeting_title: string;
+  meeting_date: string;
+  duration_minutes: number | null;
+  participants: MeetingParticipant[];
+  transcript_text: string;
+  summary: string | null;
+  key_points: string[];
+  action_items: MeetingActionItem[];
+  recording_url: string | null;
+  recording_file_id: string | null;
+  recording_duration: string | null;
+  recording_size_bytes: number | null;
+  processed_at: string | null;
+  imported_by: string;
+  created_at: string;
+  updated_at: string;
+  contact?: Contact | null;
+  imported_by_user?: User;
+  linked_contacts?: MeetingTranscriptionContact[];
+}
+
+export interface MeetingTranscriptionContact {
+  id: string;
+  org_id: string;
+  meeting_transcription_id: string;
+  contact_id: string;
+  participant_email: string | null;
+  created_at: string;
+  contact?: Contact;
+}
+
+export interface ContactMeetingNote {
+  id: string;
+  org_id: string;
+  contact_id: string;
+  meeting_transcription_id: string | null;
+  title: string;
+  content: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  meeting_transcription?: MeetingTranscription | null;
+  created_by_user?: User;
+}
+
+export interface ProposalMeetingContext {
+  id: string;
+  org_id: string;
+  proposal_id: string;
+  meeting_transcription_id: string;
+  included_in_generation: boolean;
+  created_at: string;
+  meeting_transcription?: MeetingTranscription;
+}
+
+export interface MeetingTranscriptionFilters {
+  contactId?: string;
+  meetingSource?: MeetingSource;
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+  hasRecording?: boolean;
+}
+
+export interface GoogleMeetRecording {
+  meetingId: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  participants: string[];
+  hasTranscript: boolean;
+  recordingUrl?: string;
+  recordingFileId?: string;
+  recordingDuration?: string;
+  recordingSizeBytes?: number;
+  driveFileUrl?: string;
+}
 
 export const DEFAULT_AI_PROMPT_TEMPLATE = `You are an AI assistant representing {{company_name}}.
 
