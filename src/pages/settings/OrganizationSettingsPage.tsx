@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getOrganization, updateOrganization } from '../../services/organizations';
 import { getDepartments, createDepartment, updateDepartment, deleteDepartment } from '../../services/departments';
-import { getFeatureFlags } from '../../services/featureFlags';
+import { getFeatureFlags, updateFeatureFlag } from '../../services/featureFlags';
 import type { Organization, Department, FeatureFlag } from '../../types';
 import {
   Building2,
@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 export function OrganizationSettingsPage() {
-  const { user, hasPermission } = useAuth();
+  const { user, hasPermission, isSuperAdmin } = useAuth();
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
@@ -31,6 +31,7 @@ export function OrganizationSettingsPage() {
   const [newDeptName, setNewDeptName] = useState('');
   const [editingDept, setEditingDept] = useState<Department | null>(null);
   const [editDeptName, setEditDeptName] = useState('');
+  const [togglingFlag, setTogglingFlag] = useState<string | null>(null);
 
   const canManage = hasPermission('settings.manage');
 
@@ -111,6 +112,24 @@ export function OrganizationSettingsPage() {
       loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete department');
+    }
+  };
+
+  const handleToggleFlag = async (flag: FeatureFlag) => {
+    if (!isSuperAdmin) return;
+
+    setTogglingFlag(flag.id);
+    setError(null);
+
+    try {
+      const updated = await updateFeatureFlag(flag.id, !flag.enabled);
+      setFeatureFlags((prev) =>
+        prev.map((f) => (f.id === flag.id ? updated : f))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update feature flag');
+    } finally {
+      setTogglingFlag(null);
     }
   };
 
@@ -273,7 +292,11 @@ export function OrganizationSettingsPage() {
       <div className="bg-slate-900 rounded-xl border border-slate-800">
         <div className="p-4 border-b border-slate-800">
           <h3 className="text-lg font-semibold text-white">Feature Flags</h3>
-          <p className="text-sm text-slate-400 mt-1">Module activation status (read-only)</p>
+          <p className="text-sm text-slate-400 mt-1">
+            {isSuperAdmin
+              ? 'Enable or disable modules for your organization'
+              : 'Module activation status (read-only)'}
+          </p>
         </div>
         <div className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -282,16 +305,30 @@ export function OrganizationSettingsPage() {
                 key={flag.id}
                 className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50"
               >
-                <div>
+                <div className="flex-1 min-w-0 pr-3">
                   <p className="text-white capitalize">{flag.key.replace(/_/g, ' ')}</p>
                   {flag.description && (
-                    <p className="text-xs text-slate-400">{flag.description}</p>
+                    <p className="text-xs text-slate-400 line-clamp-2">{flag.description}</p>
                   )}
                 </div>
-                {flag.enabled ? (
-                  <ToggleRight className="w-6 h-6 text-emerald-400" />
+                {isSuperAdmin ? (
+                  <button
+                    onClick={() => handleToggleFlag(flag)}
+                    disabled={togglingFlag === flag.id}
+                    className="flex-shrink-0 transition-colors disabled:opacity-50"
+                  >
+                    {togglingFlag === flag.id ? (
+                      <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+                    ) : flag.enabled ? (
+                      <ToggleRight className="w-6 h-6 text-emerald-400 hover:text-emerald-300" />
+                    ) : (
+                      <ToggleLeft className="w-6 h-6 text-slate-500 hover:text-slate-400" />
+                    )}
+                  </button>
+                ) : flag.enabled ? (
+                  <ToggleRight className="w-6 h-6 text-emerald-400 flex-shrink-0" />
                 ) : (
-                  <ToggleLeft className="w-6 h-6 text-slate-500" />
+                  <ToggleLeft className="w-6 h-6 text-slate-500 flex-shrink-0" />
                 )}
               </div>
             ))}

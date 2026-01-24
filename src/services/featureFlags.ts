@@ -31,3 +31,18 @@ export async function getEnabledFeatures(): Promise<string[]> {
   if (error) return [];
   return data?.map((f: { key: string }) => f.key) || [];
 }
+
+export async function updateFeatureFlag(
+  id: string,
+  enabled: boolean
+): Promise<FeatureFlag> {
+  const { data, error } = await supabase
+    .from('feature_flags')
+    .update({ enabled })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as FeatureFlag;
+}
