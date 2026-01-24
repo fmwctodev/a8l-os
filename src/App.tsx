@@ -47,6 +47,7 @@ import { WorkflowEnrollments } from './pages/modules/WorkflowEnrollments';
 import { MediaStorage } from './pages/modules/MediaStorage';
 import { Reputation } from './pages/modules/Reputation';
 import { Reporting } from './pages/modules/Reporting';
+import { AIReporting } from './pages/modules/AIReporting';
 import { ReportBuilder } from './pages/modules/ReportBuilder';
 import { ReportView } from './pages/modules/ReportView';
 import { UsersPage } from './pages/admin/Users';
@@ -375,6 +376,14 @@ function App() {
                 element={
                   <ProtectedRoute permission="reporting.view" featureFlag="reporting">
                     <Reporting />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/reporting/ai"
+                element={
+                  <ProtectedRoute permission="reporting.ai.query" featureFlag="reporting">
+                    <AIReporting />
                   </ProtectedRoute>
                 }
               />

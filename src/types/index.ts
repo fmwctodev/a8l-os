@@ -111,7 +111,7 @@ export type PermissionKey =
   | 'automation.view' | 'automation.manage'
   | 'media.view' | 'media.manage'
   | 'reputation.view' | 'reputation.request' | 'reputation.manage' | 'reputation.providers.manage'
-  | 'reporting.view' | 'reporting.manage' | 'reporting.schedule' | 'reporting.export'
+  | 'reporting.view' | 'reporting.manage' | 'reporting.schedule' | 'reporting.export' | 'reporting.ai.query'
   | 'users.view' | 'users.invite' | 'users.manage'
   | 'staff.view' | 'staff.manage' | 'staff.invite' | 'staff.disable' | 'staff.reset_password'
   | 'departments.manage'
@@ -1684,7 +1684,9 @@ export interface SocialStats {
   failedPosts: number;
 }
 
-export type ReportDataSource = 'contacts' | 'conversations' | 'appointments' | 'forms' | 'surveys' | 'workflows';
+export type ReportDataSource =
+  | 'contacts' | 'conversations' | 'appointments' | 'forms' | 'surveys' | 'workflows'
+  | 'opportunities' | 'invoices' | 'payments' | 'tasks' | 'ai_runs' | 'marketing' | 'reputation';
 export type ReportVisualizationType = 'table' | 'bar' | 'line' | 'pie';
 export type ReportVisibility = 'private' | 'department' | 'organization';
 export type ReportTriggeredBy = 'user' | 'schedule';
@@ -1759,6 +1761,8 @@ export interface ReportConfig {
   limit?: number;
 }
 
+export type ReportType = 'manual' | 'ai_generated';
+
 export interface Report {
   id: string;
   organization_id: string;
@@ -1769,6 +1773,7 @@ export interface Report {
   visualization_type: ReportVisualizationType;
   visibility: ReportVisibility;
   department_id: string | null;
+  report_type: ReportType;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -1776,6 +1781,7 @@ export interface Report {
   department?: Department | null;
   last_run?: ReportRun | null;
   schedules?: ReportSchedule[];
+  source_ai_query?: AIReportQuery | null;
 }
 
 export interface ReportRun {
@@ -1871,6 +1877,66 @@ export interface ReportStats {
   scheduledReports: number;
   exportsThisMonth: number;
   lastRunDate: string | null;
+}
+
+export type AIQueryDataScope = 'my_data' | 'department' | 'organization';
+
+export interface AIReportQuery {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  query_text: string;
+  response_text: string | null;
+  response_data: AIQueryResponseData;
+  data_sources_used: ReportDataSource[];
+  sql_generated: string | null;
+  execution_time_ms: number | null;
+  tokens_used: number | null;
+  data_scope: AIQueryDataScope;
+  time_range: ReportTimeRange;
+  saved_as_report_id: string | null;
+  error: string | null;
+  created_at: string;
+  user?: User;
+  saved_as_report?: Report | null;
+}
+
+export interface AIQueryResponseData {
+  answer: string;
+  explanation?: string;
+  chart_type?: ReportVisualizationType;
+  chart_data?: Array<Record<string, unknown>>;
+  table_columns?: Array<{ key: string; label: string; format?: string }>;
+  table_rows?: Array<Record<string, unknown>>;
+  sources?: Array<{ table: string; fields: string[] }>;
+  insights?: string[];
+}
+
+export interface AIQueryRequest {
+  query_text: string;
+  data_scope: AIQueryDataScope;
+  time_range: ReportTimeRange;
+}
+
+export interface AIQueryResponse {
+  success: boolean;
+  query_id: string;
+  answer: string;
+  explanation?: string;
+  data_sources_used: ReportDataSource[];
+  chart_type?: ReportVisualizationType;
+  chart_data?: Array<Record<string, unknown>>;
+  table_columns?: Array<{ key: string; label: string; format?: string }>;
+  table_rows?: Array<Record<string, unknown>>;
+  execution_time_ms: number;
+  tokens_used: number;
+  error?: string;
+}
+
+export interface AIReportQueryFilters {
+  userId?: string;
+  search?: string;
+  limit?: number;
 }
 
 export type OpportunityStatus = 'open' | 'won' | 'lost';
