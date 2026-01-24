@@ -2,9 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getOrganization, updateOrganization } from '../../services/organizations';
 import { getDepartments, createDepartment, updateDepartment, deleteDepartment } from '../../services/departments';
-import { getFeatureFlags, isFeatureEnabled } from '../../services/featureFlags';
-import { QBOConfig } from '../../components/settings/QBOConfig';
-import DriveConfig from '../../components/settings/DriveConfig';
+import { getFeatureFlags } from '../../services/featureFlags';
 import type { Organization, Department, FeatureFlag } from '../../types';
 import {
   Building2,
@@ -33,8 +31,6 @@ export function OrganizationSettingsPage() {
   const [newDeptName, setNewDeptName] = useState('');
   const [editingDept, setEditingDept] = useState<Department | null>(null);
   const [editDeptName, setEditDeptName] = useState('');
-  const [paymentsEnabled, setPaymentsEnabled] = useState(false);
-  const [mediaEnabled, setMediaEnabled] = useState(false);
 
   const canManage = hasPermission('settings.manage');
 
@@ -47,19 +43,15 @@ export function OrganizationSettingsPage() {
 
     try {
       setIsLoading(true);
-      const [org, depts, flags, paymentsFlag, mediaFlag] = await Promise.all([
+      const [org, depts, flags] = await Promise.all([
         getOrganization(user.organization_id),
         getDepartments(user.organization_id),
         getFeatureFlags(),
-        isFeatureEnabled('payments'),
-        isFeatureEnabled('media'),
       ]);
       setOrganization(org);
       setOrgName(org?.name || '');
       setDepartments(depts);
       setFeatureFlags(flags);
-      setPaymentsEnabled(paymentsFlag);
-      setMediaEnabled(mediaFlag);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load settings');
     } finally {
@@ -277,10 +269,6 @@ export function OrganizationSettingsPage() {
           </div>
         </div>
       </div>
-
-      {paymentsEnabled && <QBOConfig />}
-
-      {mediaEnabled && <DriveConfig />}
 
       <div className="bg-slate-900 rounded-xl border border-slate-800">
         <div className="p-4 border-b border-slate-800">
