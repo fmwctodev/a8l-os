@@ -3746,6 +3746,7 @@ export interface Proposal {
   sent_at: string | null;
   viewed_at: string | null;
   responded_at: string | null;
+  archived_at: string | null;
   created_by: string;
   assigned_user_id: string | null;
   template_id: string | null;
@@ -3831,6 +3832,7 @@ export interface ProposalFilters {
   createdAfter?: string;
   createdBefore?: string;
   search?: string;
+  includeArchived?: boolean;
 }
 
 export interface ProposalStats {

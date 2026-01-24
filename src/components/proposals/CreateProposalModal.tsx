@@ -47,13 +47,14 @@ export function CreateProposalModal({
   const [useAI, setUseAI] = useState(true);
 
   useEffect(() => {
+    if (!user?.organization_id) return;
     loadTemplates();
     if (preselectedContactId) {
       loadPreselectedContact();
     } else {
       searchContacts('');
     }
-  }, []);
+  }, [user?.organization_id]);
 
   useEffect(() => {
     if (selectedContact) {
@@ -75,9 +76,10 @@ export function CreateProposalModal({
   };
 
   const loadPreselectedContact = async () => {
+    if (!user?.organization_id) return;
     try {
-      const result = await getContacts({ search: '' }, 1, 100);
-      const contact = result.data.find(c => c.id === preselectedContactId);
+      const data = await getContacts(user.organization_id, { search: '' });
+      const contact = data.find(c => c.id === preselectedContactId);
       if (contact) {
         setSelectedContact(contact);
         setStep('details');
@@ -88,10 +90,11 @@ export function CreateProposalModal({
   };
 
   const searchContacts = async (query: string) => {
+    if (!user?.organization_id) return;
     try {
       setIsLoadingContacts(true);
-      const result = await getContacts({ search: query }, 1, 20);
-      setContacts(result.data);
+      const data = await getContacts(user.organization_id, { search: query });
+      setContacts(data.slice(0, 20));
     } catch (err) {
       console.error('Failed to search contacts:', err);
     } finally {

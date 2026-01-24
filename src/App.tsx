@@ -62,6 +62,7 @@ import { BookingPage } from './pages/public/BookingPage';
 import { PublicFormPage } from './pages/public/PublicFormPage';
 import { PublicSurveyPage } from './pages/public/PublicSurveyPage';
 import { ReviewPage } from './pages/public/ReviewPage';
+import PublicProposalPage from './pages/public/PublicProposalPage';
 
 function App() {
   return (
@@ -482,6 +483,7 @@ function App() {
             <Route path="/f/:slug" element={<PublicFormPage />} />
             <Route path="/s/:slug" element={<PublicSurveyPage />} />
             <Route path="/r/:slug" element={<ReviewPage />} />
+            <Route path="/p/:token" element={<PublicProposalPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </SidebarProvider>

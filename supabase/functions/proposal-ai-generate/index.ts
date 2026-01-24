@@ -216,12 +216,29 @@ Deno.serve(async (req: Request) => {
       .eq("id", proposal.org_id)
       .single();
 
-    const { data: brandVoice } = await supabase
-      .from("brand_voices")
-      .select("*")
+    const { data: activeBrandKit } = await supabase
+      .from("brand_kits")
+      .select("*, latest_version:brand_kit_versions(*)")
       .eq("org_id", proposal.org_id)
-      .eq("status", "active")
+      .eq("active", true)
+      .is("archived_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
+
+    const brandKitVersion = activeBrandKit?.latest_version?.[0] || null;
+
+    const { data: activeBrandVoice } = await supabase
+      .from("brand_voices")
+      .select("*, latest_version:brand_voice_versions(*)")
+      .eq("org_id", proposal.org_id)
+      .eq("active", true)
+      .is("archived_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const brandVoiceVersion = activeBrandVoice?.latest_version?.[0] || null;
 
     const { data: llmProvider } = await supabase
       .from("llm_providers")
@@ -247,7 +264,8 @@ Deno.serve(async (req: Request) => {
 
     const systemPrompt = buildSystemPrompt(
       org?.name || "Our Company",
-      brandVoice,
+      brandVoiceVersion,
+      brandKitVersion,
       templateContent
     );
 
@@ -326,7 +344,8 @@ Deno.serve(async (req: Request) => {
 
 function buildSystemPrompt(
   companyName: string,
-  brandVoice: Record<string, unknown> | null,
+  brandVoiceVersion: Record<string, unknown> | null,
+  brandKitVersion: Record<string, unknown> | null,
   templateContent: string
 ): string {
   let prompt = `You are a professional proposal writer for ${companyName}. Your task is to generate high-quality proposal content that is persuasive, professional, and tailored to the client.
@@ -339,11 +358,54 @@ Guidelines:
 - Personalize content based on client information provided
 `;
 
-  if (brandVoice) {
-    prompt += `\nBrand Voice Guidelines:
-- Tone: ${brandVoice.tone_sliders || "Professional"}
-- Writing Style: Maintain consistency with our brand voice
-`;
+  if (brandVoiceVersion) {
+    const toneSettings = brandVoiceVersion.tone_settings as Record<string, number> || {};
+    const dos = (brandVoiceVersion.dos as string[]) || [];
+    const donts = (brandVoiceVersion.donts as string[]) || [];
+    const vocabPreferred = (brandVoiceVersion.vocabulary_preferred as string[]) || [];
+    const vocabProhibited = (brandVoiceVersion.vocabulary_prohibited as string[]) || [];
+
+    prompt += `\nBrand Voice Guidelines:`;
+
+    if (Object.keys(toneSettings).length > 0) {
+      prompt += `\n- Tone Settings:`;
+      if (toneSettings.formality !== undefined) {
+        const level = toneSettings.formality > 0.5 ? "Formal" : "Casual";
+        prompt += `\n  • Formality: ${level}`;
+      }
+      if (toneSettings.friendliness !== undefined) {
+        const level = toneSettings.friendliness > 0.5 ? "Warm and friendly" : "Direct and professional";
+        prompt += `\n  • Approach: ${level}`;
+      }
+      if (toneSettings.energy !== undefined) {
+        const level = toneSettings.energy > 0.5 ? "Energetic and dynamic" : "Calm and measured";
+        prompt += `\n  • Energy: ${level}`;
+      }
+      if (toneSettings.confidence !== undefined) {
+        const level = toneSettings.confidence > 0.5 ? "Assertive and confident" : "Humble and consultative";
+        prompt += `\n  • Confidence: ${level}`;
+      }
+    }
+
+    if (dos.length > 0) {
+      prompt += `\n- Do use: ${dos.join(", ")}`;
+    }
+    if (donts.length > 0) {
+      prompt += `\n- Avoid: ${donts.join(", ")}`;
+    }
+    if (vocabPreferred.length > 0) {
+      prompt += `\n- Preferred vocabulary: ${vocabPreferred.join(", ")}`;
+    }
+    if (vocabProhibited.length > 0) {
+      prompt += `\n- Never use: ${vocabProhibited.join(", ")}`;
+    }
+  }
+
+  if (brandKitVersion) {
+    const colors = brandKitVersion.colors as Record<string, { hex: string }> || {};
+    prompt += `\nBrand Colors (for reference in describing visual elements):`;
+    if (colors.primary) prompt += `\n- Primary: ${colors.primary.hex}`;
+    if (colors.secondary) prompt += `\n- Secondary: ${colors.secondary.hex}`;
   }
 
   if (templateContent) {
@@ -356,7 +418,7 @@ ${templateContent}
 Return a JSON array of sections, each with:
 - section_type: one of (intro, scope, deliverables, timeline, pricing, terms)
 - title: section heading
-- content: the section content in markdown format`;
+- content: the section content in HTML format (use <p>, <h3>, <ul>, <li> tags)`;
 
   return prompt;
 }

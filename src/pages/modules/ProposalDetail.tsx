@@ -1,11 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { SendProposalModal } from '../../components/proposals/SendProposalModal';
+import { ConvertToInvoiceModal } from '../../components/proposals/ConvertToInvoiceModal';
 import {
   getProposalById,
   updateProposal,
   sendProposal,
   deleteProposal,
+  duplicateProposal,
+  archiveProposal,
+  unarchiveProposal,
   getProposalComments,
   addProposalComment,
   getProposalActivities,
@@ -42,6 +47,9 @@ import {
   Copy,
   MoreVertical,
   Video,
+  Archive,
+  ArchiveRestore,
+  Copy as CopyIcon,
 } from 'lucide-react';
 
 const STATUS_STYLES = {
@@ -69,6 +77,8 @@ export function ProposalDetail() {
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [sectionContent, setSectionContent] = useState('');
   const [showActionMenu, setShowActionMenu] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [showConvertModal, setShowConvertModal] = useState(false);
 
   const canEdit = hasPermission('proposals.edit');
   const canSend = hasPermission('proposals.send');
@@ -101,14 +111,17 @@ export function ProposalDetail() {
     }
   };
 
-  const handleSendProposal = async () => {
-    if (!proposal || !user) return;
-    try {
-      await sendProposal(proposal.id, user.id);
-      loadProposal();
-    } catch (err) {
-      console.error('Failed to send proposal:', err);
+  const handleSendProposal = () => {
+    if (!proposal?.contact?.email) {
+      alert('This proposal must have a contact with an email address before it can be sent.');
+      return;
     }
+    setShowSendModal(true);
+  };
+
+  const handleSendComplete = () => {
+    setShowSendModal(false);
+    loadProposal();
   };
 
   const handleDeleteProposal = async () => {
@@ -118,6 +131,36 @@ export function ProposalDetail() {
       navigate('/proposals');
     } catch (err) {
       console.error('Failed to delete proposal:', err);
+    }
+  };
+
+  const handleDuplicateProposal = async () => {
+    if (!proposal || !user) return;
+    try {
+      const duplicated = await duplicateProposal(proposal.id, user.id);
+      navigate(`/proposals/${duplicated.id}`);
+    } catch (err) {
+      console.error('Failed to duplicate proposal:', err);
+    }
+  };
+
+  const handleArchiveProposal = async () => {
+    if (!proposal || !user) return;
+    try {
+      await archiveProposal(proposal.id, user.id);
+      loadProposal();
+    } catch (err) {
+      console.error('Failed to archive proposal:', err);
+    }
+  };
+
+  const handleUnarchiveProposal = async () => {
+    if (!proposal || !user) return;
+    try {
+      await unarchiveProposal(proposal.id, user.id);
+      loadProposal();
+    } catch (err) {
+      console.error('Failed to unarchive proposal:', err);
     }
   };
 
@@ -224,6 +267,12 @@ export function ProposalDetail() {
                   <StatusIcon className="w-3 h-3" />
                   {statusStyle.label}
                 </span>
+                {proposal.archived_at && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-500/20 text-slate-400 rounded-full text-xs">
+                    <Archive className="w-3 h-3" />
+                    Archived
+                  </span>
+                )}
                 {proposal.ai_context?.generated_at && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded-full text-xs">
                     <Sparkles className="w-3 h-3" />
@@ -269,6 +318,15 @@ export function ProposalDetail() {
                 Send Proposal
               </button>
             )}
+            {proposal.status === 'accepted' && hasPermission('payments.manage') && (
+              <button
+                onClick={() => setShowConvertModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
+              >
+                <DollarSign className="w-4 h-4" />
+                Convert to Invoice
+              </button>
+            )}
             {proposal.status !== 'draft' && (
               <>
                 <button
@@ -298,13 +356,40 @@ export function ProposalDetail() {
               </button>
               {showActionMenu && (
                 <div className="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10">
+                  {canEdit && (
+                    <button
+                      onClick={handleDuplicateProposal}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
+                    >
+                      <CopyIcon className="w-4 h-4" />
+                      Duplicate
+                    </button>
+                  )}
+                  {canEdit && !proposal.archived_at && (
+                    <button
+                      onClick={handleArchiveProposal}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
+                    >
+                      <Archive className="w-4 h-4" />
+                      Archive
+                    </button>
+                  )}
+                  {canEdit && proposal.archived_at && (
+                    <button
+                      onClick={handleUnarchiveProposal}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
+                    >
+                      <ArchiveRestore className="w-4 h-4" />
+                      Unarchive
+                    </button>
+                  )}
                   {canDelete && (
                     <button
                       onClick={handleDeleteProposal}
-                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-slate-700 transition-colors"
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-slate-700 transition-colors border-t border-slate-700"
                     >
                       <Trash2 className="w-4 h-4" />
-                      Delete Proposal
+                      Delete
                     </button>
                   )}
                 </div>
@@ -615,6 +700,25 @@ export function ProposalDetail() {
           </div>
         )}
       </div>
+
+      {showSendModal && proposal && (
+        <SendProposalModal
+          proposal={proposal}
+          onClose={() => setShowSendModal(false)}
+          onSent={handleSendComplete}
+        />
+      )}
+
+      {showConvertModal && proposal && (
+        <ConvertToInvoiceModal
+          proposal={proposal}
+          onClose={() => setShowConvertModal(false)}
+          onConverted={() => {
+            setShowConvertModal(false);
+            loadProposal();
+          }}
+        />
+      )}
     </div>
   );
 }

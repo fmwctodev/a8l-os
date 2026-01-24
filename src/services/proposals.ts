@@ -66,6 +66,10 @@ export async function getProposals(
     query = query.ilike('title', `%${filters.search}%`);
   }
 
+  if (!filters.includeArchived) {
+    query = query.is('archived_at', null);
+  }
+
   const offset = (page - 1) * pageSize;
   query = query
     .order('updated_at', { ascending: false })
@@ -645,5 +649,129 @@ export async function recalculateAndUpdateProposalTotal(proposalId: string): Pro
     .single();
 
   if (error) throw error;
+  return data;
+}
+
+export async function duplicateProposal(proposalId: string, actorUserId: string): Promise<Proposal> {
+  const original = await getProposalById(proposalId);
+  if (!original) throw new Error('Proposal not found');
+
+  const { data: newProposal, error: proposalError } = await supabase
+    .from('proposals')
+    .insert({
+      org_id: original.org_id,
+      contact_id: original.contact_id,
+      opportunity_id: original.opportunity_id,
+      title: `Copy of ${original.title}`,
+      content: original.content,
+      summary: original.summary,
+      total_value: original.total_value,
+      currency: original.currency,
+      valid_until: null,
+      created_by: actorUserId,
+      assigned_user_id: original.assigned_user_id,
+      template_id: original.template_id,
+      ai_context: original.ai_context,
+      status: 'draft',
+    })
+    .select(PROPOSAL_SELECT)
+    .single();
+
+  if (proposalError) throw proposalError;
+
+  if (original.sections && original.sections.length > 0) {
+    const sectionsToInsert = original.sections.map(section => ({
+      org_id: original.org_id,
+      proposal_id: newProposal.id,
+      title: section.title,
+      content: section.content,
+      section_type: section.section_type,
+      sort_order: section.sort_order,
+      ai_generated: section.ai_generated,
+    }));
+
+    await supabase.from('proposal_sections').insert(sectionsToInsert);
+  }
+
+  if (original.line_items && original.line_items.length > 0) {
+    const lineItemsToInsert = original.line_items.map(item => ({
+      org_id: original.org_id,
+      proposal_id: newProposal.id,
+      product_id: item.product_id,
+      name: item.name,
+      description: item.description,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      discount_percent: item.discount_percent,
+      sort_order: item.sort_order,
+    }));
+
+    await supabase.from('proposal_line_items').insert(lineItemsToInsert);
+  }
+
+  if (original.meeting_contexts && original.meeting_contexts.length > 0) {
+    const meetingContextsToInsert = original.meeting_contexts.map(context => ({
+      org_id: original.org_id,
+      proposal_id: newProposal.id,
+      meeting_transcription_id: context.meeting_transcription_id,
+      included_in_generation: context.included_in_generation,
+    }));
+
+    await supabase.from('proposal_meeting_contexts').insert(meetingContextsToInsert);
+  }
+
+  await createProposalActivity(
+    newProposal.id,
+    newProposal.org_id,
+    'created',
+    `Proposal duplicated from ${original.title}`,
+    { original_proposal_id: proposalId },
+    actorUserId
+  );
+
+  return newProposal;
+}
+
+export async function archiveProposal(proposalId: string, actorUserId: string): Promise<Proposal> {
+  const { data, error } = await supabase
+    .from('proposals')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('id', proposalId)
+    .select(PROPOSAL_SELECT)
+    .single();
+
+  if (error) throw error;
+
+  await createProposalActivity(
+    data.id,
+    data.org_id,
+    'updated',
+    'Proposal archived',
+    {},
+    actorUserId
+  );
+
+  return data;
+}
+
+export async function unarchiveProposal(proposalId: string, actorUserId: string): Promise<Proposal> {
+  const { data, error } = await supabase
+    .from('proposals')
+    .update({ archived_at: null })
+    .eq('id', proposalId)
+    .select(PROPOSAL_SELECT)
+    .single();
+
+  if (error) throw error;
+
+  await createProposalActivity(
+    data.id,
+    data.org_id,
+    'updated',
+    'Proposal unarchived',
+    {},
+    actorUserId
+  );
+
   return data;
 }
