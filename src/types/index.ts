@@ -2962,6 +2962,47 @@ export interface AgentKnowledgeSourceFilters {
   search?: string;
 }
 
+export interface WebCrawlerSourceConfig {
+  url: string;
+  crawlType: 'exact' | 'domain' | 'sitemap';
+  depth?: number;
+  includePatterns?: string[];
+  excludePatterns?: string[];
+}
+
+export interface FAQSourceConfig {
+  faqs: Array<{ question: string; answer: string }>;
+}
+
+export interface TableSourceConfig {
+  fileName: string;
+  selectedColumns: string[];
+  rowCount: number;
+  columnMappings?: Record<string, string>;
+  previewData?: string[][];
+}
+
+export interface RichTextSourceConfig {
+  content: string;
+  plainText: string;
+}
+
+export interface FileUploadSourceConfig {
+  files: Array<{
+    name: string;
+    size: number;
+    path?: string;
+    contentPreview?: string;
+  }>;
+}
+
+export type KnowledgeSourceConfig =
+  | WebCrawlerSourceConfig
+  | FAQSourceConfig
+  | TableSourceConfig
+  | RichTextSourceConfig
+  | FileUploadSourceConfig;
+
 export interface AgentTemplate {
   id: string;
   org_id: string;

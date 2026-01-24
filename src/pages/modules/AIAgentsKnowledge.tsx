@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Database, Plus, Search, Filter, Loader2, Globe, FileQuestion, Table, FileText, Upload, Link as LinkIcon } from 'lucide-react';
+import { Database, Plus, Search, Filter, Loader2, Globe, FileQuestion, Table, FileText, Upload, Link as LinkIcon, MoreVertical, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import type { AgentKnowledgeSource } from '../../types';
-import { getKnowledgeSources } from '../../services/agentKnowledge';
+import { getKnowledgeSources, deleteKnowledgeSource, reEmbedKnowledgeSource } from '../../services/agentKnowledge';
+import { AddKnowledgeSourceModal } from '../../components/settings/ai-agents';
 
 const SOURCE_TYPE_CONFIG = {
   website: { icon: Globe, label: 'Website', color: 'blue' },
@@ -17,8 +18,48 @@ export function AIAgentsKnowledge() {
   const [sources, setSources] = useState<AgentKnowledgeSource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingSource, setEditingSource] = useState<AgentKnowledgeSource | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const canManage = hasPermission('ai_agents.manage');
+
+  const handleOpenModal = (source?: AgentKnowledgeSource) => {
+    setEditingSource(source || null);
+    setIsModalOpen(true);
+    setOpenMenuId(null);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingSource(null);
+  };
+
+  const handleSave = () => {
+    handleCloseModal();
+    loadSources();
+  };
+
+  const handleDelete = async (source: AgentKnowledgeSource) => {
+    if (!confirm(`Are you sure you want to delete "${source.source_name}"?`)) return;
+    try {
+      await deleteKnowledgeSource(source.id);
+      loadSources();
+    } catch (error) {
+      console.error('Failed to delete source:', error);
+    }
+    setOpenMenuId(null);
+  };
+
+  const handleReEmbed = async (source: AgentKnowledgeSource) => {
+    try {
+      await reEmbedKnowledgeSource(source.id);
+      loadSources();
+    } catch (error) {
+      console.error('Failed to re-embed source:', error);
+    }
+    setOpenMenuId(null);
+  };
 
   useEffect(() => {
     loadSources();
@@ -58,7 +99,10 @@ export function AIAgentsKnowledge() {
           </p>
         </div>
         {canManage && (
-          <button className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors">
+          <button
+            onClick={() => handleOpenModal()}
+            className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition-colors"
+          >
             <Plus className="w-4 h-4" />
             Add Knowledge Source
           </button>
@@ -93,7 +137,10 @@ export function AIAgentsKnowledge() {
               Add knowledge sources like websites, FAQs, or documents that your agents can reference.
             </p>
             {canManage && (
-              <button className="inline-flex items-center gap-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium transition-colors">
+              <button
+                onClick={() => handleOpenModal()}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium transition-colors"
+              >
                 <Plus className="w-4 h-4" />
                 Add Knowledge Source
               </button>
@@ -139,21 +186,62 @@ export function AIAgentsKnowledge() {
                     {source.agent ? (
                       <div className="flex items-center gap-1">
                         <LinkIcon className="w-4 h-4" />
-                        <span>Linked to agent</span>
+                        <span>{source.agent.name}</span>
                       </div>
                     ) : (
-                      <span>Not linked</span>
+                      <span>Shared</span>
                     )}
                     <span>{source.embedding_count} chunks</span>
                   </div>
-                  <button className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors">
-                    Configure
-                  </button>
+                  {canManage && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setOpenMenuId(openMenuId === source.id ? null : source.id)}
+                        className="p-1 text-slate-400 hover:text-white rounded transition-colors"
+                      >
+                        <MoreVertical className="w-5 h-5" />
+                      </button>
+
+                      {openMenuId === source.id && (
+                        <div className="absolute right-0 top-full mt-1 w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10">
+                          <button
+                            onClick={() => handleOpenModal(source)}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white rounded-t-lg"
+                          >
+                            <Pencil className="w-4 h-4" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleReEmbed(source)}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                            Re-embed
+                          </button>
+                          <button
+                            onClick={() => handleDelete(source)}
+                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-slate-700 hover:text-red-300 rounded-b-lg"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+
+      {isModalOpen && (
+        <AddKnowledgeSourceModal
+          knowledgeSource={editingSource}
+          onClose={handleCloseModal}
+          onSave={handleSave}
+        />
       )}
     </div>
   );
