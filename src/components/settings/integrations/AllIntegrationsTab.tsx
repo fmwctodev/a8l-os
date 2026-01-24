@@ -12,6 +12,7 @@ interface AllIntegrationsTabProps {
 
 const categoryOptions: { value: IntegrationCategory | ''; label: string }[] = [
   { value: '', label: 'All Categories' },
+  { value: 'Channels', label: 'Communication Channels' },
   { value: 'Advertising', label: 'Advertising' },
   { value: 'AI_LLM', label: 'AI & LLM' },
   { value: 'Calendars', label: 'Calendars' },
@@ -25,6 +26,8 @@ const categoryOptions: { value: IntegrationCategory | ''; label: string }[] = [
 
 function getIntegrationIcon(key: string): string {
   const icons: Record<string, string> = {
+    gmail: 'https://www.gstatic.com/images/branding/product/2x/gmail_2020q4_48dp.png',
+    webchat: 'https://www.gstatic.com/images/branding/product/2x/chat_2020q4_48dp.png',
     google_workspace: 'https://www.gstatic.com/images/branding/product/2x/drive_2020q4_48dp.png',
     google_calendar: 'https://www.gstatic.com/images/branding/product/2x/calendar_2020q4_48dp.png',
     twilio: 'https://www.twilio.com/assets/icons/twilio-icon-512.png',

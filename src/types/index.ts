@@ -3534,7 +3534,7 @@ export const CUSTOM_FIELD_TYPE_LABELS: Record<CustomFieldType, string> = {
   file: 'File Upload',
 };
 
-export type IntegrationCategory = 'Advertising' | 'CRM_Data' | 'Calendars' | 'Email' | 'Phone' | 'Payments' | 'Storage' | 'AI_LLM' | 'Other';
+export type IntegrationCategory = 'Channels' | 'Advertising' | 'CRM_Data' | 'Calendars' | 'Email' | 'Phone' | 'Payments' | 'Storage' | 'AI_LLM' | 'Other';
 export type IntegrationScope = 'global' | 'user';
 export type IntegrationConnectionType = 'oauth' | 'api_key' | 'webhook';
 export type IntegrationConnectionStatus = 'connected' | 'disconnected' | 'error';
@@ -3783,6 +3783,7 @@ export interface UpdateWebhookInput {
 }
 
 export const INTEGRATION_CATEGORY_LABELS: Record<IntegrationCategory, string> = {
+  Channels: 'Communication Channels',
   Advertising: 'Advertising',
   CRM_Data: 'CRM & Data',
   Calendars: 'Calendars',
