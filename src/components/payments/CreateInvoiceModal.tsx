@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { createInvoice } from '../../services/invoices';
 import { getProducts } from '../../services/products';
-import { getContacts } from '../../services/contacts';
+import { getContacts, createContact } from '../../services/contacts';
 import { getOpportunities } from '../../services/opportunities';
 import type { Contact, Product, Opportunity, CreateInvoiceLineItem, DiscountType } from '../../types';
-import { X, Loader2, FileText, Plus, Trash2, Search } from 'lucide-react';
+import { X, Loader2, FileText, Plus, Trash2, Search, User as UserIcon, ArrowLeft } from 'lucide-react';
 
 interface CreateInvoiceModalProps {
   onClose: () => void;
@@ -44,6 +44,14 @@ export function CreateInvoiceModal({
 
   const [contactSearch, setContactSearch] = useState('');
   const [showContactDropdown, setShowContactDropdown] = useState(false);
+  const [showNewContactForm, setShowNewContactForm] = useState(false);
+  const [creatingContact, setCreatingContact] = useState(false);
+  const [newContactData, setNewContactData] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+  });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -147,6 +155,55 @@ export function CreateInvoiceModal({
   const selectedContact = contacts.find((c) => c.id === selectedContactId);
   const contactOpportunities = opportunities.filter((o) => o.contact_id === selectedContactId);
 
+  const selectContact = (contact: Contact) => {
+    setSelectedContactId(contact.id);
+    setContactSearch('');
+    setShowContactDropdown(false);
+    setShowNewContactForm(false);
+  };
+
+  const openNewContactForm = () => {
+    setShowNewContactForm(true);
+    setShowContactDropdown(false);
+    setNewContactData({
+      first_name: contactSearch,
+      last_name: '',
+      email: '',
+      phone: '',
+    });
+  };
+
+  const cancelNewContactForm = () => {
+    setShowNewContactForm(false);
+    setNewContactData({ first_name: '', last_name: '', email: '', phone: '' });
+  };
+
+  const handleCreateContact = async () => {
+    if (!user || !newContactData.first_name.trim()) return;
+
+    setCreatingContact(true);
+    try {
+      const newContact = await createContact(
+        user.org_id,
+        {
+          department_id: user.department_id,
+          owner_id: user.id,
+          first_name: newContactData.first_name.trim(),
+          last_name: newContactData.last_name.trim() || undefined,
+          email: newContactData.email.trim() || null,
+          phone: newContactData.phone.trim() || null,
+        },
+        user
+      );
+      setContacts([newContact, ...contacts]);
+      selectContact(newContact);
+    } catch (err) {
+      console.error('Failed to create contact:', err);
+    } finally {
+      setCreatingContact(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !selectedContactId || lineItems.every((item) => !item.description)) return;
@@ -216,49 +273,182 @@ export function CreateInvoiceModal({
               <label className="block text-sm font-medium text-slate-300 mb-2">
                 Contact *
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={
-                    selectedContact
-                      ? selectedContact.company || `${selectedContact.first_name} ${selectedContact.last_name}`
-                      : contactSearch
-                  }
-                  onChange={(e) => {
-                    setContactSearch(e.target.value);
-                    setSelectedContactId('');
-                    setShowContactDropdown(true);
-                  }}
-                  onFocus={() => setShowContactDropdown(true)}
-                  placeholder="Search contacts..."
-                  className="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                />
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              </div>
-              {showContactDropdown && (
-                <div className="absolute z-10 w-full mt-1 max-h-48 overflow-y-auto rounded-lg bg-slate-800 border border-slate-700 shadow-xl">
-                  {filteredContacts.length === 0 ? (
-                    <div className="px-4 py-3 text-sm text-slate-400">No contacts found</div>
-                  ) : (
-                    filteredContacts.slice(0, 10).map((contact) => (
-                      <button
-                        key={contact.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedContactId(contact.id);
-                          setContactSearch('');
-                          setShowContactDropdown(false);
-                        }}
-                        className="w-full px-4 py-2 text-left hover:bg-slate-700 transition-colors"
-                      >
-                        <p className="text-white text-sm">
-                          {contact.company || `${contact.first_name} ${contact.last_name}`}
-                        </p>
-                        {contact.email && (
-                          <p className="text-slate-400 text-xs">{contact.email}</p>
-                        )}
-                      </button>
-                    ))
+              {selectedContact ? (
+                <div className="flex items-center justify-between p-3 bg-slate-800 border border-slate-700 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
+                      <UserIcon className="w-4 h-4 text-slate-400" />
+                    </div>
+                    <div>
+                      <div className="text-white text-sm">
+                        {selectedContact.company || `${selectedContact.first_name} ${selectedContact.last_name}`}
+                      </div>
+                      {selectedContact.email && (
+                        <div className="text-xs text-slate-400">{selectedContact.email}</div>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedContactId('');
+                      setSelectedOpportunityId('');
+                    }}
+                    className="text-sm text-cyan-400 hover:text-cyan-300"
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : showNewContactForm ? (
+                <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={cancelNewContactForm}
+                      className="p-1 hover:bg-slate-700 rounded"
+                    >
+                      <ArrowLeft className="w-4 h-4 text-slate-400" />
+                    </button>
+                    <span className="text-sm font-medium text-white">New Contact</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">First Name *</label>
+                      <input
+                        type="text"
+                        value={newContactData.first_name}
+                        onChange={(e) => setNewContactData((prev) => ({ ...prev, first_name: e.target.value }))}
+                        placeholder="First name"
+                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Last Name</label>
+                      <input
+                        type="text"
+                        value={newContactData.last_name}
+                        onChange={(e) => setNewContactData((prev) => ({ ...prev, last_name: e.target.value }))}
+                        placeholder="Last name"
+                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={newContactData.email}
+                      onChange={(e) => setNewContactData((prev) => ({ ...prev, email: e.target.value }))}
+                      placeholder="email@example.com"
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Phone</label>
+                    <input
+                      type="tel"
+                      value={newContactData.phone}
+                      onChange={(e) => setNewContactData((prev) => ({ ...prev, phone: e.target.value }))}
+                      placeholder="+1 (555) 000-0000"
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={cancelNewContactForm}
+                      className="flex-1 px-3 py-2 bg-slate-700 text-slate-300 rounded text-sm hover:bg-slate-600 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCreateContact}
+                      disabled={creatingContact || !newContactData.first_name.trim()}
+                      className="flex-1 px-3 py-2 bg-cyan-600 text-white rounded text-sm hover:bg-cyan-700 disabled:opacity-50 transition-colors"
+                    >
+                      {creatingContact ? 'Creating...' : 'Create & Select'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={contactSearch}
+                    onChange={(e) => {
+                      setContactSearch(e.target.value);
+                      setShowContactDropdown(true);
+                    }}
+                    onFocus={() => setShowContactDropdown(true)}
+                    placeholder="Search contacts..."
+                    className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                  {showContactDropdown && (
+                    <div className="absolute z-10 w-full mt-1 max-h-60 overflow-y-auto rounded-lg bg-slate-800 border border-slate-700 shadow-xl">
+                      {filteredContacts.length === 0 && !contactSearch ? (
+                        <div className="px-4 py-3 text-sm text-slate-400">Type to search contacts</div>
+                      ) : filteredContacts.length === 0 ? (
+                        <>
+                          <div className="px-4 py-3 text-sm text-slate-400">No contacts found</div>
+                          <button
+                            type="button"
+                            onClick={openNewContactForm}
+                            className="w-full px-4 py-3 text-left hover:bg-slate-700 flex items-center gap-3 border-t border-slate-700 transition-colors"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-cyan-600/20 flex items-center justify-center">
+                              <Plus className="w-4 h-4 text-cyan-400" />
+                            </div>
+                            <div>
+                              <div className="text-cyan-400 font-medium text-sm">Create new contact</div>
+                              {contactSearch && (
+                                <div className="text-xs text-slate-400">Add "{contactSearch}" as a new contact</div>
+                              )}
+                            </div>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {filteredContacts.slice(0, 10).map((contact) => (
+                            <button
+                              key={contact.id}
+                              type="button"
+                              onClick={() => selectContact(contact)}
+                              className="w-full px-4 py-2 text-left hover:bg-slate-700 flex items-center gap-3 transition-colors"
+                            >
+                              <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
+                                <UserIcon className="w-4 h-4 text-slate-400" />
+                              </div>
+                              <div>
+                                <p className="text-white text-sm">
+                                  {contact.company || `${contact.first_name} ${contact.last_name}`}
+                                </p>
+                                {contact.email && (
+                                  <p className="text-slate-400 text-xs">{contact.email}</p>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={openNewContactForm}
+                            className="w-full px-4 py-3 text-left hover:bg-slate-700 flex items-center gap-3 border-t border-slate-700 transition-colors"
+                          >
+                            <div className="w-8 h-8 rounded-full bg-cyan-600/20 flex items-center justify-center">
+                              <Plus className="w-4 h-4 text-cyan-400" />
+                            </div>
+                            <div>
+                              <div className="text-cyan-400 font-medium text-sm">Create new contact</div>
+                              {contactSearch && (
+                                <div className="text-xs text-slate-400">Add "{contactSearch}" as a new contact</div>
+                              )}
+                            </div>
+                          </button>
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
