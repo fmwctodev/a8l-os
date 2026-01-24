@@ -28,6 +28,9 @@ export async function getCollections(
   if (filters?.applyToAllAgents !== undefined) {
     query = query.eq('apply_to_all_agents', filters.applyToAllAgents);
   }
+  if (filters?.sourceType) {
+    query = query.eq('source_type', filters.sourceType);
+  }
   if (filters?.search) {
     query = query.or(`name.ilike.%${filters.search}%,description.ilike.%${filters.search}%`);
   }
@@ -93,6 +96,8 @@ export async function createCollection(
       description: input.description || null,
       status: input.status || 'active',
       apply_to_all_agents: input.apply_to_all_agents ?? false,
+      source_type: input.source_type || 'rich_text',
+      source_config: input.source_config || {},
       created_by: userId,
     })
     .select()
@@ -100,10 +105,11 @@ export async function createCollection(
 
   if (error) throw error;
 
-  if (input.body_text || input.drive_file_ids) {
+  if (input.body_text || input.drive_file_ids || input.source_config) {
     await createVersion(data.id, {
       body_text: input.body_text,
       drive_file_ids: input.drive_file_ids,
+      source_config: input.source_config,
     }, userId);
   }
 
@@ -127,6 +133,12 @@ export async function updateCollection(
   }
   if (input.apply_to_all_agents !== undefined) {
     updates.apply_to_all_agents = input.apply_to_all_agents;
+  }
+  if (input.source_type !== undefined) {
+    updates.source_type = input.source_type;
+  }
+  if (input.source_config !== undefined) {
+    updates.source_config = input.source_config;
   }
 
   const { error } = await supabase
@@ -214,6 +226,7 @@ export async function createVersion(
       version_number: nextVersion || 1,
       body_text: input.body_text || null,
       drive_file_ids: input.drive_file_ids || null,
+      source_config: input.source_config || null,
       created_by: userId,
     })
     .select()
@@ -221,7 +234,8 @@ export async function createVersion(
 
   if (error) throw error;
 
-  if (input.body_text) {
+  const hasContent = input.body_text || input.source_config;
+  if (hasContent) {
     await generateEmbeddings(collectionId, data.id);
   }
 

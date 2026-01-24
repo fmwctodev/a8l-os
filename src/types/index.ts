@@ -2677,6 +2677,8 @@ export interface KnowledgeCollection {
   description: string | null;
   status: KnowledgeStatus;
   apply_to_all_agents: boolean;
+  source_type: AgentKnowledgeSourceType;
+  source_config: KnowledgeSourceConfig | Record<string, unknown>;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -2691,6 +2693,7 @@ export interface KnowledgeVersion {
   version_number: number;
   body_text: string | null;
   drive_file_ids: string[] | null;
+  source_config: KnowledgeSourceConfig | Record<string, unknown> | null;
   created_by: string | null;
   created_at: string;
   created_by_user?: User | null;
@@ -2795,6 +2798,7 @@ export interface LLMModelFilters {
 export interface KnowledgeCollectionFilters {
   status?: KnowledgeStatus;
   applyToAllAgents?: boolean;
+  sourceType?: AgentKnowledgeSourceType;
   search?: string;
 }
 
@@ -2840,6 +2844,8 @@ export interface CreateKnowledgeCollectionInput {
   description?: string;
   status?: KnowledgeStatus;
   apply_to_all_agents?: boolean;
+  source_type?: AgentKnowledgeSourceType;
+  source_config?: KnowledgeSourceConfig | Record<string, unknown>;
   body_text?: string;
   drive_file_ids?: string[];
 }
@@ -2849,11 +2855,14 @@ export interface UpdateKnowledgeCollectionInput {
   description?: string;
   status?: KnowledgeStatus;
   apply_to_all_agents?: boolean;
+  source_type?: AgentKnowledgeSourceType;
+  source_config?: KnowledgeSourceConfig | Record<string, unknown>;
 }
 
 export interface CreateKnowledgeVersionInput {
   body_text?: string;
   drive_file_ids?: string[];
+  source_config?: KnowledgeSourceConfig | Record<string, unknown>;
 }
 
 export interface CreatePromptTemplateInput {
