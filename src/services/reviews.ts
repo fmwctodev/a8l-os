@@ -189,3 +189,68 @@ export async function unlinkReview(reviewId: string, userId: string): Promise<vo
 
   if (error) throw error;
 }
+
+export async function respondToReview(
+  reviewId: string,
+  response: string,
+  userId: string,
+  source: 'manual' | 'ai' = 'manual'
+): Promise<Review> {
+  const { data, error } = await supabase
+    .from('reviews')
+    .update({
+      response,
+      responded_at: new Date().toISOString(),
+      responded_by: userId,
+      response_source: source,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', reviewId)
+    .select(`
+      *,
+      contact:contacts(id, first_name, last_name, email, phone),
+      review_request:review_requests(id, public_slug, channel),
+      responded_by_user:users!responded_by(id, name, email)
+    `)
+    .single();
+
+  if (error) throw error;
+  return data as Review;
+}
+
+export async function markReviewAsSpam(reviewId: string, isSpam: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('reviews')
+    .update({
+      is_spam: isSpam,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', reviewId);
+
+  if (error) throw error;
+}
+
+export async function getSentimentStats(
+  orgId: string,
+  startDate?: string,
+  endDate?: string
+): Promise<{ positive: number; neutral: number; negative: number }> {
+  let query = supabase
+    .from('reviews')
+    .select('rating')
+    .eq('organization_id', orgId)
+    .eq('is_spam', false);
+
+  if (startDate) query = query.gte('received_at', startDate);
+  if (endDate) query = query.lte('received_at', endDate);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const reviews = data || [];
+  return {
+    positive: reviews.filter(r => r.rating >= 4).length,
+    neutral: reviews.filter(r => r.rating === 3).length,
+    negative: reviews.filter(r => r.rating <= 2).length,
+  };
+}

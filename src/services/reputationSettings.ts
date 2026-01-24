@@ -20,9 +20,13 @@ export async function getSettings(orgId: string): Promise<ReputationSettings> {
       default_email_subject: 'How was your experience with {company_name}?',
       google_review_url: null,
       facebook_review_url: null,
+      yelp_review_url: null,
       brand_name: null,
       brand_logo_url: null,
       brand_primary_color: '#3B82F6',
+      review_goal: 20,
+      ai_replies_enabled: false,
+      spam_keywords: [],
     };
 
     const { data: created, error: createError } = await supabase

@@ -41,6 +41,7 @@ export async function getDashboardStats(
   const reviewsByProvider: Record<ReviewProvider, number> = {
     google: 0,
     facebook: 0,
+    yelp: 0,
     internal: 0,
   };
 
@@ -110,6 +111,7 @@ export async function getProviderBreakdown(orgId: string): Promise<Record<Review
   const breakdown: Record<ReviewProvider, number> = {
     google: 0,
     facebook: 0,
+    yelp: 0,
     internal: 0,
   };
 

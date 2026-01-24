@@ -92,3 +92,21 @@ export async function updateProviderConfig(
 
   if (error) throw error;
 }
+
+export async function updateProvider(
+  id: string,
+  updates: Partial<ReviewProviderConfig>
+): Promise<ReviewProviderConfig> {
+  const { data, error } = await supabase
+    .from('review_providers')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as ReviewProviderConfig;
+}

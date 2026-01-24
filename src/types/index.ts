@@ -2280,9 +2280,11 @@ export interface CreateRecurringProfileInput {
   auto_send?: boolean;
 }
 
-export type ReviewProvider = 'google' | 'facebook' | 'internal';
+export type ReviewProvider = 'google' | 'facebook' | 'yelp' | 'internal';
 export type ReviewProviderStatus = 'connected' | 'disconnected';
-export type ReviewRequestStatus = 'pending' | 'sent' | 'clicked' | 'completed';
+export type ReviewRequestStatus = 'pending' | 'sent' | 'failed' | 'clicked' | 'completed';
+export type ReviewRequestSource = 'manual' | 'quickbooks' | 'workflow';
+export type ReviewResponseSource = 'manual' | 'ai';
 
 export interface ReviewProviderConfig {
   id: string;
@@ -2303,7 +2305,7 @@ export interface ReviewRequest {
   organization_id: string;
   contact_id: string;
   public_slug: string;
-  provider_preference: 'smart' | 'google' | 'facebook' | 'internal';
+  provider_preference: 'smart' | 'google' | 'facebook' | 'yelp' | 'internal';
   channel: 'sms' | 'email';
   message_template: string;
   review_link_url: string;
@@ -2312,6 +2314,9 @@ export interface ReviewRequest {
   completed_at: string | null;
   created_by: string | null;
   created_at: string;
+  status: ReviewRequestStatus;
+  sent_by_source: ReviewRequestSource;
+  retry_count: number;
   contact?: Contact;
   created_by_user?: User | null;
   rating?: number;
@@ -2332,8 +2337,15 @@ export interface Review {
   received_at: string;
   created_at: string;
   updated_at: string;
+  response: string | null;
+  responded_at: string | null;
+  responded_by: string | null;
+  response_source: ReviewResponseSource | null;
+  external_response_id: string | null;
+  is_spam: boolean;
   contact?: Contact | null;
   review_request?: ReviewRequest | null;
+  responded_by_user?: User | null;
 }
 
 export interface ReputationSettings {
@@ -2345,9 +2357,28 @@ export interface ReputationSettings {
   default_email_subject: string;
   google_review_url: string | null;
   facebook_review_url: string | null;
+  yelp_review_url: string | null;
   brand_name: string | null;
   brand_logo_url: string | null;
   brand_primary_color: string;
+  review_goal: number;
+  ai_replies_enabled: boolean;
+  spam_keywords: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReputationCompetitor {
+  id: string;
+  organization_id: string;
+  business_name: string;
+  google_place_id: string | null;
+  facebook_page_id: string | null;
+  yelp_business_id: string | null;
+  google_url: string | null;
+  facebook_url: string | null;
+  yelp_url: string | null;
+  last_sync_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -2385,7 +2416,8 @@ export interface CreateReviewRequestInput {
   contact_id: string;
   channel: 'sms' | 'email';
   message_template: string;
-  provider_preference?: 'smart' | 'google' | 'facebook' | 'internal';
+  provider_preference?: 'smart' | 'google' | 'facebook' | 'yelp' | 'internal';
+  sent_by_source?: ReviewRequestSource;
 }
 
 export interface CreateManualReviewInput {
