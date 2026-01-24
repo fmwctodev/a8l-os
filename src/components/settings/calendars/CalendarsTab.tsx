@@ -15,7 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
-import { getCalendars } from '../../../services/calendars';
+import { getCalendars, enableCalendar, disableCalendar } from '../../../services/calendars';
 import { getDepartments } from '../../../services/departments';
 import { getUsers } from '../../../services/users';
 import type { Calendar as CalendarType, Department, User as UserType, CalendarFilters } from '../../../types';
@@ -36,6 +36,10 @@ export function CalendarsTab() {
   const [editingCalendar, setEditingCalendar] = useState<CalendarType | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletingCalendar, setDeletingCalendar] = useState<CalendarType | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const userRole = user?.role?.name;
+  const canToggleStatus = userRole === 'SuperAdmin' || userRole === 'Admin';
 
   useEffect(() => {
     loadData();
@@ -98,6 +102,27 @@ export function CalendarsTab() {
     const bookingUrl = `${window.location.origin}/book/${calendar.slug}`;
     navigator.clipboard.writeText(bookingUrl);
     setActiveMenu(null);
+  };
+
+  const handleToggleStatus = async (calendar: CalendarType) => {
+    if (!user || !canToggleStatus) return;
+
+    const isActive = (calendar as CalendarType & { active?: boolean }).active !== false;
+    setTogglingId(calendar.id);
+    setActiveMenu(null);
+
+    try {
+      if (isActive) {
+        await disableCalendar(calendar.id, user);
+      } else {
+        await enableCalendar(calendar.id, user);
+      }
+      await loadData();
+    } catch (error) {
+      console.error('Failed to toggle calendar status:', error);
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   const handleDrawerClose = () => {
@@ -315,12 +340,18 @@ export function CalendarsTab() {
                                   <Copy className="w-4 h-4" />
                                   Copy Booking Link
                                 </button>
-                                {canManage && (
+                                {canToggleStatus && (
                                   <button
-                                    onClick={() => setActiveMenu(null)}
-                                    className="w-full px-4 py-2 text-left text-slate-300 hover:bg-slate-700 flex items-center gap-2"
+                                    onClick={() => handleToggleStatus(calendar)}
+                                    disabled={togglingId === calendar.id}
+                                    className="w-full px-4 py-2 text-left text-slate-300 hover:bg-slate-700 flex items-center gap-2 disabled:opacity-50"
                                   >
-                                    {(calendar as CalendarType & { active?: boolean }).active !== false ? (
+                                    {togglingId === calendar.id ? (
+                                      <>
+                                        <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                                        Updating...
+                                      </>
+                                    ) : (calendar as CalendarType & { active?: boolean }).active !== false ? (
                                       <>
                                         <ToggleLeft className="w-4 h-4" />
                                         Disable
