@@ -371,8 +371,8 @@ export function Contacts() {
               </button>
               {showColumnPicker && (
                 <>
-                  <div className="fixed inset-0 z-10" onClick={() => setShowColumnPicker(false)} />
-                  <div className="absolute right-0 mt-2 w-48 bg-slate-800 rounded-lg border border-slate-700 shadow-xl z-20 py-2">
+                  <div className="fixed inset-0 z-40" onClick={() => setShowColumnPicker(false)} />
+                  <div className="absolute right-0 mt-2 w-48 bg-slate-800 rounded-lg border border-slate-700 shadow-xl z-50 py-2">
                     <p className="px-3 py-1 text-xs font-medium text-slate-400 uppercase">Columns</p>
                     {columns.map((col) => (
                       <label
@@ -463,7 +463,7 @@ export function Contacts() {
 
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead>
+            <thead className="bg-slate-900 sticky top-0 z-10">
               <tr className="border-b border-slate-800">
                 <th className="w-10 px-4 py-3">
                   <input

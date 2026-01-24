@@ -218,7 +218,7 @@ export function PromptsSettingsTab() {
                       </button>
 
                       {openMenuId === template.id && (
-                        <div className="absolute right-0 top-full mt-1 w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10">
+                        <div className="absolute right-0 top-full mt-1 w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
                           <button
                             onClick={() => handleEdit(template)}
                             className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
@@ -433,7 +433,7 @@ function PromptEditorDrawer({ template, onClose, onSave }: PromptEditorDrawerPro
                 </button>
 
                 {showVariableHelper && (
-                  <div className="absolute right-0 top-full mt-1 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10 p-2 max-h-64 overflow-y-auto">
+                  <div className="absolute right-0 top-full mt-1 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 p-2 max-h-64 overflow-y-auto">
                     {COMMON_PROMPT_VARIABLES.map((v) => (
                       <button
                         key={v.key}

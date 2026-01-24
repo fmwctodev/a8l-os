@@ -268,7 +268,7 @@ export function Proposals() {
           </div>
         ) : (
           <table className="w-full">
-            <thead className="bg-slate-800/50 sticky top-0">
+            <thead className="bg-slate-800/95 sticky top-0 z-10 backdrop-blur-sm">
               <tr>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Proposal
@@ -356,7 +356,7 @@ export function Proposals() {
                         </button>
 
                         {actionMenuId === proposal.id && (
-                          <div className="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10">
+                          <div className="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
                             <button
                               onClick={() => navigate(`/proposals/${proposal.id}`)}
                               className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors"

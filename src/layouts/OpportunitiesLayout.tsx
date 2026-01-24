@@ -19,8 +19,8 @@ export function OpportunitiesLayout() {
   return (
     <div className="h-full flex flex-col">
       <div className="flex-none border-b border-slate-700 bg-slate-800/50">
-        <div className="px-6 pt-4">
-          <h1 className="text-xl font-semibold text-white mb-4">Opportunities</h1>
+        <div className="px-6 pt-2">
+          <h1 className="text-xl font-semibold text-white mb-2">Opportunities</h1>
           <nav className="flex gap-1">
             {tabs.map((tab) => {
               const Icon = tab.icon;

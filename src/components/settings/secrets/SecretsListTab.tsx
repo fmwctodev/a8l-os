@@ -405,10 +405,10 @@ export function SecretsListTab({ onSuccess }: Props) {
                       {actionMenu === secret.id && (
                         <>
                           <div
-                            className="fixed inset-0 z-10"
+                            className="fixed inset-0 z-40"
                             onClick={() => setActionMenu(null)}
                           />
-                          <div className="absolute right-0 z-20 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1">
+                          <div className="absolute right-0 z-50 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1">
                             {canEdit && (
                               <button
                                 onClick={() => {

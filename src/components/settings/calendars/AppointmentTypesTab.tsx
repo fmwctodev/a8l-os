@@ -319,10 +319,10 @@ export function AppointmentTypesTab() {
                           {activeMenu === type.id && (
                             <>
                               <div
-                                className="fixed inset-0 z-10"
+                                className="fixed inset-0 z-40"
                                 onClick={() => setActiveMenu(null)}
                               />
-                              <div className="absolute right-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-20 py-1">
+                              <div className="absolute right-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 py-1">
                                 <button
                                   onClick={() => handleEditType(type)}
                                   className="w-full px-4 py-2 text-left text-slate-300 hover:bg-slate-700 flex items-center gap-2"

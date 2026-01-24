@@ -162,10 +162,10 @@ export function FieldGroupsPanel({
             {fieldMenuOpen === field.id && (
               <>
                 <div
-                  className="fixed inset-0 z-10"
+                  className="fixed inset-0 z-40"
                   onClick={() => setFieldMenuOpen(null)}
                 />
-                <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20">
+                <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
                   <button
                     onClick={() => {
                       onEditField(field);
@@ -249,10 +249,10 @@ export function FieldGroupsPanel({
               {groupMenuOpen === group.id && (
                 <>
                   <div
-                    className="fixed inset-0 z-10"
+                    className="fixed inset-0 z-40"
                     onClick={() => setGroupMenuOpen(null)}
                   />
-                  <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20">
+                  <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50">
                     <button
                       onClick={() => {
                         onEditGroup(group);

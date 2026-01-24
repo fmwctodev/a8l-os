@@ -123,10 +123,10 @@ export function ConversationHeader({
           {showStatusMenu && (
             <>
               <div
-                className="fixed inset-0 z-10"
+                className="fixed inset-0 z-40"
                 onClick={() => setShowStatusMenu(false)}
               />
-              <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg z-20 min-w-[140px]">
+              <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg z-50 min-w-[140px]">
                 {STATUS_OPTIONS.map((status) => (
                   <button
                     key={status.value}
@@ -176,10 +176,10 @@ export function ConversationHeader({
           {showAssignMenu && (
             <>
               <div
-                className="fixed inset-0 z-10"
+                className="fixed inset-0 z-40"
                 onClick={() => setShowAssignMenu(false)}
               />
-              <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg z-20 min-w-[200px] max-h-[300px] overflow-y-auto">
+              <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg z-50 min-w-[200px] max-h-[300px] overflow-y-auto">
                 <button
                   onClick={() => handleAssign(null)}
                   className="w-full flex items-center gap-2 px-4 py-2 text-left hover:bg-slate-700 rounded-t-lg"

@@ -212,7 +212,7 @@ export function EditStaffModal({
                   <MoreVertical className="w-5 h-5 text-slate-400" />
                 </button>
                 {showActions && (
-                  <div className="absolute right-0 top-full mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-20">
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
                     {member.status === 'invited' && (
                       <button
                         onClick={handleResendInvite}

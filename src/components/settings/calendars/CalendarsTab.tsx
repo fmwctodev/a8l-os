@@ -295,10 +295,10 @@ export function CalendarsTab() {
                           {activeMenu === calendar.id && (
                             <>
                               <div
-                                className="fixed inset-0 z-10"
+                                className="fixed inset-0 z-40"
                                 onClick={() => setActiveMenu(null)}
                               />
-                              <div className="absolute right-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-20 py-1">
+                              <div className="absolute right-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 py-1">
                                 {canManage && (
                                   <button
                                     onClick={() => handleEditCalendar(calendar)}

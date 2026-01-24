@@ -32,13 +32,13 @@ export function SettingsLayout() {
           className={`
             ${mobileNavOpen ? 'flex' : 'hidden'} lg:flex
             flex-col w-full lg:w-64 border-r border-slate-800 bg-slate-900/50
-            absolute lg:relative z-20 h-[calc(100vh-88px)] lg:h-auto
+            absolute lg:relative z-40 h-[calc(100vh-88px)] lg:h-auto
           `}
         >
           <SettingsNav onNavigate={() => setMobileNavOpen(false)} />
         </aside>
 
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto isolate">
           <div className="p-6">
             <Outlet />
           </div>

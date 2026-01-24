@@ -347,7 +347,7 @@ export function Payments() {
           {activeTab === 'invoices' && (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead>
+                <thead className="bg-slate-900 sticky top-0 z-10">
                   <tr className="border-b border-slate-800">
                     <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Invoice</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Contact</th>
@@ -424,7 +424,7 @@ export function Payments() {
                                 <MoreVertical className="w-4 h-4" />
                               </button>
                               {actionMenuId === invoice.id && (
-                                <div className="absolute right-0 top-full mt-1 w-48 rounded-lg bg-slate-800 border border-slate-700 shadow-xl z-10">
+                                <div className="absolute right-0 top-full mt-1 w-48 rounded-lg bg-slate-800 border border-slate-700 shadow-xl z-50">
                                   <button
                                     onClick={() => {
                                       navigate(`/payments/invoices/${invoice.id}`);
@@ -469,7 +469,7 @@ export function Payments() {
           {activeTab === 'products' && (
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead>
+                <thead className="bg-slate-900 sticky top-0 z-10">
                   <tr className="border-b border-slate-800">
                     <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Product</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Description</th>

@@ -168,7 +168,7 @@ export function ModelsTab() {
                         <MoreVertical className="h-5 w-5 text-gray-400" />
                       </button>
                       {actionMenuId === model.id && (
-                        <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
+                        <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
                           <div className="py-1">
                             <button
                               onClick={() => {

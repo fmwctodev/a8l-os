@@ -203,7 +203,7 @@ export function AIAgentsKnowledge() {
                       </button>
 
                       {openMenuId === source.id && (
-                        <div className="absolute right-0 top-full mt-1 w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10">
+                        <div className="absolute right-0 top-full mt-1 w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
                           <button
                             onClick={() => handleOpenModal(source)}
                             className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white rounded-t-lg"

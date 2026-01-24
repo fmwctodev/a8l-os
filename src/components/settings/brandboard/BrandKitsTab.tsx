@@ -226,7 +226,7 @@ export function BrandKitsTab({ onSuccess }: BrandKitsTabProps) {
                       <MoreVertical className="w-4 h-4" />
                     </button>
                     {menuOpenId === kit.id && (
-                      <div className="absolute right-0 top-8 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                      <div className="absolute right-0 top-8 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                         {canActivate && !kit.active && (
                           <button
                             onClick={() => handleActivate(kit)}

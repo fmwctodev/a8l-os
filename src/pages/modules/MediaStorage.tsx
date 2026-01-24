@@ -288,7 +288,7 @@ export function MediaStorage() {
                 <Filter className="w-5 h-5" />
               </button>
               {showFilters && (
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-10">
+                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
                   <div className="px-3 py-2 border-b border-gray-100">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-medium text-gray-500 uppercase">

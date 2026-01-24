@@ -154,7 +154,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className={`fixed left-0 top-0 h-screen ${sidebarWidth} bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-200`}
+      className={`fixed left-0 top-0 h-screen ${sidebarWidth} bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-200 z-40`}
     >
       <div className={`p-4 border-b border-slate-800 ${!isExpanded ? 'px-2' : ''}`}>
         <div className={`flex items-center ${isExpanded ? 'gap-3' : 'justify-center'}`}>

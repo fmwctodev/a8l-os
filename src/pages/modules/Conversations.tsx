@@ -92,7 +92,7 @@ export function Conversations() {
   ).length;
 
   return (
-    <div className="h-[calc(100vh-64px)] flex bg-slate-900">
+    <div className="h-[calc(100vh-64px)] flex bg-slate-900 relative isolate">
       <div className="w-80 border-r border-slate-700 flex flex-col bg-slate-800">
         <div className="p-4 border-b border-slate-700">
           <div className="flex items-center justify-between mb-3">

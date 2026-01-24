@@ -344,7 +344,7 @@ export default function VoiceRoutingTab() {
                         <MoreVertical className="w-5 h-5 text-gray-400" />
                       </button>
                       {openMenu === group.id && (
-                        <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                        <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                           <button
                             onClick={() => {
                               setOpenMenu(null);

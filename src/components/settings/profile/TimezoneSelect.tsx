@@ -57,7 +57,7 @@ export function TimezoneSelect({ value, onChange }: TimezoneSelectProps) {
       </button>
 
       {isOpen && (
-        <div className="absolute z-10 mt-2 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-64 overflow-hidden">
+        <div className="absolute z-50 mt-2 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-64 overflow-hidden">
           <div className="p-2 border-b border-slate-700">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />

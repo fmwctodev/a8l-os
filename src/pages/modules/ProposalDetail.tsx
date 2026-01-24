@@ -355,7 +355,7 @@ export function ProposalDetail() {
                 <MoreVertical className="w-5 h-5 text-slate-400" />
               </button>
               {showActionMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10">
+                <div className="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
                   {canEdit && (
                     <button
                       onClick={handleDuplicateProposal}

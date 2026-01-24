@@ -515,8 +515,8 @@ export function OpportunitiesListPage() {
       <div className="flex-1 overflow-auto p-4">
         <div className="bg-slate-800 rounded-lg overflow-hidden">
           <table className="w-full">
-            <thead>
-              <tr className="bg-slate-700/50">
+            <thead className="bg-slate-700/95 sticky top-0 z-10 backdrop-blur-sm">
+              <tr>
                 <th className="w-12 px-4 py-3">
                   <input
                     type="checkbox"
