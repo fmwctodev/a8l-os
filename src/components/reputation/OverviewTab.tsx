@@ -30,17 +30,17 @@ export function OverviewTab({ onRequestReview }: OverviewTabProps) {
   const [subTab, setSubTab] = useState<SubTab>('my_stats');
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('last_6_months');
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<{
-    avgRating: number;
-    totalReviews: number;
-    ratingBreakdown: Record<number, number>;
-    reviewsByProvider: Record<string, number>;
-    invitesSent: number;
-    reviewsReceived: number;
-    previousReviewsReceived: number;
-    positive: number;
-    negative: number;
-  } | null>(null);
+  const [stats, setStats] = useState({
+    avgRating: 0,
+    totalReviews: 0,
+    ratingBreakdown: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } as Record<number, number>,
+    reviewsByProvider: { google: 0, facebook: 0, yelp: 0, internal: 0 } as Record<string, number>,
+    invitesSent: 0,
+    reviewsReceived: 0,
+    previousReviewsReceived: 0,
+    positive: 0,
+    negative: 0,
+  });
   const [recentRequests, setRecentRequests] = useState<ReviewRequest[]>([]);
   const [recentReviews, setRecentReviews] = useState<Review[]>([]);
   const [settings, setSettings] = useState<ReputationSettings | null>(null);
@@ -85,6 +85,17 @@ export function OverviewTab({ onRequestReview }: OverviewTabProps) {
       setSettings(settingsData);
     } catch (error) {
       console.error('Failed to load overview data:', error);
+      setStats({
+        avgRating: 0,
+        totalReviews: 0,
+        ratingBreakdown: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+        reviewsByProvider: { google: 0, facebook: 0, yelp: 0, internal: 0 },
+        invitesSent: 0,
+        reviewsReceived: 0,
+        previousReviewsReceived: 0,
+        positive: 0,
+        negative: 0,
+      });
     } finally {
       setLoading(false);
     }
@@ -169,7 +180,7 @@ export function OverviewTab({ onRequestReview }: OverviewTabProps) {
         </div>
       )}
 
-      {subTab === 'my_stats' && stats && (
+      {subTab === 'my_stats' && (
         <>
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex gap-8">
