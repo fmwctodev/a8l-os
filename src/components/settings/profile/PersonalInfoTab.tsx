@@ -43,15 +43,11 @@ export function PersonalInfoTab() {
 
     try {
       const fullName = `${formData.firstName} ${formData.lastName}`.trim();
-      await updateUserProfile(
-        user.id,
-        {
-          name: fullName,
-          phone: formData.phone,
-          timezone: formData.timezone,
-        },
-        user
-      );
+      await updateUserProfile(user.id, {
+        name: fullName,
+        phone: formData.phone,
+        timezone: formData.timezone,
+      });
       await refreshUser();
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -67,7 +63,7 @@ export function PersonalInfoTab() {
     if (!user) return;
 
     try {
-      await updateUserProfile(user.id, { profile_photo: url }, user);
+      await updateUserProfile(user.id, { profile_photo: url });
       await refreshUser();
     } catch (err) {
       console.error('Failed to update profile photo:', err);

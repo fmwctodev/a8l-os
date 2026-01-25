@@ -49,15 +49,13 @@ export async function updateUserProfile(
     title: string;
     email_signature: string;
     profile_photo: string;
-  }>,
-  user: User
+  }>
 ): Promise<void> {
   const { error } = await supabase
     .from('users')
     .update({
       ...updates,
       updated_at: new Date().toISOString(),
-      updated_by: user.id,
     })
     .eq('id', userId);
 
