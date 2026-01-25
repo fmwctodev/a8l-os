@@ -21,7 +21,6 @@
     - Google Workspace (Storage) - OAuth
     - Google Calendar (Calendars) - OAuth, user-scoped
     - QuickBooks Online (Payments) - OAuth
-    - Stripe (Payments) - API Key
     - OpenAI (AI_LLM) - API Key
     - Anthropic (AI_LLM) - API Key
     - ElevenLabs (AI_LLM) - API Key
@@ -145,20 +144,6 @@ BEGIN
       'https://developer.intuit.com/app/developer/qbo/docs',
       NULL
     ),
-    -- Stripe (Payments)
-    (
-      target_org_id,
-      'stripe',
-      'Stripe',
-      'Payment processing for subscriptions, invoices, and online payments.',
-      'Payments',
-      'global',
-      'api_key',
-      NULL,
-      '{"fields": [{"name": "secret_key", "label": "Secret Key", "required": true, "secret": true}, {"name": "publishable_key", "label": "Publishable Key", "required": true}]}'::jsonb,
-      'https://stripe.com/docs',
-      NULL
-    ),
     -- OpenAI (AI_LLM)
     (
       target_org_id,
@@ -279,7 +264,6 @@ BEGIN
     (target_org_id, 'calendars', 'google_calendar', false, 'Calendar sync and availability'),
     (target_org_id, 'media_storage', 'google_workspace', false, 'Google Drive file storage'),
     (target_org_id, 'payments', 'quickbooks_online', false, 'QuickBooks invoice sync'),
-    (target_org_id, 'payments', 'stripe', false, 'Payment processing'),
     (target_org_id, 'automation', 'zapier', false, 'Third-party app automation'),
     (target_org_id, 'automation', 'slack', false, 'Slack notifications'),
     (target_org_id, 'marketing', 'meta_ads', false, 'Facebook/Instagram ad management'),

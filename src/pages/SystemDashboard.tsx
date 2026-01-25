@@ -184,7 +184,7 @@ export function SystemDashboard() {
               title="Payments"
               icon={CreditCard}
               status={errors.some(e => e.service === 'Payments' && !e.acknowledged) ? 'degraded' : 'connected'}
-              description="Stripe and QuickBooks Online"
+              description="QuickBooks Online"
               onClick={() => navigate('/settings/integrations')}
               isLoading={loading.health}
             />

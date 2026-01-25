@@ -183,18 +183,6 @@ CROSS JOIN (
       NULL,
       'https://api.slack.com/docs',
       NULL
-    ),
-    (
-      'stripe',
-      'Stripe',
-      'Payment processing for subscriptions, invoices, and online payments.',
-      'Payments',
-      'global',
-      'api_key',
-      NULL,
-      '{"fields": [{"name": "secret_key", "label": "Secret Key", "required": true, "secret": true}, {"name": "publishable_key", "label": "Publishable Key", "required": true}]}',
-      'https://stripe.com/docs',
-      NULL
     )
 ) AS int(key, name, description, category, scope, connection_type, oauth_config, api_key_config, docs_url, settings_path)
 WHERE o.name = 'Default Organization'
@@ -228,7 +216,6 @@ CROSS JOIN (
     ('calendars', 'google_calendar', false, 'Calendar sync and availability'),
     ('media_storage', 'google_workspace', false, 'Google Drive file storage'),
     ('payments', 'quickbooks_online', false, 'QuickBooks invoice sync'),
-    ('payments', 'stripe', false, 'Payment processing'),
     ('automation', 'zapier', false, 'Third-party app automation'),
     ('automation', 'slack', false, 'Slack notifications'),
     ('marketing', 'meta_ads', false, 'Facebook/Instagram ad management'),

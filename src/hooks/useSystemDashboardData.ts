@@ -222,10 +222,10 @@ export function useSystemDashboardData() {
       {
         id: '3',
         timestamp: new Date(Date.now() - 45 * 60000).toISOString(),
-        severity: 'critical',
+        severity: 'info',
         service: 'Payments',
-        summary: 'Stripe webhook signature verification failed',
-        stackTrace: 'Error: Invalid signature\n  at verifyWebhookSignature (/functions/stripe-webhook/index.ts:28)',
+        summary: 'QuickBooks sync completed successfully for all organizations',
+        stackTrace: null,
         affectedCount: 0,
         acknowledged: true,
       },
