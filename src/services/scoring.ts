@@ -87,16 +87,28 @@ export interface AdjustmentLimits {
 export const TRIGGER_TYPES = [
   { value: 'contact_created', label: 'Contact Created', category: 'Contact' },
   { value: 'contact_status_changed', label: 'Contact Status Changed', category: 'Contact' },
+  { value: 'tag_added', label: 'Tag Added', category: 'Contact' },
+  { value: 'tag_removed', label: 'Tag Removed', category: 'Contact' },
   { value: 'form_submitted', label: 'Form Submitted', category: 'Engagement' },
+  { value: 'survey_completed', label: 'Survey Completed', category: 'Engagement' },
+  { value: 'email_opened', label: 'Email Opened', category: 'Email' },
+  { value: 'email_clicked', label: 'Email Link Clicked', category: 'Email' },
+  { value: 'email_replied', label: 'Email Replied', category: 'Email' },
+  { value: 'sms_replied', label: 'SMS Replied', category: 'Messaging' },
+  { value: 'webchat_started', label: 'Webchat Started', category: 'Messaging' },
   { value: 'appointment_booked', label: 'Appointment Booked', category: 'Calendar' },
   { value: 'appointment_completed', label: 'Appointment Completed', category: 'Calendar' },
   { value: 'appointment_noshow', label: 'Appointment No-Show', category: 'Calendar' },
   { value: 'appointment_cancelled', label: 'Appointment Cancelled', category: 'Calendar' },
   { value: 'payment_completed', label: 'Payment Completed', category: 'Payments' },
+  { value: 'invoice_paid', label: 'Invoice Paid', category: 'Payments' },
   { value: 'opportunity_created', label: 'Opportunity Created', category: 'Opportunities' },
   { value: 'opportunity_stage_changed', label: 'Opportunity Stage Changed', category: 'Opportunities' },
   { value: 'opportunity_won', label: 'Opportunity Won', category: 'Opportunities' },
   { value: 'opportunity_lost', label: 'Opportunity Lost', category: 'Opportunities' },
+  { value: 'ai_detected_intent', label: 'AI Detected Intent', category: 'AI' },
+  { value: 'ai_conversation_positive', label: 'AI Positive Sentiment', category: 'AI' },
+  { value: 'ai_conversation_negative', label: 'AI Negative Sentiment', category: 'AI' },
 ];
 
 async function callScoringApi<T>(action: string, params: Record<string, unknown> = {}): Promise<T> {

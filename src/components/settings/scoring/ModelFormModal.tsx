@@ -50,26 +50,26 @@ export function ModelFormModal({ model, onClose, onSubmit }: ModelFormModalProps
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-full items-center justify-center p-4">
-        <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-        <div className="relative w-full max-w-md bg-white rounded-xl shadow-xl">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">
+        <div className="fixed inset-0 bg-black/60" onClick={onClose} />
+        <div className="relative w-full max-w-md bg-slate-800 rounded-xl shadow-xl border border-slate-700">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+            <h2 className="text-lg font-semibold text-white">
               {model ? 'Edit Model' : 'Create Scoring Model'}
             </h2>
-            <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
-              <X className="h-5 w-5 text-gray-500" />
+            <button onClick={onClose} className="p-1 rounded hover:bg-slate-700">
+              <X className="h-5 w-5 text-slate-400" />
             </button>
           </div>
 
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+              <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
                 {error}
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-300 mb-1">
                 Model Name
               </label>
               <input
@@ -77,12 +77,12 @@ export function ModelFormModal({ model, onClose, onSubmit }: ModelFormModalProps
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Lead Score, Engagement Score"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-300 mb-1">
                 Scope
               </label>
               <div className="flex gap-4">
@@ -94,9 +94,9 @@ export function ModelFormModal({ model, onClose, onSubmit }: ModelFormModalProps
                     checked={scope === 'contact'}
                     onChange={() => setScope('contact')}
                     disabled={!!model}
-                    className="text-teal-600 focus:ring-teal-500"
+                    className="text-cyan-500 bg-slate-900 border-slate-600 focus:ring-cyan-500"
                   />
-                  <span className="text-sm text-gray-700">Contact</span>
+                  <span className="text-sm text-slate-300">Contact</span>
                 </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -106,19 +106,19 @@ export function ModelFormModal({ model, onClose, onSubmit }: ModelFormModalProps
                     checked={scope === 'opportunity'}
                     onChange={() => setScope('opportunity')}
                     disabled={!!model}
-                    className="text-teal-600 focus:ring-teal-500"
+                    className="text-cyan-500 bg-slate-900 border-slate-600 focus:ring-cyan-500"
                   />
-                  <span className="text-sm text-gray-700">Opportunity</span>
+                  <span className="text-sm text-slate-300">Opportunity</span>
                 </label>
               </div>
               {model && (
-                <p className="mt-1 text-xs text-gray-500">Scope cannot be changed after creation</p>
+                <p className="mt-1 text-xs text-slate-500">Scope cannot be changed after creation</p>
               )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-300 mb-1">
                   Starting Score
                 </label>
                 <input
@@ -126,11 +126,11 @@ export function ModelFormModal({ model, onClose, onSubmit }: ModelFormModalProps
                   value={startingScore}
                   onChange={(e) => setStartingScore(Number(e.target.value))}
                   min={0}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-300 mb-1">
                   Max Score
                 </label>
                 <input
@@ -139,7 +139,7 @@ export function ModelFormModal({ model, onClose, onSubmit }: ModelFormModalProps
                   onChange={(e) => setMaxScore(e.target.value === '' ? '' : Number(e.target.value))}
                   min={1}
                   placeholder="No limit"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
                 />
               </div>
             </div>
@@ -150,11 +150,11 @@ export function ModelFormModal({ model, onClose, onSubmit }: ModelFormModalProps
                   type="checkbox"
                   checked={isPrimary}
                   onChange={(e) => setIsPrimary(e.target.checked)}
-                  className="rounded text-teal-600 focus:ring-teal-500"
+                  className="rounded text-cyan-500 bg-slate-900 border-slate-600 focus:ring-cyan-500"
                 />
-                <span className="text-sm text-gray-700">Set as primary model for this scope</span>
+                <span className="text-sm text-slate-300">Set as primary model for this scope</span>
               </label>
-              <p className="mt-1 text-xs text-gray-500 ml-6">
+              <p className="mt-1 text-xs text-slate-500 ml-6">
                 The primary model is displayed by default on contact/opportunity cards
               </p>
             </div>
@@ -163,14 +163,14 @@ export function ModelFormModal({ model, onClose, onSubmit }: ModelFormModalProps
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 text-sm font-medium text-slate-400 hover:text-slate-300 rounded-lg hover:bg-slate-700"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-cyan-500 to-teal-600 rounded-lg shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 hover:brightness-110 disabled:opacity-50 transition-all"
               >
                 {loading ? 'Saving...' : model ? 'Update Model' : 'Create Model'}
               </button>

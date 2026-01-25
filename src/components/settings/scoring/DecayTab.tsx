@@ -108,7 +108,7 @@ export function DecayTab() {
   if (loading && models.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
       </div>
     );
   }
@@ -116,11 +116,11 @@ export function DecayTab() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <label className="text-sm font-medium text-gray-700">Model:</label>
+        <label className="text-sm font-medium text-slate-400">Model:</label>
         <select
           value={selectedModelId}
           onChange={(e) => setSelectedModelId(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+          className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
         >
           <option value="">Select a model</option>
           {models.map((model) => (
@@ -132,24 +132,24 @@ export function DecayTab() {
       </div>
 
       {!selectedModelId ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-          <p className="text-gray-500">Select a scoring model to configure decay settings.</p>
+        <div className="text-center py-12 bg-slate-800/50 rounded-lg border border-dashed border-slate-700">
+          <p className="text-slate-400">Select a scoring model to configure decay settings.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
+          <div className="bg-slate-800 rounded-lg border border-slate-700 p-6 space-y-6">
             <div className="flex items-center gap-3">
-              <Timer className="h-5 w-5 text-teal-600" />
-              <h3 className="text-lg font-medium text-gray-900">Decay Settings</h3>
+              <Timer className="h-5 w-5 text-cyan-400" />
+              <h3 className="text-lg font-medium text-white">Decay Settings</h3>
             </div>
 
             <label className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-700">Enable score decay</span>
+              <span className="text-sm font-medium text-slate-300">Enable score decay</span>
               <button
                 type="button"
                 onClick={() => setEnabled(!enabled)}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  enabled ? 'bg-teal-600' : 'bg-gray-200'
+                  enabled ? 'bg-cyan-500' : 'bg-slate-600'
                 }`}
               >
                 <span
@@ -163,7 +163,7 @@ export function DecayTab() {
             {enabled && (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Decay Type</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Decay Type</label>
                   <div className="flex gap-4">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -172,9 +172,9 @@ export function DecayTab() {
                         value="linear"
                         checked={decayType === 'linear'}
                         onChange={() => setDecayType('linear')}
-                        className="text-teal-600 focus:ring-teal-500"
+                        className="text-cyan-500 bg-slate-900 border-slate-600 focus:ring-cyan-500"
                       />
-                      <span className="text-sm text-gray-700">Linear</span>
+                      <span className="text-sm text-slate-300">Linear</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -183,12 +183,12 @@ export function DecayTab() {
                         value="step"
                         checked={decayType === 'step'}
                         onChange={() => setDecayType('step')}
-                        className="text-teal-600 focus:ring-teal-500"
+                        className="text-cyan-500 bg-slate-900 border-slate-600 focus:ring-cyan-500"
                       />
-                      <span className="text-sm text-gray-700">Step</span>
+                      <span className="text-sm text-slate-300">Step</span>
                     </label>
                   </div>
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-slate-500">
                     {decayType === 'linear'
                       ? 'Subtract points at regular intervals'
                       : 'Apply decay at specific milestones'}
@@ -197,7 +197,7 @@ export function DecayTab() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
                       Decay Amount
                     </label>
                     <div className="flex items-center gap-2">
@@ -206,13 +206,13 @@ export function DecayTab() {
                         value={decayAmount}
                         onChange={(e) => setDecayAmount(Number(e.target.value))}
                         min={1}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
                       />
-                      <span className="text-sm text-gray-500">points</span>
+                      <span className="text-sm text-slate-400">points</span>
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-slate-300 mb-1">
                       Interval
                     </label>
                     <div className="flex items-center gap-2">
@@ -221,15 +221,15 @@ export function DecayTab() {
                         value={intervalDays}
                         onChange={(e) => setIntervalDays(Number(e.target.value))}
                         min={1}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
                       />
-                      <span className="text-sm text-gray-500">days</span>
+                      <span className="text-sm text-slate-400">days</span>
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
                     Minimum Score Floor
                   </label>
                   <input
@@ -237,26 +237,26 @@ export function DecayTab() {
                     value={minScoreFloor}
                     onChange={(e) => setMinScoreFloor(Number(e.target.value))}
                     min={0}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
                   />
-                  <p className="mt-1 text-xs text-gray-500">Score will not decay below this value</p>
+                  <p className="mt-1 text-xs text-slate-500">Score will not decay below this value</p>
                 </div>
 
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600">{calculateDecayPreview()}</p>
+                <div className="p-4 bg-slate-900 rounded-lg border border-slate-700">
+                  <p className="text-sm text-slate-300">{calculateDecayPreview()}</p>
                 </div>
               </>
             )}
           </div>
 
-          <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
+          <div className="bg-slate-800 rounded-lg border border-slate-700 p-6 space-y-6">
             <div className="flex items-center gap-3">
-              <Bell className="h-5 w-5 text-teal-600" />
-              <h3 className="text-lg font-medium text-gray-900">Notification Settings</h3>
+              <Bell className="h-5 w-5 text-cyan-400" />
+              <h3 className="text-lg font-medium text-white">Notification Settings</h3>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-300 mb-1">
                 Alert Threshold
               </label>
               <input
@@ -265,49 +265,49 @@ export function DecayTab() {
                 onChange={(e) => setNotificationThreshold(e.target.value === '' ? '' : Number(e.target.value))}
                 placeholder="e.g., 20"
                 min={0}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-slate-500">
                 Send notification when score drops below this threshold
               </p>
             </div>
 
             <div className="space-y-3">
-              <p className="text-sm font-medium text-gray-700">Notification Channels</p>
-              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
+              <p className="text-sm font-medium text-slate-300">Notification Channels</p>
+              <label className="flex items-center justify-between p-3 bg-slate-900 rounded-lg cursor-pointer border border-slate-700">
                 <div className="flex items-center gap-3">
-                  <Bell className="h-5 w-5 text-gray-500" />
-                  <span className="text-sm text-gray-700">In-App Notification</span>
+                  <Bell className="h-5 w-5 text-slate-400" />
+                  <span className="text-sm text-slate-300">In-App Notification</span>
                 </div>
                 <input
                   type="checkbox"
                   checked={notifyInApp}
                   onChange={(e) => setNotifyInApp(e.target.checked)}
-                  className="rounded text-teal-600 focus:ring-teal-500"
+                  className="rounded text-cyan-500 bg-slate-900 border-slate-600 focus:ring-cyan-500"
                 />
               </label>
-              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
+              <label className="flex items-center justify-between p-3 bg-slate-900 rounded-lg cursor-pointer border border-slate-700">
                 <div className="flex items-center gap-3">
-                  <Mail className="h-5 w-5 text-gray-500" />
-                  <span className="text-sm text-gray-700">Email Notification</span>
+                  <Mail className="h-5 w-5 text-slate-400" />
+                  <span className="text-sm text-slate-300">Email Notification</span>
                 </div>
                 <input
                   type="checkbox"
                   checked={notifyEmail}
                   onChange={(e) => setNotifyEmail(e.target.checked)}
-                  className="rounded text-teal-600 focus:ring-teal-500"
+                  className="rounded text-cyan-500 bg-slate-900 border-slate-600 focus:ring-cyan-500"
                 />
               </label>
-              <label className="flex items-center justify-between p-3 bg-gray-50 rounded-lg cursor-pointer">
+              <label className="flex items-center justify-between p-3 bg-slate-900 rounded-lg cursor-pointer border border-slate-700">
                 <div className="flex items-center gap-3">
-                  <MessageSquare className="h-5 w-5 text-gray-500" />
-                  <span className="text-sm text-gray-700">SMS Notification</span>
+                  <MessageSquare className="h-5 w-5 text-slate-400" />
+                  <span className="text-sm text-slate-300">SMS Notification</span>
                 </div>
                 <input
                   type="checkbox"
                   checked={notifySms}
                   onChange={(e) => setNotifySms(e.target.checked)}
-                  className="rounded text-teal-600 focus:ring-teal-500"
+                  className="rounded text-cyan-500 bg-slate-900 border-slate-600 focus:ring-cyan-500"
                 />
               </label>
             </div>
@@ -320,7 +320,7 @@ export function DecayTab() {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-6 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors"
+            className="px-6 py-2 bg-gradient-to-r from-cyan-500 to-teal-600 text-white rounded-lg shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 hover:brightness-110 disabled:opacity-50 transition-all"
           >
             {saving ? 'Saving...' : 'Save Changes'}
           </button>

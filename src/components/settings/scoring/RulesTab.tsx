@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, MoreVertical, Check, X, Trash2, Pencil } from 'lucide-react';
-import { getModels, getRules, deleteRule, toggleRule, type ScoringModel, type ScoringRule, getTriggerTypeLabel, formatScoreChange, getScoreChangeColor } from '../../../services/scoring';
+import { Plus, MoreVertical, Check, X, Trash2, Pencil, Zap } from 'lucide-react';
+import { getModels, getRules, deleteRule, toggleRule, type ScoringModel, type ScoringRule, getTriggerTypeLabel, formatScoreChange } from '../../../services/scoring';
 import { RuleFormModal } from './RuleFormModal';
 
 export function RulesTab() {
@@ -75,10 +75,16 @@ export function RulesTab() {
     return rule.frequency_type;
   }
 
+  function getScoreColor(delta: number): string {
+    if (delta > 0) return 'text-emerald-400';
+    if (delta < 0) return 'text-red-400';
+    return 'text-slate-400';
+  }
+
   if (loading && models.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
       </div>
     );
   }
@@ -87,11 +93,11 @@ export function RulesTab() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-4">
-          <label className="text-sm font-medium text-gray-700">Model:</label>
+          <label className="text-sm font-medium text-slate-400">Model:</label>
           <select
             value={selectedModelId}
             onChange={(e) => setSelectedModelId(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+            className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
           >
             <option value="">Select a model</option>
             {models.map((model) => (
@@ -104,7 +110,7 @@ export function RulesTab() {
         {selectedModelId && (
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-teal-600 text-white rounded-lg shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 hover:brightness-110 transition-all"
           >
             <Plus className="h-4 w-4" />
             Add Rule
@@ -113,71 +119,72 @@ export function RulesTab() {
       </div>
 
       {!selectedModelId ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-          <p className="text-gray-500">Select a scoring model to view and manage its rules.</p>
+        <div className="text-center py-12 bg-slate-800/50 rounded-lg border border-dashed border-slate-700">
+          <p className="text-slate-400">Select a scoring model to view and manage its rules.</p>
         </div>
       ) : rules.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No rules yet</h3>
-          <p className="text-gray-500 mb-4">Create rules to define how scores change based on actions.</p>
+        <div className="text-center py-12 bg-slate-800/50 rounded-lg border border-dashed border-slate-700">
+          <Zap className="h-12 w-12 text-slate-500 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-white mb-2">No rules yet</h3>
+          <p className="text-slate-400 mb-4">Create rules to define how scores change based on actions.</p>
           <button
             onClick={() => setShowModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-teal-600 text-white rounded-lg shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 hover:brightness-110 transition-all"
           >
             <Plus className="h-4 w-4" />
             Add Rule
           </button>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+        <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+          <table className="min-w-full divide-y divide-slate-700">
+            <thead className="bg-slate-800/50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Rule Name
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Trigger
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Points
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Frequency
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-slate-800 divide-y divide-slate-700">
               {rules.map((rule) => (
-                <tr key={rule.id} className="hover:bg-gray-50">
+                <tr key={rule.id} className="hover:bg-slate-700/50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-medium text-gray-900">{rule.name}</span>
+                    <span className="text-sm font-medium text-white">{rule.name}</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm text-gray-600">{getTriggerTypeLabel(rule.trigger_type)}</span>
+                    <span className="text-sm text-slate-300">{getTriggerTypeLabel(rule.trigger_type)}</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-sm font-semibold ${getScoreChangeColor(rule.points)}`}>
+                    <span className={`text-sm font-semibold ${getScoreColor(rule.points)}`}>
                       {formatScoreChange(rule.points)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm text-gray-600">{getFrequencyLabel(rule)}</span>
+                    <span className="text-sm text-slate-400">{getFrequencyLabel(rule)}</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {rule.active ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                         <Check className="h-3 w-3" />
                         Active
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700 text-slate-400">
                         <X className="h-3 w-3" />
                         Inactive
                       </span>
@@ -187,33 +194,33 @@ export function RulesTab() {
                     <div className="relative">
                       <button
                         onClick={() => setActionMenuId(actionMenuId === rule.id ? null : rule.id)}
-                        className="p-1 rounded hover:bg-gray-100"
+                        className="p-1 rounded hover:bg-slate-700"
                       >
-                        <MoreVertical className="h-5 w-5 text-gray-400" />
+                        <MoreVertical className="h-5 w-5 text-slate-400" />
                       </button>
                       {actionMenuId === rule.id && (
-                        <div className="absolute right-0 mt-2 w-40 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
+                        <div className="absolute right-0 mt-2 w-40 rounded-lg shadow-xl bg-slate-800 border border-slate-700 z-50">
                           <div className="py-1">
                             <button
                               onClick={() => {
                                 setEditingRule(rule);
                                 setActionMenuId(null);
                               }}
-                              className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                              className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-300 hover:bg-slate-700"
                             >
                               <Pencil className="h-4 w-4" />
                               Edit
                             </button>
                             <button
                               onClick={() => handleToggle(rule)}
-                              className="flex items-center gap-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                              className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-300 hover:bg-slate-700"
                             >
                               {rule.active ? <X className="h-4 w-4" /> : <Check className="h-4 w-4" />}
                               {rule.active ? 'Disable' : 'Enable'}
                             </button>
                             <button
                               onClick={() => handleDelete(rule)}
-                              className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                              className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-400 hover:bg-red-500/10"
                             >
                               <Trash2 className="h-4 w-4" />
                               Delete
