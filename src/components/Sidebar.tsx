@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Zap, Home, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Home, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSidebar } from '../contexts/SidebarContext';
 import { navigationConfig } from '../config/navigation';
@@ -158,9 +158,11 @@ export function Sidebar() {
     >
       <div className={`p-4 border-b border-slate-800 ${!isExpanded ? 'px-2' : ''}`}>
         <div className={`flex items-center ${isExpanded ? 'gap-3' : 'justify-center'}`}>
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center flex-shrink-0">
-            <Zap className="w-5 h-5 text-white" />
-          </div>
+          <img
+            src="/assets/logo/logo.png"
+            alt="Autom8ion Lab"
+            className="w-10 h-10 rounded-xl flex-shrink-0 object-contain"
+          />
           {isExpanded && (
             <div className="min-w-0">
               <h1 className="text-white font-semibold text-sm truncate">Autom8ion Lab</h1>
