@@ -11,7 +11,7 @@ import {
   Palette,
   Zap,
   LayoutList,
-  Key,
+  Braces,
   Target,
   MessageSquare,
   LucideIcon,
@@ -118,10 +118,10 @@ const settingsNavSections: SettingsNavSection[] = [
     title: 'Developer',
     items: [
       {
-        name: 'API Keys & Secrets',
-        path: '/settings/secrets',
-        icon: Key,
-        requiresPermission: 'secrets.view',
+        name: 'Custom Values',
+        path: '/settings/custom-values',
+        icon: Braces,
+        requiresPermission: 'custom_values.view',
       },
       {
         name: 'Integrations',

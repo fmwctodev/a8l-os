@@ -62,7 +62,7 @@ import { AIAgentsSettingsPage } from './pages/settings/AIAgentsSettingsPage';
 import { EmailServicesSettingsPage } from './pages/settings/EmailServicesSettingsPage';
 import PhoneSystemSettingsPage from './pages/settings/PhoneSystemSettingsPage';
 import { CustomFieldsSettingsPage } from './pages/settings/CustomFieldsSettingsPage';
-import { SecretsSettingsPage } from './pages/settings/SecretsSettingsPage';
+import { CustomValuesSettingsPage } from './pages/settings/CustomValuesSettingsPage';
 import ScoringSettingsPage from './pages/settings/ScoringSettingsPage';
 import { IntegrationsSettingsPage } from './pages/settings/IntegrationsSettingsPage';
 import { BrandboardSettingsPage } from './pages/settings/BrandboardSettingsPage';
@@ -487,10 +487,10 @@ function App() {
                   }
                 />
                 <Route
-                  path="secrets"
+                  path="custom-values"
                   element={
-                    <ProtectedRoute permission="secrets.view" featureFlag="secrets_management">
-                      <SecretsSettingsPage />
+                    <ProtectedRoute permission="custom_values.view" featureFlag="custom_values">
+                      <CustomValuesSettingsPage />
                     </ProtectedRoute>
                   }
                 />
