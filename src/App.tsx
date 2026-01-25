@@ -66,6 +66,7 @@ import { CustomValuesSettingsPage } from './pages/settings/CustomValuesSettingsP
 import ScoringSettingsPage from './pages/settings/ScoringSettingsPage';
 import { IntegrationsSettingsPage } from './pages/settings/IntegrationsSettingsPage';
 import { BrandboardSettingsPage } from './pages/settings/BrandboardSettingsPage';
+import { BrandKitDetailPage } from './pages/settings/BrandKitDetailPage';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
 import { BookingPage } from './pages/public/BookingPage';
 import { PublicFormPage } from './pages/public/PublicFormPage';
@@ -507,6 +508,14 @@ function App() {
                   element={
                     <ProtectedRoute permission="brandboard.view" featureFlag="brandboard">
                       <BrandboardSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="brandboard/:brandId"
+                  element={
+                    <ProtectedRoute permission="brandboard.view" featureFlag="brandboard">
+                      <BrandKitDetailPage />
                     </ProtectedRoute>
                   }
                 />

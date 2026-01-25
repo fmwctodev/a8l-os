@@ -4083,12 +4083,15 @@ export interface BrandKitFonts {
   secondary?: BrandFont;
 }
 
+export type BrandKitStatus = 'draft' | 'active' | 'archived';
+
 export interface BrandKit {
   id: string;
   org_id: string;
   name: string;
   description: string | null;
   active: boolean;
+  status: BrandKitStatus;
   archived_at: string | null;
   created_by: string | null;
   created_at: string;
@@ -4105,9 +4108,29 @@ export interface BrandKitVersion {
   colors: BrandKitColors;
   fonts: BrandKitFonts;
   imagery_refs: string[];
+  tone_settings: ToneSettings;
+  voice_descriptors: string[];
+  voice_examples: VoiceTrainingExamples;
+  dos: string[];
+  donts: string[];
+  elevator_pitch: string | null;
+  value_proposition: string | null;
+  short_tagline: string | null;
+  long_description: string | null;
+  ctas: BrandCTA[];
+  ai_enforce_voice: boolean;
+  ai_enforce_terminology: boolean;
+  ai_avoid_restricted: boolean;
+  ai_forbidden_topics: string[];
+  ai_forbidden_claims: string[];
+  ai_forbidden_phrases: string[];
+  ai_fallback_behavior: AIFallbackBehavior;
+  published_at: string | null;
+  published_by: string | null;
   created_by: string | null;
   created_at: string;
   created_by_user?: User | null;
+  published_by_user?: User | null;
 }
 
 export interface BrandKitWithVersion extends BrandKit {
@@ -4120,6 +4143,24 @@ export interface ToneSettings {
   energy: number;
   confidence: number;
 }
+
+export interface BrandCTA {
+  text: string;
+  context: string;
+  placement: string;
+}
+
+export interface VoiceTrainingExample {
+  text: string;
+  context?: string;
+}
+
+export interface VoiceTrainingExamples {
+  good: VoiceTrainingExample[];
+  bad: VoiceTrainingExample[];
+}
+
+export type AIFallbackBehavior = 'ask_human' | 'neutral_copy' | 'skip';
 
 export interface BrandVoiceExamples {
   email?: string;
@@ -4194,6 +4235,23 @@ export interface CreateBrandKitInput {
   colors?: BrandKitColors;
   fonts?: BrandKitFonts;
   imagery_refs?: string[];
+  tone_settings?: ToneSettings;
+  voice_descriptors?: string[];
+  voice_examples?: VoiceTrainingExamples;
+  dos?: string[];
+  donts?: string[];
+  elevator_pitch?: string;
+  value_proposition?: string;
+  short_tagline?: string;
+  long_description?: string;
+  ctas?: BrandCTA[];
+  ai_enforce_voice?: boolean;
+  ai_enforce_terminology?: boolean;
+  ai_avoid_restricted?: boolean;
+  ai_forbidden_topics?: string[];
+  ai_forbidden_claims?: string[];
+  ai_forbidden_phrases?: string[];
+  ai_fallback_behavior?: AIFallbackBehavior;
 }
 
 export interface UpdateBrandKitInput {
@@ -4203,6 +4261,31 @@ export interface UpdateBrandKitInput {
   colors?: BrandKitColors;
   fonts?: BrandKitFonts;
   imagery_refs?: string[];
+  tone_settings?: ToneSettings;
+  voice_descriptors?: string[];
+  voice_examples?: VoiceTrainingExamples;
+  dos?: string[];
+  donts?: string[];
+  elevator_pitch?: string;
+  value_proposition?: string;
+  short_tagline?: string;
+  long_description?: string;
+  ctas?: BrandCTA[];
+  ai_enforce_voice?: boolean;
+  ai_enforce_terminology?: boolean;
+  ai_avoid_restricted?: boolean;
+  ai_forbidden_topics?: string[];
+  ai_forbidden_claims?: string[];
+  ai_forbidden_phrases?: string[];
+  ai_fallback_behavior?: AIFallbackBehavior;
+}
+
+export type RollbackSection = 'visual_identity' | 'brand_voice' | 'messaging' | 'ai_rules';
+
+export interface BrandKitFilters {
+  search?: string;
+  status?: BrandKitStatus;
+  includeArchived?: boolean;
 }
 
 export interface CreateBrandVoiceInput {
@@ -4229,12 +4312,6 @@ export interface UpdateBrandVoiceInput {
   formatting_rules?: string;
   examples?: BrandVoiceExamples;
   ai_prompt_template?: string;
-}
-
-export interface BrandKitFilters {
-  search?: string;
-  active?: boolean;
-  includeArchived?: boolean;
 }
 
 export interface BrandVoiceFilters {

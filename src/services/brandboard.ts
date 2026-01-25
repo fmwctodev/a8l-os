@@ -3,6 +3,7 @@ import type {
   BrandKit,
   BrandKitVersion,
   BrandKitWithVersion,
+  BrandKitStatus,
   BrandVoice,
   BrandVoiceVersion,
   BrandVoiceWithVersion,
@@ -16,6 +17,13 @@ import type {
   BrandVoiceFilters,
   BrandUsageFilters,
   ToneSettings,
+  RollbackSection,
+  BrandKitColors,
+  BrandKitFonts,
+  BrandLogo,
+  VoiceTrainingExamples,
+  BrandCTA,
+  AIFallbackBehavior,
   DEFAULT_AI_PROMPT_TEMPLATE,
 } from '../types';
 
@@ -30,15 +38,15 @@ export async function getBrandKits(
       created_by_user:users!brand_kits_created_by_fkey(id, name, email)
     `)
     .eq('org_id', orgId)
-    .order('active', { ascending: false })
+    .order('status', { ascending: true })
     .order('name');
 
   if (!filters?.includeArchived) {
-    query = query.is('archived_at', null);
+    query = query.neq('status', 'archived');
   }
 
-  if (filters?.active !== undefined) {
-    query = query.eq('active', filters.active);
+  if (filters?.status) {
+    query = query.eq('status', filters.status);
   }
 
   if (filters?.search) {
@@ -54,7 +62,8 @@ export async function getBrandKits(
       .from('brand_kit_versions')
       .select(`
         *,
-        created_by_user:users!brand_kit_versions_created_by_fkey(id, name, email)
+        created_by_user:users!brand_kit_versions_created_by_fkey(id, name, email),
+        published_by_user:users!brand_kit_versions_published_by_fkey(id, name, email)
       `)
       .eq('brand_kit_id', kit.id)
       .order('version_number', { ascending: false })
@@ -86,7 +95,8 @@ export async function getBrandKitById(id: string): Promise<BrandKitWithVersion |
     .from('brand_kit_versions')
     .select(`
       *,
-      created_by_user:users!brand_kit_versions_created_by_fkey(id, name, email)
+      created_by_user:users!brand_kit_versions_created_by_fkey(id, name, email),
+      published_by_user:users!brand_kit_versions_published_by_fkey(id, name, email)
     `)
     .eq('brand_kit_id', id)
     .order('version_number', { ascending: false })
@@ -96,6 +106,398 @@ export async function getBrandKitById(id: string): Promise<BrandKitWithVersion |
     ...kit,
     latest_version: versions?.[0] || null,
   };
+}
+
+export async function getBrandKitDetail(id: string): Promise<BrandKitWithVersion | null> {
+  return getBrandKitById(id);
+}
+
+export interface UpdateVisualIdentityInput {
+  logos?: BrandLogo[];
+  colors?: BrandKitColors;
+  fonts?: BrandKitFonts;
+  imagery_refs?: string[];
+}
+
+export async function updateBrandKitVisualIdentity(
+  id: string,
+  input: UpdateVisualIdentityInput,
+  userId: string
+): Promise<BrandKitVersion> {
+  const { data: currentVersion } = await supabase
+    .from('brand_kit_versions')
+    .select('*')
+    .eq('brand_kit_id', id)
+    .order('version_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: newVersion, error } = await supabase
+    .from('brand_kit_versions')
+    .insert({
+      brand_kit_id: id,
+      logos: input.logos ?? currentVersion?.logos ?? [],
+      colors: input.colors ?? currentVersion?.colors ?? {},
+      fonts: input.fonts ?? currentVersion?.fonts ?? {},
+      imagery_refs: input.imagery_refs ?? currentVersion?.imagery_refs ?? [],
+      tone_settings: currentVersion?.tone_settings ?? { formality: 50, friendliness: 50, energy: 50, confidence: 50 },
+      voice_descriptors: currentVersion?.voice_descriptors ?? [],
+      voice_examples: currentVersion?.voice_examples ?? { good: [], bad: [] },
+      dos: currentVersion?.dos ?? [],
+      donts: currentVersion?.donts ?? [],
+      elevator_pitch: currentVersion?.elevator_pitch ?? null,
+      value_proposition: currentVersion?.value_proposition ?? null,
+      short_tagline: currentVersion?.short_tagline ?? null,
+      long_description: currentVersion?.long_description ?? null,
+      ctas: currentVersion?.ctas ?? [],
+      ai_enforce_voice: currentVersion?.ai_enforce_voice ?? true,
+      ai_enforce_terminology: currentVersion?.ai_enforce_terminology ?? false,
+      ai_avoid_restricted: currentVersion?.ai_avoid_restricted ?? true,
+      ai_forbidden_topics: currentVersion?.ai_forbidden_topics ?? [],
+      ai_forbidden_claims: currentVersion?.ai_forbidden_claims ?? [],
+      ai_forbidden_phrases: currentVersion?.ai_forbidden_phrases ?? [],
+      ai_fallback_behavior: currentVersion?.ai_fallback_behavior ?? 'ask_human',
+      created_by: userId,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return newVersion;
+}
+
+export interface UpdateBrandVoiceInput {
+  tone_settings?: ToneSettings;
+  voice_descriptors?: string[];
+  voice_examples?: VoiceTrainingExamples;
+  dos?: string[];
+  donts?: string[];
+}
+
+export async function updateBrandKitVoice(
+  id: string,
+  input: UpdateBrandVoiceInput,
+  userId: string
+): Promise<BrandKitVersion> {
+  const { data: currentVersion } = await supabase
+    .from('brand_kit_versions')
+    .select('*')
+    .eq('brand_kit_id', id)
+    .order('version_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: newVersion, error } = await supabase
+    .from('brand_kit_versions')
+    .insert({
+      brand_kit_id: id,
+      logos: currentVersion?.logos ?? [],
+      colors: currentVersion?.colors ?? {},
+      fonts: currentVersion?.fonts ?? {},
+      imagery_refs: currentVersion?.imagery_refs ?? [],
+      tone_settings: input.tone_settings ?? currentVersion?.tone_settings ?? { formality: 50, friendliness: 50, energy: 50, confidence: 50 },
+      voice_descriptors: input.voice_descriptors ?? currentVersion?.voice_descriptors ?? [],
+      voice_examples: input.voice_examples ?? currentVersion?.voice_examples ?? { good: [], bad: [] },
+      dos: input.dos ?? currentVersion?.dos ?? [],
+      donts: input.donts ?? currentVersion?.donts ?? [],
+      elevator_pitch: currentVersion?.elevator_pitch ?? null,
+      value_proposition: currentVersion?.value_proposition ?? null,
+      short_tagline: currentVersion?.short_tagline ?? null,
+      long_description: currentVersion?.long_description ?? null,
+      ctas: currentVersion?.ctas ?? [],
+      ai_enforce_voice: currentVersion?.ai_enforce_voice ?? true,
+      ai_enforce_terminology: currentVersion?.ai_enforce_terminology ?? false,
+      ai_avoid_restricted: currentVersion?.ai_avoid_restricted ?? true,
+      ai_forbidden_topics: currentVersion?.ai_forbidden_topics ?? [],
+      ai_forbidden_claims: currentVersion?.ai_forbidden_claims ?? [],
+      ai_forbidden_phrases: currentVersion?.ai_forbidden_phrases ?? [],
+      ai_fallback_behavior: currentVersion?.ai_fallback_behavior ?? 'ask_human',
+      created_by: userId,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return newVersion;
+}
+
+export interface UpdateMessagingInput {
+  elevator_pitch?: string | null;
+  value_proposition?: string | null;
+  short_tagline?: string | null;
+  long_description?: string | null;
+  ctas?: BrandCTA[];
+}
+
+export async function updateBrandKitMessaging(
+  id: string,
+  input: UpdateMessagingInput,
+  userId: string
+): Promise<BrandKitVersion> {
+  const { data: currentVersion } = await supabase
+    .from('brand_kit_versions')
+    .select('*')
+    .eq('brand_kit_id', id)
+    .order('version_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: newVersion, error } = await supabase
+    .from('brand_kit_versions')
+    .insert({
+      brand_kit_id: id,
+      logos: currentVersion?.logos ?? [],
+      colors: currentVersion?.colors ?? {},
+      fonts: currentVersion?.fonts ?? {},
+      imagery_refs: currentVersion?.imagery_refs ?? [],
+      tone_settings: currentVersion?.tone_settings ?? { formality: 50, friendliness: 50, energy: 50, confidence: 50 },
+      voice_descriptors: currentVersion?.voice_descriptors ?? [],
+      voice_examples: currentVersion?.voice_examples ?? { good: [], bad: [] },
+      dos: currentVersion?.dos ?? [],
+      donts: currentVersion?.donts ?? [],
+      elevator_pitch: input.elevator_pitch !== undefined ? input.elevator_pitch : currentVersion?.elevator_pitch ?? null,
+      value_proposition: input.value_proposition !== undefined ? input.value_proposition : currentVersion?.value_proposition ?? null,
+      short_tagline: input.short_tagline !== undefined ? input.short_tagline : currentVersion?.short_tagline ?? null,
+      long_description: input.long_description !== undefined ? input.long_description : currentVersion?.long_description ?? null,
+      ctas: input.ctas ?? currentVersion?.ctas ?? [],
+      ai_enforce_voice: currentVersion?.ai_enforce_voice ?? true,
+      ai_enforce_terminology: currentVersion?.ai_enforce_terminology ?? false,
+      ai_avoid_restricted: currentVersion?.ai_avoid_restricted ?? true,
+      ai_forbidden_topics: currentVersion?.ai_forbidden_topics ?? [],
+      ai_forbidden_claims: currentVersion?.ai_forbidden_claims ?? [],
+      ai_forbidden_phrases: currentVersion?.ai_forbidden_phrases ?? [],
+      ai_fallback_behavior: currentVersion?.ai_fallback_behavior ?? 'ask_human',
+      created_by: userId,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return newVersion;
+}
+
+export interface UpdateAIRulesInput {
+  ai_enforce_voice?: boolean;
+  ai_enforce_terminology?: boolean;
+  ai_avoid_restricted?: boolean;
+  ai_forbidden_topics?: string[];
+  ai_forbidden_claims?: string[];
+  ai_forbidden_phrases?: string[];
+  ai_fallback_behavior?: AIFallbackBehavior;
+}
+
+export async function updateBrandKitAIRules(
+  id: string,
+  input: UpdateAIRulesInput,
+  userId: string
+): Promise<BrandKitVersion> {
+  const { data: currentVersion } = await supabase
+    .from('brand_kit_versions')
+    .select('*')
+    .eq('brand_kit_id', id)
+    .order('version_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const { data: newVersion, error } = await supabase
+    .from('brand_kit_versions')
+    .insert({
+      brand_kit_id: id,
+      logos: currentVersion?.logos ?? [],
+      colors: currentVersion?.colors ?? {},
+      fonts: currentVersion?.fonts ?? {},
+      imagery_refs: currentVersion?.imagery_refs ?? [],
+      tone_settings: currentVersion?.tone_settings ?? { formality: 50, friendliness: 50, energy: 50, confidence: 50 },
+      voice_descriptors: currentVersion?.voice_descriptors ?? [],
+      voice_examples: currentVersion?.voice_examples ?? { good: [], bad: [] },
+      dos: currentVersion?.dos ?? [],
+      donts: currentVersion?.donts ?? [],
+      elevator_pitch: currentVersion?.elevator_pitch ?? null,
+      value_proposition: currentVersion?.value_proposition ?? null,
+      short_tagline: currentVersion?.short_tagline ?? null,
+      long_description: currentVersion?.long_description ?? null,
+      ctas: currentVersion?.ctas ?? [],
+      ai_enforce_voice: input.ai_enforce_voice ?? currentVersion?.ai_enforce_voice ?? true,
+      ai_enforce_terminology: input.ai_enforce_terminology ?? currentVersion?.ai_enforce_terminology ?? false,
+      ai_avoid_restricted: input.ai_avoid_restricted ?? currentVersion?.ai_avoid_restricted ?? true,
+      ai_forbidden_topics: input.ai_forbidden_topics ?? currentVersion?.ai_forbidden_topics ?? [],
+      ai_forbidden_claims: input.ai_forbidden_claims ?? currentVersion?.ai_forbidden_claims ?? [],
+      ai_forbidden_phrases: input.ai_forbidden_phrases ?? currentVersion?.ai_forbidden_phrases ?? [],
+      ai_fallback_behavior: input.ai_fallback_behavior ?? currentVersion?.ai_fallback_behavior ?? 'ask_human',
+      created_by: userId,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return newVersion;
+}
+
+export async function publishBrandKit(id: string, userId: string): Promise<BrandKitVersion> {
+  const { data: currentVersion } = await supabase
+    .from('brand_kit_versions')
+    .select('*')
+    .eq('brand_kit_id', id)
+    .order('version_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!currentVersion) {
+    throw new Error('No version found to publish');
+  }
+
+  const { data: publishedVersion, error } = await supabase
+    .from('brand_kit_versions')
+    .insert({
+      brand_kit_id: id,
+      logos: currentVersion.logos,
+      colors: currentVersion.colors,
+      fonts: currentVersion.fonts,
+      imagery_refs: currentVersion.imagery_refs,
+      tone_settings: currentVersion.tone_settings,
+      voice_descriptors: currentVersion.voice_descriptors,
+      voice_examples: currentVersion.voice_examples,
+      dos: currentVersion.dos,
+      donts: currentVersion.donts,
+      elevator_pitch: currentVersion.elevator_pitch,
+      value_proposition: currentVersion.value_proposition,
+      short_tagline: currentVersion.short_tagline,
+      long_description: currentVersion.long_description,
+      ctas: currentVersion.ctas,
+      ai_enforce_voice: currentVersion.ai_enforce_voice,
+      ai_enforce_terminology: currentVersion.ai_enforce_terminology,
+      ai_avoid_restricted: currentVersion.ai_avoid_restricted,
+      ai_forbidden_topics: currentVersion.ai_forbidden_topics,
+      ai_forbidden_claims: currentVersion.ai_forbidden_claims,
+      ai_forbidden_phrases: currentVersion.ai_forbidden_phrases,
+      ai_fallback_behavior: currentVersion.ai_fallback_behavior,
+      created_by: userId,
+      published_at: new Date().toISOString(),
+      published_by: userId,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return publishedVersion;
+}
+
+export async function setActiveBrandKit(id: string): Promise<void> {
+  const { data: kit, error: fetchError } = await supabase
+    .from('brand_kits')
+    .select('org_id')
+    .eq('id', id)
+    .single();
+
+  if (fetchError) throw fetchError;
+
+  const { error: deactivateError } = await supabase
+    .from('brand_kits')
+    .update({ status: 'draft', active: false })
+    .eq('org_id', kit.org_id)
+    .eq('status', 'active');
+
+  if (deactivateError) throw deactivateError;
+
+  const { error: activateError } = await supabase
+    .from('brand_kits')
+    .update({ status: 'active', active: true })
+    .eq('id', id);
+
+  if (activateError) throw activateError;
+}
+
+export async function rollbackBrandKitSection(
+  kitId: string,
+  versionNumber: number,
+  sections: RollbackSection[],
+  userId: string
+): Promise<BrandKitVersion> {
+  const { data: targetVersion, error: fetchError } = await supabase
+    .from('brand_kit_versions')
+    .select('*')
+    .eq('brand_kit_id', kitId)
+    .eq('version_number', versionNumber)
+    .single();
+
+  if (fetchError) throw fetchError;
+
+  const { data: currentVersion } = await supabase
+    .from('brand_kit_versions')
+    .select('*')
+    .eq('brand_kit_id', kitId)
+    .order('version_number', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const newVersionData: Record<string, unknown> = {
+    brand_kit_id: kitId,
+    logos: currentVersion?.logos ?? [],
+    colors: currentVersion?.colors ?? {},
+    fonts: currentVersion?.fonts ?? {},
+    imagery_refs: currentVersion?.imagery_refs ?? [],
+    tone_settings: currentVersion?.tone_settings ?? { formality: 50, friendliness: 50, energy: 50, confidence: 50 },
+    voice_descriptors: currentVersion?.voice_descriptors ?? [],
+    voice_examples: currentVersion?.voice_examples ?? { good: [], bad: [] },
+    dos: currentVersion?.dos ?? [],
+    donts: currentVersion?.donts ?? [],
+    elevator_pitch: currentVersion?.elevator_pitch ?? null,
+    value_proposition: currentVersion?.value_proposition ?? null,
+    short_tagline: currentVersion?.short_tagline ?? null,
+    long_description: currentVersion?.long_description ?? null,
+    ctas: currentVersion?.ctas ?? [],
+    ai_enforce_voice: currentVersion?.ai_enforce_voice ?? true,
+    ai_enforce_terminology: currentVersion?.ai_enforce_terminology ?? false,
+    ai_avoid_restricted: currentVersion?.ai_avoid_restricted ?? true,
+    ai_forbidden_topics: currentVersion?.ai_forbidden_topics ?? [],
+    ai_forbidden_claims: currentVersion?.ai_forbidden_claims ?? [],
+    ai_forbidden_phrases: currentVersion?.ai_forbidden_phrases ?? [],
+    ai_fallback_behavior: currentVersion?.ai_fallback_behavior ?? 'ask_human',
+    created_by: userId,
+  };
+
+  for (const section of sections) {
+    switch (section) {
+      case 'visual_identity':
+        newVersionData.logos = targetVersion.logos;
+        newVersionData.colors = targetVersion.colors;
+        newVersionData.fonts = targetVersion.fonts;
+        newVersionData.imagery_refs = targetVersion.imagery_refs;
+        break;
+      case 'brand_voice':
+        newVersionData.tone_settings = targetVersion.tone_settings;
+        newVersionData.voice_descriptors = targetVersion.voice_descriptors;
+        newVersionData.voice_examples = targetVersion.voice_examples;
+        newVersionData.dos = targetVersion.dos;
+        newVersionData.donts = targetVersion.donts;
+        break;
+      case 'messaging':
+        newVersionData.elevator_pitch = targetVersion.elevator_pitch;
+        newVersionData.value_proposition = targetVersion.value_proposition;
+        newVersionData.short_tagline = targetVersion.short_tagline;
+        newVersionData.long_description = targetVersion.long_description;
+        newVersionData.ctas = targetVersion.ctas;
+        break;
+      case 'ai_rules':
+        newVersionData.ai_enforce_voice = targetVersion.ai_enforce_voice;
+        newVersionData.ai_enforce_terminology = targetVersion.ai_enforce_terminology;
+        newVersionData.ai_avoid_restricted = targetVersion.ai_avoid_restricted;
+        newVersionData.ai_forbidden_topics = targetVersion.ai_forbidden_topics;
+        newVersionData.ai_forbidden_claims = targetVersion.ai_forbidden_claims;
+        newVersionData.ai_forbidden_phrases = targetVersion.ai_forbidden_phrases;
+        newVersionData.ai_fallback_behavior = targetVersion.ai_fallback_behavior;
+        break;
+    }
+  }
+
+  const { data: newVersion, error } = await supabase
+    .from('brand_kit_versions')
+    .insert(newVersionData)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return newVersion;
 }
 
 export async function getActiveBrandKit(orgId: string): Promise<BrandKitWithVersion | null> {
@@ -140,6 +542,7 @@ export async function createBrandKit(
       org_id: orgId,
       name: input.name,
       description: input.description || null,
+      status: 'draft',
       created_by: userId,
     })
     .select()
@@ -153,6 +556,23 @@ export async function createBrandKit(
     colors: input.colors || {},
     fonts: input.fonts || {},
     imagery_refs: input.imagery_refs || [],
+    tone_settings: input.tone_settings || { formality: 50, friendliness: 50, energy: 50, confidence: 50 },
+    voice_descriptors: input.voice_descriptors || [],
+    voice_examples: input.voice_examples || { good: [], bad: [] },
+    dos: input.dos || [],
+    donts: input.donts || [],
+    elevator_pitch: input.elevator_pitch || null,
+    value_proposition: input.value_proposition || null,
+    short_tagline: input.short_tagline || null,
+    long_description: input.long_description || null,
+    ctas: input.ctas || [],
+    ai_enforce_voice: input.ai_enforce_voice ?? true,
+    ai_enforce_terminology: input.ai_enforce_terminology ?? false,
+    ai_avoid_restricted: input.ai_avoid_restricted ?? true,
+    ai_forbidden_topics: input.ai_forbidden_topics || [],
+    ai_forbidden_claims: input.ai_forbidden_claims || [],
+    ai_forbidden_phrases: input.ai_forbidden_phrases || [],
+    ai_fallback_behavior: input.ai_fallback_behavior || 'ask_human',
     created_by: userId,
   });
 
@@ -178,7 +598,30 @@ export async function updateBrandKit(
     if (updateError) throw updateError;
   }
 
-  if (input.logos !== undefined || input.colors !== undefined || input.fonts !== undefined || input.imagery_refs !== undefined) {
+  const hasVersionChanges =
+    input.logos !== undefined ||
+    input.colors !== undefined ||
+    input.fonts !== undefined ||
+    input.imagery_refs !== undefined ||
+    input.tone_settings !== undefined ||
+    input.voice_descriptors !== undefined ||
+    input.voice_examples !== undefined ||
+    input.dos !== undefined ||
+    input.donts !== undefined ||
+    input.elevator_pitch !== undefined ||
+    input.value_proposition !== undefined ||
+    input.short_tagline !== undefined ||
+    input.long_description !== undefined ||
+    input.ctas !== undefined ||
+    input.ai_enforce_voice !== undefined ||
+    input.ai_enforce_terminology !== undefined ||
+    input.ai_avoid_restricted !== undefined ||
+    input.ai_forbidden_topics !== undefined ||
+    input.ai_forbidden_claims !== undefined ||
+    input.ai_forbidden_phrases !== undefined ||
+    input.ai_fallback_behavior !== undefined;
+
+  if (hasVersionChanges) {
     const { data: currentVersion } = await supabase
       .from('brand_kit_versions')
       .select('*')
@@ -193,6 +636,23 @@ export async function updateBrandKit(
       colors: input.colors ?? currentVersion?.colors ?? {},
       fonts: input.fonts ?? currentVersion?.fonts ?? {},
       imagery_refs: input.imagery_refs ?? currentVersion?.imagery_refs ?? [],
+      tone_settings: input.tone_settings ?? currentVersion?.tone_settings ?? { formality: 50, friendliness: 50, energy: 50, confidence: 50 },
+      voice_descriptors: input.voice_descriptors ?? currentVersion?.voice_descriptors ?? [],
+      voice_examples: input.voice_examples ?? currentVersion?.voice_examples ?? { good: [], bad: [] },
+      dos: input.dos ?? currentVersion?.dos ?? [],
+      donts: input.donts ?? currentVersion?.donts ?? [],
+      elevator_pitch: input.elevator_pitch !== undefined ? input.elevator_pitch : currentVersion?.elevator_pitch ?? null,
+      value_proposition: input.value_proposition !== undefined ? input.value_proposition : currentVersion?.value_proposition ?? null,
+      short_tagline: input.short_tagline !== undefined ? input.short_tagline : currentVersion?.short_tagline ?? null,
+      long_description: input.long_description !== undefined ? input.long_description : currentVersion?.long_description ?? null,
+      ctas: input.ctas ?? currentVersion?.ctas ?? [],
+      ai_enforce_voice: input.ai_enforce_voice ?? currentVersion?.ai_enforce_voice ?? true,
+      ai_enforce_terminology: input.ai_enforce_terminology ?? currentVersion?.ai_enforce_terminology ?? false,
+      ai_avoid_restricted: input.ai_avoid_restricted ?? currentVersion?.ai_avoid_restricted ?? true,
+      ai_forbidden_topics: input.ai_forbidden_topics ?? currentVersion?.ai_forbidden_topics ?? [],
+      ai_forbidden_claims: input.ai_forbidden_claims ?? currentVersion?.ai_forbidden_claims ?? [],
+      ai_forbidden_phrases: input.ai_forbidden_phrases ?? currentVersion?.ai_forbidden_phrases ?? [],
+      ai_fallback_behavior: input.ai_fallback_behavior ?? currentVersion?.ai_fallback_behavior ?? 'ask_human',
       created_by: userId,
     });
 
@@ -212,16 +672,34 @@ export async function updateBrandKit(
 export async function duplicateBrandKit(id: string, newName: string, userId: string): Promise<BrandKit> {
   const existing = await getBrandKitById(id);
   if (!existing) throw new Error('Brand kit not found');
+  const v = existing.latest_version;
 
   return createBrandKit(
     existing.org_id,
     {
       name: newName,
       description: existing.description || undefined,
-      logos: existing.latest_version?.logos,
-      colors: existing.latest_version?.colors,
-      fonts: existing.latest_version?.fonts,
-      imagery_refs: existing.latest_version?.imagery_refs,
+      logos: v?.logos,
+      colors: v?.colors,
+      fonts: v?.fonts,
+      imagery_refs: v?.imagery_refs,
+      tone_settings: v?.tone_settings,
+      voice_descriptors: v?.voice_descriptors,
+      voice_examples: v?.voice_examples,
+      dos: v?.dos,
+      donts: v?.donts,
+      elevator_pitch: v?.elevator_pitch || undefined,
+      value_proposition: v?.value_proposition || undefined,
+      short_tagline: v?.short_tagline || undefined,
+      long_description: v?.long_description || undefined,
+      ctas: v?.ctas,
+      ai_enforce_voice: v?.ai_enforce_voice,
+      ai_enforce_terminology: v?.ai_enforce_terminology,
+      ai_avoid_restricted: v?.ai_avoid_restricted,
+      ai_forbidden_topics: v?.ai_forbidden_topics,
+      ai_forbidden_claims: v?.ai_forbidden_claims,
+      ai_forbidden_phrases: v?.ai_forbidden_phrases,
+      ai_fallback_behavior: v?.ai_fallback_behavior,
     },
     userId
   );
@@ -238,15 +716,15 @@ export async function activateBrandKit(id: string): Promise<void> {
 
   const { error: deactivateError } = await supabase
     .from('brand_kits')
-    .update({ active: false })
+    .update({ active: false, status: 'draft' })
     .eq('org_id', kit.org_id)
-    .eq('active', true);
+    .eq('status', 'active');
 
   if (deactivateError) throw deactivateError;
 
   const { error: activateError } = await supabase
     .from('brand_kits')
-    .update({ active: true })
+    .update({ active: true, status: 'active' })
     .eq('id', id);
 
   if (activateError) throw activateError;
@@ -255,7 +733,7 @@ export async function activateBrandKit(id: string): Promise<void> {
 export async function archiveBrandKit(id: string): Promise<void> {
   const { error } = await supabase
     .from('brand_kits')
-    .update({ archived_at: new Date().toISOString(), active: false })
+    .update({ archived_at: new Date().toISOString(), active: false, status: 'archived' })
     .eq('id', id);
 
   if (error) throw error;
@@ -266,7 +744,8 @@ export async function getBrandKitVersions(kitId: string): Promise<BrandKitVersio
     .from('brand_kit_versions')
     .select(`
       *,
-      created_by_user:users!brand_kit_versions_created_by_fkey(id, name, email)
+      created_by_user:users!brand_kit_versions_created_by_fkey(id, name, email),
+      published_by_user:users!brand_kit_versions_published_by_fkey(id, name, email)
     `)
     .eq('brand_kit_id', kitId)
     .order('version_number', { ascending: false });
