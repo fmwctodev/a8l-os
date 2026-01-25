@@ -5,6 +5,7 @@ import { getIntegrations } from '../../../services/integrations';
 import type { Integration, IntegrationCategory } from '../../../types';
 import { INTEGRATION_CATEGORY_LABELS } from '../../../types';
 import { IntegrationDetailPanel } from './IntegrationDetailPanel';
+import { LLMIntegrationCard } from './LLMIntegrationCard';
 
 interface AllIntegrationsTabProps {
   onSuccess?: () => void;
@@ -180,49 +181,64 @@ export function AllIntegrationsTab({ onSuccess }: AllIntegrationsTabProps) {
                 {INTEGRATION_CATEGORY_LABELS[cat as IntegrationCategory] || cat}
               </h3>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {ints.map((integration) => (
-                  <button
-                    key={integration.id}
-                    onClick={() => handleIntegrationClick(integration)}
-                    className="group relative flex flex-col rounded-lg border border-slate-700 bg-slate-800 p-4 text-left transition-all hover:border-cyan-500/50 hover:shadow-lg hover:shadow-cyan-500/5"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        {getIntegrationIcon(integration.key) ? (
-                          <img
-                            src={getIntegrationIcon(integration.key)}
-                            alt={integration.name}
-                            className="h-10 w-10 rounded-lg object-contain bg-white p-1"
-                          />
-                        ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-700 text-slate-400">
-                            <Settings className="h-5 w-5" />
-                          </div>
-                        )}
-                        <div>
-                          <h4 className="font-medium text-white">{integration.name}</h4>
-                          <div className="flex items-center gap-2 text-xs text-slate-500">
-                            <span className="capitalize">{integration.scope}</span>
-                            <span>-</span>
-                            <span className="capitalize">{integration.connection_type.replace('_', ' ')}</span>
+                {ints.map((integration) => {
+                  const isLLMIntegration = integration.category === 'AI_LLM' &&
+                    ['openai', 'anthropic', 'google', 'google_ai'].includes(integration.key);
+
+                  if (isLLMIntegration) {
+                    return (
+                      <LLMIntegrationCard
+                        key={integration.id}
+                        integration={integration}
+                        onOpenPanel={() => setSelectedIntegration(integration)}
+                      />
+                    );
+                  }
+
+                  return (
+                    <button
+                      key={integration.id}
+                      onClick={() => handleIntegrationClick(integration)}
+                      className="group relative flex flex-col rounded-lg border border-slate-700 bg-slate-800 p-4 text-left transition-all hover:border-cyan-500/50 hover:shadow-lg hover:shadow-cyan-500/5"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          {getIntegrationIcon(integration.key) ? (
+                            <img
+                              src={getIntegrationIcon(integration.key)}
+                              alt={integration.name}
+                              className="h-10 w-10 rounded-lg object-contain bg-white p-1"
+                            />
+                          ) : (
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-700 text-slate-400">
+                              <Settings className="h-5 w-5" />
+                            </div>
+                          )}
+                          <div>
+                            <h4 className="font-medium text-white">{integration.name}</h4>
+                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                              <span className="capitalize">{integration.scope}</span>
+                              <span>-</span>
+                              <span className="capitalize">{integration.connection_type.replace('_', ' ')}</span>
+                            </div>
                           </div>
                         </div>
+                        {integration.settings_path && (
+                          <ExternalLink className="h-4 w-4 text-slate-600 opacity-0 transition-opacity group-hover:opacity-100" />
+                        )}
                       </div>
-                      {integration.settings_path && (
-                        <ExternalLink className="h-4 w-4 text-slate-600 opacity-0 transition-opacity group-hover:opacity-100" />
-                      )}
-                    </div>
-                    <p className="mt-3 text-sm text-slate-400 line-clamp-2">
-                      {integration.description}
-                    </p>
-                    <div className="mt-4 flex items-center justify-between">
-                      {getStatusBadge(integration)}
-                      {!integration.enabled && (
-                        <span className="text-xs text-slate-600">Disabled</span>
-                      )}
-                    </div>
-                  </button>
-                ))}
+                      <p className="mt-3 text-sm text-slate-400 line-clamp-2">
+                        {integration.description}
+                      </p>
+                      <div className="mt-4 flex items-center justify-between">
+                        {getStatusBadge(integration)}
+                        {!integration.enabled && (
+                          <span className="text-xs text-slate-600">Disabled</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ))}

@@ -7,3 +7,4 @@ export { IntegrationDetailPanel } from './IntegrationDetailPanel';
 export { IntegrationLogsTab } from './IntegrationLogsTab';
 export { WebhooksTab } from './WebhooksTab';
 export { WebhookFormModal } from './WebhookFormModal';
+export { LLMIntegrationCard } from './LLMIntegrationCard';

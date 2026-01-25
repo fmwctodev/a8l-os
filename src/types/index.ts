@@ -2855,6 +2855,45 @@ export interface UpdateLLMModelInput {
   metadata?: Record<string, unknown>;
 }
 
+export interface LLMModelCatalogEntry {
+  id: string;
+  org_id: string;
+  provider: LLMProviderType;
+  model_key: string;
+  display_name: string;
+  context_window: number | null;
+  capabilities: {
+    vision?: boolean;
+    function_calling?: boolean;
+    streaming?: boolean;
+    reasoning?: boolean;
+  };
+  is_deprecated: boolean;
+  is_enabled: boolean;
+  is_default: boolean;
+  last_synced_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderModelInfo {
+  model_key: string;
+  display_name: string;
+  context_window: number | null;
+  capabilities: Record<string, boolean>;
+  is_deprecated: boolean;
+  is_enabled: boolean;
+  is_default: boolean;
+}
+
+export interface FetchProviderModelsResponse {
+  models: ProviderModelInfo[];
+}
+
+export interface SyncCatalogResponse {
+  synced_count: number;
+}
+
 export interface CreateKnowledgeCollectionInput {
   name: string;
   description?: string;
