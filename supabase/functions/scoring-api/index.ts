@@ -1,10 +1,28 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
+import {
+  corsHeaders,
+  handleCors,
+  successResponse,
+} from "../_shared/cors.ts";
+import {
+  getSupabaseClient,
+  extractUserContext,
+  requireAuth,
+  AuthError,
+} from "../_shared/auth.ts";
+import {
+  requirePermission,
+  PermissionError,
+} from "../_shared/permissions.ts";
+import { handleError } from "../_shared/errors.ts";
+import { auditAction } from "../_shared/audit.ts";
+import type { UserContext } from "../_shared/types.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+const PERMISSIONS = {
+  VIEW: "scoring.view",
+  MANAGE: "scoring.manage",
+  ADJUST: "scoring.adjust",
 };
 
 interface RequestPayload {
@@ -13,45 +31,13 @@ interface RequestPayload {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
+  const corsResponse = handleCors(req);
+  if (corsResponse) return corsResponse;
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { data: userData } = await supabase
-      .from("users")
-      .select("id, org_id, role_id")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (!userData) {
-      return new Response(JSON.stringify({ error: "User not found" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const supabase = getSupabaseClient();
+    const userContext = await extractUserContext(req, supabase);
+    const user = requireAuth(userContext);
 
     const payload: RequestPayload = await req.json();
     const { action } = payload;
@@ -60,83 +46,131 @@ Deno.serve(async (req: Request) => {
 
     switch (action) {
       case "list-models":
-        result = await listModels(supabase, userData.org_id);
+        requirePermission(user, PERMISSIONS.VIEW);
+        result = await listModels(supabase, user.orgId);
         break;
+
       case "get-model":
-        result = await getModel(supabase, userData.org_id, payload.modelId as string);
+        requirePermission(user, PERMISSIONS.VIEW);
+        result = await getModel(supabase, user.orgId, payload.modelId as string);
         break;
+
       case "create-model":
-        result = await createModel(supabase, userData.org_id, payload);
+        requirePermission(user, PERMISSIONS.MANAGE);
+        result = await createModel(supabase, user.orgId, payload);
+        await auditAction(supabase, user, "create", "scoring_model", (result as { model: { id: string } }).model.id);
         break;
+
       case "update-model":
-        result = await updateModel(supabase, userData.org_id, payload.modelId as string, payload);
+        requirePermission(user, PERMISSIONS.MANAGE);
+        result = await updateModel(supabase, user.orgId, payload.modelId as string, payload);
+        await auditAction(supabase, user, "update", "scoring_model", payload.modelId as string);
         break;
+
       case "delete-model":
-        result = await deleteModel(supabase, userData.org_id, payload.modelId as string);
+        requirePermission(user, PERMISSIONS.MANAGE);
+        result = await deleteModel(supabase, user.orgId, payload.modelId as string);
+        await auditAction(supabase, user, "delete", "scoring_model", payload.modelId as string);
         break;
+
       case "toggle-model":
-        result = await toggleModel(supabase, userData.org_id, payload.modelId as string, payload.active as boolean);
-        break;
-      case "set-primary":
-        result = await setPrimaryModel(supabase, userData.org_id, payload.modelId as string);
-        break;
-      case "list-rules":
-        result = await listRules(supabase, userData.org_id, payload.modelId as string);
-        break;
-      case "create-rule":
-        result = await createRule(supabase, userData.org_id, payload);
-        break;
-      case "update-rule":
-        result = await updateRule(supabase, userData.org_id, payload.ruleId as string, payload);
-        break;
-      case "delete-rule":
-        result = await deleteRule(supabase, userData.org_id, payload.ruleId as string);
-        break;
-      case "toggle-rule":
-        result = await toggleRule(supabase, userData.org_id, payload.ruleId as string, payload.active as boolean);
-        break;
-      case "adjust-score":
-        result = await adjustScore(supabase, userData.org_id, user.id, payload);
-        break;
-      case "get-entity-scores":
-        result = await getEntityScores(supabase, userData.org_id, payload.entityType as string, payload.entityId as string);
-        break;
-      case "get-score-history":
-        result = await getScoreHistory(supabase, userData.org_id, payload);
-        break;
-      case "get-decay-config":
-        result = await getDecayConfig(supabase, userData.org_id, payload.modelId as string);
-        break;
-      case "update-decay-config":
-        result = await updateDecayConfig(supabase, userData.org_id, payload.modelId as string, payload);
-        break;
-      case "get-adjustment-limits":
-        result = await getAdjustmentLimits(supabase, userData.org_id);
-        break;
-      case "update-adjustment-limits":
-        result = await updateAdjustmentLimits(supabase, userData.org_id, payload);
-        break;
-      default:
-        return new Response(JSON.stringify({ error: "Unknown action" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        requirePermission(user, PERMISSIONS.MANAGE);
+        result = await toggleModel(supabase, user.orgId, payload.modelId as string, payload.active as boolean);
+        await auditAction(supabase, user, "update", "scoring_model", payload.modelId as string, {
+          metadata: { action: payload.active ? "enabled" : "disabled" },
         });
+        break;
+
+      case "set-primary":
+        requirePermission(user, PERMISSIONS.MANAGE);
+        result = await setPrimaryModel(supabase, user.orgId, payload.modelId as string);
+        await auditAction(supabase, user, "update", "scoring_model", payload.modelId as string, {
+          metadata: { action: "set_primary" },
+        });
+        break;
+
+      case "list-rules":
+        requirePermission(user, PERMISSIONS.VIEW);
+        result = await listRules(supabase, user.orgId, payload.modelId as string);
+        break;
+
+      case "create-rule":
+        requirePermission(user, PERMISSIONS.MANAGE);
+        result = await createRule(supabase, user.orgId, payload);
+        await auditAction(supabase, user, "create", "scoring_rule", (result as { rule: { id: string } }).rule.id);
+        break;
+
+      case "update-rule":
+        requirePermission(user, PERMISSIONS.MANAGE);
+        result = await updateRule(supabase, user.orgId, payload.ruleId as string, payload);
+        await auditAction(supabase, user, "update", "scoring_rule", payload.ruleId as string);
+        break;
+
+      case "delete-rule":
+        requirePermission(user, PERMISSIONS.MANAGE);
+        result = await deleteRule(supabase, user.orgId, payload.ruleId as string);
+        await auditAction(supabase, user, "delete", "scoring_rule", payload.ruleId as string);
+        break;
+
+      case "toggle-rule":
+        requirePermission(user, PERMISSIONS.MANAGE);
+        result = await toggleRule(supabase, user.orgId, payload.ruleId as string, payload.active as boolean);
+        break;
+
+      case "adjust-score":
+        requirePermission(user, PERMISSIONS.ADJUST);
+        result = await adjustScore(supabase, user, payload);
+        await auditAction(supabase, user, "update", payload.entityType as string, payload.entityId as string, {
+          metadata: { action: "score_adjustment", points: payload.points },
+        });
+        break;
+
+      case "get-entity-scores":
+        requirePermission(user, PERMISSIONS.VIEW);
+        result = await getEntityScores(supabase, user.orgId, payload.entityType as string, payload.entityId as string);
+        break;
+
+      case "get-score-history":
+        requirePermission(user, PERMISSIONS.VIEW);
+        result = await getScoreHistory(supabase, user.orgId, payload);
+        break;
+
+      case "get-decay-config":
+        requirePermission(user, PERMISSIONS.VIEW);
+        result = await getDecayConfig(supabase, user.orgId, payload.modelId as string);
+        break;
+
+      case "update-decay-config":
+        requirePermission(user, PERMISSIONS.MANAGE);
+        result = await updateDecayConfig(supabase, user.orgId, payload.modelId as string, payload);
+        await auditAction(supabase, user, "update", "scoring_decay_config", payload.modelId as string);
+        break;
+
+      case "get-adjustment-limits":
+        requirePermission(user, PERMISSIONS.VIEW);
+        result = await getAdjustmentLimits(supabase, user.orgId);
+        break;
+
+      case "update-adjustment-limits":
+        requirePermission(user, PERMISSIONS.MANAGE);
+        result = await updateAdjustmentLimits(supabase, user.orgId, payload);
+        await auditAction(supabase, user, "update", "scoring_adjustment_limits", user.orgId);
+        break;
+
+      default:
+        return new Response(
+          JSON.stringify({ success: false, error: { code: "BAD_REQUEST", message: "Unknown action" } }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
     }
 
-    return new Response(JSON.stringify(result), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return successResponse(result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return handleError(error);
   }
 });
 
-async function listModels(supabase: ReturnType<typeof createClient>, orgId: string) {
+async function listModels(supabase: SupabaseClient, orgId: string) {
   const { data, error } = await supabase
     .from("scoring_models")
     .select(`
@@ -151,7 +185,7 @@ async function listModels(supabase: ReturnType<typeof createClient>, orgId: stri
   return { models: data };
 }
 
-async function getModel(supabase: ReturnType<typeof createClient>, orgId: string, modelId: string) {
+async function getModel(supabase: SupabaseClient, orgId: string, modelId: string) {
   const { data, error } = await supabase
     .from("scoring_models")
     .select(`
@@ -168,7 +202,7 @@ async function getModel(supabase: ReturnType<typeof createClient>, orgId: string
   return { model: data };
 }
 
-async function createModel(supabase: ReturnType<typeof createClient>, orgId: string, payload: RequestPayload) {
+async function createModel(supabase: SupabaseClient, orgId: string, payload: RequestPayload) {
   const { name, scope, startingScore, maxScore, isPrimary } = payload;
 
   if (isPrimary) {
@@ -209,7 +243,7 @@ async function createModel(supabase: ReturnType<typeof createClient>, orgId: str
   return { model: data };
 }
 
-async function updateModel(supabase: ReturnType<typeof createClient>, orgId: string, modelId: string, payload: RequestPayload) {
+async function updateModel(supabase: SupabaseClient, orgId: string, modelId: string, payload: RequestPayload) {
   const { name, startingScore, maxScore, isPrimary } = payload;
 
   const { data: existing } = await supabase
@@ -246,7 +280,7 @@ async function updateModel(supabase: ReturnType<typeof createClient>, orgId: str
   return { model: data };
 }
 
-async function deleteModel(supabase: ReturnType<typeof createClient>, orgId: string, modelId: string) {
+async function deleteModel(supabase: SupabaseClient, orgId: string, modelId: string) {
   const { error } = await supabase
     .from("scoring_models")
     .delete()
@@ -257,7 +291,7 @@ async function deleteModel(supabase: ReturnType<typeof createClient>, orgId: str
   return { success: true };
 }
 
-async function toggleModel(supabase: ReturnType<typeof createClient>, orgId: string, modelId: string, active: boolean) {
+async function toggleModel(supabase: SupabaseClient, orgId: string, modelId: string, active: boolean) {
   const { data, error } = await supabase
     .from("scoring_models")
     .update({ active })
@@ -270,7 +304,7 @@ async function toggleModel(supabase: ReturnType<typeof createClient>, orgId: str
   return { model: data };
 }
 
-async function setPrimaryModel(supabase: ReturnType<typeof createClient>, orgId: string, modelId: string) {
+async function setPrimaryModel(supabase: SupabaseClient, orgId: string, modelId: string) {
   const { data: model } = await supabase
     .from("scoring_models")
     .select("scope")
@@ -298,7 +332,7 @@ async function setPrimaryModel(supabase: ReturnType<typeof createClient>, orgId:
   return { model: data };
 }
 
-async function listRules(supabase: ReturnType<typeof createClient>, orgId: string, modelId: string) {
+async function listRules(supabase: SupabaseClient, orgId: string, modelId: string) {
   const { data: model } = await supabase
     .from("scoring_models")
     .select("id")
@@ -318,7 +352,7 @@ async function listRules(supabase: ReturnType<typeof createClient>, orgId: strin
   return { rules: data };
 }
 
-async function createRule(supabase: ReturnType<typeof createClient>, orgId: string, payload: RequestPayload) {
+async function createRule(supabase: SupabaseClient, orgId: string, payload: RequestPayload) {
   const { modelId, name, triggerType, triggerConfig, points, frequencyType, cooldownInterval, cooldownUnit } = payload;
 
   const { data: model } = await supabase
@@ -350,7 +384,7 @@ async function createRule(supabase: ReturnType<typeof createClient>, orgId: stri
   return { rule: data };
 }
 
-async function updateRule(supabase: ReturnType<typeof createClient>, orgId: string, ruleId: string, payload: RequestPayload) {
+async function updateRule(supabase: SupabaseClient, orgId: string, ruleId: string, payload: RequestPayload) {
   const { name, triggerType, triggerConfig, points, frequencyType, cooldownInterval, cooldownUnit, active } = payload;
 
   const { data: rule } = await supabase
@@ -390,7 +424,7 @@ async function updateRule(supabase: ReturnType<typeof createClient>, orgId: stri
   return { rule: data };
 }
 
-async function deleteRule(supabase: ReturnType<typeof createClient>, orgId: string, ruleId: string) {
+async function deleteRule(supabase: SupabaseClient, orgId: string, ruleId: string) {
   const { data: rule } = await supabase
     .from("scoring_rules")
     .select("model_id")
@@ -417,7 +451,7 @@ async function deleteRule(supabase: ReturnType<typeof createClient>, orgId: stri
   return { success: true };
 }
 
-async function toggleRule(supabase: ReturnType<typeof createClient>, orgId: string, ruleId: string, active: boolean) {
+async function toggleRule(supabase: SupabaseClient, orgId: string, ruleId: string, active: boolean) {
   const { data: rule } = await supabase
     .from("scoring_rules")
     .select("model_id")
@@ -446,8 +480,9 @@ async function toggleRule(supabase: ReturnType<typeof createClient>, orgId: stri
   return { rule: data };
 }
 
-async function adjustScore(supabase: ReturnType<typeof createClient>, orgId: string, userId: string, payload: RequestPayload) {
+async function adjustScore(supabase: SupabaseClient, user: UserContext, payload: RequestPayload) {
   const { modelId, entityType, entityId, points, reason } = payload;
+  const orgId = user.orgId;
 
   const { data: limits } = await supabase
     .from("scoring_adjustment_limits")
@@ -456,13 +491,13 @@ async function adjustScore(supabase: ReturnType<typeof createClient>, orgId: str
     .maybeSingle();
 
   if (limits) {
-    if (points > 0 && points > limits.max_positive_adjustment) {
+    if ((points as number) > 0 && (points as number) > limits.max_positive_adjustment) {
       throw new Error(`Adjustment exceeds maximum positive limit of ${limits.max_positive_adjustment}`);
     }
-    if (points < 0 && Math.abs(points) > limits.max_negative_adjustment) {
+    if ((points as number) < 0 && Math.abs(points as number) > limits.max_negative_adjustment) {
       throw new Error(`Adjustment exceeds maximum negative limit of ${limits.max_negative_adjustment}`);
     }
-    if (limits.require_reason && (!reason || reason.trim() === "")) {
+    if (limits.require_reason && (!reason || (reason as string).trim() === "")) {
       throw new Error("A reason is required for manual adjustments");
     }
   }
@@ -523,13 +558,13 @@ async function adjustScore(supabase: ReturnType<typeof createClient>, orgId: str
       new_score: newScore,
       reason: reason || "Manual adjustment",
       source: "manual",
-      created_by: userId,
+      created_by: user.id,
     });
 
   return { previousScore: currentScore, newScore, pointsDelta: points };
 }
 
-async function getEntityScores(supabase: ReturnType<typeof createClient>, orgId: string, entityType: string, entityId: string) {
+async function getEntityScores(supabase: SupabaseClient, orgId: string, entityType: string, entityId: string) {
   const { data, error } = await supabase
     .from("entity_scores")
     .select(`
@@ -544,7 +579,7 @@ async function getEntityScores(supabase: ReturnType<typeof createClient>, orgId:
   return { scores: data };
 }
 
-async function getScoreHistory(supabase: ReturnType<typeof createClient>, orgId: string, payload: RequestPayload) {
+async function getScoreHistory(supabase: SupabaseClient, orgId: string, payload: RequestPayload) {
   const { entityType, entityId, modelId, limit = 50, offset = 0 } = payload;
 
   let query = supabase
@@ -570,7 +605,7 @@ async function getScoreHistory(supabase: ReturnType<typeof createClient>, orgId:
   return { events: data, total: count };
 }
 
-async function getDecayConfig(supabase: ReturnType<typeof createClient>, orgId: string, modelId: string) {
+async function getDecayConfig(supabase: SupabaseClient, orgId: string, modelId: string) {
   const { data: model } = await supabase
     .from("scoring_models")
     .select("id")
@@ -590,7 +625,7 @@ async function getDecayConfig(supabase: ReturnType<typeof createClient>, orgId: 
   return { config: data };
 }
 
-async function updateDecayConfig(supabase: ReturnType<typeof createClient>, orgId: string, modelId: string, payload: RequestPayload) {
+async function updateDecayConfig(supabase: SupabaseClient, orgId: string, modelId: string, payload: RequestPayload) {
   const { enabled, decayType, decayAmount, intervalDays, minScoreFloor, notificationThreshold, notifyInApp, notifyEmail, notifySms } = payload;
 
   const { data: model } = await supabase
@@ -642,7 +677,7 @@ async function updateDecayConfig(supabase: ReturnType<typeof createClient>, orgI
   return { config: data };
 }
 
-async function getAdjustmentLimits(supabase: ReturnType<typeof createClient>, orgId: string) {
+async function getAdjustmentLimits(supabase: SupabaseClient, orgId: string) {
   const { data, error } = await supabase
     .from("scoring_adjustment_limits")
     .select("*")
@@ -653,7 +688,7 @@ async function getAdjustmentLimits(supabase: ReturnType<typeof createClient>, or
   return { limits: data || { max_positive_adjustment: 100, max_negative_adjustment: 100, require_reason: true } };
 }
 
-async function updateAdjustmentLimits(supabase: ReturnType<typeof createClient>, orgId: string, payload: RequestPayload) {
+async function updateAdjustmentLimits(supabase: SupabaseClient, orgId: string, payload: RequestPayload) {
   const { maxPositiveAdjustment, maxNegativeAdjustment, requireReason } = payload;
 
   const { data: existing } = await supabase
