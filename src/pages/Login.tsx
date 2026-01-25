@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Loader2, AlertCircle, Zap, Eye, EyeOff } from 'lucide-react';
+import { Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 function getErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) {
@@ -95,9 +95,11 @@ export function Login() {
     <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-600 mb-4">
-            <Zap className="w-8 h-8 text-white" />
-          </div>
+          <img
+            src="/assets/logo/logo.png"
+            alt="Autom8ion Lab OS"
+            className="h-16 mx-auto mb-4"
+          />
           <h1 className="text-2xl font-bold text-white mb-1">Autom8ion Lab OS</h1>
           <p className="text-slate-400">Sign in to your workspace</p>
         </div>
