@@ -49,6 +49,7 @@ export function SystemDashboard() {
     security,
     compliance,
     jobs,
+    integrations,
     loading,
     isLoading,
     refetch,
@@ -162,7 +163,7 @@ export function SystemDashboard() {
 
         <section>
           <h2 className="text-sm font-medium text-slate-400 mb-4">Service Connectivity</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <ServiceHealthCard
               title="Messaging"
               icon={MessageSquare}
@@ -187,8 +188,71 @@ export function SystemDashboard() {
               onClick={() => navigate('/settings/integrations')}
               isLoading={loading.health}
             />
+            <ServiceHealthCard
+              title="Integration Setup"
+              icon={Zap}
+              status={integrations.pending > 0 ? 'degraded' : 'connected'}
+              description={`${integrations.configured}/${integrations.total} configured`}
+              onClick={() => navigate('/settings/integrations?tab=all')}
+              isLoading={loading.integrations}
+            />
           </div>
         </section>
+
+        {integrations.pending > 0 && (
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-medium text-slate-400">Integrations Requiring Configuration</h2>
+              <span className="px-2 py-1 bg-amber-500/10 text-amber-400 text-xs font-medium rounded-full">
+                {integrations.pending} pending
+              </span>
+            </div>
+            <div className="bg-slate-800/50 rounded-xl border border-amber-500/20 overflow-hidden">
+              {loading.integrations ? (
+                <div className="p-6">
+                  <div className="animate-pulse space-y-3">
+                    {[1, 2, 3].map(i => (
+                      <div key={i} className="h-12 bg-slate-700/50 rounded" />
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-700/50">
+                  {integrations.pendingList.slice(0, 8).map(integration => (
+                    <div
+                      key={integration.key}
+                      onClick={() => navigate('/settings/integrations?tab=all')}
+                      className="flex items-center justify-between p-4 hover:bg-slate-800 cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-slate-700 rounded-lg flex items-center justify-center">
+                          <Zap className="h-4 w-4 text-slate-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-white">{integration.name}</p>
+                          <p className="text-xs text-slate-500">{integration.category.replace('_', ' ')}</p>
+                        </div>
+                      </div>
+                      <span className="px-2 py-1 bg-amber-500/10 text-amber-400 text-xs font-medium rounded">
+                        Needs API Key
+                      </span>
+                    </div>
+                  ))}
+                  {integrations.pendingList.length > 8 && (
+                    <div
+                      onClick={() => navigate('/settings/integrations?tab=all')}
+                      className="p-4 text-center hover:bg-slate-800 cursor-pointer transition-colors"
+                    >
+                      <span className="text-sm text-cyan-400">
+                        +{integrations.pendingList.length - 8} more integrations
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         <section>
           <div className="flex items-center justify-between mb-4">

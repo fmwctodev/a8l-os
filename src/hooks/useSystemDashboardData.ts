@@ -66,6 +66,13 @@ export interface JobStats {
   failedJobs24h: number;
 }
 
+export interface IntegrationSetupStats {
+  total: number;
+  configured: number;
+  pending: number;
+  pendingList: { key: string; name: string; category: string }[];
+}
+
 export interface SystemDashboardData {
   health: {
     services: ServiceHealth[];
@@ -82,6 +89,7 @@ export interface SystemDashboardData {
   security: SecurityStats;
   compliance: ComplianceStatus;
   jobs: JobStats;
+  integrations: IntegrationSetupStats;
 }
 
 interface LoadingState {
@@ -91,6 +99,7 @@ interface LoadingState {
   usage: boolean;
   security: boolean;
   jobs: boolean;
+  integrations: boolean;
 }
 
 const defaultData: SystemDashboardData = {
@@ -109,6 +118,7 @@ const defaultData: SystemDashboardData = {
   security: { failedLogins24h: 0, suspiciousIps: 0, permissionEscalations: 0, secretsRotated30d: 0 },
   compliance: { soc2: 'compliant', gdpr: 'enabled', auditLogging: 'active' },
   jobs: { activeWorkflows: 0, jobsWaiting: 0, stuckJobs: 0, failedJobs24h: 0 },
+  integrations: { total: 0, configured: 0, pending: 0, pendingList: [] },
 };
 
 export function useSystemDashboardData() {
@@ -121,6 +131,7 @@ export function useSystemDashboardData() {
     usage: true,
     security: true,
     jobs: true,
+    integrations: true,
   });
   const [error, setError] = useState<Error | null>(null);
 
@@ -361,6 +372,46 @@ export function useSystemDashboardData() {
     setLoading(prev => ({ ...prev, jobs: false }));
   }, []);
 
+  const fetchIntegrationsData = useCallback(async () => {
+    setLoading(prev => ({ ...prev, integrations: true }));
+
+    const { data: integrations } = await supabase
+      .from('integrations')
+      .select(`
+        id,
+        key,
+        name,
+        category,
+        connection_type,
+        integration_connections!integration_connections_integration_id_fkey (
+          id,
+          status
+        )
+      `)
+      .eq('enabled', true);
+
+    const total = integrations?.length || 0;
+    const configured = integrations?.filter(
+      i => i.integration_connections?.some((c: { status: string }) => c.status === 'connected')
+    ).length || 0;
+    const pending = total - configured;
+
+    const pendingList = integrations
+      ?.filter(i => !i.integration_connections?.some((c: { status: string }) => c.status === 'connected'))
+      .map(i => ({ key: i.key, name: i.name, category: i.category })) || [];
+
+    setData(prev => ({
+      ...prev,
+      integrations: {
+        total,
+        configured,
+        pending,
+        pendingList,
+      },
+    }));
+    setLoading(prev => ({ ...prev, integrations: false }));
+  }, []);
+
   const refetch = useCallback(async () => {
     if (!isSuperAdmin) return;
 
@@ -371,8 +422,9 @@ export function useSystemDashboardData() {
       fetchUsageData(),
       fetchSecurityData(),
       fetchJobsData(),
+      fetchIntegrationsData(),
     ]);
-  }, [isSuperAdmin, fetchHealthData, fetchErrors, fetchTenantData, fetchUsageData, fetchSecurityData, fetchJobsData]);
+  }, [isSuperAdmin, fetchHealthData, fetchErrors, fetchTenantData, fetchUsageData, fetchSecurityData, fetchJobsData, fetchIntegrationsData]);
 
   const acknowledgeError = useCallback((errorId: string) => {
     setData(prev => ({
