@@ -9,6 +9,7 @@ import type {
   OpportunityCustomFieldValue
 } from '../types';
 import { createTimelineEvent } from './opportunityTimeline';
+import { logAuditWithContext, createUserContext } from './audit';
 
 function normalizeOpportunityTags(opportunity: Opportunity): Opportunity {
   if (opportunity.contact && (opportunity.contact as any).tags) {
@@ -343,6 +344,14 @@ export async function updateOpportunity(
     }
 
     if (updates.stage_id && updates.stage_id !== existing.stage_id) {
+      await recordStageHistory(
+        existing.org_id,
+        id,
+        existing.stage_id,
+        updates.stage_id,
+        actorUserId
+      );
+
       await createTimelineEvent({
         org_id: existing.org_id,
         opportunity_id: id,
@@ -356,6 +365,16 @@ export async function updateOpportunity(
           to_stage_name: data.stage?.name
         },
         actor_user_id: actorUserId
+      });
+
+      const userContext = createUserContext(actorUserId, existing.org_id);
+      await logAuditWithContext({
+        userContext,
+        action: 'opportunity_stage_changed',
+        entityType: 'opportunity',
+        entityId: id,
+        beforeState: { stage_id: existing.stage_id, stage_name: existing.stage?.name },
+        afterState: { stage_id: updates.stage_id, stage_name: data.stage?.name },
       });
     }
 
@@ -666,6 +685,55 @@ export async function bulkClose(
   for (const id of ids) {
     await closeOpportunity(id, status, actorUserId, lostReasonId, lostReasonText);
   }
+}
+
+async function recordStageHistory(
+  orgId: string,
+  opportunityId: string,
+  fromStageId: string | null,
+  toStageId: string,
+  changedByUserId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('opportunity_stage_history')
+    .insert({
+      org_id: orgId,
+      opportunity_id: opportunityId,
+      from_stage_id: fromStageId,
+      to_stage_id: toStageId,
+      changed_by_user_id: changedByUserId,
+    });
+
+  if (error) {
+    console.error('Failed to record stage history:', error);
+  }
+}
+
+export async function getStageHistory(
+  opportunityId: string
+): Promise<Array<{
+  id: string;
+  from_stage_id: string | null;
+  to_stage_id: string;
+  changed_at: string;
+  changed_by_user_id: string | null;
+  from_stage?: { id: string; name: string };
+  to_stage?: { id: string; name: string };
+  changed_by_user?: { id: string; name: string };
+}>> {
+  const { data, error } = await supabase
+    .from('opportunity_stage_history')
+    .select(`
+      *,
+      from_stage:pipeline_stages!opportunity_stage_history_from_stage_id_fkey(id, name),
+      to_stage:pipeline_stages!opportunity_stage_history_to_stage_id_fkey(id, name),
+      changed_by_user:users!opportunity_stage_history_changed_by_user_id_fkey(id, name)
+    `)
+    .eq('opportunity_id', opportunityId)
+    .order('changed_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
 }
 
 export async function exportOpportunitiesToCSV(

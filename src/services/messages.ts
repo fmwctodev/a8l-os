@@ -1,19 +1,27 @@
 import { supabase } from '../lib/supabase';
 import type { Message, MessageChannel, MessageDirection, MessageStatus, MessageMetadata } from '../types';
+import { logAuditWithContext, createUserContext } from './audit';
 
 export async function getMessages(
   conversationId: string,
   page = 1,
-  pageSize = 50
+  pageSize = 50,
+  options: { includeHidden?: boolean } = {}
 ): Promise<{ data: Message[]; hasMore: boolean }> {
   const offset = (page - 1) * pageSize;
 
-  const { data, error, count } = await supabase
+  let query = supabase
     .from('messages')
     .select('*', { count: 'exact' })
     .eq('conversation_id', conversationId)
     .order('sent_at', { ascending: true })
     .range(offset, offset + pageSize - 1);
+
+  if (!options.includeHidden) {
+    query = query.is('hidden_at', null);
+  }
+
+  const { data, error, count } = await query;
 
   if (error) throw error;
 
@@ -25,14 +33,21 @@ export async function getMessages(
 
 export async function getRecentMessages(
   conversationId: string,
-  limit = 20
+  limit = 20,
+  options: { includeHidden?: boolean } = {}
 ): Promise<Message[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from('messages')
     .select('*')
     .eq('conversation_id', conversationId)
     .order('sent_at', { ascending: false })
     .limit(limit);
+
+  if (!options.includeHidden) {
+    query = query.is('hidden_at', null);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -195,10 +210,87 @@ export async function getLastMessageForConversation(conversationId: string): Pro
     .select('*')
     .eq('conversation_id', conversationId)
     .neq('direction', 'system')
+    .is('hidden_at', null)
     .order('sent_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (error) throw error;
   return data as Message | null;
+}
+
+export async function hideMessage(
+  messageId: string,
+  userId: string,
+  organizationId: string
+): Promise<void> {
+  const { data: message, error: fetchError } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('id', messageId)
+    .single();
+
+  if (fetchError) throw fetchError;
+
+  const { error } = await supabase
+    .from('messages')
+    .update({
+      hidden_at: new Date().toISOString(),
+      hidden_by_user_id: userId,
+    })
+    .eq('id', messageId);
+
+  if (error) throw error;
+
+  const userContext = createUserContext(userId, organizationId);
+  await logAuditWithContext({
+    userContext,
+    action: 'message_hidden',
+    entityType: 'message',
+    entityId: messageId,
+    beforeState: { hidden_at: null },
+    afterState: { hidden_at: new Date().toISOString(), hidden_by_user_id: userId },
+  });
+}
+
+export async function unhideMessage(
+  messageId: string,
+  userId: string,
+  organizationId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('messages')
+    .update({
+      hidden_at: null,
+      hidden_by_user_id: null,
+    })
+    .eq('id', messageId);
+
+  if (error) throw error;
+
+  const userContext = createUserContext(userId, organizationId);
+  await logAuditWithContext({
+    userContext,
+    action: 'message_unhidden',
+    entityType: 'message',
+    entityId: messageId,
+    beforeState: { hidden_at: 'was_hidden' },
+    afterState: { hidden_at: null },
+  });
+}
+
+export async function getHiddenMessages(
+  conversationId: string,
+  limit = 50
+): Promise<Message[]> {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .not('hidden_at', 'is', null)
+    .order('hidden_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data as Message[];
 }

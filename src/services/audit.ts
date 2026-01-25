@@ -10,6 +10,23 @@ interface LogAuditParams {
   ipAddress?: string;
 }
 
+interface UserContext {
+  userId: string;
+  userName?: string;
+  organizationId: string;
+  userAgent?: string;
+  ipAddress?: string;
+}
+
+interface LogAuditWithContextParams {
+  userContext: UserContext;
+  action: string;
+  entityType: string;
+  entityId?: string;
+  beforeState?: Record<string, unknown> | null;
+  afterState?: Record<string, unknown> | null;
+}
+
 export async function logAudit({
   userId,
   action,
@@ -34,12 +51,52 @@ export async function logAudit({
   }
 }
 
+export async function logAuditWithContext({
+  userContext,
+  action,
+  entityType,
+  entityId,
+  beforeState,
+  afterState,
+}: LogAuditWithContextParams) {
+  const { error } = await supabase.from('audit_logs').insert({
+    user_id: userContext.userId,
+    organization_id: userContext.organizationId,
+    actor_user_name: userContext.userName || null,
+    action,
+    entity_type: entityType,
+    entity_id: entityId || null,
+    before_state: beforeState || null,
+    after_state: afterState || null,
+    ip_address: userContext.ipAddress || null,
+    user_agent: userContext.userAgent || null,
+  });
+
+  if (error) {
+    console.error('Failed to log audit with context:', error);
+  }
+}
+
+export function createUserContext(
+  userId: string,
+  organizationId: string,
+  userName?: string
+): UserContext {
+  return {
+    userId,
+    organizationId,
+    userName,
+    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
+  };
+}
+
 export async function getAuditLogs(options?: {
   limit?: number;
   offset?: number;
   entityType?: string;
   action?: string;
   userId?: string;
+  organizationId?: string;
   startDate?: string;
   endDate?: string;
 }) {
@@ -50,6 +107,10 @@ export async function getAuditLogs(options?: {
       user:users(id, name, email)
     `, { count: 'exact' })
     .order('timestamp', { ascending: false });
+
+  if (options?.organizationId) {
+    query = query.eq('organization_id', options.organizationId);
+  }
 
   if (options?.entityType) {
     query = query.eq('entity_type', options.entityType);
@@ -84,3 +145,5 @@ export async function getAuditLogs(options?: {
   if (error) throw error;
   return { data, count };
 }
+
+export type { UserContext };

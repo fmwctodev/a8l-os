@@ -67,6 +67,7 @@ import ScoringSettingsPage from './pages/settings/ScoringSettingsPage';
 import { IntegrationsSettingsPage } from './pages/settings/IntegrationsSettingsPage';
 import { BrandboardSettingsPage } from './pages/settings/BrandboardSettingsPage';
 import { BrandKitDetailPage } from './pages/settings/BrandKitDetailPage';
+import { CRUDHealthCheckPage } from './pages/settings/CRUDHealthCheckPage';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
 import { BookingPage } from './pages/public/BookingPage';
 import { PublicFormPage } from './pages/public/PublicFormPage';
@@ -524,6 +525,14 @@ function App() {
                   element={
                     <ProtectedRoute permission="integrations.view" featureFlag="integrations">
                       <IntegrationsSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="system/crud-health-check"
+                  element={
+                    <ProtectedRoute permission="audit.view">
+                      <CRUDHealthCheckPage />
                     </ProtectedRoute>
                   }
                 />

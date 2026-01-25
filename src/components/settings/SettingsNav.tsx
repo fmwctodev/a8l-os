@@ -14,6 +14,7 @@ import {
   Braces,
   Target,
   MessageSquare,
+  HeartPulse,
   LucideIcon,
 } from 'lucide-react';
 
@@ -139,6 +140,17 @@ const settingsNavSections: SettingsNavSection[] = [
         path: '/settings/brandboard',
         icon: Palette,
         requiresPermission: 'brandboard.view',
+      },
+    ],
+  },
+  {
+    title: 'System',
+    items: [
+      {
+        name: 'CRUD Health Check',
+        path: '/settings/system/crud-health-check',
+        icon: HeartPulse,
+        requiresPermission: 'audit.view',
       },
     ],
   },
