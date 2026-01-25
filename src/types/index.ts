@@ -44,6 +44,7 @@ export interface User {
   email: string;
   name: string;
   avatar_url: string | null;
+  profile_photo: string | null;
   phone: string | null;
   timezone: string;
   status: UserStatus;

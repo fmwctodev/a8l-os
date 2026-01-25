@@ -6,7 +6,7 @@ interface ProfileAvatarUploaderProps {
   currentUrl: string | null;
   userId: string;
   userName: string;
-  onUploadComplete: (url: string) => void;
+  onUploadComplete: (url: string) => void | Promise<void>;
   size?: 'sm' | 'md' | 'lg';
 }
 
@@ -59,8 +59,7 @@ export function ProfileAvatarUploader({
     setIsUploading(true);
     try {
       const url = await uploadProfilePhoto(userId, file);
-      onUploadComplete(url);
-      setPreviewUrl(null);
+      await onUploadComplete(url);
     } catch (err) {
       console.error('Upload failed:', err);
       setError('Failed to upload image');

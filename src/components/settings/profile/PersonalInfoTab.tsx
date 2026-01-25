@@ -81,7 +81,7 @@ export function PersonalInfoTab() {
       <div className="bg-slate-900 rounded-xl border border-slate-800 p-6">
         <div className="flex items-start gap-6 mb-6">
           <ProfileAvatarUploader
-            currentUrl={(user as any).profile_photo || user.avatar_url}
+            currentUrl={user.profile_photo || user.avatar_url}
             userId={user.id}
             userName={user.name || 'User'}
             onUploadComplete={handlePhotoUpload}
