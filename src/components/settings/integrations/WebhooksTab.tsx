@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Power, Play, ExternalLink, CheckCircle, XCircle, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, Power, Play, ExternalLink, CheckCircle, XCircle, Clock, ChevronDown, ChevronUp, Loader2, Edit2, ArrowUpRight } from 'lucide-react';
 import { getWebhooks, deleteWebhook, toggleWebhook, testWebhook, getWebhookDeliveries } from '../../../services/webhooks';
 import type { OutgoingWebhook, WebhookDelivery } from '../../../types';
 import { WEBHOOK_EVENT_LABELS } from '../../../types';
-import { WebhookFormModal } from './WebhookFormModal';
+import { WebhookFormDrawer } from './WebhookFormDrawer';
 
 interface WebhooksTabProps {
   onSuccess?: () => void;
@@ -12,7 +12,7 @@ interface WebhooksTabProps {
 export function WebhooksTab({ onSuccess }: WebhooksTabProps) {
   const [webhooks, setWebhooks] = useState<OutgoingWebhook[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(false);
   const [editingWebhook, setEditingWebhook] = useState<OutgoingWebhook | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -98,8 +98,13 @@ export function WebhooksTab({ onSuccess }: WebhooksTabProps) {
     }
   };
 
-  const handleModalClose = () => {
-    setShowModal(false);
+  const handleEdit = (webhook: OutgoingWebhook) => {
+    setEditingWebhook(webhook);
+    setShowDrawer(true);
+  };
+
+  const handleDrawerClose = () => {
+    setShowDrawer(false);
     setEditingWebhook(null);
     loadWebhooks();
     onSuccess?.();
@@ -119,21 +124,21 @@ export function WebhooksTab({ onSuccess }: WebhooksTabProps) {
     switch (status) {
       case 'delivered':
         return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
             <CheckCircle className="h-3 w-3" />
             Delivered
           </span>
         );
       case 'failed':
         return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-400">
             <XCircle className="h-3 w-3" />
             Failed
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-400">
             <Clock className="h-3 w-3" />
             Pending
           </span>
@@ -144,7 +149,7 @@ export function WebhooksTab({ onSuccess }: WebhooksTabProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+        <Loader2 className="h-8 w-8 animate-spin text-cyan-500" />
       </div>
     );
   }
@@ -152,12 +157,12 @@ export function WebhooksTab({ onSuccess }: WebhooksTabProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-slate-400">
           Configure outgoing webhooks to send event data to external systems in real-time.
         </p>
         <button
-          onClick={() => setShowModal(true)}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          onClick={() => setShowDrawer(true)}
+          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-cyan-500/25 transition-all hover:shadow-cyan-500/40"
         >
           <Plus className="h-4 w-4" />
           Create Webhook
@@ -165,15 +170,15 @@ export function WebhooksTab({ onSuccess }: WebhooksTabProps) {
       </div>
 
       {webhooks.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 bg-white p-12 text-center">
-          <ExternalLink className="mx-auto h-12 w-12 text-gray-300" />
-          <h3 className="mt-4 text-lg font-medium text-gray-900">No Webhooks Configured</h3>
-          <p className="mt-2 text-sm text-gray-500">
+        <div className="rounded-lg border border-slate-700 bg-slate-800 p-12 text-center">
+          <ExternalLink className="mx-auto h-12 w-12 text-slate-600" />
+          <h3 className="mt-4 text-lg font-medium text-white">No Webhooks Configured</h3>
+          <p className="mt-2 text-sm text-slate-400">
             Create a webhook to start sending event notifications to external systems.
           </p>
           <button
-            onClick={() => setShowModal(true)}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            onClick={() => setShowDrawer(true)}
+            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-cyan-500/25 transition-all hover:shadow-cyan-500/40"
           >
             <Plus className="h-4 w-4" />
             Create Webhook
@@ -184,34 +189,38 @@ export function WebhooksTab({ onSuccess }: WebhooksTabProps) {
           {webhooks.map((webhook) => (
             <div
               key={webhook.id}
-              className="overflow-hidden rounded-lg border border-gray-200 bg-white"
+              className="overflow-hidden rounded-lg border border-slate-700 bg-slate-800"
             >
               <div className="flex items-center justify-between px-6 py-4">
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3">
-                    <h4 className="font-medium text-gray-900">{webhook.name}</h4>
+                    <h4 className="font-medium text-white">{webhook.name}</h4>
                     {webhook.enabled ? (
-                      <span className="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+                      <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
                         Active
                       </span>
                     ) : (
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                      <span className="rounded-full bg-slate-700 px-2 py-0.5 text-xs font-medium text-slate-400">
                         Disabled
                       </span>
                     )}
+                    <span className="rounded bg-cyan-500/10 px-2 py-0.5 text-xs font-medium text-cyan-400">
+                      <ArrowUpRight className="mr-1 inline h-3 w-3" />
+                      Outbound
+                    </span>
                   </div>
-                  <p className="mt-1 text-sm text-gray-500 truncate max-w-md">{webhook.url}</p>
+                  <p className="mt-1 text-sm text-slate-500 truncate max-w-lg">{webhook.url}</p>
                   <div className="mt-2 flex flex-wrap gap-1">
                     {webhook.events.slice(0, 3).map((event) => (
                       <span
                         key={event}
-                        className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
+                        className="rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-400"
                       >
                         {WEBHOOK_EVENT_LABELS[event] || event}
                       </span>
                     ))}
                     {webhook.events.length > 3 && (
-                      <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                      <span className="rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-400">
                         +{webhook.events.length - 3} more
                       </span>
                     )}
@@ -221,16 +230,23 @@ export function WebhooksTab({ onSuccess }: WebhooksTabProps) {
                   <button
                     onClick={() => handleTest(webhook)}
                     disabled={testingId === webhook.id || !webhook.enabled}
-                    className="rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
+                    className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-700 hover:text-white disabled:opacity-50"
                     title="Test Webhook"
                   >
                     <Play className={`h-4 w-4 ${testingId === webhook.id ? 'animate-pulse' : ''}`} />
                   </button>
                   <button
+                    onClick={() => handleEdit(webhook)}
+                    className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
+                    title="Edit Webhook"
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </button>
+                  <button
                     onClick={() => handleToggle(webhook)}
                     disabled={togglingId === webhook.id}
-                    className={`rounded p-2 hover:bg-gray-100 disabled:opacity-50 ${
-                      webhook.enabled ? 'text-green-500' : 'text-gray-400'
+                    className={`rounded p-2 transition-colors hover:bg-slate-700 disabled:opacity-50 ${
+                      webhook.enabled ? 'text-emerald-400' : 'text-slate-500'
                     }`}
                     title={webhook.enabled ? 'Disable' : 'Enable'}
                   >
@@ -239,14 +255,15 @@ export function WebhooksTab({ onSuccess }: WebhooksTabProps) {
                   <button
                     onClick={() => handleDelete(webhook)}
                     disabled={deletingId === webhook.id}
-                    className="rounded p-2 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                    className="rounded p-2 text-slate-400 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
                     title="Delete"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => setExpandedId(expandedId === webhook.id ? null : webhook.id)}
-                    className="rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                    className="rounded p-2 text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
+                    title="View Deliveries"
                   >
                     {expandedId === webhook.id ? (
                       <ChevronUp className="h-4 w-4" />
@@ -258,52 +275,52 @@ export function WebhooksTab({ onSuccess }: WebhooksTabProps) {
               </div>
 
               {expandedId === webhook.id && (
-                <div className="border-t border-gray-200 bg-gray-50 px-6 py-4">
-                  <h5 className="text-sm font-medium text-gray-700">Recent Deliveries</h5>
+                <div className="border-t border-slate-700 bg-slate-900 px-6 py-4">
+                  <h5 className="text-sm font-medium text-slate-300">Recent Deliveries</h5>
                   {loadingDeliveries ? (
                     <div className="py-4 text-center">
-                      <div className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
+                      <Loader2 className="inline-block h-5 w-5 animate-spin text-cyan-500" />
                     </div>
                   ) : deliveries.length === 0 ? (
-                    <p className="mt-2 text-sm text-gray-500">No deliveries yet</p>
+                    <p className="mt-2 text-sm text-slate-500">No deliveries yet</p>
                   ) : (
                     <div className="mt-3 overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
+                      <table className="min-w-full divide-y divide-slate-700/50">
                         <thead>
                           <tr>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                            <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                               Event
                             </th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                            <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                               Status
                             </th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                            <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                               Response
                             </th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                            <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                               Attempts
                             </th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                            <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                               Timestamp
                             </th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-slate-700/30">
                           {deliveries.slice(0, 10).map((delivery) => (
-                            <tr key={delivery.id}>
-                              <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-900">
+                            <tr key={delivery.id} className="hover:bg-slate-800/50">
+                              <td className="whitespace-nowrap px-3 py-2 text-sm text-white">
                                 {WEBHOOK_EVENT_LABELS[delivery.event_type] || delivery.event_type}
                               </td>
                               <td className="whitespace-nowrap px-3 py-2">
                                 {getStatusBadge(delivery.status)}
                               </td>
-                              <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-500">
+                              <td className="whitespace-nowrap px-3 py-2 text-sm text-slate-400">
                                 {delivery.response_code || '-'}
                               </td>
-                              <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-500">
+                              <td className="whitespace-nowrap px-3 py-2 text-sm text-slate-400">
                                 {delivery.attempts}
                               </td>
-                              <td className="whitespace-nowrap px-3 py-2 text-sm text-gray-500">
+                              <td className="whitespace-nowrap px-3 py-2 text-sm text-slate-500">
                                 {formatDate(delivery.created_at)}
                               </td>
                             </tr>
@@ -319,10 +336,10 @@ export function WebhooksTab({ onSuccess }: WebhooksTabProps) {
         </div>
       )}
 
-      {showModal && (
-        <WebhookFormModal
+      {showDrawer && (
+        <WebhookFormDrawer
           webhook={editingWebhook}
-          onClose={handleModalClose}
+          onClose={handleDrawerClose}
         />
       )}
     </div>

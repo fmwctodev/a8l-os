@@ -1,15 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Puzzle, Building2, Link2, User, Webhook, History, CheckCircle, AlertCircle } from 'lucide-react';
+import { Puzzle, Link2, Users, Webhook, History, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { AllIntegrationsTab } from '../../components/settings/integrations/AllIntegrationsTab';
-import { OrganizationChannelsTab } from '../../components/settings/integrations/OrganizationChannelsTab';
 import { ConnectedIntegrationsTab } from '../../components/settings/integrations/ConnectedIntegrationsTab';
-import { MyAccountTab } from '../../components/settings/integrations/MyAccountTab';
+import { UserIntegrationsTab } from '../../components/settings/integrations/UserIntegrationsTab';
 import { WebhooksTab } from '../../components/settings/integrations/WebhooksTab';
 import { IntegrationLogsTab } from '../../components/settings/integrations/IntegrationLogsTab';
 
-type TabId = 'all' | 'organization' | 'connected' | 'my-account' | 'webhooks' | 'logs';
+type TabId = 'all' | 'connected' | 'user-integrations' | 'webhooks' | 'logs';
 
 interface Tab {
   id: TabId;
@@ -21,9 +20,8 @@ interface Tab {
 
 const tabs: Tab[] = [
   { id: 'all', label: 'All Integrations', icon: Puzzle },
-  { id: 'organization', label: 'Organization', icon: Building2, requiresSuperAdmin: true },
   { id: 'connected', label: 'Connected', icon: Link2 },
-  { id: 'my-account', label: 'My Account', icon: User },
+  { id: 'user-integrations', label: 'User Integrations', icon: Users },
   { id: 'webhooks', label: 'Webhooks', icon: Webhook, permission: 'integrations.webhooks.manage' },
   { id: 'logs', label: 'Activity Logs', icon: History, permission: 'integrations.logs.view' },
 ];
@@ -34,7 +32,7 @@ export function IntegrationsSettingsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const isSuperAdmin = hasPermission('settings.manage');
+  const isAdmin = hasPermission('integrations.manage');
 
   const successParam = searchParams.get('success');
   const errorParam = searchParams.get('error');
@@ -70,7 +68,7 @@ export function IntegrationsSettingsPage() {
   }, [notification]);
 
   const visibleTabs = tabs.filter(tab => {
-    if (tab.requiresSuperAdmin && !isSuperAdmin) return false;
+    if (tab.requiresSuperAdmin && !hasPermission('settings.manage')) return false;
     if (tab.permission && !hasPermission(tab.permission)) return false;
     return true;
   });
@@ -95,16 +93,19 @@ export function IntegrationsSettingsPage() {
     setRefreshKey(prev => prev + 1);
   };
 
+  const handleBrowseIntegrations = () => {
+    setActiveTab('all');
+    setSearchParams({ tab: 'all' });
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'all':
         return <AllIntegrationsTab key={refreshKey} onSuccess={triggerRefresh} />;
-      case 'organization':
-        return isSuperAdmin ? <OrganizationChannelsTab key={refreshKey} /> : null;
       case 'connected':
         return <ConnectedIntegrationsTab key={refreshKey} onSuccess={triggerRefresh} />;
-      case 'my-account':
-        return <MyAccountTab key={refreshKey} />;
+      case 'user-integrations':
+        return <UserIntegrationsTab key={refreshKey} />;
       case 'webhooks':
         return hasPermission('integrations.webhooks.manage') ? (
           <WebhooksTab key={refreshKey} onSuccess={triggerRefresh} />
@@ -120,25 +121,36 @@ export function IntegrationsSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Integrations</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Connect third-party services, manage organization channels, and configure webhooks
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-white">Integrations</h1>
+          <p className="mt-1 text-sm text-slate-400">
+            Connect third-party tools and services
+          </p>
+        </div>
+        {isAdmin && activeTab !== 'all' && (
+          <button
+            onClick={handleBrowseIntegrations}
+            className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-cyan-500/25 transition-all hover:shadow-cyan-500/40"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Browse Integrations
+          </button>
+        )}
       </div>
 
       {notification && (
         <div
           className={`flex items-center gap-3 rounded-lg border p-4 ${
             notification.type === 'success'
-              ? 'border-green-200 bg-green-50 text-green-800'
-              : 'border-red-200 bg-red-50 text-red-800'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+              : 'border-red-500/30 bg-red-500/10 text-red-400'
           }`}
         >
           {notification.type === 'success' ? (
-            <CheckCircle className="h-5 w-5 text-green-500" />
+            <CheckCircle className="h-5 w-5" />
           ) : (
-            <AlertCircle className="h-5 w-5 text-red-500" />
+            <AlertCircle className="h-5 w-5" />
           )}
           <p className="text-sm font-medium">{notification.message}</p>
           <button
@@ -150,7 +162,7 @@ export function IntegrationsSettingsPage() {
         </div>
       )}
 
-      <div className="border-b border-gray-200">
+      <div className="border-b border-slate-700">
         <nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
           {visibleTabs.map((tab) => {
             const Icon = tab.icon;
@@ -162,8 +174,8 @@ export function IntegrationsSettingsPage() {
                 className={`
                   flex items-center gap-2 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium transition-colors
                   ${isActive
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                    ? 'border-cyan-500 text-cyan-400'
+                    : 'border-transparent text-slate-400 hover:border-slate-600 hover:text-slate-300'
                   }
                 `}
               >

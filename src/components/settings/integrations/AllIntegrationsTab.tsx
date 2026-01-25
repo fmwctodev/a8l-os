@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, ExternalLink, CheckCircle, XCircle, AlertCircle, Settings } from 'lucide-react';
+import { Search, Filter, ExternalLink, CheckCircle, XCircle, AlertCircle, Settings, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getIntegrations } from '../../../services/integrations';
 import type { Integration, IntegrationCategory } from '../../../types';
@@ -108,7 +108,7 @@ export function AllIntegrationsTab({ onSuccess }: AllIntegrationsTabProps) {
     const status = integration.connection?.status;
     if (status === 'connected') {
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700">
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-400">
           <CheckCircle className="h-3 w-3" />
           Connected
         </span>
@@ -116,14 +116,14 @@ export function AllIntegrationsTab({ onSuccess }: AllIntegrationsTabProps) {
     }
     if (status === 'error') {
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700">
+        <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-1 text-xs font-medium text-red-400">
           <AlertCircle className="h-3 w-3" />
           Error
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
+      <span className="inline-flex items-center gap-1 rounded-full bg-slate-700 px-2 py-1 text-xs font-medium text-slate-400">
         <XCircle className="h-3 w-3" />
         Not Connected
       </span>
@@ -133,7 +133,7 @@ export function AllIntegrationsTab({ onSuccess }: AllIntegrationsTabProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+        <Loader2 className="h-8 w-8 animate-spin text-cyan-500" />
       </div>
     );
   }
@@ -142,21 +142,21 @@ export function AllIntegrationsTab({ onSuccess }: AllIntegrationsTabProps) {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
             placeholder="Search integrations..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded-lg border border-slate-700 bg-slate-800 py-2 pl-10 pr-4 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
           />
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-gray-400" />
+          <Filter className="h-4 w-4 text-slate-500" />
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as IntegrationCategory | '')}
-            className="rounded-lg border border-gray-300 py-2 pl-3 pr-8 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="rounded-lg border border-slate-700 bg-slate-800 py-2 pl-3 pr-8 text-sm text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
           >
             {categoryOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -168,14 +168,15 @@ export function AllIntegrationsTab({ onSuccess }: AllIntegrationsTabProps) {
       </div>
 
       {Object.keys(groupedIntegrations).length === 0 ? (
-        <div className="rounded-lg border border-gray-200 bg-white p-12 text-center">
-          <p className="text-gray-500">No integrations found</p>
+        <div className="rounded-lg border border-slate-700 bg-slate-800 p-12 text-center">
+          <Settings className="mx-auto h-12 w-12 text-slate-600" />
+          <p className="mt-4 text-slate-400">No integrations found</p>
         </div>
       ) : (
         <div className="space-y-8">
           {Object.entries(groupedIntegrations).map(([cat, ints]) => (
             <div key={cat}>
-              <h3 className="mb-4 text-sm font-semibold text-gray-700">
+              <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
                 {INTEGRATION_CATEGORY_LABELS[cat as IntegrationCategory] || cat}
               </h3>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -183,7 +184,7 @@ export function AllIntegrationsTab({ onSuccess }: AllIntegrationsTabProps) {
                   <button
                     key={integration.id}
                     onClick={() => handleIntegrationClick(integration)}
-                    className="group relative flex flex-col rounded-lg border border-gray-200 bg-white p-4 text-left transition-all hover:border-blue-300 hover:shadow-md"
+                    className="group relative flex flex-col rounded-lg border border-slate-700 bg-slate-800 p-4 text-left transition-all hover:border-cyan-500/50 hover:shadow-lg hover:shadow-cyan-500/5"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
@@ -191,16 +192,16 @@ export function AllIntegrationsTab({ onSuccess }: AllIntegrationsTabProps) {
                           <img
                             src={getIntegrationIcon(integration.key)}
                             alt={integration.name}
-                            className="h-10 w-10 rounded-lg object-contain"
+                            className="h-10 w-10 rounded-lg object-contain bg-white p-1"
                           />
                         ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-700 text-slate-400">
                             <Settings className="h-5 w-5" />
                           </div>
                         )}
                         <div>
-                          <h4 className="font-medium text-gray-900">{integration.name}</h4>
-                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                          <h4 className="font-medium text-white">{integration.name}</h4>
+                          <div className="flex items-center gap-2 text-xs text-slate-500">
                             <span className="capitalize">{integration.scope}</span>
                             <span>-</span>
                             <span className="capitalize">{integration.connection_type.replace('_', ' ')}</span>
@@ -208,16 +209,16 @@ export function AllIntegrationsTab({ onSuccess }: AllIntegrationsTabProps) {
                         </div>
                       </div>
                       {integration.settings_path && (
-                        <ExternalLink className="h-4 w-4 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100" />
+                        <ExternalLink className="h-4 w-4 text-slate-600 opacity-0 transition-opacity group-hover:opacity-100" />
                       )}
                     </div>
-                    <p className="mt-3 text-sm text-gray-600 line-clamp-2">
+                    <p className="mt-3 text-sm text-slate-400 line-clamp-2">
                       {integration.description}
                     </p>
                     <div className="mt-4 flex items-center justify-between">
                       {getStatusBadge(integration)}
                       {!integration.enabled && (
-                        <span className="text-xs text-gray-400">Disabled</span>
+                        <span className="text-xs text-slate-600">Disabled</span>
                       )}
                     </div>
                   </button>
