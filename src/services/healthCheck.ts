@@ -99,7 +99,7 @@ async function checkCriticalTables(): Promise<HealthCheck> {
     'appointments',
     'opportunities',
     'pipelines',
-    'stages',
+    'pipeline_stages',
     'workflows',
     'ai_agents',
   ];
