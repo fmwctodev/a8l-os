@@ -2,6 +2,12 @@ export interface Organization {
   id: string;
   name: string;
   created_at: string;
+  business_address?: string | null;
+  business_city?: string | null;
+  business_state?: string | null;
+  business_country?: string | null;
+  business_postal_code?: string | null;
+  business_timezone?: string | null;
 }
 
 export interface Department {
@@ -4923,4 +4929,220 @@ export const CUSTOM_LLM_REQUEST_FORMAT_LABELS: Record<CustomLLMRequestFormat, st
   openai: 'OpenAI Compatible',
   anthropic: 'Anthropic Compatible',
   custom: 'Custom Format'
+};
+
+export type SocialAIActionType =
+  | 'improve_engagement'
+  | 'shorten'
+  | 'rewrite_tone'
+  | 'make_promotional'
+  | 'add_cta'
+  | 'optimize_hashtags'
+  | 'localize'
+  | 'generate_new'
+  | 'repurpose';
+
+export type AIGenerateObjective =
+  | 'promote_offer'
+  | 'announce_update'
+  | 'educational'
+  | 'engagement'
+  | 'testimonial';
+
+export type AIToneOption =
+  | 'brandboard_default'
+  | 'friendly'
+  | 'professional'
+  | 'casual'
+  | 'bold';
+
+export type AIContentLength = 'short' | 'medium' | 'long';
+
+export type AIRepurposeSourceType = 'current_content' | 'meeting_notes';
+
+export type AIRepurposeAction =
+  | 'shorten_post'
+  | 'carousel_captions'
+  | 'proposal_highlights';
+
+export type AIHashtagCategory = 'trending' | 'niche' | 'brand';
+
+export type AIHashtagPlacement = 'inline' | 'follow_comment';
+
+export interface SocialPostAIMetadata {
+  id: string;
+  post_id: string | null;
+  organization_id: string;
+  user_id: string | null;
+  platform: SocialProvider | 'all' | null;
+  action_type: SocialAIActionType;
+  model_used: string | null;
+  brand_kit_id: string | null;
+  brand_voice_id: string | null;
+  brand_kit_version: number | null;
+  brand_voice_version: number | null;
+  input_content: string | null;
+  input_length: number | null;
+  output_content: string | null;
+  output_length: number | null;
+  tokens_used: number;
+  generation_params: Record<string, unknown>;
+  applied: boolean;
+  applied_at: string | null;
+  created_at: string;
+}
+
+export interface AIQuickSuggestion {
+  id: SocialAIActionType;
+  label: string;
+  description: string;
+  icon: string;
+}
+
+export interface AISuggestionResult {
+  original: string;
+  suggested: string;
+  action_type: SocialAIActionType;
+  character_count_original: number;
+  character_count_suggested: number;
+  metadata_id?: string;
+}
+
+export interface AIHashtagSuggestion {
+  text: string;
+  category: AIHashtagCategory;
+  platform_appropriate: SocialProvider[];
+}
+
+export interface AICTASuggestion {
+  text: string;
+  context: string;
+  platform_appropriate: SocialProvider[];
+}
+
+export interface AIGenerateNewOptions {
+  objective: AIGenerateObjective;
+  tone: AIToneOption;
+  length: AIContentLength;
+  platforms: SocialProvider[];
+  custom_prompt?: string;
+  brand_kit_id?: string;
+  brand_voice_id?: string;
+}
+
+export interface AIGenerateNewResult {
+  variations: Array<{
+    content: string;
+    character_count: number;
+  }>;
+  objective: AIGenerateObjective;
+  tone: AIToneOption;
+  metadata_id?: string;
+}
+
+export interface AIRepurposeOptions {
+  source_type: AIRepurposeSourceType;
+  source_content: string;
+  action: AIRepurposeAction;
+  target_platform: SocialProvider;
+}
+
+export interface AIRepurposeResult {
+  content: string;
+  slides?: string[];
+  character_count: number;
+  metadata_id?: string;
+}
+
+export interface AIContentAssistantState {
+  isOpen: boolean;
+  activeTab: 'suggestions' | 'generate' | 'repurpose' | 'brand_voice';
+  isLoading: boolean;
+  currentAction: SocialAIActionType | null;
+  suggestionResult: AISuggestionResult | null;
+  generateResult: AIGenerateNewResult | null;
+  repurposeResult: AIRepurposeResult | null;
+  hashtagSuggestions: AIHashtagSuggestion[];
+  ctaSuggestions: AICTASuggestion[];
+  error: string | null;
+}
+
+export interface PlatformCharacterLimits {
+  facebook: number;
+  instagram: number;
+  linkedin: number;
+  tiktok: number;
+  youtube: number;
+  twitter: number;
+  google_business: number;
+}
+
+export interface PlatformHashtagGuidelines {
+  max_hashtags: number;
+  placement: AIHashtagPlacement;
+  include_in_body: boolean;
+}
+
+export interface ActiveBrandboardForAI {
+  brand_kit: {
+    id: string;
+    name: string;
+    version: number;
+  } | null;
+  brand_voice: {
+    id: string;
+    name: string;
+    version: number;
+    tone_settings: {
+      formality: number;
+      friendliness: number;
+      energy: number;
+      confidence: number;
+    };
+    dos: string[];
+    donts: string[];
+    vocabulary_preferred: string[];
+    vocabulary_prohibited: string[];
+    ai_system_prompt: string | null;
+  } | null;
+}
+
+export const AI_ACTION_LABELS: Record<SocialAIActionType, string> = {
+  improve_engagement: 'Improve Engagement',
+  shorten: 'Shorten',
+  rewrite_tone: 'Rewrite Tone',
+  make_promotional: 'Make Promotional',
+  add_cta: 'Add CTA',
+  optimize_hashtags: 'Optimize Hashtags',
+  localize: 'Localize',
+  generate_new: 'Generate New',
+  repurpose: 'Repurpose'
+};
+
+export const AI_OBJECTIVE_LABELS: Record<AIGenerateObjective, string> = {
+  promote_offer: 'Promote an Offer',
+  announce_update: 'Announce an Update',
+  educational: 'Educational Content',
+  engagement: 'Drive Engagement',
+  testimonial: 'Share a Testimonial'
+};
+
+export const AI_TONE_LABELS: Record<AIToneOption, string> = {
+  brandboard_default: 'Brandboard Default',
+  friendly: 'Friendly',
+  professional: 'Professional',
+  casual: 'Casual',
+  bold: 'Bold'
+};
+
+export const AI_LENGTH_LABELS: Record<AIContentLength, string> = {
+  short: 'Short (Under 100 chars)',
+  medium: 'Medium (100-250 chars)',
+  long: 'Long (250+ chars)'
+};
+
+export const AI_REPURPOSE_ACTION_LABELS: Record<AIRepurposeAction, string> = {
+  shorten_post: 'Shorten to Brief Post',
+  carousel_captions: 'Create Carousel Captions',
+  proposal_highlights: 'Extract Proposal Highlights'
 };

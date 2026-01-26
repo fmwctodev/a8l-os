@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, RefObject } from 'react';
 import {
   Sparkles,
   Bold,
@@ -12,6 +12,7 @@ import {
   Link as LinkIcon,
   AtSign,
   X,
+  Undo2,
 } from 'lucide-react';
 import type { SocialProvider, SocialPostMedia } from '../../types';
 
@@ -29,8 +30,10 @@ interface ContentComposerProps {
   onMediaAdd: () => void;
   onMediaRemove: (id: string) => void;
   onAIClick: () => void;
+  aiButtonRef?: RefObject<HTMLButtonElement>;
   linkUrl?: string;
   onLinkChange?: (url: string) => void;
+  onUndo?: () => void;
 }
 
 export function ContentComposer({
@@ -45,8 +48,10 @@ export function ContentComposer({
   onMediaAdd,
   onMediaRemove,
   onAIClick,
+  aiButtonRef,
   linkUrl,
   onLinkChange,
+  onUndo,
 }: ContentComposerProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(!!linkUrl);
@@ -132,6 +137,7 @@ export function ContentComposer({
 
         <div className="flex items-center gap-1 px-3 py-2 border-t border-gray-100 bg-gray-50">
           <button
+            ref={aiButtonRef}
             type="button"
             onClick={onAIClick}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-lg text-sm font-medium hover:from-blue-600 hover:to-teal-600 transition-all"
@@ -139,6 +145,17 @@ export function ContentComposer({
             <Sparkles className="w-4 h-4" />
             AI
           </button>
+
+          {onUndo && (
+            <button
+              type="button"
+              onClick={onUndo}
+              className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Undo AI change"
+            >
+              <Undo2 className="w-4 h-4" />
+            </button>
+          )}
 
           <div className="w-px h-5 bg-gray-200 mx-1" />
 

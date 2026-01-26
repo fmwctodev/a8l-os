@@ -1,17 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Calendar,
   Clock,
   Send,
-  Save,
-  Sparkles,
   X,
   Loader2,
   Globe,
   ChevronDown,
-  CheckCircle,
+  Undo2,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSocialAccounts } from '../../services/socialAccounts';
@@ -29,6 +27,7 @@ import {
   PlatformAdvancedOptions,
   PostPreviewPanel,
   CreateGroupModal,
+  AIContentAssistant,
 } from '../../components/social-planner';
 import type {
   SocialAccount,
@@ -78,10 +77,9 @@ export function PostComposer() {
   const [platformOptions, setPlatformOptions] = useState<SocialPlatformOptions>({});
   const [customizePerChannel, setCustomizePerChannel] = useState(false);
 
-  const [showAIModal, setShowAIModal] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [aiGenerating, setAiGenerating] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [showAIPanel, setShowAIPanel] = useState(false);
+  const [contentHistory, setContentHistory] = useState<string[]>([]);
+  const aiButtonRef = useRef<HTMLButtonElement>(null);
 
   const [activePreviewTab, setActivePreviewTab] = useState<SocialProvider | 'all'>('all');
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
@@ -186,57 +184,18 @@ export function PostComposer() {
     setMedia(prev => prev.filter(m => m.id !== mediaId));
   }
 
-  async function handleGenerateCaption() {
-    if (!aiPrompt.trim()) return;
-
-    setAiGenerating(true);
-    setAiSuggestions([]);
-
-    try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-      const response = await fetch(`${supabaseUrl}/functions/v1/ai-caption-generator`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseKey}`,
-        },
-        body: JSON.stringify({
-          prompt: aiPrompt,
-          platforms: getSelectedProviders(),
-          tone: 'professional',
-          includeHashtags: true,
-          includeEmojis: true,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setAiSuggestions(data.suggestions || []);
-      } else {
-        setAiSuggestions([
-          `Check out our latest update! ${aiPrompt} #business #growth`,
-          `Exciting news! ${aiPrompt} Follow us for more updates!`,
-          `We're thrilled to share: ${aiPrompt} What do you think?`,
-        ]);
-      }
-    } catch {
-      setAiSuggestions([
-        `Check out our latest update! ${aiPrompt} #business #growth`,
-        `Exciting news! ${aiPrompt} Follow us for more updates!`,
-        `We're thrilled to share: ${aiPrompt} What do you think?`,
-      ]);
-    } finally {
-      setAiGenerating(false);
+  function handleApplyAIContent(newContent: string) {
+    if (body.trim()) {
+      setContentHistory(prev => [...prev, body]);
     }
+    setBody(newContent);
   }
 
-  function useSuggestion(suggestion: string) {
-    setBody(suggestion);
-    setShowAIModal(false);
-    setAiPrompt('');
-    setAiSuggestions([]);
+  function handleUndoContent() {
+    if (contentHistory.length === 0) return;
+    const previousContent = contentHistory[contentHistory.length - 1];
+    setContentHistory(prev => prev.slice(0, -1));
+    setBody(previousContent);
   }
 
   async function handleSave(action: 'draft' | 'post' | 'schedule') {
@@ -383,9 +342,11 @@ export function PostComposer() {
                 media={media}
                 onMediaAdd={() => fileInputRef.current?.click()}
                 onMediaRemove={removeMedia}
-                onAIClick={() => setShowAIModal(true)}
+                onAIClick={() => setShowAIPanel(true)}
+                aiButtonRef={aiButtonRef}
                 linkUrl={linkUrl}
                 onLinkChange={setLinkUrl}
+                onUndo={contentHistory.length > 0 ? handleUndoContent : undefined}
               />
 
               {selectedProviders.length > 0 && (
@@ -551,21 +512,14 @@ export function PostComposer() {
         </div>
       )}
 
-      {showAIModal && (
-        <AIGeneratorModal
-          onClose={() => {
-            setShowAIModal(false);
-            setAiPrompt('');
-            setAiSuggestions([]);
-          }}
-          prompt={aiPrompt}
-          onPromptChange={setAiPrompt}
-          suggestions={aiSuggestions}
-          generating={aiGenerating}
-          onGenerate={handleGenerateCaption}
-          onUseSuggestion={useSuggestion}
-        />
-      )}
+      <AIContentAssistant
+        open={showAIPanel}
+        onClose={() => setShowAIPanel(false)}
+        anchorRef={aiButtonRef}
+        currentContent={body}
+        platforms={selectedProviders}
+        onApplyContent={handleApplyAIContent}
+      />
 
       {showCreateGroupModal && (
         <CreateGroupModal
@@ -581,97 +535,6 @@ export function PostComposer() {
           onClick={() => setShowPostDropdown(false)}
         />
       )}
-    </div>
-  );
-}
-
-function AIGeneratorModal({
-  onClose,
-  prompt,
-  onPromptChange,
-  suggestions,
-  generating,
-  onGenerate,
-  onUseSuggestion,
-}: {
-  onClose: () => void;
-  prompt: string;
-  onPromptChange: (value: string) => void;
-  suggestions: string[];
-  generating: boolean;
-  onGenerate: () => void;
-  onUseSuggestion: (suggestion: string) => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-blue-500" />
-            <h2 className="text-lg font-semibold text-gray-900">
-              AI Caption Generator
-            </h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              What is your post about?
-            </label>
-            <textarea
-              value={prompt}
-              onChange={(e) => onPromptChange(e.target.value)}
-              placeholder="E.g., Announcing our new product launch, sharing tips for remote work, promoting our holiday sale..."
-              className="w-full h-24 px-4 py-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          <button
-            onClick={onGenerate}
-            disabled={generating || !prompt.trim()}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-          >
-            {generating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                Generate Captions
-              </>
-            )}
-          </button>
-
-          {suggestions.length > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium text-gray-700">Suggestions</h3>
-              {suggestions.map((suggestion, idx) => (
-                <div
-                  key={idx}
-                  className="p-4 border border-gray-200 rounded-lg hover:border-blue-200 hover:bg-blue-50 transition-colors"
-                >
-                  <p className="text-sm text-gray-800 mb-3">{suggestion}</p>
-                  <button
-                    onClick={() => onUseSuggestion(suggestion)}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    Use this caption
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
