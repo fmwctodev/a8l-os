@@ -879,7 +879,60 @@ export type WorkflowTriggerType =
   | 'invoice_paid'
   | 'invoice_overdue'
   | 'payment_received'
-  | 'recurring_invoice_created';
+  | 'recurring_invoice_created'
+  | 'scheduled'
+  | 'webhook_received';
+
+export type TriggerCategory = 'event' | 'scheduled' | 'webhook';
+
+export type ScheduledTriggerCadence = 'daily' | 'weekly' | 'monthly' | 'custom_cron';
+
+export type ReEnrollmentPolicy = 'never' | 'always' | 'after_completion';
+
+export type WebhookContactIdentifier = 'email' | 'phone' | 'external_id' | 'custom';
+
+export interface ScheduledTriggerFilterRule {
+  field: string;
+  operator: string;
+  value: unknown;
+}
+
+export interface ScheduledTriggerFilterConfig {
+  logic?: 'and' | 'or';
+  rules?: ScheduledTriggerFilterRule[];
+}
+
+export interface ScheduledTriggerConfig {
+  triggerId?: string;
+  name: string;
+  cadence: ScheduledTriggerCadence;
+  timeOfDay: string;
+  timezone: string;
+  dayOfWeek?: number | null;
+  dayOfMonth?: number | null;
+  cronExpression?: string | null;
+  filterConfig: ScheduledTriggerFilterConfig;
+  reEnrollmentPolicy: ReEnrollmentPolicy;
+}
+
+export interface WebhookPayloadMapping {
+  sourceField: string;
+  targetField: string;
+}
+
+export interface WebhookTriggerConfig {
+  triggerId?: string;
+  name: string;
+  token?: string;
+  webhookUrl?: string;
+  contactIdentifierField: WebhookContactIdentifier;
+  contactIdentifierPath: string;
+  payloadMapping: WebhookPayloadMapping[];
+  createContactIfMissing: boolean;
+  updateExistingContact: boolean;
+  reEnrollmentPolicy: ReEnrollmentPolicy;
+  hasSignatureValidation?: boolean;
+}
 
 export type WorkflowActionType =
   | 'add_tag'
@@ -923,7 +976,10 @@ export interface WorkflowViewport {
 
 export interface TriggerNodeData {
   triggerType: WorkflowTriggerType;
+  triggerCategory?: TriggerCategory;
   filters?: ConditionGroup;
+  scheduledConfig?: ScheduledTriggerConfig;
+  webhookConfig?: WebhookTriggerConfig;
 }
 
 export interface ConditionRule {

@@ -311,7 +311,9 @@ export const TRIGGER_TYPE_LABELS: Record<string, string> = {
   conversation_assigned: 'Conversation Assigned',
   appointment_booked: 'Appointment Booked',
   appointment_rescheduled: 'Appointment Rescheduled',
-  appointment_canceled: 'Appointment Canceled'
+  appointment_canceled: 'Appointment Canceled',
+  scheduled: 'Scheduled (Recurring)',
+  webhook_received: 'Incoming Webhook',
 };
 
 export const ACTION_TYPE_LABELS: Record<string, string> = {

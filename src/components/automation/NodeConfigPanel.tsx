@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, ChevronDown } from 'lucide-react';
+import { X, ChevronDown, Zap, Clock, Link } from 'lucide-react';
 import type {
   WorkflowNode,
   WorkflowTriggerType,
@@ -9,8 +9,13 @@ import type {
   ActionNodeData,
   DelayNodeData,
   ConditionNodeData,
+  TriggerCategory,
+  ScheduledTriggerConfig as ScheduledTriggerConfigType,
+  WebhookTriggerConfig as WebhookTriggerConfigType,
 } from '../../types';
 import { TRIGGER_TYPE_LABELS, ACTION_TYPE_LABELS } from '../../services/workflowEngine';
+import { ScheduledTriggerConfig } from './ScheduledTriggerConfig';
+import { WebhookTriggerConfig } from './WebhookTriggerConfig';
 
 interface NodeConfigPanelProps {
   node: WorkflowNode;
@@ -116,6 +121,34 @@ export function NodeConfigPanel({ node, onUpdate, onClose, canEdit }: NodeConfig
   );
 }
 
+const TRIGGER_CATEGORIES: { value: TriggerCategory; label: string; icon: typeof Zap; description: string }[] = [
+  { value: 'event', label: 'Event-Based', icon: Zap, description: 'Triggered by contact or system events' },
+  { value: 'scheduled', label: 'Scheduled', icon: Clock, description: 'Runs on a recurring schedule' },
+  { value: 'webhook', label: 'Incoming Webhook', icon: Link, description: 'Triggered by external HTTP requests' },
+];
+
+const DEFAULT_SCHEDULED_CONFIG: ScheduledTriggerConfigType = {
+  name: '',
+  cadence: 'daily',
+  timeOfDay: '09:00',
+  timezone: 'UTC',
+  dayOfWeek: null,
+  dayOfMonth: null,
+  cronExpression: null,
+  filterConfig: { logic: 'and', rules: [] },
+  reEnrollmentPolicy: 'never',
+};
+
+const DEFAULT_WEBHOOK_CONFIG: WebhookTriggerConfigType = {
+  name: '',
+  contactIdentifierField: 'email',
+  contactIdentifierPath: 'email',
+  payloadMapping: [],
+  createContactIfMissing: true,
+  updateExistingContact: true,
+  reEnrollmentPolicy: 'never',
+};
+
 function TriggerConfig({
   data,
   onUpdate,
@@ -125,33 +158,111 @@ function TriggerConfig({
   onUpdate: (data: Record<string, unknown>) => void;
   canEdit: boolean;
 }) {
+  const triggerCategory = data.triggerCategory || 'event';
+
+  const handleCategoryChange = (category: TriggerCategory) => {
+    const updates: Partial<TriggerNodeData> = { triggerCategory: category };
+
+    if (category === 'scheduled') {
+      updates.triggerType = 'scheduled';
+      updates.scheduledConfig = data.scheduledConfig || DEFAULT_SCHEDULED_CONFIG;
+      updates.webhookConfig = undefined;
+    } else if (category === 'webhook') {
+      updates.triggerType = 'webhook_received';
+      updates.webhookConfig = data.webhookConfig || DEFAULT_WEBHOOK_CONFIG;
+      updates.scheduledConfig = undefined;
+    } else {
+      updates.triggerType = data.triggerType === 'scheduled' || data.triggerType === 'webhook_received'
+        ? 'contact_created'
+        : data.triggerType;
+      updates.scheduledConfig = undefined;
+      updates.webhookConfig = undefined;
+    }
+
+    onUpdate(updates);
+  };
+
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-slate-300 mb-1.5">
-          Trigger Type
+        <label className="block text-sm font-medium text-slate-300 mb-2">
+          Trigger Category
         </label>
-        <select
-          value={data.triggerType || ''}
-          onChange={(e) => onUpdate({ triggerType: e.target.value as WorkflowTriggerType })}
-          disabled={!canEdit}
-          className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
-        >
-          <option value="">Select trigger...</option>
-          {TRIGGER_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {TRIGGER_TYPE_LABELS[type]}
-            </option>
-          ))}
-        </select>
+        <div className="grid grid-cols-1 gap-2">
+          {TRIGGER_CATEGORIES.map((cat) => {
+            const Icon = cat.icon;
+            const isSelected = triggerCategory === cat.value;
+            return (
+              <button
+                key={cat.value}
+                onClick={() => canEdit && handleCategoryChange(cat.value)}
+                disabled={!canEdit}
+                className={`flex items-start gap-3 p-3 rounded-lg border text-left transition-all ${
+                  isSelected
+                    ? 'border-cyan-500 bg-cyan-500/10'
+                    : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
+                } ${!canEdit ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                <Icon className={`w-5 h-5 mt-0.5 ${isSelected ? 'text-cyan-400' : 'text-slate-400'}`} />
+                <div>
+                  <div className={`text-sm font-medium ${isSelected ? 'text-white' : 'text-slate-300'}`}>
+                    {cat.label}
+                  </div>
+                  <div className="text-xs text-slate-500">{cat.description}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {data.triggerType && (
-        <div className="p-3 rounded-lg bg-slate-800/50 border border-slate-700">
-          <p className="text-xs text-slate-400">
-            This workflow will start when: <br />
-            <span className="text-cyan-400">{TRIGGER_TYPE_LABELS[data.triggerType]}</span>
-          </p>
+      {triggerCategory === 'event' && (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+              Event Type
+            </label>
+            <select
+              value={data.triggerType || ''}
+              onChange={(e) => onUpdate({ triggerType: e.target.value as WorkflowTriggerType })}
+              disabled={!canEdit}
+              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
+            >
+              <option value="">Select trigger...</option>
+              {TRIGGER_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {TRIGGER_TYPE_LABELS[type]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {data.triggerType && data.triggerType !== 'scheduled' && data.triggerType !== 'webhook_received' && (
+            <div className="p-3 rounded-lg bg-slate-800/50 border border-slate-700">
+              <p className="text-xs text-slate-400">
+                This workflow will start when: <br />
+                <span className="text-cyan-400">{TRIGGER_TYPE_LABELS[data.triggerType]}</span>
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {triggerCategory === 'scheduled' && (
+        <div className="bg-slate-800/30 rounded-lg p-4 -mx-4">
+          <ScheduledTriggerConfig
+            config={data.scheduledConfig || DEFAULT_SCHEDULED_CONFIG}
+            onChange={(config) => onUpdate({ scheduledConfig: config })}
+          />
+        </div>
+      )}
+
+      {triggerCategory === 'webhook' && (
+        <div className="bg-slate-800/30 rounded-lg p-4 -mx-4">
+          <WebhookTriggerConfig
+            config={data.webhookConfig || DEFAULT_WEBHOOK_CONFIG}
+            onChange={(config) => onUpdate({ webhookConfig: config })}
+          />
         </div>
       )}
     </div>
