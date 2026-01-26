@@ -19,6 +19,55 @@ interface SocialAccount {
   token_meta: Record<string, unknown>;
 }
 
+interface GoogleBusinessOptions {
+  post_type?: "STANDARD" | "EVENT" | "OFFER" | "ALERT";
+  cta_type?: string;
+  cta_url?: string;
+  event_title?: string;
+  event_start?: string;
+  event_end?: string;
+  offer_coupon_code?: string;
+  offer_redeem_url?: string;
+  offer_terms?: string;
+}
+
+interface FacebookOptions {
+  post_type?: "feed" | "reel" | "story";
+  video_title?: string;
+}
+
+interface InstagramOptions {
+  share_to_feed?: boolean;
+}
+
+interface LinkedInOptions {
+  share_as_company?: boolean;
+  visibility?: "PUBLIC" | "CONNECTIONS";
+}
+
+interface YouTubeOptions {
+  video_title?: string;
+  category?: string;
+  tags?: string[];
+  privacy?: "public" | "unlisted" | "private";
+}
+
+interface TikTokOptions {
+  privacy?: "PUBLIC_TO_EVERYONE" | "MUTUAL_FOLLOW_FRIENDS" | "SELF_ONLY";
+  disable_duet?: boolean;
+  disable_comment?: boolean;
+  disable_stitch?: boolean;
+}
+
+interface PlatformOptions {
+  google_business?: GoogleBusinessOptions;
+  facebook?: FacebookOptions;
+  instagram?: InstagramOptions;
+  linkedin?: LinkedInOptions;
+  youtube?: YouTubeOptions;
+  tiktok?: TikTokOptions;
+}
+
 interface SocialPost {
   id: string;
   organization_id: string;
@@ -27,6 +76,7 @@ interface SocialPost {
   targets: string[];
   status: string;
   attempt_count: number;
+  platform_options?: PlatformOptions;
 }
 
 interface PublishResult {
@@ -48,6 +98,8 @@ async function publishToFacebook(
   try {
     const accessToken = simpleDecrypt(account.access_token_encrypted);
     const pageId = account.external_account_id;
+    const options = post.platform_options?.facebook;
+    const postType = options?.post_type || "feed";
 
     let endpoint = `https://graph.facebook.com/v18.0/${pageId}/feed`;
     const body: Record<string, unknown> = {
@@ -55,7 +107,25 @@ async function publishToFacebook(
       access_token: accessToken,
     };
 
-    if (post.media.length > 0) {
+    if (postType === "reel" && post.media.length > 0 && post.media[0].type === "video") {
+      endpoint = `https://graph.facebook.com/v18.0/${pageId}/video_reels`;
+      body.video_url = post.media[0].url;
+      body.description = post.body;
+      if (options?.video_title) {
+        body.title = options.video_title;
+      }
+      delete body.message;
+    } else if (postType === "story" && post.media.length > 0) {
+      const media = post.media[0];
+      if (media.type === "image") {
+        endpoint = `https://graph.facebook.com/v18.0/${pageId}/photo_stories`;
+        body.photo_url = media.url;
+      } else if (media.type === "video") {
+        endpoint = `https://graph.facebook.com/v18.0/${pageId}/video_stories`;
+        body.video_url = media.url;
+      }
+      delete body.message;
+    } else if (post.media.length > 0) {
       const media = post.media[0];
       if (media.type === "image") {
         endpoint = `https://graph.facebook.com/v18.0/${pageId}/photos`;
@@ -95,25 +165,27 @@ async function publishToInstagram(
   try {
     const accessToken = simpleDecrypt(account.access_token_encrypted);
     const igUserId = account.external_account_id;
+    const options = post.platform_options?.instagram;
 
     if (post.media.length === 0) {
       return { success: false, error: "Instagram requires media for posts" };
     }
 
     const media = post.media[0];
-    let containerEndpoint: string;
+    const containerEndpoint = `https://graph.facebook.com/v18.0/${igUserId}/media`;
     const containerBody: Record<string, unknown> = {
       access_token: accessToken,
       caption: post.body,
     };
 
     if (media.type === "image") {
-      containerEndpoint = `https://graph.facebook.com/v18.0/${igUserId}/media`;
       containerBody.image_url = media.url;
     } else if (media.type === "video") {
-      containerEndpoint = `https://graph.facebook.com/v18.0/${igUserId}/media`;
       containerBody.video_url = media.url;
       containerBody.media_type = "REELS";
+      if (options?.share_to_feed !== undefined) {
+        containerBody.share_to_feed = options.share_to_feed;
+      }
     } else {
       return { success: false, error: "Unsupported media type" };
     }
@@ -160,7 +232,13 @@ async function publishToLinkedIn(
 ): Promise<PublishResult> {
   try {
     const accessToken = simpleDecrypt(account.access_token_encrypted);
-    const authorUrn = `urn:li:person:${account.external_account_id}`;
+    const options = post.platform_options?.linkedin;
+    const isCompany = options?.share_as_company && account.token_meta?.company_id;
+    const authorUrn = isCompany
+      ? `urn:li:organization:${account.token_meta.company_id}`
+      : `urn:li:person:${account.external_account_id}`;
+
+    const visibility = options?.visibility === "CONNECTIONS" ? "CONNECTIONS" : "PUBLIC";
 
     const postBody: Record<string, unknown> = {
       author: authorUrn,
@@ -174,7 +252,7 @@ async function publishToLinkedIn(
         },
       },
       visibility: {
-        "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC",
+        "com.linkedin.ugc.MemberNetworkVisibility": visibility,
       },
     };
 
@@ -214,17 +292,43 @@ async function publishToGoogleBusiness(
   try {
     const accessToken = simpleDecrypt(account.access_token_encrypted);
     const locationName = account.external_account_id;
+    const options = post.platform_options?.google_business;
 
     const postBody: Record<string, unknown> = {
       languageCode: "en",
       summary: post.body,
-      topicType: "STANDARD",
+      topicType: options?.post_type || "STANDARD",
     };
 
     if (post.media.length > 0) {
       postBody.media = {
         mediaFormat: post.media[0].type === "video" ? "VIDEO" : "PHOTO",
         sourceUrl: post.media[0].url,
+      };
+    }
+
+    if (options?.cta_type && options?.cta_url) {
+      postBody.callToAction = {
+        actionType: options.cta_type,
+        url: options.cta_url,
+      };
+    }
+
+    if (options?.post_type === "EVENT" && options?.event_title) {
+      postBody.event = {
+        title: options.event_title,
+        schedule: {
+          startDate: options.event_start ? parseDate(options.event_start) : undefined,
+          endDate: options.event_end ? parseDate(options.event_end) : undefined,
+        },
+      };
+    }
+
+    if (options?.post_type === "OFFER") {
+      postBody.offer = {
+        couponCode: options.offer_coupon_code,
+        redeemOnlineUrl: options.offer_redeem_url,
+        termsConditions: options.offer_terms,
       };
     }
 
@@ -251,6 +355,19 @@ async function publishToGoogleBusiness(
   }
 }
 
+function parseDate(isoString: string): { year: number; month: number; day: number } | undefined {
+  try {
+    const date = new Date(isoString);
+    return {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      day: date.getDate(),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 async function publishToTikTok(
   account: SocialAccount,
   post: SocialPost
@@ -261,6 +378,7 @@ async function publishToTikTok(
     }
 
     const accessToken = simpleDecrypt(account.access_token_encrypted);
+    const options = post.platform_options?.tiktok;
 
     const initResponse = await fetch(
       "https://open.tiktokapis.com/v2/post/publish/video/init/",
@@ -273,10 +391,10 @@ async function publishToTikTok(
         body: JSON.stringify({
           post_info: {
             title: post.body.substring(0, 150),
-            privacy_level: "PUBLIC_TO_EVERYONE",
-            disable_duet: false,
-            disable_comment: false,
-            disable_stitch: false,
+            privacy_level: options?.privacy || "PUBLIC_TO_EVERYONE",
+            disable_duet: options?.disable_duet ?? false,
+            disable_comment: options?.disable_comment ?? false,
+            disable_stitch: options?.disable_stitch ?? false,
           },
           source_info: {
             source: "PULL_FROM_URL",
@@ -307,6 +425,17 @@ async function publishToYouTube(
     }
 
     const accessToken = simpleDecrypt(account.access_token_encrypted);
+    const options = post.platform_options?.youtube;
+
+    const snippet: Record<string, unknown> = {
+      title: options?.video_title || post.body.substring(0, 100) || "Video",
+      description: post.body,
+      categoryId: options?.category || "22",
+    };
+
+    if (options?.tags && options.tags.length > 0) {
+      snippet.tags = options.tags;
+    }
 
     const initResponse = await fetch(
       "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
@@ -318,13 +447,9 @@ async function publishToYouTube(
           "X-Upload-Content-Type": "video/*",
         },
         body: JSON.stringify({
-          snippet: {
-            title: post.body.substring(0, 100) || "Video",
-            description: post.body,
-            categoryId: "22",
-          },
+          snippet,
           status: {
-            privacyStatus: "public",
+            privacyStatus: options?.privacy || "public",
             selfDeclaredMadeForKids: false,
           },
         }),

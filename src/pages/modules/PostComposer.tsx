@@ -2,59 +2,41 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
-  Image,
-  Video,
   Calendar,
   Clock,
   Send,
   Save,
   Sparkles,
   X,
-  Upload,
-  Trash2,
-  AlertCircle,
-  CheckCircle,
-  Facebook,
-  Instagram,
-  Linkedin,
-  Youtube,
-  MapPin,
-  Music2,
-  Link as LinkIcon,
-  MessageSquare,
-  Eye,
   Loader2,
   Globe,
   ChevronDown,
+  CheckCircle,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSocialAccounts } from '../../services/socialAccounts';
+import { getAccountGroups, createAccountGroup } from '../../services/socialAccountGroups';
 import {
   createSocialPost,
   updateSocialPost,
   getSocialPostById,
   getCharacterLimits,
-  getMediaRequirements,
+  submitForApproval,
 } from '../../services/socialPosts';
-import type { SocialAccount, SocialPost, SocialProvider, SocialPostMedia } from '../../types';
-
-const PROVIDER_ICONS: Record<SocialProvider, React.ElementType> = {
-  facebook: Facebook,
-  instagram: Instagram,
-  linkedin: Linkedin,
-  google_business: MapPin,
-  tiktok: Music2,
-  youtube: Youtube,
-};
-
-const PROVIDER_COLORS: Record<SocialProvider, string> = {
-  facebook: '#1877F2',
-  instagram: '#E4405F',
-  linkedin: '#0A66C2',
-  google_business: '#4285F4',
-  tiktok: '#000000',
-  youtube: '#FF0000',
-};
+import {
+  AccountSelector,
+  ContentComposer,
+  PlatformAdvancedOptions,
+  PostPreviewPanel,
+  CreateGroupModal,
+} from '../../components/social-planner';
+import type {
+  SocialAccount,
+  SocialAccountGroup,
+  SocialProvider,
+  SocialPostMedia,
+  SocialPlatformOptions,
+} from '../../types';
 
 const TIMEZONES = [
   { value: 'America/New_York', label: 'Eastern Time (ET)' },
@@ -80,11 +62,12 @@ export function PostComposer() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
+  const [groups, setGroups] = useState<SocialAccountGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const [body, setBody] = useState('');
-  const [firstComment, setFirstComment] = useState('');
+  const [followUpComment, setFollowUpComment] = useState('');
   const [media, setMedia] = useState<SocialPostMedia[]>([]);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
   const [scheduleDate, setScheduleDate] = useState('');
@@ -92,19 +75,21 @@ export function PostComposer() {
   const [scheduleTz, setScheduleTz] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const [requiresApproval, setRequiresApproval] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
-  const [showLinkInput, setShowLinkInput] = useState(false);
+  const [platformOptions, setPlatformOptions] = useState<SocialPlatformOptions>({});
+  const [customizePerChannel, setCustomizePerChannel] = useState(false);
 
   const [showAIModal, setShowAIModal] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
 
-  const [activePreview, setActivePreview] = useState<SocialProvider | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const [activePreviewTab, setActivePreviewTab] = useState<SocialProvider | 'all'>('all');
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [showPostDropdown, setShowPostDropdown] = useState(false);
+  const [showSchedulePanel, setShowSchedulePanel] = useState(false);
 
   const isEdit = !!id;
   const characterLimits = getCharacterLimits();
-  const mediaRequirements = getMediaRequirements();
 
   useEffect(() => {
     loadData();
@@ -115,14 +100,18 @@ export function PostComposer() {
 
     try {
       setLoading(true);
-      const accountsData = await getSocialAccounts(user.organization_id);
+      const [accountsData, groupsData] = await Promise.all([
+        getSocialAccounts(user.organization_id),
+        getAccountGroups(user.organization_id),
+      ]);
       setAccounts(accountsData.filter(a => a.status === 'connected'));
+      setGroups(groupsData);
 
       if (id) {
         const post = await getSocialPostById(id);
         if (post) {
           setBody(post.body);
-          setFirstComment(post.first_comment || '');
+          setFollowUpComment(post.first_comment || '');
           setMedia(post.media);
           setSelectedTargets(post.targets);
           if (post.scheduled_at_utc) {
@@ -134,8 +123,11 @@ export function PostComposer() {
           setRequiresApproval(post.requires_approval || false);
           if (post.link_preview?.url) {
             setLinkUrl(post.link_preview.url);
-            setShowLinkInput(true);
           }
+          if (post.platform_options) {
+            setPlatformOptions(post.platform_options);
+          }
+          setCustomizePerChannel(post.customized_per_channel || false);
         }
       }
     } catch (error) {
@@ -156,16 +148,8 @@ export function PostComposer() {
 
   function getLowestCharLimit(): number {
     const selectedProviders = getSelectedProviders();
-    if (selectedProviders.length === 0) return 63206;
-    return Math.min(...selectedProviders.map(p => characterLimits[p]?.text || 63206));
-  }
-
-  function toggleTarget(accountId: string) {
-    setSelectedTargets(prev =>
-      prev.includes(accountId)
-        ? prev.filter(id => id !== accountId)
-        : [...prev, accountId]
-    );
+    if (selectedProviders.length === 0) return 1500;
+    return Math.min(...selectedProviders.map(p => characterLimits[p]?.text || 1500));
   }
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -188,42 +172,18 @@ export function PostComposer() {
         filename: file.name,
         mimeType: file.type,
         size: file.size,
-        status: 'pending',
+        status: 'uploaded',
       };
 
       newMedia.push(mediaItem);
-
-      simulateUpload(mediaItem.id);
     }
 
     setMedia(prev => [...prev, ...newMedia]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  function simulateUpload(mediaId: string) {
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 30;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-        setMedia(prev =>
-          prev.map(m =>
-            m.id === mediaId ? { ...m, status: 'uploaded' as const } : m
-          )
-        );
-      }
-      setUploadProgress(prev => ({ ...prev, [mediaId]: Math.min(progress, 100) }));
-    }, 300);
-  }
-
   function removeMedia(mediaId: string) {
     setMedia(prev => prev.filter(m => m.id !== mediaId));
-    setUploadProgress(prev => {
-      const newProgress = { ...prev };
-      delete newProgress[mediaId];
-      return newProgress;
-    });
   }
 
   async function handleGenerateCaption() {
@@ -279,7 +239,7 @@ export function PostComposer() {
     setAiSuggestions([]);
   }
 
-  async function handleSave(publish: boolean) {
+  async function handleSave(action: 'draft' | 'post' | 'schedule') {
     if (!user?.organization_id) return;
     if (selectedTargets.length === 0) {
       alert('Please select at least one account to post to');
@@ -294,7 +254,7 @@ export function PostComposer() {
 
     try {
       let scheduledAtUtc: string | undefined;
-      if (scheduleDate && scheduleTime) {
+      if (action === 'schedule' && scheduleDate && scheduleTime) {
         const localDate = new Date(`${scheduleDate}T${scheduleTime}`);
         scheduledAtUtc = localDate.toISOString();
       }
@@ -303,17 +263,23 @@ export function PostComposer() {
         body,
         media,
         targets: selectedTargets,
-        scheduledAtUtc: publish ? scheduledAtUtc : undefined,
+        scheduledAtUtc: action === 'post' ? new Date().toISOString() : scheduledAtUtc,
         scheduledTimezone: scheduleTz,
-        requiresApproval,
-        firstComment: firstComment || undefined,
+        requiresApproval: action === 'schedule' && requiresApproval,
+        firstComment: followUpComment || undefined,
         linkUrl: linkUrl || undefined,
+        platformOptions,
+        customizedPerChannel: customizePerChannel,
       };
 
       if (isEdit && id) {
         await updateSocialPost(id, postData);
       } else {
-        await createSocialPost(user.organization_id, user.id, postData);
+        const post = await createSocialPost(user.organization_id, user.id, postData);
+
+        if (action === 'schedule' && requiresApproval && scheduledAtUtc) {
+          await submitForApproval(post.id, scheduledAtUtc, scheduleTz);
+        }
       }
 
       navigate('/marketing/social');
@@ -325,127 +291,78 @@ export function PostComposer() {
     }
   }
 
-  const showFirstComment = getSelectedProviders().some(p =>
-    ['facebook', 'instagram'].includes(p)
-  );
+  async function handleCreateGroup(name: string, accountIds: string[], description?: string) {
+    if (!user?.organization_id) return;
+    await createAccountGroup(user.organization_id, name, accountIds, user.id, description);
+    const groupsData = await getAccountGroups(user.organization_id);
+    setGroups(groupsData);
+  }
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-rose-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
       </div>
     );
   }
 
+  const selectedProviders = getSelectedProviders();
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link
-            to="/marketing/social"
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5 text-gray-500" />
-          </Link>
-          <div>
-            <h1 className="text-2xl font-semibold text-white">
-              {isEdit ? 'Edit Post' : 'Create Post'}
-            </h1>
-            <p className="text-sm text-gray-500">
-              Compose and schedule your social media content
-            </p>
+    <div className="min-h-screen bg-gray-50">
+      <div className="border-b border-gray-200 bg-white">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link
+              to="/marketing/social"
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 text-gray-500" />
+            </Link>
+            <span className="text-sm text-gray-500">Back</span>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => handleSave(false)}
-            disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-          >
-            <Save className="w-4 h-4" />
-            Save Draft
-          </button>
-          <button
-            onClick={() => handleSave(true)}
-            disabled={saving || selectedTargets.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors disabled:opacity-50"
-          >
-            {saving ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : scheduleDate ? (
-              <Calendar className="w-4 h-4" />
-            ) : (
-              <Send className="w-4 h-4" />
-            )}
-            {scheduleDate ? 'Schedule' : 'Publish Now'}
-          </button>
+          <h1 className="text-lg font-semibold text-gray-900">
+            {isEdit ? 'Edit Post' : 'New Social Post'}
+          </h1>
+          <div className="w-24" />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-medium text-gray-900">Content</h2>
-              <button
-                onClick={() => setShowAIModal(true)}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm text-rose-600 bg-rose-50 rounded-lg hover:bg-rose-100 transition-colors"
-              >
-                <Sparkles className="w-4 h-4" />
-                AI Caption
-              </button>
-            </div>
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <div className="lg:col-span-3 space-y-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <div className="flex items-start justify-between gap-4 mb-6">
+                <div className="flex-1">
+                  <AccountSelector
+                    accounts={accounts}
+                    groups={groups}
+                    selectedIds={selectedTargets}
+                    onSelectionChange={setSelectedTargets}
+                    onCreateGroup={() => setShowCreateGroupModal(true)}
+                    onAddAccount={() => navigate('/settings/integrations')}
+                  />
+                </div>
 
-            <div className="relative">
-              <textarea
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                placeholder="What do you want to share?"
-                className="w-full h-40 px-4 py-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent"
-              />
-              <div className="absolute bottom-3 right-3 text-sm">
-                <span className={body.length > getLowestCharLimit() ? 'text-red-500' : 'text-gray-400'}>
-                  {body.length}
-                </span>
-                <span className="text-gray-300"> / {getLowestCharLimit()}</span>
-              </div>
-            </div>
-
-            {getSelectedProviders().length > 1 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {getSelectedProviders().map(provider => {
-                  const limit = characterLimits[provider]?.text || 0;
-                  const isOver = body.length > limit;
-                  return (
-                    <span
-                      key={provider}
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        isOver ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                {selectedTargets.length > 0 && (
+                  <label className="flex items-center gap-2 cursor-pointer whitespace-nowrap">
+                    <div
+                      className={`w-10 h-6 rounded-full transition-colors ${
+                        customizePerChannel ? 'bg-blue-600' : 'bg-gray-200'
                       }`}
+                      onClick={() => setCustomizePerChannel(!customizePerChannel)}
                     >
-                      {provider}: {body.length}/{limit}
-                    </span>
-                  );
-                })}
+                      <div
+                        className={`w-5 h-5 rounded-full bg-white shadow-sm transform transition-transform mt-0.5 ${
+                          customizePerChannel ? 'translate-x-4.5 ml-0.5' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </div>
+                    <span className="text-sm text-gray-600">Customize for each channel</span>
+                  </label>
+                )}
               </div>
-            )}
 
-            {showFirstComment && (
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <MessageSquare className="w-4 h-4 inline mr-1" />
-                  First Comment (Instagram/Facebook)
-                </label>
-                <textarea
-                  value={firstComment}
-                  onChange={(e) => setFirstComment(e.target.value)}
-                  placeholder="Add hashtags or additional content as a first comment..."
-                  className="w-full h-20 px-4 py-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent text-sm"
-                />
-              </div>
-            )}
-
-            <div className="mt-4 flex items-center gap-2">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -454,274 +371,185 @@ export function PostComposer() {
                 onChange={handleFileSelect}
                 className="hidden"
               />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 px-3 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                <Image className="w-4 h-4" />
-                Add Media
-              </button>
-              <button
-                onClick={() => setShowLinkInput(!showLinkInput)}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                  showLinkInput
-                    ? 'bg-rose-100 text-rose-600'
-                    : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-                }`}
-              >
-                <LinkIcon className="w-4 h-4" />
-                Add Link
-              </button>
-            </div>
 
-            {showLinkInput && (
-              <div className="mt-3">
-                <input
-                  type="url"
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  placeholder="https://example.com"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent"
-                />
-              </div>
-            )}
+              <ContentComposer
+                value={body}
+                onChange={setBody}
+                followUpComment={followUpComment}
+                onFollowUpChange={setFollowUpComment}
+                showFollowUp={selectedProviders.some(p => ['facebook', 'instagram'].includes(p))}
+                characterLimit={getLowestCharLimit()}
+                platforms={selectedProviders}
+                media={media}
+                onMediaAdd={() => fileInputRef.current?.click()}
+                onMediaRemove={removeMedia}
+                onAIClick={() => setShowAIModal(true)}
+                linkUrl={linkUrl}
+                onLinkChange={setLinkUrl}
+              />
 
-            {media.length > 0 && (
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {media.map((item) => (
-                  <div key={item.id} className="relative group">
-                    {item.type === 'video' ? (
-                      <div className="aspect-square bg-gray-900 rounded-lg flex items-center justify-center">
-                        <Video className="w-8 h-8 text-white" />
-                      </div>
-                    ) : (
-                      <img
-                        src={item.url}
-                        alt={item.filename}
-                        className="aspect-square object-cover rounded-lg"
-                      />
-                    )}
-                    {item.status === 'pending' && (
-                      <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
-                        <div className="w-3/4">
-                          <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-rose-500 transition-all"
-                              style={{ width: `${uploadProgress[item.id] || 0}%` }}
-                            />
-                          </div>
-                          <div className="text-center text-white text-xs mt-1">
-                            {Math.round(uploadProgress[item.id] || 0)}%
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    <button
-                      onClick={() => removeMedia(item.id)}
-                      className="absolute top-1 right-1 p-1 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                    {item.type === 'video' && (
-                      <span className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/50 text-white text-xs rounded">
-                        Video
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="mt-3 text-xs text-gray-400">
-              Max file size: 100MB. Supported: Images (JPG, PNG, GIF, WebP), Videos (MP4, MOV)
+              {selectedProviders.length > 0 && (
+                <div className="mt-4">
+                  <PlatformAdvancedOptions
+                    platforms={selectedProviders}
+                    options={platformOptions}
+                    onChange={setPlatformOptions}
+                  />
+                </div>
+              )}
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Schedule</h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Date
-                </label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="date"
-                    value={scheduleDate}
-                    onChange={(e) => setScheduleDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Time
-                </label>
-                <div className="relative">
-                  <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="time"
-                    value={scheduleTime}
-                    onChange={(e) => setScheduleTime(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Timezone
-                </label>
-                <div className="relative">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <select
-                    value={scheduleTz}
-                    onChange={(e) => setScheduleTz(e.target.value)}
-                    className="w-full pl-10 pr-8 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent appearance-none"
-                  >
-                    {TIMEZONES.map(tz => (
-                      <option key={tz.value} value={tz.value}>{tz.label}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={requiresApproval}
-                  onChange={(e) => setRequiresApproval(e.target.checked)}
-                  className="rounded border-gray-300 text-rose-600 focus:ring-rose-500"
-                />
-                <span className="text-sm text-gray-700">
-                  Requires approval before posting
-                </span>
-              </label>
-            </div>
+          <div className="lg:col-span-2">
+            <PostPreviewPanel
+              accounts={accounts}
+              selectedIds={selectedTargets}
+              body={body}
+              media={media}
+              activeTab={activePreviewTab}
+              onTabChange={setActivePreviewTab}
+            />
           </div>
         </div>
+      </div>
 
-        <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">
-              Post To ({selectedTargets.length} selected)
-            </h2>
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 py-4">
+        <div className="max-w-7xl mx-auto px-4 flex items-center justify-end gap-3">
+          <button
+            onClick={() => handleSave('draft')}
+            disabled={saving}
+            className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            Save for later
+          </button>
 
-            {accounts.length === 0 ? (
-              <div className="text-center py-6">
-                <AlertCircle className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500 mb-3">
-                  No connected accounts
-                </p>
-                <Link
-                  to="/marketing/social"
-                  className="text-sm text-rose-600 hover:text-rose-700"
-                >
-                  Connect accounts
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {accounts.map((account) => {
-                  const Icon = PROVIDER_ICONS[account.provider];
-                  const color = PROVIDER_COLORS[account.provider];
-                  const isSelected = selectedTargets.includes(account.id);
-
-                  return (
-                    <button
-                      key={account.id}
-                      onClick={() => toggleTarget(account.id)}
-                      className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-colors ${
-                        isSelected
-                          ? 'border-rose-500 bg-rose-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div
-                        className="p-2 rounded-lg"
-                        style={{ backgroundColor: color + '20' }}
-                      >
-                        <Icon className="w-5 h-5" style={{ color }} />
-                      </div>
-                      <div className="flex-1 text-left">
-                        <div className="font-medium text-gray-900 text-sm">
-                          {account.display_name}
-                        </div>
-                        <div className="text-xs text-gray-500 capitalize">
-                          {account.provider.replace('_', ' ')}
-                        </div>
-                      </div>
-                      {isSelected && (
-                        <CheckCircle className="w-5 h-5 text-rose-500" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-medium text-gray-900">Preview</h2>
+          <div className="relative">
+            <div className="flex">
               <button
-                onClick={() => setActivePreview(null)}
-                className="text-sm text-gray-500 hover:text-gray-700"
+                onClick={() => {
+                  if (showSchedulePanel) {
+                    handleSave('schedule');
+                  } else {
+                    handleSave('post');
+                  }
+                }}
+                disabled={saving || selectedTargets.length === 0}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-l-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
-                <Eye className="w-4 h-4" />
+                {saving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                {showSchedulePanel ? 'Schedule' : 'Post'}
+              </button>
+              <button
+                onClick={() => setShowPostDropdown(!showPostDropdown)}
+                disabled={saving || selectedTargets.length === 0}
+                className="px-2 py-2 bg-blue-600 text-white rounded-r-lg hover:bg-blue-700 transition-colors disabled:opacity-50 border-l border-blue-500"
+              >
+                <ChevronDown className="w-4 h-4" />
               </button>
             </div>
 
-            {selectedTargets.length === 0 ? (
-              <div className="text-center py-6 text-gray-400 text-sm">
-                Select accounts to preview
-              </div>
-            ) : (
-              <div>
-                <div className="flex gap-1 mb-4 overflow-x-auto pb-2">
-                  {getSelectedProviders().map(provider => {
-                    const Icon = PROVIDER_ICONS[provider];
-                    const color = PROVIDER_COLORS[provider];
-                    const isActive = activePreview === provider;
-
-                    return (
-                      <button
-                        key={provider}
-                        onClick={() => setActivePreview(provider)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs whitespace-nowrap transition-colors ${
-                          isActive
-                            ? 'text-white'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                        style={isActive ? { backgroundColor: color } : {}}
-                      >
-                        <Icon className="w-3 h-3" />
-                        {provider.replace('_', ' ')}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <PostPreview
-                  provider={activePreview || getSelectedProviders()[0]}
-                  body={body}
-                  media={media}
-                  account={accounts.find(a =>
-                    a.provider === (activePreview || getSelectedProviders()[0])
-                  )}
-                />
+            {showPostDropdown && (
+              <div className="absolute bottom-full right-0 mb-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden z-50">
+                <button
+                  onClick={() => {
+                    setShowSchedulePanel(false);
+                    setShowPostDropdown(false);
+                    handleSave('post');
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                >
+                  <Send className="w-4 h-4" />
+                  Post Now
+                </button>
+                <button
+                  onClick={() => {
+                    setShowSchedulePanel(true);
+                    setShowPostDropdown(false);
+                  }}
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                >
+                  <Calendar className="w-4 h-4" />
+                  Schedule
+                </button>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {showSchedulePanel && (
+        <div className="fixed bottom-20 right-4 bg-white border border-gray-200 rounded-xl shadow-lg p-4 w-80 z-40">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-medium text-gray-900">Schedule Post</h3>
+            <button
+              onClick={() => setShowSchedulePanel(false)}
+              className="p-1 hover:bg-gray-100 rounded"
+            >
+              <X className="w-4 h-4 text-gray-400" />
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Date</label>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="date"
+                  value={scheduleDate}
+                  onChange={(e) => setScheduleDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Time</label>
+              <div className="relative">
+                <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="time"
+                  value={scheduleTime}
+                  onChange={(e) => setScheduleTime(e.target.value)}
+                  className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">Timezone</label>
+              <div className="relative">
+                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <select
+                  value={scheduleTz}
+                  onChange={(e) => setScheduleTz(e.target.value)}
+                  className="w-full pl-10 pr-8 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                >
+                  {TIMEZONES.map(tz => (
+                    <option key={tz.value} value={tz.value}>{tz.label}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 pt-2">
+              <input
+                type="checkbox"
+                checked={requiresApproval}
+                onChange={(e) => setRequiresApproval(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700">Requires approval before posting</span>
+            </label>
+          </div>
+        </div>
+      )}
 
       {showAIModal && (
         <AIGeneratorModal
@@ -738,81 +566,21 @@ export function PostComposer() {
           onUseSuggestion={useSuggestion}
         />
       )}
-    </div>
-  );
-}
 
-function PostPreview({
-  provider,
-  body,
-  media,
-  account,
-}: {
-  provider: SocialProvider;
-  body: string;
-  media: SocialPostMedia[];
-  account?: SocialAccount;
-}) {
-  const Icon = PROVIDER_ICONS[provider];
-  const color = PROVIDER_COLORS[provider];
-
-  return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
-      <div className="p-3 border-b border-gray-100 flex items-center gap-2">
-        <div
-          className="w-8 h-8 rounded-full flex items-center justify-center"
-          style={{ backgroundColor: color + '20' }}
-        >
-          <Icon className="w-4 h-4" style={{ color }} />
-        </div>
-        <div>
-          <div className="font-medium text-sm text-gray-900">
-            {account?.display_name || 'Account Name'}
-          </div>
-          <div className="text-xs text-gray-400">Just now</div>
-        </div>
-      </div>
-
-      <div className="p-3">
-        <p className="text-sm text-gray-800 whitespace-pre-wrap">
-          {body || 'Your post content will appear here...'}
-        </p>
-      </div>
-
-      {media.length > 0 && (
-        <div className={`${media.length === 1 ? '' : 'grid grid-cols-2 gap-0.5'}`}>
-          {media.slice(0, 4).map((item, idx) => (
-            <div key={item.id} className="relative aspect-square bg-gray-100">
-              {item.type === 'video' ? (
-                <div className="w-full h-full flex items-center justify-center bg-gray-900">
-                  <Video className="w-8 h-8 text-white" />
-                </div>
-              ) : (
-                <img
-                  src={item.url}
-                  alt=""
-                  className="w-full h-full object-cover"
-                />
-              )}
-              {idx === 3 && media.length > 4 && (
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                  <span className="text-white font-bold text-xl">
-                    +{media.length - 4}
-                  </span>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+      {showCreateGroupModal && (
+        <CreateGroupModal
+          accounts={accounts}
+          onClose={() => setShowCreateGroupModal(false)}
+          onSave={handleCreateGroup}
+        />
       )}
 
-      <div className="p-3 border-t border-gray-100 flex items-center justify-between text-gray-400">
-        <div className="flex items-center gap-4 text-xs">
-          <span>Like</span>
-          <span>Comment</span>
-          <span>Share</span>
-        </div>
-      </div>
+      {showPostDropdown && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowPostDropdown(false)}
+        />
+      )}
     </div>
   );
 }
@@ -839,7 +607,7 @@ function AIGeneratorModal({
       <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-rose-500" />
+            <Sparkles className="w-5 h-5 text-blue-500" />
             <h2 className="text-lg font-semibold text-gray-900">
               AI Caption Generator
             </h2>
@@ -861,14 +629,14 @@ function AIGeneratorModal({
               value={prompt}
               onChange={(e) => onPromptChange(e.target.value)}
               placeholder="E.g., Announcing our new product launch, sharing tips for remote work, promoting our holiday sale..."
-              className="w-full h-24 px-4 py-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+              className="w-full h-24 px-4 py-3 border border-gray-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
 
           <button
             onClick={onGenerate}
             disabled={generating || !prompt.trim()}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
           >
             {generating ? (
               <>
@@ -889,12 +657,12 @@ function AIGeneratorModal({
               {suggestions.map((suggestion, idx) => (
                 <div
                   key={idx}
-                  className="p-4 border border-gray-200 rounded-lg hover:border-rose-200 hover:bg-rose-50 transition-colors"
+                  className="p-4 border border-gray-200 rounded-lg hover:border-blue-200 hover:bg-blue-50 transition-colors"
                 >
                   <p className="text-sm text-gray-800 mb-3">{suggestion}</p>
                   <button
                     onClick={() => onUseSuggestion(suggestion)}
-                    className="text-sm text-rose-600 hover:text-rose-700 font-medium"
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                   >
                     Use this caption
                   </button>

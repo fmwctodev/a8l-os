@@ -74,6 +74,7 @@ import { PublicFormPage } from './pages/public/PublicFormPage';
 import { PublicSurveyPage } from './pages/public/PublicSurveyPage';
 import { ReviewPage } from './pages/public/ReviewPage';
 import PublicProposalPage from './pages/public/PublicProposalPage';
+import PostApprovalPage from './pages/public/PostApprovalPage';
 
 function App() {
   return (
@@ -552,6 +553,7 @@ function App() {
             <Route path="/s/:slug" element={<PublicSurveyPage />} />
             <Route path="/r/:slug" element={<ReviewPage />} />
             <Route path="/p/:token" element={<PublicProposalPage />} />
+            <Route path="/marketing/social/approve/:token" element={<PostApprovalPage />} />
             <Route path="*" element={<NotFound />} />
             </Routes>
           </SidebarProvider>

@@ -1572,8 +1572,8 @@ export interface SurveySubmission {
 export type SocialProvider = 'facebook' | 'instagram' | 'linkedin' | 'google_business' | 'tiktok' | 'youtube';
 export type SocialAccountType = 'page' | 'profile' | 'channel' | 'location' | 'business';
 export type SocialAccountStatus = 'connected' | 'disconnected' | 'error' | 'token_expiring';
-export type SocialPostStatus = 'draft' | 'scheduled' | 'queued' | 'posting' | 'posted' | 'failed' | 'cancelled';
-export type SocialPostLogAction = 'created' | 'scheduled' | 'queued' | 'attempt' | 'success' | 'failure' | 'cancelled' | 'approved';
+export type SocialPostStatus = 'draft' | 'pending_approval' | 'scheduled' | 'queued' | 'posting' | 'posted' | 'failed' | 'cancelled' | 'denied';
+export type SocialPostLogAction = 'created' | 'scheduled' | 'queued' | 'attempt' | 'success' | 'failure' | 'cancelled' | 'approved' | 'denied' | 'approval_requested';
 
 export interface SocialAccount {
   id: string;
@@ -1608,10 +1608,15 @@ export interface SocialOAuthState {
 }
 
 export interface SocialPostMedia {
+  id?: string;
   url: string;
   type: 'image' | 'video';
   thumbnail_url?: string;
   alt_text?: string;
+  filename?: string;
+  mimeType?: string;
+  size?: number;
+  status?: 'pending' | 'uploaded' | 'failed';
 }
 
 export interface SocialPostLinkPreview {
@@ -1648,6 +1653,13 @@ export interface SocialPost {
   created_by_user?: User | null;
   approved_by_user?: User | null;
   target_accounts?: SocialAccount[];
+  platform_options?: SocialPlatformOptions;
+  approval_token?: string | null;
+  approval_notes?: string | null;
+  approval_requested_at?: string | null;
+  approval_email_sent_at?: string | null;
+  customized_per_channel?: boolean;
+  content_by_platform?: Record<SocialProvider, SocialPostChannelContent>;
 }
 
 export type ContentAIType =
@@ -1717,6 +1729,84 @@ export interface SocialStats {
   scheduledPosts: number;
   postedThisWeek: number;
   failedPosts: number;
+}
+
+export interface SocialAccountGroup {
+  id: string;
+  organization_id: string;
+  name: string;
+  description?: string | null;
+  account_ids: string[];
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type GoogleBusinessPostType = 'STANDARD' | 'EVENT' | 'OFFER' | 'ALERT';
+export type GoogleBusinessCTAType = 'LEARN_MORE' | 'BOOK' | 'ORDER' | 'SHOP' | 'SIGN_UP' | 'CALL' | 'GET_OFFER' | 'GET_QUOTE' | 'VISIT';
+export type FacebookPostType = 'feed' | 'reel' | 'story';
+export type InstagramPostFormat = 'feed' | 'reel';
+export type YouTubeVideoType = 'standard' | 'short';
+export type YouTubePrivacy = 'public' | 'unlisted' | 'private';
+export type TikTokPrivacyLevel = 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'SELF_ONLY';
+export type LinkedInVisibility = 'PUBLIC' | 'CONNECTIONS';
+
+export interface GoogleBusinessOptions {
+  postType: GoogleBusinessPostType;
+  ctaButton?: GoogleBusinessCTAType;
+  ctaUrl?: string;
+  eventTitle?: string;
+  eventStart?: string;
+  eventEnd?: string;
+  offerCode?: string;
+  offerTerms?: string;
+  offerRedeemUrl?: string;
+}
+
+export interface FacebookOptions {
+  postType: FacebookPostType;
+}
+
+export interface InstagramOptions {
+  format: InstagramPostFormat;
+}
+
+export interface LinkedInOptions {
+  visibility: LinkedInVisibility;
+  postAsOrganization?: boolean;
+  organizationId?: string;
+}
+
+export interface YouTubeOptions {
+  videoType: YouTubeVideoType;
+  title: string;
+  description?: string;
+  privacy: YouTubePrivacy;
+  thumbnailUrl?: string;
+  categoryId?: string;
+}
+
+export interface TikTokOptions {
+  privacyLevel: TikTokPrivacyLevel;
+  allowComments?: boolean;
+  allowDuet?: boolean;
+  allowStitch?: boolean;
+}
+
+export interface SocialPlatformOptions {
+  customized?: boolean;
+  facebook?: FacebookOptions;
+  instagram?: InstagramOptions;
+  linkedin?: LinkedInOptions;
+  google_business?: GoogleBusinessOptions;
+  youtube?: YouTubeOptions;
+  tiktok?: TikTokOptions;
+}
+
+export interface SocialPostChannelContent {
+  text: string;
+  followUpComment?: string;
+  media?: SocialPostMedia[];
 }
 
 export type ReportDataSource =

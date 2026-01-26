@@ -5,6 +5,9 @@ import type {
   SocialPostMedia,
   SocialPostFilters,
   SocialPostStatus,
+  SocialPlatformOptions,
+  SocialPostChannelContent,
+  SocialProvider,
 } from '../types';
 
 export async function getSocialPosts(
@@ -92,9 +95,16 @@ export async function createSocialPost(
     linkUrl?: string;
     aiGenerated?: boolean;
     aiGenerationId?: string;
+    platformOptions?: SocialPlatformOptions;
+    customizedPerChannel?: boolean;
+    contentByPlatform?: Record<SocialProvider, SocialPostChannelContent>;
   }
 ): Promise<SocialPost> {
-  const status: SocialPostStatus = data.scheduledAtUtc ? 'scheduled' : 'draft';
+  let status: SocialPostStatus = data.scheduledAtUtc ? 'scheduled' : 'draft';
+
+  if (data.requiresApproval && data.scheduledAtUtc) {
+    status = 'pending_approval';
+  }
 
   const insertData: Record<string, unknown> = {
     organization_id: organizationId,
@@ -106,6 +116,7 @@ export async function createSocialPost(
     scheduled_at_utc: data.scheduledAtUtc || null,
     scheduled_timezone: data.scheduledTimezone || 'UTC',
     requires_approval: data.requiresApproval || false,
+    customized_per_channel: data.customizedPerChannel || false,
   };
 
   if (data.firstComment) {
@@ -123,6 +134,15 @@ export async function createSocialPost(
     }
   }
 
+  if (data.platformOptions) {
+    insertData.platform_options = data.platformOptions;
+  }
+
+  if (status === 'pending_approval') {
+    insertData.approval_token = crypto.randomUUID();
+    insertData.approval_requested_at = new Date().toISOString();
+  }
+
   const { data: post, error } = await supabase
     .from('social_posts')
     .insert(insertData)
@@ -131,15 +151,57 @@ export async function createSocialPost(
 
   if (error) throw error;
 
+  if (data.customizedPerChannel && data.contentByPlatform) {
+    await saveChannelContent(post.id, data.contentByPlatform);
+  }
+
   await createPostLog(post.id, null, 'created', {});
 
   if (status === 'scheduled') {
     await createPostLog(post.id, null, 'scheduled', {
       scheduled_at: data.scheduledAtUtc,
     });
+  } else if (status === 'pending_approval') {
+    await createPostLog(post.id, null, 'approval_requested', {
+      scheduled_at: data.scheduledAtUtc,
+    });
   }
 
   return post;
+}
+
+async function saveChannelContent(
+  postId: string,
+  contentByPlatform: Record<SocialProvider, SocialPostChannelContent>
+): Promise<void> {
+  const contentRecords = Object.entries(contentByPlatform).map(([platform, content]) => ({
+    post_id: postId,
+    platform,
+    text: content.text,
+    follow_up_comment: content.followUpComment || null,
+  }));
+
+  if (contentRecords.length > 0) {
+    const { error } = await supabase
+      .from('social_post_content')
+      .insert(contentRecords);
+    if (error) throw error;
+  }
+
+  const mediaRecords = Object.entries(contentByPlatform)
+    .filter(([, content]) => content.media && content.media.length > 0)
+    .map(([platform, content]) => ({
+      post_id: postId,
+      platform,
+      media_items: content.media,
+    }));
+
+  if (mediaRecords.length > 0) {
+    const { error } = await supabase
+      .from('social_post_media')
+      .insert(mediaRecords);
+    if (error) throw error;
+  }
 }
 
 export async function updateSocialPost(
@@ -153,6 +215,9 @@ export async function updateSocialPost(
     requiresApproval?: boolean;
     firstComment?: string;
     linkUrl?: string;
+    platformOptions?: SocialPlatformOptions;
+    customizedPerChannel?: boolean;
+    contentByPlatform?: Record<SocialProvider, SocialPostChannelContent>;
   }
 ): Promise<SocialPost> {
   const updateData: Record<string, unknown> = {};
@@ -165,6 +230,8 @@ export async function updateSocialPost(
   if (updates.requiresApproval !== undefined) updateData.requires_approval = updates.requiresApproval;
   if (updates.firstComment !== undefined) updateData.first_comment = updates.firstComment;
   if (updates.linkUrl !== undefined) updateData.link_preview = { url: updates.linkUrl };
+  if (updates.platformOptions !== undefined) updateData.platform_options = updates.platformOptions;
+  if (updates.customizedPerChannel !== undefined) updateData.customized_per_channel = updates.customizedPerChannel;
 
   const { data, error } = await supabase
     .from('social_posts')
@@ -174,6 +241,13 @@ export async function updateSocialPost(
     .single();
 
   if (error) throw error;
+
+  if (updates.customizedPerChannel && updates.contentByPlatform) {
+    await supabase.from('social_post_content').delete().eq('post_id', id);
+    await supabase.from('social_post_media').delete().eq('post_id', id);
+    await saveChannelContent(id, updates.contentByPlatform);
+  }
+
   return data;
 }
 
@@ -301,6 +375,147 @@ export async function createPostLog(
 
   if (error) throw error;
   return data;
+}
+
+export async function getPostByApprovalToken(token: string): Promise<SocialPost | null> {
+  const { data, error } = await supabase
+    .from('social_posts')
+    .select(`
+      *,
+      created_by_user:users!social_posts_created_by_fkey(id, name, email, avatar_url),
+      approved_by_user:users!social_posts_approved_by_fkey(id, name, email, avatar_url)
+    `)
+    .eq('approval_token', token)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function submitForApproval(
+  postId: string,
+  scheduledAtUtc: string,
+  scheduledTimezone: string = 'UTC'
+): Promise<SocialPost> {
+  const approvalToken = crypto.randomUUID();
+
+  const { data, error } = await supabase
+    .from('social_posts')
+    .update({
+      status: 'pending_approval',
+      scheduled_at_utc: scheduledAtUtc,
+      scheduled_timezone: scheduledTimezone,
+      approval_token: approvalToken,
+      approval_requested_at: new Date().toISOString(),
+    })
+    .eq('id', postId)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  await createPostLog(postId, null, 'approval_requested', {
+    scheduled_at: scheduledAtUtc,
+  });
+
+  return data;
+}
+
+export async function approvePostWithToken(
+  token: string,
+  userId: string
+): Promise<SocialPost> {
+  const post = await getPostByApprovalToken(token);
+  if (!post) throw new Error('Post not found or invalid token');
+  if (post.status !== 'pending_approval') throw new Error('Post is not pending approval');
+
+  const { data, error } = await supabase
+    .from('social_posts')
+    .update({
+      status: 'scheduled',
+      approved_by: userId,
+      approved_at: new Date().toISOString(),
+      approval_token: null,
+    })
+    .eq('id', post.id)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  await createPostLog(post.id, null, 'approved', { approved_by: userId });
+
+  return data;
+}
+
+export async function denyPostWithToken(
+  token: string,
+  userId: string,
+  notes: string
+): Promise<SocialPost> {
+  const post = await getPostByApprovalToken(token);
+  if (!post) throw new Error('Post not found or invalid token');
+  if (post.status !== 'pending_approval') throw new Error('Post is not pending approval');
+
+  const { data, error } = await supabase
+    .from('social_posts')
+    .update({
+      status: 'denied',
+      approved_by: userId,
+      approved_at: new Date().toISOString(),
+      approval_notes: notes,
+      approval_token: null,
+    })
+    .eq('id', post.id)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  await createPostLog(post.id, null, 'denied', { denied_by: userId, notes });
+
+  return data;
+}
+
+export async function getChannelContent(
+  postId: string
+): Promise<Record<SocialProvider, SocialPostChannelContent>> {
+  const { data: contentData, error: contentError } = await supabase
+    .from('social_post_content')
+    .select('*')
+    .eq('post_id', postId);
+
+  if (contentError) throw contentError;
+
+  const { data: mediaData, error: mediaError } = await supabase
+    .from('social_post_media')
+    .select('*')
+    .eq('post_id', postId);
+
+  if (mediaError) throw mediaError;
+
+  const result: Record<string, SocialPostChannelContent> = {};
+
+  for (const content of contentData || []) {
+    result[content.platform as SocialProvider] = {
+      text: content.text,
+      followUpComment: content.follow_up_comment || undefined,
+    };
+  }
+
+  for (const media of mediaData || []) {
+    const platform = media.platform as SocialProvider;
+    if (result[platform]) {
+      result[platform].media = media.media_items;
+    } else {
+      result[platform] = {
+        text: '',
+        media: media.media_items,
+      };
+    }
+  }
+
+  return result as Record<SocialProvider, SocialPostChannelContent>;
 }
 
 export function getCharacterLimits(): Record<string, { text: number; title?: number }> {
