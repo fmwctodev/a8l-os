@@ -46,6 +46,10 @@ import { SocialCalendar } from './pages/modules/SocialCalendar';
 import { Automation } from './pages/modules/Automation';
 import { WorkflowBuilder } from './pages/modules/WorkflowBuilder';
 import { WorkflowEnrollments } from './pages/modules/WorkflowEnrollments';
+import WorkflowRuns from './pages/modules/WorkflowRuns';
+import WorkflowRunDetail from './pages/modules/WorkflowRunDetail';
+import WorkflowVersions from './pages/modules/WorkflowVersions';
+import WorkflowAnalytics from './pages/modules/WorkflowAnalytics';
 import { MediaStorage } from './pages/modules/MediaStorage';
 import { Reputation } from './pages/modules/Reputation';
 import { Reporting } from './pages/modules/Reporting';
@@ -357,6 +361,38 @@ function App() {
                 element={
                   <ProtectedRoute permission="automation.view" featureFlag="automation">
                     <WorkflowEnrollments />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/automation/:id/runs"
+                element={
+                  <ProtectedRoute permission="automation.view" featureFlag="automation">
+                    <WorkflowRuns />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/automation/:id/runs/:enrollmentId"
+                element={
+                  <ProtectedRoute permission="automation.view" featureFlag="automation">
+                    <WorkflowRunDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/automation/:id/versions"
+                element={
+                  <ProtectedRoute permission="automation.view" featureFlag="automation">
+                    <WorkflowVersions />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/automation/:id/analytics"
+                element={
+                  <ProtectedRoute permission="automation.view" featureFlag="automation">
+                    <WorkflowAnalytics />
                   </ProtectedRoute>
                 }
               />
