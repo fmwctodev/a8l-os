@@ -129,8 +129,9 @@ export function Contacts() {
       setDepartments(departmentsData);
       setUsers(usersData);
       setCustomFields(customFieldsData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load contacts');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : (err as { message?: string })?.message;
+      setError(message || 'Failed to load contacts');
     } finally {
       setIsLoading(false);
     }
@@ -187,8 +188,9 @@ export function Contacts() {
       await bulkDeleteContacts([...selectedContacts], currentUser);
       setSelectedContacts(new Set());
       loadData();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete contacts');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : (err as { message?: string })?.message;
+      setError(message || 'Failed to delete contacts');
     }
   };
 

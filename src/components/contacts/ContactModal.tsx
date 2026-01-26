@@ -111,8 +111,9 @@ export function ContactModal({
       }
 
       onSuccess();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save contact');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : (err as { message?: string })?.message;
+      setError(message || 'Failed to save contact');
     } finally {
       setIsSubmitting(false);
     }
@@ -131,8 +132,9 @@ export function ContactModal({
       setSelectedTags([...selectedTags, tag.id]);
       setNewTagName('');
       onSuccess();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create tag');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : (err as { message?: string })?.message;
+      setError(message || 'Failed to create tag');
     }
   };
 

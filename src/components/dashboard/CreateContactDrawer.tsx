@@ -84,8 +84,9 @@ export function CreateContactDrawer({ open, onClose, onSuccess }: CreateContactD
       });
       onSuccess?.();
       onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create contact');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : (err as { message?: string })?.message;
+      setError(message || 'Failed to create contact');
     } finally {
       setLoading(false);
     }

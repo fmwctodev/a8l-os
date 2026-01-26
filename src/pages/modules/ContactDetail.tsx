@@ -155,8 +155,9 @@ export function ContactDetail() {
       const timelineData = await getAggregatedTimeline(id);
       setAggregatedTimeline(timelineData);
       setIsTimelineLoading(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load contact');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : (err as { message?: string })?.message;
+      setError(message || 'Failed to load contact');
     } finally {
       setIsLoading(false);
     }
@@ -176,8 +177,9 @@ export function ContactDetail() {
     try {
       await deleteContact(contact.id, currentUser);
       navigate('/contacts');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete contact');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : (err as { message?: string })?.message;
+      setError(message || 'Failed to delete contact');
     }
   };
 
@@ -187,8 +189,9 @@ export function ContactDetail() {
     try {
       await archiveContact(contact.id, currentUser);
       loadContact();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to archive contact');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : (err as { message?: string })?.message;
+      setError(message || 'Failed to archive contact');
     }
   };
 
@@ -198,8 +201,9 @@ export function ContactDetail() {
     try {
       await restoreContact(contact.id, currentUser);
       loadContact();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to restore contact');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : (err as { message?: string })?.message;
+      setError(message || 'Failed to restore contact');
     }
   };
 
@@ -209,8 +213,9 @@ export function ContactDetail() {
     try {
       await addTagToContact(contact.id, tagId, currentUser);
       loadContact();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add tag');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : (err as { message?: string })?.message;
+      setError(message || 'Failed to add tag');
     }
   };
 
@@ -220,8 +225,9 @@ export function ContactDetail() {
     try {
       await removeTagFromContact(contact.id, tagId, currentUser);
       loadContact();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove tag');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : (err as { message?: string })?.message;
+      setError(message || 'Failed to remove tag');
     }
   };
 
