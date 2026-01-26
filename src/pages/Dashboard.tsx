@@ -173,7 +173,7 @@ export function Dashboard() {
 
       <div>
         <h2 className="text-sm font-medium text-slate-400 mb-3">Quick Actions</h2>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3 justify-center">
           <QuickActionButton
             icon={UserPlus}
             label="Add Contact"
