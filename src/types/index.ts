@@ -1,3 +1,16 @@
+import type {
+  AIConversationReplyConfig,
+  AIEmailDraftConfig,
+  AIFollowUpMessageConfig,
+  AILeadQualificationConfig,
+  AIBookingAssistConfig,
+  AIDecisionStepConfig,
+  AIDraftSource,
+  AIWorkflowActionType,
+} from './aiWorkflowActions';
+
+export * from './aiWorkflowActions';
+
 export interface Organization {
   id: string;
   name: string;
@@ -530,9 +543,15 @@ export interface AIDraft {
   approved_at: string | null;
   created_at: string;
   updated_at: string;
+  workflow_id?: string | null;
+  enrollment_id?: string | null;
+  workflow_ai_run_id?: string | null;
+  source_type: AIDraftSource;
+  action_type?: AIWorkflowActionType | null;
   agent?: AIAgent | null;
   triggered_by_rule?: ConversationRule | null;
   approved_by_user?: User | null;
+  workflow?: { id: string; name: string } | null;
 }
 
 export type RuleTriggerType =
@@ -945,7 +964,13 @@ export type WorkflowActionType =
   | 'send_email'
   | 'webhook_post'
   | 'internal_notification'
-  | 'invoke_ai_agent';
+  | 'invoke_ai_agent'
+  | 'ai_conversation_reply'
+  | 'ai_email_draft'
+  | 'ai_follow_up_message'
+  | 'ai_lead_qualification'
+  | 'ai_booking_assist'
+  | 'ai_decision_step';
 
 export type WorkflowNodeType = 'trigger' | 'condition' | 'delay' | 'action' | 'end';
 
@@ -1022,7 +1047,13 @@ export type ActionConfig =
   | SendEmailConfig
   | WebhookPostConfig
   | InternalNotificationConfig
-  | InvokeAIAgentActionConfig;
+  | InvokeAIAgentActionConfig
+  | AIConversationReplyConfig
+  | AIEmailDraftConfig
+  | AIFollowUpMessageConfig
+  | AILeadQualificationConfig
+  | AIBookingAssistConfig
+  | AIDecisionStepConfig;
 
 export interface InvokeAIAgentActionConfig {
   agentId: string;

@@ -240,9 +240,46 @@ Deno.serve(async (req: Request) => {
           }
 
           case "action": {
-            await executeAction(supabase, node.data, enrollment, job.org_id);
-            const edge = definition.edges.find((e) => e.source === node.id);
-            nextNodeId = edge?.target || null;
+            const actionResult = await executeAction(supabase, node.data, enrollment, job.org_id);
+
+            if (actionResult && actionResult.branch) {
+              const branchEdge = definition.edges.find(
+                (e) => e.source === node.id && e.sourceHandle === actionResult.branch
+              );
+              nextNodeId = branchEdge?.target || null;
+
+              if (!nextNodeId) {
+                const defaultEdge = definition.edges.find(
+                  (e) => e.source === node.id && (!e.sourceHandle || e.sourceHandle === "default")
+                );
+                nextNodeId = defaultEdge?.target || null;
+              }
+
+              if (actionResult.status === "pending_approval") {
+                await supabase
+                  .from("workflow_jobs")
+                  .update({ status: "pending", last_error: "Waiting for AI draft approval" })
+                  .eq("id", job.id);
+
+                await supabase
+                  .from("workflow_enrollments")
+                  .update({
+                    context_data: {
+                      ...(enrollment.context_data as Record<string, unknown>),
+                      waiting_for_approval: true,
+                      pending_node_id: node.id,
+                      pending_next_node_id: nextNodeId,
+                    },
+                  })
+                  .eq("id", enrollment.id);
+
+                results.jobsProcessed++;
+                continue;
+              }
+            } else {
+              const edge = definition.edges.find((e) => e.source === node.id);
+              nextNodeId = edge?.target || null;
+            }
             break;
           }
 
@@ -626,7 +663,99 @@ async function executeAction(
         .eq("id", enrollment.id);
       break;
     }
+
+    case "ai_conversation_reply":
+    case "ai_email_draft":
+    case "ai_follow_up_message":
+    case "ai_lead_qualification":
+    case "ai_booking_assist":
+    case "ai_decision_step": {
+      const result = await executeAIWorkflowAction(
+        supabase,
+        actionType,
+        config,
+        enrollment,
+        orgId,
+        contactId
+      );
+
+      const contextData = (enrollment.context_data as Record<string, unknown>) || {};
+      if (!contextData.ai_outputs) {
+        contextData.ai_outputs = {};
+      }
+      (contextData.ai_outputs as Record<string, unknown>)[data.nodeId || actionType] = result;
+
+      await supabase
+        .from("workflow_enrollments")
+        .update({ context_data: contextData })
+        .eq("id", enrollment.id);
+
+      return result;
+    }
   }
+}
+
+interface AIActionResult {
+  success: boolean;
+  status: string;
+  branch?: string;
+  output_raw?: string;
+  output_structured?: Record<string, unknown>;
+  draft_id?: string;
+}
+
+async function executeAIWorkflowAction(
+  supabase: ReturnType<typeof createClient>,
+  actionType: string,
+  config: Record<string, unknown>,
+  enrollment: Record<string, unknown>,
+  orgId: string,
+  contactId: string
+): Promise<AIActionResult> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("contact_id", contactId)
+    .neq("status", "closed")
+    .order("last_message_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/workflow-ai-action-executor`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({
+        workflow_id: enrollment.workflow_id,
+        enrollment_id: enrollment.id,
+        node_id: config.nodeId || actionType,
+        action_type: actionType,
+        action_config: config,
+        contact_id: contactId,
+        conversation_id: conversation?.id,
+        org_id: orgId,
+        context_data: enrollment.context_data,
+      }),
+    }
+  );
+
+  const result = await response.json();
+
+  return {
+    success: result.success,
+    status: result.status,
+    branch: result.branch,
+    output_raw: result.output_raw,
+    output_structured: result.output_structured,
+    draft_id: result.draft_id,
+  };
 }
 
 function resolveMergeFields(template: string, contact: Record<string, unknown>): string {

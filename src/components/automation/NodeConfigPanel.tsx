@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, ChevronDown, Zap, Clock, Link } from 'lucide-react';
+import { X, ChevronDown, Zap, Clock, Link, Bot, Sparkles } from 'lucide-react';
 import type {
   WorkflowNode,
   WorkflowTriggerType,
@@ -12,10 +12,13 @@ import type {
   TriggerCategory,
   ScheduledTriggerConfig as ScheduledTriggerConfigType,
   WebhookTriggerConfig as WebhookTriggerConfigType,
+  AIWorkflowActionType,
+  AIActionConfig,
 } from '../../types';
 import { TRIGGER_TYPE_LABELS, ACTION_TYPE_LABELS } from '../../services/workflowEngine';
 import { ScheduledTriggerConfig } from './ScheduledTriggerConfig';
 import { WebhookTriggerConfig } from './WebhookTriggerConfig';
+import { AIActionConfigPanel } from './AIActionConfigPanel';
 
 interface NodeConfigPanelProps {
   node: WorkflowNode;
@@ -39,7 +42,7 @@ const TRIGGER_TYPES: WorkflowTriggerType[] = [
   'appointment_canceled',
 ];
 
-const ACTION_TYPES: WorkflowActionType[] = [
+const STANDARD_ACTION_TYPES: WorkflowActionType[] = [
   'add_tag',
   'remove_tag',
   'update_field',
@@ -50,6 +53,28 @@ const ACTION_TYPES: WorkflowActionType[] = [
   'send_email',
   'webhook_post',
 ];
+
+const AI_ACTION_TYPES: AIWorkflowActionType[] = [
+  'ai_conversation_reply',
+  'ai_email_draft',
+  'ai_follow_up_message',
+  'ai_lead_qualification',
+  'ai_booking_assist',
+  'ai_decision_step',
+];
+
+const AI_ACTION_LABELS: Record<AIWorkflowActionType, string> = {
+  ai_conversation_reply: 'AI Conversation Reply',
+  ai_email_draft: 'AI Email Draft',
+  ai_follow_up_message: 'AI Follow-up Message',
+  ai_lead_qualification: 'AI Lead Qualification',
+  ai_booking_assist: 'AI Booking Assistant',
+  ai_decision_step: 'AI Decision Step',
+};
+
+const isAIActionType = (type: string): type is AIWorkflowActionType => {
+  return AI_ACTION_TYPES.includes(type as AIWorkflowActionType);
+};
 
 const DELAY_TYPES: { value: DelayType; label: string }[] = [
   { value: 'wait_duration', label: 'Wait for duration' },
@@ -279,31 +304,134 @@ function ActionConfig({
   canEdit: boolean;
 }) {
   const config = data.config || {};
+  const [actionCategory, setActionCategory] = useState<'standard' | 'ai'>(
+    isAIActionType(data.actionType || '') ? 'ai' : 'standard'
+  );
 
   const updateConfig = (updates: Record<string, unknown>) => {
     onUpdate({ config: { ...config, ...updates } });
   };
 
+  const handleActionTypeChange = (type: string) => {
+    if (isAIActionType(type)) {
+      onUpdate({
+        actionType: type as AIWorkflowActionType,
+        config: {
+          actionType: type,
+          agentId: null,
+          useMemory: true,
+          useKnowledge: true,
+          useBrandboard: true,
+          inputContext: {
+            includeConversationHistory: true,
+            includeContactDetails: true,
+            includeCustomFields: true,
+            includePreviousAIOutputs: true,
+            maxConversationMessages: 20,
+            customInstructions: '',
+          },
+          outputMode: 'generate_draft',
+          guardrailConfig: {
+            profanityFilter: true,
+            blockSensitiveClaims: true,
+            blockedClaimsList: [],
+            quietHoursEnabled: false,
+            quietHoursStart: null,
+            quietHoursEnd: null,
+            maxMessageLength: null,
+            disallowedDomains: [],
+          },
+          retryConfig: {
+            maxRetries: 2,
+            retryOnEmptyOutput: true,
+            fallbackAction: 'skip',
+          },
+        },
+      });
+    } else {
+      onUpdate({ actionType: type as WorkflowActionType, config: {} });
+    }
+  };
+
   return (
     <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-2">
+          Action Category
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => {
+              setActionCategory('standard');
+              if (isAIActionType(data.actionType || '')) {
+                onUpdate({ actionType: '', config: {} });
+              }
+            }}
+            disabled={!canEdit}
+            className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-all ${
+              actionCategory === 'standard'
+                ? 'border-cyan-500 bg-cyan-500/10 text-cyan-400'
+                : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-600'
+            } ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <Zap size={16} />
+            <span className="text-sm font-medium">Standard</span>
+          </button>
+          <button
+            onClick={() => {
+              setActionCategory('ai');
+              if (!isAIActionType(data.actionType || '')) {
+                onUpdate({ actionType: '', config: {} });
+              }
+            }}
+            disabled={!canEdit}
+            className={`flex items-center justify-center gap-2 p-3 rounded-lg border transition-all ${
+              actionCategory === 'ai'
+                ? 'border-blue-500 bg-blue-500/10 text-blue-400'
+                : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-600'
+            } ${!canEdit ? 'opacity-50 cursor-not-allowed' : ''}`}
+          >
+            <Sparkles size={16} />
+            <span className="text-sm font-medium">AI-Powered</span>
+          </button>
+        </div>
+      </div>
+
       <div>
         <label className="block text-sm font-medium text-slate-300 mb-1.5">
           Action Type
         </label>
         <select
           value={data.actionType || ''}
-          onChange={(e) => onUpdate({ actionType: e.target.value as WorkflowActionType, config: {} })}
+          onChange={(e) => handleActionTypeChange(e.target.value)}
           disabled={!canEdit}
           className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-50"
         >
           <option value="">Select action...</option>
-          {ACTION_TYPES.map((type) => (
-            <option key={type} value={type}>
-              {ACTION_TYPE_LABELS[type]}
-            </option>
-          ))}
+          {actionCategory === 'standard' ? (
+            STANDARD_ACTION_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {ACTION_TYPE_LABELS[type]}
+              </option>
+            ))
+          ) : (
+            AI_ACTION_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {AI_ACTION_LABELS[type]}
+              </option>
+            ))
+          )}
         </select>
       </div>
+
+      {isAIActionType(data.actionType || '') && (
+        <AIActionConfigPanel
+          actionType={data.actionType as AIWorkflowActionType}
+          config={config as AIActionConfig}
+          onChange={(newConfig) => onUpdate({ config: newConfig })}
+          canEdit={canEdit}
+        />
+      )}
 
       {data.actionType === 'send_sms' && (
         <div>

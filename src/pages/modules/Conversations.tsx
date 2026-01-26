@@ -7,6 +7,7 @@ import { ContactPanel } from '../../components/conversations/ContactPanel';
 import { ConversationFilters } from '../../components/conversations/ConversationFilters';
 import { TeamMessagingTab } from '../../components/conversations/TeamMessagingTab';
 import { NewConversationModal } from '../../components/conversations/NewConversationModal';
+import { PendingDraftsSection } from '../../components/conversations/PendingDraftsSection';
 import { getConversations, getConversationById, markConversationAsRead, findOrCreateConversation } from '../../services/conversations';
 import type { Conversation, ConversationFilters as FilterType } from '../../types';
 import { MessageSquare, Filter, Users, Inbox, Plus } from 'lucide-react';
@@ -224,6 +225,11 @@ export function Conversations() {
                 </button>
               </div>
             </div>
+
+            <PendingDraftsSection
+              selectedConversationId={conversationId}
+              onSelectConversation={(id) => navigate(`/conversations/${id}`)}
+            />
 
             {showFilters && (
               <ConversationFilters
