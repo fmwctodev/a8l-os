@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation, NavLink } from 'react-router-dom';
-import { Bot, Plus, ChevronDown, Lightbulb, Mic, MessageSquare, Database, FileCode, Sparkles } from 'lucide-react';
+import { Bot, Plus, ChevronDown, Lightbulb, Mic, MessageSquare, Database, FileCode, Sparkles, BarChart3 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const tabs = [
@@ -10,6 +10,7 @@ const tabs = [
   { path: '/ai-agents/knowledge', label: 'Knowledge Base', icon: Database },
   { path: '/ai-agents/templates', label: 'Templates', icon: FileCode },
   { path: '/ai-agents/content', label: 'Content AI', icon: Sparkles },
+  { path: '/ai-agents/content/analytics', label: 'Analytics', icon: BarChart3 },
 ];
 
 export function AIAgentsLayout() {
@@ -111,7 +112,8 @@ export function AIAgentsLayout() {
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = location.pathname === tab.path ||
-                (location.pathname === '/ai-agents' && tab.path === '/ai-agents/getting-started');
+                (location.pathname === '/ai-agents' && tab.path === '/ai-agents/getting-started') ||
+                (location.pathname.startsWith(tab.path) && tab.path !== '/ai-agents/content');
 
               return (
                 <NavLink

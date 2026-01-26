@@ -34,6 +34,7 @@ import { AIAgentsConversation } from './pages/modules/AIAgentsConversation';
 import { AIAgentsKnowledge } from './pages/modules/AIAgentsKnowledge';
 import { AIAgentsTemplates } from './pages/modules/AIAgentsTemplates';
 import { AIAgentsContent } from './pages/modules/AIAgentsContent';
+import { ContentAIAnalytics } from './pages/modules/ContentAIAnalytics';
 import { Marketing } from './pages/modules/Marketing';
 import { MarketingForms } from './pages/modules/MarketingForms';
 import { FormBuilder } from './pages/modules/FormBuilder';
@@ -221,6 +222,7 @@ function App() {
                 <Route path="knowledge" element={<AIAgentsKnowledge />} />
                 <Route path="templates" element={<AIAgentsTemplates />} />
                 <Route path="content" element={<AIAgentsContent />} />
+                <Route path="content/analytics" element={<ContentAIAnalytics />} />
               </Route>
               <Route
                 path="/ai-agents/:agentId"

@@ -10,9 +10,12 @@ import {
   Send,
   FileText,
   CalendarPlus,
+  DollarSign,
+  Receipt,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useDashboardData } from '../hooks/useDashboardData';
+import { useUserDashboardAnalytics } from '../hooks/useUserDashboardAnalytics';
 import { getGreeting, getDateRangePresets, type DateRange } from '../services/dashboard';
 import { usePermission } from '../hooks/usePermission';
 import {
@@ -21,27 +24,50 @@ import {
   QueuePanel,
   AppointmentsList,
   ActivityFeed,
-  DateRangeSelector,
   CreateContactDrawer,
   ComposeMessageDrawer,
   CreateOpportunityDrawer,
   CreateInvoiceDrawer,
   BookAppointmentDrawer,
 } from '../components/dashboard';
+import { TimeRangeSelector, ExportButton } from '../components/analytics';
 import { SystemDashboard } from './SystemDashboard';
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
 
 export function Dashboard() {
   const { user, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const mode = searchParams.get('mode');
-  const [dateRange, setDateRange] = useState<DateRange>(getDateRangePresets()[1]);
   const [refreshing, setRefreshing] = useState(false);
   const [createContactOpen, setCreateContactOpen] = useState(false);
   const [composeMessageOpen, setComposeMessageOpen] = useState(false);
   const [createOpportunityOpen, setCreateOpportunityOpen] = useState(false);
   const [createInvoiceOpen, setCreateInvoiceOpen] = useState(false);
   const [bookAppointmentOpen, setBookAppointmentOpen] = useState(false);
+
+  const {
+    data: analytics,
+    loading: analyticsLoading,
+    timeRange,
+    startDate,
+    endDate,
+    setTimeRange,
+    refetch: refetchAnalytics,
+    exportToPDF,
+  } = useUserDashboardAnalytics();
+
+  const dateRange = getDateRangePresets().find(
+    (p) => p.value === (timeRange === '7d' ? 7 : timeRange === '90d' ? 90 : 30)
+  ) || getDateRangePresets()[1];
 
   const {
     stats,
@@ -67,12 +93,13 @@ export function Dashboard() {
 
   async function handleRefresh() {
     setRefreshing(true);
-    await refetch();
+    await Promise.all([refetch(), refetchAnalytics()]);
     setTimeout(() => setRefreshing(false), 500);
   }
 
   function handleDrawerSuccess() {
     refetch();
+    refetchAnalytics();
   }
 
   function formatNextAppointment(): string | undefined {
@@ -88,6 +115,8 @@ export function Dashboard() {
     if (isTomorrow) return `Next: Tomorrow ${time}`;
     return `Next: ${date.toLocaleDateString([], { weekday: 'short' })} ${time}`;
   }
+
+  const isLoading = loading.stats || analyticsLoading;
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
@@ -112,7 +141,13 @@ export function Dashboard() {
               </button>
             </div>
           )}
-          <DateRangeSelector value={dateRange} onChange={setDateRange} />
+          <TimeRangeSelector
+            value={timeRange}
+            onChange={setTimeRange}
+            startDate={startDate}
+            endDate={endDate}
+          />
+          <ExportButton onExport={exportToPDF} disabled={!analytics} />
           <button
             onClick={handleRefresh}
             disabled={refreshing}
@@ -124,20 +159,43 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard
           title="Total Contacts"
-          value={stats?.totalContacts ?? '--'}
+          value={analytics?.contacts.total ?? stats?.totalContacts ?? '--'}
+          delta={analytics?.contacts.newInPeriod.deltaPercent}
+          deltaType={
+            analytics?.contacts.newInPeriod.trend === 'up'
+              ? 'positive'
+              : analytics?.contacts.newInPeriod.trend === 'down'
+              ? 'negative'
+              : 'neutral'
+          }
+          sublabel={
+            analytics?.contacts.newInPeriod
+              ? `+${analytics.contacts.newInPeriod.current} new this period`
+              : undefined
+          }
           icon={Users}
           accentColor="cyan"
           onClick={() => navigate('/contacts')}
-          isLoading={loading.stats}
+          isLoading={isLoading}
         />
         <StatCard
-          title="Open Conversations"
-          value={stats?.openConversations ?? '--'}
+          title="Active Conversations"
+          value={analytics?.conversations.active ?? stats?.openConversations ?? '--'}
+          delta={analytics?.conversations.messagesSent.deltaPercent}
+          deltaType={
+            analytics?.conversations.messagesSent.trend === 'up'
+              ? 'positive'
+              : analytics?.conversations.messagesSent.trend === 'down'
+              ? 'negative'
+              : 'neutral'
+          }
           sublabel={
-            stats?.unreadConversations
+            analytics?.conversations.messagesSent
+              ? `${analytics.conversations.messagesSent.current} messages sent`
+              : stats?.unreadConversations
               ? `${stats.unreadConversations} unread`
               : undefined
           }
@@ -150,24 +208,91 @@ export function Dashboard() {
                 : '/conversations'
             )
           }
-          isLoading={loading.stats}
+          isLoading={isLoading}
         />
         <StatCard
-          title="Active Opportunities"
-          value={stats?.activeOpportunities ?? '--'}
+          title="Open Opportunities"
+          value={analytics?.opportunities.open ?? stats?.activeOpportunities ?? '--'}
+          delta={analytics?.opportunities.winRate.deltaPercent}
+          deltaType={
+            analytics?.opportunities.winRate.trend === 'up'
+              ? 'positive'
+              : analytics?.opportunities.winRate.trend === 'down'
+              ? 'negative'
+              : 'neutral'
+          }
+          sublabel={
+            analytics?.opportunities.pipelineValue
+              ? `${formatCurrency(analytics.opportunities.pipelineValue.current)} pipeline`
+              : undefined
+          }
           icon={Target}
           accentColor="amber"
           onClick={() => navigate('/opportunities')}
-          isLoading={loading.stats}
+          isLoading={isLoading}
         />
         <StatCard
           title="Upcoming Appointments"
-          value={stats?.upcomingAppointments ?? '--'}
+          value={analytics?.appointments.upcoming ?? stats?.upcomingAppointments ?? '--'}
+          delta={analytics?.appointments.completedInPeriod.deltaPercent}
+          deltaType={
+            analytics?.appointments.completedInPeriod.trend === 'up'
+              ? 'positive'
+              : analytics?.appointments.completedInPeriod.trend === 'down'
+              ? 'negative'
+              : 'neutral'
+          }
           sublabel={formatNextAppointment()}
           icon={Calendar}
           accentColor="rose"
           onClick={() => navigate('/calendars')}
-          isLoading={loading.stats}
+          isLoading={isLoading}
+        />
+        <StatCard
+          title="Invoiced Revenue"
+          value={
+            analytics?.revenue.invoicedInPeriod
+              ? formatCurrency(analytics.revenue.invoicedInPeriod.current)
+              : '--'
+          }
+          delta={analytics?.revenue.invoicedInPeriod.deltaPercent}
+          deltaType={
+            analytics?.revenue.invoicedInPeriod.trend === 'up'
+              ? 'positive'
+              : analytics?.revenue.invoicedInPeriod.trend === 'down'
+              ? 'negative'
+              : 'neutral'
+          }
+          sublabel={
+            analytics?.revenue.outstanding
+              ? `${formatCurrency(analytics.revenue.outstanding)} outstanding`
+              : undefined
+          }
+          icon={Receipt}
+          accentColor="emerald"
+          onClick={() => navigate('/payments')}
+          isLoading={isLoading}
+        />
+        <StatCard
+          title="Collected Revenue"
+          value={
+            analytics?.revenue.paidInPeriod
+              ? formatCurrency(analytics.revenue.paidInPeriod.current)
+              : '--'
+          }
+          delta={analytics?.revenue.paidInPeriod.deltaPercent}
+          deltaType={
+            analytics?.revenue.paidInPeriod.trend === 'up'
+              ? 'positive'
+              : analytics?.revenue.paidInPeriod.trend === 'down'
+              ? 'negative'
+              : 'neutral'
+          }
+          sublabel="Paid invoices this period"
+          icon={DollarSign}
+          accentColor="blue"
+          onClick={() => navigate('/payments')}
+          isLoading={isLoading}
         />
       </div>
 
