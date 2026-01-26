@@ -6,9 +6,10 @@ import { MessageThread } from '../../components/conversations/MessageThread';
 import { ContactPanel } from '../../components/conversations/ContactPanel';
 import { ConversationFilters } from '../../components/conversations/ConversationFilters';
 import { TeamMessagingTab } from '../../components/conversations/TeamMessagingTab';
-import { getConversations, getConversationById, markConversationAsRead } from '../../services/conversations';
+import { NewConversationModal } from '../../components/conversations/NewConversationModal';
+import { getConversations, getConversationById, markConversationAsRead, findOrCreateConversation } from '../../services/conversations';
 import type { Conversation, ConversationFilters as FilterType } from '../../types';
-import { MessageSquare, Filter, Users, Inbox } from 'lucide-react';
+import { MessageSquare, Filter, Users, Inbox, Plus } from 'lucide-react';
 
 type ConversationTabType = 'inbox' | 'team-messaging';
 
@@ -30,6 +31,8 @@ export function Conversations() {
   const [filters, setFilters] = useState<FilterType>({});
   const [showFilters, setShowFilters] = useState(false);
   const [showContactPanel, setShowContactPanel] = useState(true);
+  const [showNewConversationModal, setShowNewConversationModal] = useState(false);
+  const [creatingConversation, setCreatingConversation] = useState(false);
 
   const handleTabChange = (tab: ConversationTabType) => {
     setActiveTab(tab);
@@ -107,6 +110,26 @@ export function Conversations() {
     (key) => filters[key as keyof FilterType] !== undefined && filters[key as keyof FilterType] !== null
   ).length;
 
+  const handleCreateConversation = async (contactId: string) => {
+    if (!user?.organization_id) return;
+
+    try {
+      setCreatingConversation(true);
+      const conversation = await findOrCreateConversation(
+        user.organization_id,
+        contactId,
+        user.department_id
+      );
+
+      await loadConversations();
+      navigate(`/conversations/${conversation.id}`);
+    } catch (error) {
+      console.error('Failed to create conversation:', error);
+    } finally {
+      setCreatingConversation(false);
+    }
+  };
+
   return (
     <div className="h-[calc(100vh-64px)] flex flex-col bg-slate-900 relative isolate">
       <div className="border-b border-slate-700 bg-slate-800 px-4">
@@ -144,19 +167,28 @@ export function Conversations() {
             <div className="p-4 border-b border-slate-700">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-lg font-semibold text-white">Conversations</h2>
-                <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`p-2 rounded-lg transition-colors ${
-                    showFilters || activeFilterCount > 0
-                      ? 'bg-cyan-500/20 text-cyan-400'
-                      : 'hover:bg-slate-700 text-slate-400'
-                  }`}
-                >
-                  <Filter size={18} />
-                  {activeFilterCount > 0 && (
-                    <span className="ml-1 text-xs font-medium">{activeFilterCount}</span>
-                  )}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowNewConversationModal(true)}
+                    className="p-2 rounded-lg hover:bg-cyan-500/20 text-cyan-400 transition-colors"
+                    title="New conversation"
+                  >
+                    <Plus size={18} />
+                  </button>
+                  <button
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`p-2 rounded-lg transition-colors ${
+                      showFilters || activeFilterCount > 0
+                        ? 'bg-cyan-500/20 text-cyan-400'
+                        : 'hover:bg-slate-700 text-slate-400'
+                    }`}
+                  >
+                    <Filter size={18} />
+                    {activeFilterCount > 0 && (
+                      <span className="ml-1 text-xs font-medium">{activeFilterCount}</span>
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div className="flex gap-1">
@@ -246,6 +278,13 @@ export function Conversations() {
             </div>
           )}
         </div>
+      )}
+
+      {showNewConversationModal && (
+        <NewConversationModal
+          onClose={() => setShowNewConversationModal(false)}
+          onSelectContact={handleCreateConversation}
+        />
       )}
     </div>
   );
