@@ -85,6 +85,12 @@ export function MyStaffPage() {
       setRoles(rolesData);
       setStats(statsData);
       setSelectedIds([]);
+
+      setSelectedMember((prev) => {
+        if (!prev) return null;
+        const updated = usersData.find((u) => u.id === prev.id);
+        return updated || null;
+      });
     } catch (error) {
       console.error('Failed to load staff data:', error);
     } finally {

@@ -88,6 +88,10 @@ export async function updateUser(id: string, updates: Partial<User>, currentUser
 
   if (error) throw error;
 
+  if (!data) {
+    throw new Error('Update failed - you may not have permission to modify this user');
+  }
+
   await logAudit({
     userId: currentUser.id,
     action: 'update',
