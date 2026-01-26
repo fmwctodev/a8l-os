@@ -9,7 +9,6 @@ import {
   UserPlus,
   Send,
   FileText,
-  Bot,
   CalendarPlus,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -28,7 +27,6 @@ import {
   CreateOpportunityDrawer,
   CreateInvoiceDrawer,
   BookAppointmentDrawer,
-  RunAgentDrawer,
 } from '../components/dashboard';
 import { SystemDashboard } from './SystemDashboard';
 
@@ -44,7 +42,6 @@ export function Dashboard() {
   const [createOpportunityOpen, setCreateOpportunityOpen] = useState(false);
   const [createInvoiceOpen, setCreateInvoiceOpen] = useState(false);
   const [bookAppointmentOpen, setBookAppointmentOpen] = useState(false);
-  const [runAgentOpen, setRunAgentOpen] = useState(false);
 
   const {
     stats,
@@ -63,7 +60,6 @@ export function Dashboard() {
   const canCreateOpportunity = usePermission('opportunities.create');
   const canCreateInvoice = usePermission('invoices.create');
   const canCreateAppointment = usePermission('appointments.create');
-  const canRunAgent = usePermission('ai_agents.run');
 
   if (isSuperAdmin && mode === 'system') {
     return <SystemDashboard />;
@@ -213,13 +209,6 @@ export function Dashboard() {
             disabled={!canCreateAppointment}
             iconColor="text-rose-400"
           />
-          <QuickActionButton
-            icon={Bot}
-            label="Run AI Agent"
-            onClick={() => setRunAgentOpen(true)}
-            disabled={!canRunAgent}
-            iconColor="text-violet-400"
-          />
         </div>
       </div>
 
@@ -285,11 +274,6 @@ export function Dashboard() {
       <BookAppointmentDrawer
         open={bookAppointmentOpen}
         onClose={() => setBookAppointmentOpen(false)}
-        onSuccess={handleDrawerSuccess}
-      />
-      <RunAgentDrawer
-        open={runAgentOpen}
-        onClose={() => setRunAgentOpen(false)}
         onSuccess={handleDrawerSuccess}
       />
     </div>
