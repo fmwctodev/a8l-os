@@ -38,7 +38,7 @@ export function InternalMessageThread({
     if (channel.type === 'direct') {
       const otherMember = channel.members?.find(m => m.user_id !== user?.id);
       return {
-        name: otherMember?.full_name || 'Unknown User',
+        name: otherMember?.name || 'Unknown User',
         subtitle: otherMember?.email || '',
         icon: null,
       };
@@ -166,13 +166,13 @@ export function InternalMessageThread({
                           (message.sender?.avatar_url ? (
                             <img
                               src={message.sender.avatar_url}
-                              alt={message.sender.full_name}
+                              alt={message.sender.name}
                               className="w-8 h-8 rounded-full object-cover"
                             />
                           ) : (
                             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
                               <span className="text-white text-xs font-medium">
-                                {message.sender?.full_name?.charAt(0).toUpperCase() ||
+                                {message.sender?.name?.charAt(0).toUpperCase() ||
                                   '?'}
                               </span>
                             </div>
@@ -193,7 +193,7 @@ export function InternalMessageThread({
                             <span className="text-sm font-medium text-white">
                               {isOwnMessage
                                 ? 'You'
-                                : message.sender?.full_name || 'Unknown User'}
+                                : message.sender?.name || 'Unknown User'}
                             </span>
                             <span className="text-xs text-slate-500">
                               {formatTime(new Date(message.created_at))}

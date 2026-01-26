@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 interface User {
   id: string;
-  full_name: string;
+  name: string;
   email: string;
   avatar_url: string | null;
   department_id: string | null;
@@ -49,7 +49,7 @@ export function CreateGroupModal({
       setFilteredUsers(
         users.filter(
           (user) =>
-            user.full_name.toLowerCase().includes(query) ||
+            user.name.toLowerCase().includes(query) ||
             user.email.toLowerCase().includes(query)
         )
       );
@@ -161,17 +161,17 @@ export function CreateGroupModal({
                     {user.avatar_url ? (
                       <img
                         src={user.avatar_url}
-                        alt={user.full_name}
+                        alt={user.name}
                         className="w-5 h-5 rounded-full object-cover"
                       />
                     ) : (
                       <div className="w-5 h-5 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
                         <span className="text-white text-[10px] font-medium">
-                          {user.full_name.charAt(0).toUpperCase()}
+                          {user.name.charAt(0).toUpperCase()}
                         </span>
                       </div>
                     )}
-                    <span className="text-xs text-white">{user.full_name}</span>
+                    <span className="text-xs text-white">{user.name}</span>
                     <button
                       onClick={() => toggleUser(user.id)}
                       className="ml-1 text-slate-400 hover:text-white transition-colors"
@@ -230,20 +230,20 @@ export function CreateGroupModal({
                     {user.avatar_url ? (
                       <img
                         src={user.avatar_url}
-                        alt={user.full_name}
+                        alt={user.name}
                         className="w-10 h-10 rounded-full object-cover"
                       />
                     ) : (
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
                         <span className="text-white text-sm font-medium">
-                          {user.full_name.charAt(0).toUpperCase()}
+                          {user.name.charAt(0).toUpperCase()}
                         </span>
                       </div>
                     )}
 
                     <div className="flex-1 min-w-0">
                       <h4 className="text-sm font-medium text-white truncate">
-                        {user.full_name}
+                        {user.name}
                       </h4>
                       <p className="text-xs text-slate-400 truncate">{user.email}</p>
                     </div>

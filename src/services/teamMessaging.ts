@@ -40,7 +40,7 @@ export interface TeamMessage {
   updated_at: string;
   sender?: {
     id: string;
-    full_name: string;
+    name: string;
     email: string;
     avatar_url: string | null;
   };
@@ -62,7 +62,7 @@ export interface ChannelWithDetails extends TeamChannel {
   members?: Array<{
     user_id: string;
     role: string;
-    full_name: string;
+    name: string;
     email: string;
     avatar_url: string | null;
   }>;
@@ -124,7 +124,7 @@ export async function getUserChannels(): Promise<ChannelWithDetails[]> {
         role,
         users (
           id,
-          full_name,
+          name,
           email,
           avatar_url
         )
@@ -140,7 +140,7 @@ export async function getUserChannels(): Promise<ChannelWithDetails[]> {
       members: (channelMembers || []).map((m: any) => ({
         user_id: m.user_id,
         role: m.role,
-        full_name: m.users?.full_name || 'Unknown User',
+        name: m.users?.name || 'Unknown User',
         email: m.users?.email || '',
         avatar_url: m.users?.avatar_url || null,
       })),
@@ -323,7 +323,7 @@ export async function getChannelMessages(channelId: string, limit = 100): Promis
       *,
       sender:users!team_messages_sender_id_fkey (
         id,
-        full_name,
+        name,
         email,
         avatar_url
       )
@@ -386,7 +386,7 @@ export async function sendMessage(
       *,
       sender:users!team_messages_sender_id_fkey (
         id,
-        full_name,
+        name,
         email,
         avatar_url
       )
@@ -554,7 +554,7 @@ export async function archiveChannel(channelId: string): Promise<void> {
 
 export async function getOrganizationUsers(excludeUserId?: string): Promise<Array<{
   id: string;
-  full_name: string;
+  name: string;
   email: string;
   avatar_url: string | null;
   department_id: string | null;
@@ -573,7 +573,7 @@ export async function getOrganizationUsers(excludeUserId?: string): Promise<Arra
 
   let query = supabase
     .from('users')
-    .select('id, full_name, email, avatar_url, department_id, status')
+    .select('id, name, email, avatar_url, department_id, status')
     .eq('organization_id', userData.organization_id)
     .eq('status', 'active');
 
@@ -581,7 +581,7 @@ export async function getOrganizationUsers(excludeUserId?: string): Promise<Arra
     query = query.neq('id', excludeUserId);
   }
 
-  const { data, error } = await query.order('full_name');
+  const { data, error } = await query.order('name');
 
   if (error) throw error;
 
@@ -609,7 +609,7 @@ export function subscribeToChannelMessages(
             *,
             sender:users!team_messages_sender_id_fkey (
               id,
-              full_name,
+              name,
               email,
               avatar_url
             )

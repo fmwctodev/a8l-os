@@ -29,7 +29,7 @@ export function ChannelsList({
     if (channel.type === 'direct') {
       const otherMember = channel.members?.find(m => m.user_id !== channel.created_by);
       return {
-        name: otherMember?.full_name || 'Unknown User',
+        name: otherMember?.name || 'Unknown User',
         avatar: otherMember?.avatar_url,
         icon: null,
       };
