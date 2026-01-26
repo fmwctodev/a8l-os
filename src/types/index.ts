@@ -10,6 +10,7 @@ import type {
 } from './aiWorkflowActions';
 
 export * from './aiWorkflowActions';
+export * from './workflowActions';
 
 export interface Organization {
   id: string;

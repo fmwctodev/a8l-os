@@ -692,6 +692,943 @@ async function executeAction(
 
       return result;
     }
+
+    case "create_opportunity": {
+      const result = await executeOpportunityAction(supabase, "create", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "update_opportunity": {
+      const result = await executeOpportunityAction(supabase, "update", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "move_opportunity_stage": {
+      const result = await executeOpportunityAction(supabase, "move_stage", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "assign_opportunity_owner": {
+      const result = await executeOpportunityAction(supabase, "assign_owner", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "mark_opportunity_won": {
+      const result = await executeOpportunityAction(supabase, "mark_won", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "mark_opportunity_lost": {
+      const result = await executeOpportunityAction(supabase, "mark_lost", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "create_appointment": {
+      const result = await executeAppointmentAction(supabase, "create", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "cancel_appointment": {
+      const result = await executeAppointmentAction(supabase, "cancel", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "reschedule_appointment": {
+      const result = await executeAppointmentAction(supabase, "reschedule", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "send_appointment_reminder": {
+      const result = await executeAppointmentAction(supabase, "send_reminder", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "mark_no_show": {
+      const result = await executeAppointmentAction(supabase, "mark_no_show", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "create_invoice": {
+      const result = await executePaymentAction(supabase, "create_invoice", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "send_invoice": {
+      const result = await executePaymentAction(supabase, "send_invoice", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "void_invoice": {
+      const result = await executePaymentAction(supabase, "void_invoice", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "create_subscription": {
+      const result = await executePaymentAction(supabase, "create_subscription", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "create_task": {
+      const result = await executeTaskAction(supabase, "create", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "assign_task": {
+      const result = await executeTaskAction(supabase, "assign", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "mark_task_complete": {
+      const result = await executeTaskAction(supabase, "complete", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "update_lead_score": {
+      const { data: scoring } = await supabase
+        .from("contacts")
+        .select("lead_score")
+        .eq("id", contactId)
+        .single();
+
+      let newScore = scoring?.lead_score || 0;
+      const operation = config.operation as string;
+      const value = config.value as number;
+
+      if (operation === "set") {
+        newScore = value;
+      } else if (operation === "increment") {
+        newScore += value;
+      } else if (operation === "decrement") {
+        newScore -= value;
+      }
+
+      await supabase
+        .from("contacts")
+        .update({ lead_score: Math.max(0, newScore) })
+        .eq("id", contactId);
+
+      await supabase.from("scoring_history").insert({
+        org_id: orgId,
+        contact_id: contactId,
+        previous_score: scoring?.lead_score || 0,
+        new_score: newScore,
+        change_reason: config.reason || "Workflow action",
+        change_source: "workflow",
+      });
+      break;
+    }
+
+    case "set_dnd": {
+      const channels = config.channels as string[];
+      const endDate = config.endDate as string | undefined;
+
+      await supabase
+        .from("contacts")
+        .update({
+          dnd_status: {
+            enabled: true,
+            channels,
+            reason: config.reason,
+            end_date: endDate,
+            set_at: new Date().toISOString(),
+          },
+        })
+        .eq("id", contactId);
+      break;
+    }
+
+    case "remove_dnd": {
+      await supabase
+        .from("contacts")
+        .update({ dnd_status: null })
+        .eq("id", contactId);
+      break;
+    }
+
+    case "notify_user": {
+      const recipientType = config.recipientType as string;
+      let userIds: string[] = [];
+
+      if (recipientType === "user_id" && config.recipientIds) {
+        userIds = config.recipientIds as string[];
+      } else if (recipientType === "contact_owner") {
+        const owner = contact.assigned_user_id as string;
+        if (owner) userIds = [owner];
+      } else if (recipientType === "role" && config.roleNames) {
+        const { data: roleUsers } = await supabase
+          .from("users")
+          .select("id, role:roles!inner(name)")
+          .eq("org_id", orgId)
+          .in("roles.name", config.roleNames as string[]);
+        userIds = roleUsers?.map((u: Record<string, unknown>) => u.id as string) || [];
+      }
+
+      for (const userId of userIds) {
+        await supabase.from("inbox_events").insert({
+          org_id: orgId,
+          user_id: userId,
+          event_type: "workflow_notification",
+          title: config.subject || "Workflow Notification",
+          body: resolveMergeFields(config.message as string, contact),
+          metadata: { contact_id: contactId, enrollment_id: enrollment.id },
+          read: false,
+        });
+      }
+      break;
+    }
+
+    case "log_custom_event": {
+      await supabase.from("contact_timeline_events").insert({
+        org_id: orgId,
+        contact_id: contactId,
+        event_type: config.eventName as string,
+        title: config.eventName as string,
+        description: "Logged via workflow",
+        metadata: {
+          ...(config.eventData as Record<string, unknown> || {}),
+          workflow_enrollment_id: enrollment.id,
+        },
+      });
+      break;
+    }
+
+    case "stop_workflow": {
+      await supabase
+        .from("workflow_enrollments")
+        .update({
+          status: config.markAsCompleted ? "completed" : "stopped",
+          stopped_reason: config.reason || "Stopped by workflow action",
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", enrollment.id);
+      return { shouldStop: true };
+    }
+
+    case "trigger_another_workflow": {
+      const targetWorkflowId = config.workflowId as string;
+
+      const { data: targetWorkflow } = await supabase
+        .from("workflows")
+        .select("id, status, published_definition")
+        .eq("id", targetWorkflowId)
+        .eq("status", "published")
+        .maybeSingle();
+
+      if (targetWorkflow) {
+        const { data: latestVersion } = await supabase
+          .from("workflow_versions")
+          .select("id")
+          .eq("workflow_id", targetWorkflowId)
+          .order("version_number", { ascending: false })
+          .limit(1)
+          .single();
+
+        if (latestVersion) {
+          const definition = targetWorkflow.published_definition as WorkflowDefinition;
+          const triggerNode = definition.nodes.find((n) => n.type === "trigger");
+          const firstEdge = triggerNode
+            ? definition.edges.find((e) => e.source === triggerNode.id)
+            : null;
+          const firstNodeId = firstEdge?.target || null;
+
+          const { data: newEnrollment } = await supabase
+            .from("workflow_enrollments")
+            .insert({
+              org_id: orgId,
+              workflow_id: targetWorkflowId,
+              version_id: latestVersion.id,
+              contact_id: contactId,
+              status: "active",
+              current_node_id: firstNodeId,
+              context_data: {
+                triggered_by_workflow: enrollment.workflow_id,
+                triggered_by_enrollment: enrollment.id,
+              },
+            })
+            .select()
+            .single();
+
+          if (newEnrollment && firstNodeId) {
+            await supabase.from("workflow_jobs").insert({
+              org_id: orgId,
+              enrollment_id: newEnrollment.id,
+              node_id: firstNodeId,
+              run_at: new Date().toISOString(),
+              status: "pending",
+              execution_key: `${newEnrollment.id}-${firstNodeId}-${Date.now()}`,
+            });
+          }
+        }
+      }
+      break;
+    }
+
+    case "set_workflow_variable": {
+      const variableName = config.variableName as string;
+      let value = config.value;
+
+      if (config.valueType === "merge_field") {
+        value = resolveMergeFields(value as string, contact);
+      }
+
+      const contextData = (enrollment.context_data as Record<string, unknown>) || {};
+      contextData[variableName] = value;
+
+      await supabase
+        .from("workflow_enrollments")
+        .update({ context_data: contextData })
+        .eq("id", enrollment.id);
+      break;
+    }
+
+    case "wait_for_condition": {
+      const timeoutDays = config.timeoutDays || 30;
+      const timeoutAt = new Date();
+      timeoutAt.setDate(timeoutAt.getDate() + timeoutDays);
+
+      await supabase.from("workflow_condition_waits").insert({
+        org_id: orgId,
+        enrollment_id: enrollment.id,
+        node_id: data.nodeId || "wait_condition",
+        condition_config: config.conditions,
+        check_interval_minutes: config.checkIntervalMinutes || 5,
+        timeout_at: timeoutAt.toISOString(),
+        status: "waiting",
+      });
+
+      return { shouldWait: true };
+    }
+  }
+}
+
+async function executeOpportunityAction(
+  supabase: ReturnType<typeof createClient>,
+  action: string,
+  config: Record<string, unknown>,
+  enrollment: Record<string, unknown>,
+  orgId: string,
+  contactId: string
+): Promise<Record<string, unknown>> {
+  const contextData = enrollment.context_data as Record<string, unknown> || {};
+
+  async function resolveOpportunityId(): Promise<string | null> {
+    const source = config.opportunitySource as string || "most_recent";
+    if (source === "specific_id" && config.opportunityId) {
+      return config.opportunityId as string;
+    }
+    if (source === "context" && contextData.opportunityId) {
+      return contextData.opportunityId as string;
+    }
+    const { data } = await supabase
+      .from("opportunities")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("contact_id", contactId)
+      .eq("status", "open")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data?.id || null;
+  }
+
+  switch (action) {
+    case "create": {
+      const assigneeType = config.assigneeType as string || "contact_owner";
+      let assigneeId: string | null = null;
+
+      if (assigneeType === "specific_user") {
+        assigneeId = config.assigneeId as string;
+      } else if (assigneeType === "contact_owner") {
+        const { data: contact } = await supabase
+          .from("contacts")
+          .select("assigned_user_id")
+          .eq("id", contactId)
+          .single();
+        assigneeId = contact?.assigned_user_id;
+      }
+
+      let closeDate: string | null = null;
+      if (config.closeDateDays) {
+        const date = new Date();
+        date.setDate(date.getDate() + (config.closeDateDays as number));
+        closeDate = date.toISOString().split("T")[0];
+      }
+
+      const { data: opportunity } = await supabase
+        .from("opportunities")
+        .insert({
+          org_id: orgId,
+          contact_id: contactId,
+          pipeline_id: config.pipelineId,
+          stage_id: config.stageId,
+          name: config.name || "New Opportunity",
+          value_amount: config.value || 0,
+          currency: config.currency || "USD",
+          source: config.source,
+          close_date: closeDate,
+          assigned_user_id: assigneeId,
+          created_by: assigneeId,
+          status: "open",
+        })
+        .select()
+        .single();
+
+      if (opportunity) {
+        await supabase.from("opportunity_timeline_events").insert({
+          org_id: orgId,
+          opportunity_id: opportunity.id,
+          contact_id: contactId,
+          event_type: "opportunity_created",
+          summary: "Opportunity created via workflow",
+          payload: { enrollment_id: enrollment.id },
+        });
+      }
+
+      return { success: true, opportunityId: opportunity?.id };
+    }
+
+    case "move_stage": {
+      const opportunityId = await resolveOpportunityId();
+      if (!opportunityId) return { success: false, error: "Opportunity not found" };
+
+      const { data: currentOpp } = await supabase
+        .from("opportunities")
+        .select("stage_id")
+        .eq("id", opportunityId)
+        .single();
+
+      await supabase
+        .from("opportunities")
+        .update({ stage_id: config.targetStageId })
+        .eq("id", opportunityId);
+
+      await supabase.from("opportunity_timeline_events").insert({
+        org_id: orgId,
+        opportunity_id: opportunityId,
+        contact_id: contactId,
+        event_type: "stage_changed",
+        summary: "Stage changed via workflow",
+        payload: {
+          from_stage_id: currentOpp?.stage_id,
+          to_stage_id: config.targetStageId,
+          enrollment_id: enrollment.id,
+        },
+      });
+
+      return { success: true };
+    }
+
+    case "mark_won": {
+      const opportunityId = await resolveOpportunityId();
+      if (!opportunityId) return { success: false, error: "Opportunity not found" };
+
+      await supabase
+        .from("opportunities")
+        .update({
+          status: "won",
+          closed_at: new Date().toISOString(),
+        })
+        .eq("id", opportunityId);
+
+      await supabase.from("opportunity_timeline_events").insert({
+        org_id: orgId,
+        opportunity_id: opportunityId,
+        contact_id: contactId,
+        event_type: "opportunity_won",
+        summary: "Opportunity marked as won via workflow",
+        payload: { enrollment_id: enrollment.id },
+      });
+
+      return { success: true };
+    }
+
+    case "mark_lost": {
+      const opportunityId = await resolveOpportunityId();
+      if (!opportunityId) return { success: false, error: "Opportunity not found" };
+
+      await supabase
+        .from("opportunities")
+        .update({
+          status: "lost",
+          closed_at: new Date().toISOString(),
+          lost_reason: config.lostReasonText,
+        })
+        .eq("id", opportunityId);
+
+      await supabase.from("opportunity_timeline_events").insert({
+        org_id: orgId,
+        opportunity_id: opportunityId,
+        contact_id: contactId,
+        event_type: "opportunity_lost",
+        summary: "Opportunity marked as lost via workflow",
+        payload: { enrollment_id: enrollment.id, lost_reason: config.lostReasonText },
+      });
+
+      return { success: true };
+    }
+
+    case "assign_owner": {
+      const opportunityId = await resolveOpportunityId();
+      if (!opportunityId) return { success: false, error: "Opportunity not found" };
+
+      const ownerType = config.ownerType as string || "contact_owner";
+      let ownerId: string | null = null;
+
+      if (ownerType === "specific") {
+        ownerId = config.ownerId as string;
+      } else if (ownerType === "contact_owner") {
+        const { data: contact } = await supabase
+          .from("contacts")
+          .select("assigned_user_id")
+          .eq("id", contactId)
+          .single();
+        ownerId = contact?.assigned_user_id;
+      }
+
+      if (ownerId) {
+        await supabase
+          .from("opportunities")
+          .update({ assigned_user_id: ownerId })
+          .eq("id", opportunityId);
+      }
+
+      return { success: true };
+    }
+
+    default:
+      return { success: false, error: "Unknown action" };
+  }
+}
+
+async function executeAppointmentAction(
+  supabase: ReturnType<typeof createClient>,
+  action: string,
+  config: Record<string, unknown>,
+  enrollment: Record<string, unknown>,
+  orgId: string,
+  contactId: string
+): Promise<Record<string, unknown>> {
+  async function resolveAppointmentId(): Promise<string | null> {
+    const source = config.appointmentSource as string || "most_recent";
+    if (source === "specific_id" && config.appointmentId) {
+      return config.appointmentId as string;
+    }
+    const { data } = await supabase
+      .from("appointments")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("contact_id", contactId)
+      .eq("status", "scheduled")
+      .order("start_at_utc", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    return data?.id || null;
+  }
+
+  switch (action) {
+    case "create": {
+      const calendarId = config.calendarId as string;
+      const appointmentTypeId = config.appointmentTypeId as string;
+
+      const { data: appointmentType } = await supabase
+        .from("appointment_types")
+        .select("duration_minutes")
+        .eq("id", appointmentTypeId)
+        .single();
+
+      const duration = appointmentType?.duration_minutes || 30;
+      let startTime = new Date();
+
+      if (config.startTimeDays) {
+        startTime.setDate(startTime.getDate() + (config.startTimeDays as number));
+      }
+      if (config.startTimeHour !== undefined) {
+        startTime.setHours(config.startTimeHour as number, 0, 0, 0);
+      }
+
+      const endTime = new Date(startTime.getTime() + duration * 60 * 1000);
+
+      const { data: calendar } = await supabase
+        .from("calendars")
+        .select("owner_user_id")
+        .eq("id", calendarId)
+        .single();
+
+      const { data: appointment } = await supabase
+        .from("appointments")
+        .insert({
+          org_id: orgId,
+          calendar_id: calendarId,
+          appointment_type_id: appointmentTypeId,
+          contact_id: contactId,
+          assigned_user_id: calendar?.owner_user_id,
+          status: "scheduled",
+          start_at_utc: startTime.toISOString(),
+          end_at_utc: endTime.toISOString(),
+          visitor_timezone: "America/New_York",
+          source: "manual",
+          notes: config.notes,
+          history: [{ action: "created", timestamp: new Date().toISOString(), by: "workflow" }],
+        })
+        .select()
+        .single();
+
+      return { success: true, appointmentId: appointment?.id };
+    }
+
+    case "cancel": {
+      const appointmentId = await resolveAppointmentId();
+      if (!appointmentId) return { success: false, error: "Appointment not found" };
+
+      await supabase
+        .from("appointments")
+        .update({
+          status: "canceled",
+          canceled_at: new Date().toISOString(),
+        })
+        .eq("id", appointmentId);
+
+      return { success: true };
+    }
+
+    case "send_reminder": {
+      const appointmentId = await resolveAppointmentId();
+      if (!appointmentId) return { success: false, error: "Appointment not found" };
+
+      const { data: appointment } = await supabase
+        .from("appointments")
+        .select("*, contact:contacts(phone, email)")
+        .eq("id", appointmentId)
+        .single();
+
+      if (appointment) {
+        const contact = appointment.contact as { phone?: string; email?: string };
+        const reminderType = config.reminderType as string || "both";
+        const message = config.customMessage ||
+          `Reminder: You have an appointment scheduled for ${new Date(appointment.start_at_utc).toLocaleString()}`;
+
+        if ((reminderType === "sms" || reminderType === "both") && contact?.phone) {
+          await supabase.from("messages").insert({
+            org_id: orgId,
+            contact_id: contactId,
+            direction: "outbound",
+            channel: "sms",
+            content: message,
+            status: "queued",
+            metadata: { appointment_id: appointmentId, type: "reminder" },
+          });
+        }
+
+        if ((reminderType === "email" || reminderType === "both") && contact?.email) {
+          await supabase.from("messages").insert({
+            org_id: orgId,
+            contact_id: contactId,
+            direction: "outbound",
+            channel: "email",
+            content: message,
+            status: "queued",
+            metadata: { appointment_id: appointmentId, type: "reminder" },
+          });
+        }
+      }
+
+      return { success: true };
+    }
+
+    case "mark_no_show": {
+      const appointmentId = await resolveAppointmentId();
+      if (!appointmentId) return { success: false, error: "Appointment not found" };
+
+      await supabase
+        .from("appointments")
+        .update({ status: "no_show" })
+        .eq("id", appointmentId);
+
+      return { success: true };
+    }
+
+    default:
+      return { success: false, error: "Unknown action" };
+  }
+}
+
+async function executePaymentAction(
+  supabase: ReturnType<typeof createClient>,
+  action: string,
+  config: Record<string, unknown>,
+  enrollment: Record<string, unknown>,
+  orgId: string,
+  contactId: string
+): Promise<Record<string, unknown>> {
+  async function resolveInvoiceId(): Promise<string | null> {
+    const source = config.invoiceSource as string || "most_recent";
+    if (source === "specific_id" && config.invoiceId) {
+      return config.invoiceId as string;
+    }
+    const { data } = await supabase
+      .from("invoices")
+      .select("id")
+      .eq("org_id", orgId)
+      .eq("contact_id", contactId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data?.id || null;
+  }
+
+  switch (action) {
+    case "create_invoice": {
+      const lineItems = config.lineItems as Array<{
+        description: string;
+        quantity: number;
+        unitPrice: number;
+      }>;
+
+      let subtotal = 0;
+      const processedItems = lineItems.map((item, index) => {
+        const total = item.quantity * item.unitPrice;
+        subtotal += total;
+        return {
+          org_id: orgId,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          total_price: total,
+          sort_order: index,
+        };
+      });
+
+      let dueDate = new Date();
+      if (config.dueDays) {
+        dueDate.setDate(dueDate.getDate() + (config.dueDays as number));
+      } else {
+        dueDate.setDate(dueDate.getDate() + 30);
+      }
+
+      const { data: invoice } = await supabase
+        .from("invoices")
+        .insert({
+          org_id: orgId,
+          contact_id: contactId,
+          status: "draft",
+          subtotal,
+          total: subtotal,
+          currency: "USD",
+          due_date: dueDate.toISOString().split("T")[0],
+          memo: config.memo,
+          internal_notes: config.internalNotes,
+        })
+        .select()
+        .single();
+
+      if (invoice) {
+        const itemsWithInvoiceId = processedItems.map(item => ({
+          ...item,
+          invoice_id: invoice.id,
+        }));
+        await supabase.from("invoice_line_items").insert(itemsWithInvoiceId);
+      }
+
+      return { success: true, invoiceId: invoice?.id };
+    }
+
+    case "send_invoice": {
+      const invoiceId = await resolveInvoiceId();
+      if (!invoiceId) return { success: false, error: "Invoice not found" };
+
+      await supabase
+        .from("invoices")
+        .update({ status: "sent", sent_at: new Date().toISOString() })
+        .eq("id", invoiceId);
+
+      return { success: true };
+    }
+
+    case "void_invoice": {
+      const invoiceId = await resolveInvoiceId();
+      if (!invoiceId) return { success: false, error: "Invoice not found" };
+
+      await supabase
+        .from("invoices")
+        .update({ status: "void", voided_at: new Date().toISOString() })
+        .eq("id", invoiceId);
+
+      return { success: true };
+    }
+
+    case "create_subscription": {
+      const lineItems = config.lineItems as Array<{
+        description: string;
+        quantity: number;
+        unitPrice: number;
+      }>;
+
+      let nextInvoiceDate = new Date();
+      switch (config.frequency) {
+        case "weekly":
+          nextInvoiceDate.setDate(nextInvoiceDate.getDate() + 7);
+          break;
+        case "monthly":
+          nextInvoiceDate.setMonth(nextInvoiceDate.getMonth() + 1);
+          break;
+        case "quarterly":
+          nextInvoiceDate.setMonth(nextInvoiceDate.getMonth() + 3);
+          break;
+        case "annually":
+          nextInvoiceDate.setFullYear(nextInvoiceDate.getFullYear() + 1);
+          break;
+      }
+
+      const { data: subscription } = await supabase
+        .from("recurring_profiles")
+        .insert({
+          org_id: orgId,
+          contact_id: contactId,
+          name: config.profileName,
+          frequency: config.frequency,
+          status: "active",
+          next_invoice_date: nextInvoiceDate.toISOString().split("T")[0],
+          auto_send: config.autoSend || true,
+        })
+        .select()
+        .single();
+
+      if (subscription) {
+        const itemsWithProfileId = lineItems.map((item, index) => ({
+          org_id: orgId,
+          recurring_profile_id: subscription.id,
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          sort_order: index,
+        }));
+        await supabase.from("recurring_profile_items").insert(itemsWithProfileId);
+      }
+
+      return { success: true, subscriptionId: subscription?.id };
+    }
+
+    default:
+      return { success: false, error: "Unknown action" };
+  }
+}
+
+async function executeTaskAction(
+  supabase: ReturnType<typeof createClient>,
+  action: string,
+  config: Record<string, unknown>,
+  enrollment: Record<string, unknown>,
+  orgId: string,
+  contactId: string
+): Promise<Record<string, unknown>> {
+  switch (action) {
+    case "create": {
+      const assigneeType = config.assigneeType as string || "contact_owner";
+      let assigneeId: string | null = null;
+
+      if (assigneeType === "specific_user") {
+        assigneeId = config.assigneeId as string;
+      } else if (assigneeType === "contact_owner") {
+        const { data: contact } = await supabase
+          .from("contacts")
+          .select("assigned_user_id")
+          .eq("id", contactId)
+          .single();
+        assigneeId = contact?.assigned_user_id;
+      }
+
+      let dueDate = new Date();
+      if (config.dueDays !== undefined) {
+        dueDate.setDate(dueDate.getDate() + (config.dueDays as number));
+      }
+
+      const contextData = enrollment.context_data as Record<string, unknown> || {};
+      const opportunityId = config.linkedToOpportunity ? contextData.opportunityId as string : null;
+
+      const { data: task } = await supabase
+        .from("contact_tasks")
+        .insert({
+          org_id: orgId,
+          contact_id: contactId,
+          opportunity_id: opportunityId,
+          title: config.title,
+          description: config.description,
+          status: "pending",
+          priority: config.priority || "medium",
+          due_date: dueDate.toISOString(),
+          assigned_user_id: assigneeId,
+          metadata: { created_by_workflow: true, enrollment_id: enrollment.id },
+        })
+        .select()
+        .single();
+
+      return { success: true, taskId: task?.id };
+    }
+
+    case "assign": {
+      const taskSource = config.taskSource as string || "most_recent";
+      let taskId: string | null = null;
+
+      if (taskSource === "specific_id") {
+        taskId = config.taskId as string;
+      } else {
+        const { data } = await supabase
+          .from("contact_tasks")
+          .select("id")
+          .eq("org_id", orgId)
+          .eq("contact_id", contactId)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        taskId = data?.id || null;
+      }
+
+      if (!taskId) return { success: false, error: "Task not found" };
+
+      await supabase
+        .from("contact_tasks")
+        .update({ assigned_user_id: config.assigneeId })
+        .eq("id", taskId);
+
+      return { success: true };
+    }
+
+    case "complete": {
+      const taskSource = config.taskSource as string || "most_recent";
+      let taskId: string | null = null;
+
+      if (taskSource === "specific_id") {
+        taskId = config.taskId as string;
+      } else {
+        const { data } = await supabase
+          .from("contact_tasks")
+          .select("id")
+          .eq("org_id", orgId)
+          .eq("contact_id", contactId)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        taskId = data?.id || null;
+      }
+
+      if (!taskId) return { success: false, error: "Task not found" };
+
+      await supabase
+        .from("contact_tasks")
+        .update({
+          status: "completed",
+          completed_at: new Date().toISOString(),
+          completion_notes: config.completionNotes,
+        })
+        .eq("id", taskId);
+
+      return { success: true };
+    }
+
+    default:
+      return { success: false, error: "Unknown action" };
   }
 }
 
