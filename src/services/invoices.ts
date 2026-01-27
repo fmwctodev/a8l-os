@@ -452,3 +452,68 @@ export async function getContactInvoices(contactId: string): Promise<Invoice[]> 
 export async function getOpportunityInvoices(opportunityId: string): Promise<Invoice[]> {
   return getInvoices({ opportunityId });
 }
+
+export interface BulkActionResult {
+  successIds: string[];
+  failedIds: string[];
+  errors: Record<string, string>;
+}
+
+export async function bulkSendInvoices(
+  invoiceIds: string[],
+  user: User
+): Promise<BulkActionResult> {
+  const result: BulkActionResult = {
+    successIds: [],
+    failedIds: [],
+    errors: {},
+  };
+
+  for (const id of invoiceIds) {
+    try {
+      await sendInvoice(id, user);
+      result.successIds.push(id);
+    } catch (err) {
+      result.failedIds.push(id);
+      result.errors[id] = err instanceof Error ? err.message : 'Unknown error';
+    }
+  }
+
+  return result;
+}
+
+export async function bulkVoidInvoices(
+  invoiceIds: string[],
+  user: User
+): Promise<BulkActionResult> {
+  const result: BulkActionResult = {
+    successIds: [],
+    failedIds: [],
+    errors: {},
+  };
+
+  for (const id of invoiceIds) {
+    try {
+      await voidInvoice(id, user);
+      result.successIds.push(id);
+    } catch (err) {
+      result.failedIds.push(id);
+      result.errors[id] = err instanceof Error ? err.message : 'Unknown error';
+    }
+  }
+
+  return result;
+}
+
+export async function bulkDownloadInvoices(invoiceIds: string[]): Promise<string[]> {
+  const urls: string[] = [];
+
+  for (const id of invoiceIds) {
+    const invoice = await getInvoice(id);
+    if (invoice?.payment_link_url) {
+      urls.push(invoice.payment_link_url);
+    }
+  }
+
+  return urls;
+}

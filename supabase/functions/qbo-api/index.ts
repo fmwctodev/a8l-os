@@ -251,6 +251,20 @@ async function voidQBOInvoice(
   );
 }
 
+async function getQBOPayment(
+  accessToken: string,
+  realmId: string,
+  paymentId: string
+): Promise<{ Payment: unknown }> {
+  const response = await qboRequest(
+    accessToken,
+    realmId,
+    `/payment/${paymentId}`
+  ) as { Payment: unknown };
+
+  return { Payment: response.Payment };
+}
+
 Deno.serve(async (req: Request) => {
   try {
     if (req.method === "OPTIONS") {
@@ -347,6 +361,13 @@ Deno.serve(async (req: Request) => {
         const { invoiceId, syncToken } = body;
         await voidQBOInvoice(accessToken, connection.realm_id, invoiceId, syncToken);
         result = { success: true };
+        break;
+      }
+
+      case "getPayment": {
+        const { payment_id } = body;
+        const paymentResult = await getQBOPayment(accessToken, connection.realm_id, payment_id);
+        result = { payment: paymentResult.Payment };
         break;
       }
 

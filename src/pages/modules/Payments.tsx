@@ -29,8 +29,13 @@ import {
 } from 'lucide-react';
 import { CreateInvoiceModal } from '../../components/payments/CreateInvoiceModal';
 import { CreateProductModal } from '../../components/payments/CreateProductModal';
+import { RecurringProfilesTab } from '../../components/payments/RecurringProfilesTab';
+import { PaymentReportsTab } from '../../components/payments/PaymentReportsTab';
+import { InvoiceTemplatesTab } from '../../components/payments/InvoiceTemplatesTab';
+import { InvoiceBulkActionsBar } from '../../components/payments/InvoiceBulkActionsBar';
+import { BarChart3, Layout } from 'lucide-react';
 
-type TabType = 'invoices' | 'products' | 'recurring';
+type TabType = 'invoices' | 'products' | 'recurring' | 'templates' | 'reports';
 
 const STATUS_STYLES: Record<InvoiceStatus, { bg: string; text: string; label: string }> = {
   draft: { bg: 'bg-slate-500/20', text: 'text-slate-300', label: 'Draft' },
@@ -56,6 +61,7 @@ export function Payments() {
   const [showCreateProduct, setShowCreateProduct] = useState(false);
   const [qboConnected, setQboConnected] = useState(false);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(new Set());
 
   const canView = hasPermission('payments.view');
   const canManage = hasPermission('payments.manage');
@@ -132,6 +138,32 @@ export function Payments() {
   const copyPaymentLink = (url: string) => {
     navigator.clipboard.writeText(url);
   };
+
+  const toggleInvoiceSelection = (id: string) => {
+    setSelectedInvoiceIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllInvoices = () => {
+    if (selectedInvoiceIds.size === filteredInvoices.length) {
+      setSelectedInvoiceIds(new Set());
+    } else {
+      setSelectedInvoiceIds(new Set(filteredInvoices.map(inv => inv.id)));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedInvoiceIds(new Set());
+  };
+
+  const selectedInvoices = invoices.filter(inv => selectedInvoiceIds.has(inv.id));
 
   const formatCurrency = (amount: number, currency = 'USD') => {
     return new Intl.NumberFormat('en-US', {
@@ -273,6 +305,8 @@ export function Payments() {
               { key: 'invoices', label: 'Invoices', icon: FileText },
               { key: 'products', label: 'Products', icon: Package },
               { key: 'recurring', label: 'Recurring', icon: RefreshCw },
+              { key: 'templates', label: 'Templates', icon: Layout },
+              { key: 'reports', label: 'Reports', icon: BarChart3 },
             ].map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -290,58 +324,60 @@ export function Payments() {
           </nav>
         </div>
 
-        <div className="p-4 border-b border-slate-800">
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder={activeTab === 'invoices' ? 'Search invoices...' : 'Search products...'}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-              />
-            </div>
-            {activeTab === 'invoices' && (
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as InvoiceStatus | 'all')}
-                className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              >
-                <option value="all">All Status</option>
-                <option value="draft">Draft</option>
-                <option value="sent">Sent</option>
-                <option value="paid">Paid</option>
-                <option value="overdue">Overdue</option>
-                <option value="void">Void</option>
-              </select>
-            )}
-            {activeTab === 'products' && (
-              <>
+        {(activeTab === 'invoices' || activeTab === 'products') && (
+          <div className="p-4 border-b border-slate-800">
+            <div className="flex items-center gap-4">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder={activeTab === 'invoices' ? 'Search invoices...' : 'Search products...'}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                />
+              </div>
+              {activeTab === 'invoices' && (
                 <select
-                  value={billingTypeFilter}
-                  onChange={(e) => setBillingTypeFilter(e.target.value as BillingType | 'all')}
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as InvoiceStatus | 'all')}
                   className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 >
-                  <option value="all">All Types</option>
-                  <option value="one_time">One-time</option>
-                  <option value="recurring">Recurring</option>
+                  <option value="all">All Status</option>
+                  <option value="draft">Draft</option>
+                  <option value="sent">Sent</option>
+                  <option value="paid">Paid</option>
+                  <option value="overdue">Overdue</option>
+                  <option value="void">Void</option>
                 </select>
-                <button
-                  onClick={() => setShowActiveOnly(!showActiveOnly)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
-                    showActiveOnly
-                      ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-                      : 'bg-slate-800 border-slate-700 text-slate-400'
-                  }`}
-                >
-                  {showActiveOnly ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
-                  Active only
-                </button>
-              </>
-            )}
+              )}
+              {activeTab === 'products' && (
+                <>
+                  <select
+                    value={billingTypeFilter}
+                    onChange={(e) => setBillingTypeFilter(e.target.value as BillingType | 'all')}
+                    className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="one_time">One-time</option>
+                    <option value="recurring">Recurring</option>
+                  </select>
+                  <button
+                    onClick={() => setShowActiveOnly(!showActiveOnly)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+                      showActiveOnly
+                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                        : 'bg-slate-800 border-slate-700 text-slate-400'
+                    }`}
+                  >
+                    {showActiveOnly ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+                    Active only
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="p-4">
           {activeTab === 'invoices' && (
@@ -349,6 +385,14 @@ export function Payments() {
               <table className="w-full">
                 <thead className="bg-slate-900 sticky top-0 z-10">
                   <tr className="border-b border-slate-800">
+                    <th className="py-3 px-4 w-10">
+                      <input
+                        type="checkbox"
+                        checked={filteredInvoices.length > 0 && selectedInvoiceIds.size === filteredInvoices.length}
+                        onChange={toggleAllInvoices}
+                        className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500"
+                      />
+                    </th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Invoice</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Contact</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Amount</th>
@@ -361,19 +405,30 @@ export function Payments() {
                 <tbody>
                   {filteredInvoices.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-slate-400">
+                      <td colSpan={8} className="py-12 text-center text-slate-400">
                         No invoices found
                       </td>
                     </tr>
                   ) : (
                     filteredInvoices.map((invoice) => {
                       const statusStyle = STATUS_STYLES[invoice.status];
+                      const isSelected = selectedInvoiceIds.has(invoice.id);
                       return (
                         <tr
                           key={invoice.id}
-                          className="border-b border-slate-800/50 hover:bg-slate-800/30 cursor-pointer"
+                          className={`border-b border-slate-800/50 hover:bg-slate-800/30 cursor-pointer ${
+                            isSelected ? 'bg-cyan-500/5' : ''
+                          }`}
                           onClick={() => navigate(`/payments/invoices/${invoice.id}`)}
                         >
+                          <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleInvoiceSelection(invoice.id)}
+                              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500"
+                            />
+                          </td>
                           <td className="py-3 px-4">
                             <span className="text-white font-medium">{invoice.doc_number || '-'}</span>
                           </td>
@@ -550,14 +605,27 @@ export function Payments() {
           )}
 
           {activeTab === 'recurring' && (
-            <div className="py-12 text-center text-slate-400">
-              <RefreshCw className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>Recurring billing profiles will appear here</p>
-              <p className="text-sm mt-1">Create recurring profiles to automatically generate invoices</p>
-            </div>
+            <RecurringProfilesTab onRefresh={loadData} />
+          )}
+
+          {activeTab === 'templates' && (
+            <InvoiceTemplatesTab onRefresh={loadData} />
+          )}
+
+          {activeTab === 'reports' && (
+            <PaymentReportsTab />
           )}
         </div>
       </div>
+
+      <InvoiceBulkActionsBar
+        selectedInvoices={selectedInvoices}
+        onClearSelection={clearSelection}
+        onActionComplete={() => {
+          clearSelection();
+          loadData();
+        }}
+      />
 
       {showCreateInvoice && (
         <CreateInvoiceModal
