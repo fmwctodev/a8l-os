@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { ReputationSettings } from '../types';
+import type { ReputationSettings, User } from '../types';
 
 export async function getSettings(orgId: string): Promise<ReputationSettings> {
   const { data, error } = await supabase
@@ -27,6 +27,18 @@ export async function getSettings(orgId: string): Promise<ReputationSettings> {
       review_goal: 20,
       ai_replies_enabled: false,
       spam_keywords: [],
+      ai_provider: 'openai',
+      brand_voice_description: null,
+      response_tone: 'professional',
+      auto_analyze_reviews: true,
+      negative_review_threshold: 3,
+      negative_review_create_task: true,
+      negative_review_task_assignee: null,
+      negative_review_task_due_hours: 24,
+      negative_review_notify_email: true,
+      negative_review_notify_sms: false,
+      notification_recipients: [],
+      response_time_goal_hours: 24,
     };
 
     const { data: created, error: createError } = await supabase
@@ -51,6 +63,116 @@ export async function updateSettings(
     .from('reputation_settings')
     .update({
       ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('organization_id', orgId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as ReputationSettings;
+}
+
+export async function getNotificationRecipients(
+  orgId: string
+): Promise<Array<{ id: string; name: string; email: string }>> {
+  const settings = await getSettings(orgId);
+
+  if (!settings.notification_recipients || settings.notification_recipients.length === 0) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name, email')
+    .in('id', settings.notification_recipients);
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getAvailableRecipients(
+  orgId: string
+): Promise<Array<{ id: string; name: string; email: string; role_name: string }>> {
+  const { data, error } = await supabase
+    .from('users')
+    .select(`
+      id,
+      name,
+      email,
+      role:roles(name)
+    `)
+    .eq('organization_id', orgId)
+    .eq('status', 'active')
+    .order('name');
+
+  if (error) throw error;
+
+  return (data || []).map(u => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role_name: (u.role as { name: string } | null)?.name || 'User',
+  }));
+}
+
+export async function updateNotificationRecipients(
+  orgId: string,
+  recipientIds: string[],
+  userId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('reputation_settings')
+    .update({
+      notification_recipients: recipientIds,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('organization_id', orgId);
+
+  if (error) throw error;
+}
+
+export async function updateAISettings(
+  orgId: string,
+  settings: {
+    ai_provider?: 'openai' | 'anthropic' | 'both';
+    ai_replies_enabled?: boolean;
+    auto_analyze_reviews?: boolean;
+    brand_voice_description?: string | null;
+    response_tone?: 'professional' | 'friendly' | 'apologetic' | 'casual';
+  },
+  userId: string
+): Promise<ReputationSettings> {
+  const { data, error } = await supabase
+    .from('reputation_settings')
+    .update({
+      ...settings,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('organization_id', orgId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as ReputationSettings;
+}
+
+export async function updateNegativeReviewSettings(
+  orgId: string,
+  settings: {
+    negative_review_threshold?: number;
+    negative_review_create_task?: boolean;
+    negative_review_task_assignee?: string | null;
+    negative_review_task_due_hours?: number;
+    negative_review_notify_email?: boolean;
+    negative_review_notify_sms?: boolean;
+  },
+  userId: string
+): Promise<ReputationSettings> {
+  const { data, error } = await supabase
+    .from('reputation_settings')
+    .update({
+      ...settings,
       updated_at: new Date().toISOString(),
     })
     .eq('organization_id', orgId)

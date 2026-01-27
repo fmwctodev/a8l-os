@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { Review, ReviewFilters, CreateManualReviewInput } from '../types';
+import type { Review, ReviewFilters, CreateManualReviewInput, ReviewAIAnalysis } from '../types';
 
 export async function getReviews(
   orgId: string,
@@ -12,7 +12,8 @@ export async function getReviews(
     .select(`
       *,
       contact:contacts(id, first_name, last_name, email, phone),
-      review_request:review_requests(id, public_slug, channel)
+      review_request:review_requests(id, public_slug, channel),
+      ai_analysis:review_ai_analysis(*)
     `, { count: 'exact' })
     .eq('organization_id', orgId)
     .order('received_at', { ascending: false });
@@ -69,7 +70,8 @@ export async function getReviewById(id: string): Promise<Review | null> {
     .select(`
       *,
       contact:contacts(id, first_name, last_name, email, phone),
-      review_request:review_requests(id, public_slug, channel)
+      review_request:review_requests(id, public_slug, channel),
+      ai_analysis:review_ai_analysis(*)
     `)
     .eq('id', id)
     .maybeSingle();
@@ -218,16 +220,77 @@ export async function respondToReview(
   return data as Review;
 }
 
-export async function markReviewAsSpam(reviewId: string, isSpam: boolean): Promise<void> {
+export async function markReviewAsSpam(
+  reviewId: string,
+  isSpam: boolean,
+  userId: string,
+  reason?: string
+): Promise<void> {
+  const { data: review } = await supabase
+    .from('reviews')
+    .select('organization_id, is_spam')
+    .eq('id', reviewId)
+    .single();
+
+  if (!review) throw new Error('Review not found');
+
   const { error } = await supabase
     .from('reviews')
     .update({
       is_spam: isSpam,
+      spam_reason: isSpam ? reason : null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', reviewId);
 
   if (error) throw error;
+
+  await supabase.from('review_moderation_log').insert({
+    organization_id: review.organization_id,
+    review_id: reviewId,
+    action: isSpam ? 'spam_flagged' : 'spam_unflagged',
+    performed_by: userId,
+    previous_value: { is_spam: review.is_spam },
+    new_value: { is_spam: isSpam },
+    reason,
+  });
+}
+
+export async function hideReview(
+  reviewId: string,
+  hidden: boolean,
+  userId: string,
+  reason?: string
+): Promise<void> {
+  const { data: review } = await supabase
+    .from('reviews')
+    .select('organization_id, hidden')
+    .eq('id', reviewId)
+    .single();
+
+  if (!review) throw new Error('Review not found');
+
+  const { error } = await supabase
+    .from('reviews')
+    .update({
+      hidden,
+      hidden_at: hidden ? new Date().toISOString() : null,
+      hidden_by: hidden ? userId : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', reviewId);
+
+  if (error) throw error;
+
+  await supabase.from('review_moderation_log').insert({
+    organization_id: review.organization_id,
+    review_id: reviewId,
+    action: hidden ? 'hidden' : 'unhidden',
+    performed_by: userId,
+    previous_value: { hidden: review.hidden },
+    new_value: { hidden },
+    reason,
+  });
 }
 
 export async function getSentimentStats(
@@ -239,7 +302,8 @@ export async function getSentimentStats(
     .from('reviews')
     .select('rating')
     .eq('organization_id', orgId)
-    .eq('is_spam', false);
+    .eq('is_spam', false)
+    .eq('hidden', false);
 
   if (startDate) query = query.gte('received_at', startDate);
   if (endDate) query = query.lte('received_at', endDate);
@@ -252,5 +316,216 @@ export async function getSentimentStats(
     positive: reviews.filter(r => r.rating >= 4).length,
     neutral: reviews.filter(r => r.rating === 3).length,
     negative: reviews.filter(r => r.rating <= 2).length,
+  };
+}
+
+export async function getAIAnalysis(reviewId: string): Promise<ReviewAIAnalysis | null> {
+  const { data, error } = await supabase
+    .from('review_ai_analysis')
+    .select('*')
+    .eq('review_id', reviewId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as ReviewAIAnalysis | null;
+}
+
+export async function analyzeReview(reviewId: string): Promise<ReviewAIAnalysis> {
+  const response = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/review-ai-analyze`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ review_id: reviewId }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to analyze review');
+  }
+
+  const data = await response.json();
+  return data.analysis as ReviewAIAnalysis;
+}
+
+export async function generateAIReply(
+  reviewId: string,
+  tone?: string
+): Promise<{ reply: string; provider: string }> {
+  const response = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/review-ai-reply`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ review_id: reviewId, tone }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to generate reply');
+  }
+
+  const data = await response.json();
+  return { reply: data.reply, provider: data.provider };
+}
+
+export async function postReplyToProvider(
+  reviewId: string,
+  replyText: string,
+  orgId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  const { data: review } = await supabase
+    .from('reviews')
+    .select('provider')
+    .eq('id', reviewId)
+    .single();
+
+  if (!review) {
+    return { success: false, error: 'Review not found' };
+  }
+
+  if (review.provider === 'internal') {
+    await respondToReview(reviewId, replyText, userId, 'manual');
+    return { success: true };
+  }
+
+  const response = await fetch(
+    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/review-reply-post`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        review_id: reviewId,
+        reply_text: replyText,
+        organization_id: orgId,
+        provider: review.provider,
+        user_id: userId,
+      }),
+    }
+  );
+
+  const data = await response.json();
+  return { success: data.success, error: data.error };
+}
+
+export async function getModerationLog(
+  reviewId: string
+): Promise<Array<{
+  id: string;
+  action: string;
+  performed_by: string;
+  reason: string | null;
+  created_at: string;
+  user?: { name: string; email: string };
+}>> {
+  const { data, error } = await supabase
+    .from('review_moderation_log')
+    .select(`
+      *,
+      user:users!performed_by(name, email)
+    `)
+    .eq('review_id', reviewId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getReviewAnalytics(
+  orgId: string,
+  startDate: string,
+  endDate: string
+): Promise<{
+  avgRating: number;
+  totalReviews: number;
+  responseRate: number;
+  avgResponseTime: number;
+  sentimentBreakdown: { positive: number; neutral: number; negative: number };
+  providerBreakdown: Record<string, number>;
+  ratingTrend: Array<{ date: string; avgRating: number; count: number }>;
+}> {
+  const { data: reviews, error } = await supabase
+    .from('reviews')
+    .select('*')
+    .eq('organization_id', orgId)
+    .eq('is_spam', false)
+    .eq('hidden', false)
+    .gte('received_at', startDate)
+    .lte('received_at', endDate)
+    .order('received_at', { ascending: true });
+
+  if (error) throw error;
+
+  const reviewsData = reviews || [];
+  const totalReviews = reviewsData.length;
+
+  const avgRating = totalReviews > 0
+    ? reviewsData.reduce((sum, r) => sum + r.rating, 0) / totalReviews
+    : 0;
+
+  const respondedReviews = reviewsData.filter(r => r.responded_at);
+  const responseRate = totalReviews > 0
+    ? (respondedReviews.length / totalReviews) * 100
+    : 0;
+
+  const responseTimes = respondedReviews
+    .filter(r => r.responded_at && r.received_at)
+    .map(r => {
+      const received = new Date(r.received_at).getTime();
+      const responded = new Date(r.responded_at!).getTime();
+      return (responded - received) / (1000 * 60 * 60);
+    });
+
+  const avgResponseTime = responseTimes.length > 0
+    ? responseTimes.reduce((sum, t) => sum + t, 0) / responseTimes.length
+    : 0;
+
+  const sentimentBreakdown = {
+    positive: reviewsData.filter(r => r.rating >= 4).length,
+    neutral: reviewsData.filter(r => r.rating === 3).length,
+    negative: reviewsData.filter(r => r.rating <= 2).length,
+  };
+
+  const providerBreakdown: Record<string, number> = {};
+  for (const r of reviewsData) {
+    providerBreakdown[r.provider] = (providerBreakdown[r.provider] || 0) + 1;
+  }
+
+  const ratingsByDate: Record<string, { total: number; count: number }> = {};
+  for (const r of reviewsData) {
+    const date = r.received_at.split('T')[0];
+    if (!ratingsByDate[date]) {
+      ratingsByDate[date] = { total: 0, count: 0 };
+    }
+    ratingsByDate[date].total += r.rating;
+    ratingsByDate[date].count += 1;
+  }
+
+  const ratingTrend = Object.entries(ratingsByDate).map(([date, data]) => ({
+    date,
+    avgRating: data.total / data.count,
+    count: data.count,
+  }));
+
+  return {
+    avgRating: Math.round(avgRating * 10) / 10,
+    totalReviews,
+    responseRate: Math.round(responseRate * 10) / 10,
+    avgResponseTime: Math.round(avgResponseTime * 10) / 10,
+    sentimentBreakdown,
+    providerBreakdown,
+    ratingTrend,
   };
 }

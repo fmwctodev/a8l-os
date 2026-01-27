@@ -54,6 +54,11 @@ export type WorkflowActionType =
   | 'add_to_review_campaign'
   | 'add_to_email_campaign'
   | 'remove_from_email_campaign'
+  | 'reply_to_review'
+  | 'generate_ai_review_reply'
+  | 'flag_review_spam'
+  | 'hide_review'
+  | 'create_review_followup_task'
   // Flow Control Actions
   | 'delay'
   | 'wait_for_condition'
@@ -428,6 +433,45 @@ export interface ReviewCampaignConfig {
   campaignName?: string;
 }
 
+export interface ReplyToReviewConfig {
+  reviewSource: 'context' | 'most_recent' | 'specific_id';
+  reviewId?: string;
+  replyText: string;
+  postToProvider?: boolean;
+}
+
+export interface GenerateAIReviewReplyConfig {
+  reviewSource: 'context' | 'most_recent' | 'specific_id';
+  reviewId?: string;
+  tone?: 'professional' | 'friendly' | 'apologetic' | 'casual';
+  autoPost?: boolean;
+  requireApproval?: boolean;
+  notifyUserIds?: string[];
+}
+
+export interface FlagReviewSpamConfig {
+  reviewSource: 'context' | 'most_recent' | 'specific_id';
+  reviewId?: string;
+  reason?: string;
+}
+
+export interface HideReviewConfig {
+  reviewSource: 'context' | 'most_recent' | 'specific_id';
+  reviewId?: string;
+  reason?: string;
+}
+
+export interface CreateReviewFollowupTaskConfig {
+  reviewSource: 'context' | 'most_recent' | 'specific_id';
+  reviewId?: string;
+  title?: string;
+  description?: string;
+  assigneeType: AssigneeType;
+  assigneeId?: string;
+  dueHours: number;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+}
+
 export interface EmailCampaignConfig {
   campaignId: string;
   campaignName?: string;
@@ -621,6 +665,11 @@ export type ActionConfig =
   | SendReviewRequestConfig
   | ReviewCampaignConfig
   | EmailCampaignConfig
+  | ReplyToReviewConfig
+  | GenerateAIReviewReplyConfig
+  | FlagReviewSpamConfig
+  | HideReviewConfig
+  | CreateReviewFollowupTaskConfig
   | DelayConfig
   | WaitForConditionConfig
   | IfElseConfig
@@ -709,6 +758,11 @@ export const WORKFLOW_ACTION_DEFINITIONS: WorkflowActionDefinition[] = [
   { type: 'add_to_review_campaign', label: 'Add to Review Campaign', description: 'Add contact to a review campaign', category: 'marketing', icon: 'Stars' },
   { type: 'add_to_email_campaign', label: 'Add to Email Campaign', description: 'Enroll contact in an email campaign', category: 'marketing', icon: 'Mails' },
   { type: 'remove_from_email_campaign', label: 'Remove from Email Campaign', description: 'Remove contact from email campaign', category: 'marketing', icon: 'MailMinus' },
+  { type: 'reply_to_review', label: 'Reply to Review', description: 'Post a reply to a review', category: 'marketing', icon: 'MessageSquareReply' },
+  { type: 'generate_ai_review_reply', label: 'Generate AI Review Reply', description: 'Generate an AI-powered reply to a review', category: 'marketing', icon: 'Sparkles', isPro: true },
+  { type: 'flag_review_spam', label: 'Flag Review as Spam', description: 'Mark a review as spam', category: 'marketing', icon: 'Flag' },
+  { type: 'hide_review', label: 'Hide Review', description: 'Hide a review from public view', category: 'marketing', icon: 'EyeOff' },
+  { type: 'create_review_followup_task', label: 'Create Review Follow-up Task', description: 'Create a task to follow up on a review', category: 'marketing', icon: 'ListTodo' },
 
   // Flow Control Actions
   { type: 'delay', label: 'Delay', description: 'Wait for a specified time', category: 'flow_control', icon: 'Clock' },

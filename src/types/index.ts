@@ -2581,6 +2581,14 @@ export interface ReviewProviderConfig {
   status: ReviewProviderStatus;
   redirect_threshold: number;
   last_sync_at: string | null;
+  oauth_access_token: string | null;
+  oauth_refresh_token: string | null;
+  oauth_token_expires_at: string | null;
+  oauth_scopes: string[] | null;
+  sync_enabled: boolean;
+  sync_interval_hours: number;
+  sync_error: string | null;
+  total_reviews_synced: number;
   created_at: string;
   updated_at: string;
 }
@@ -2628,10 +2636,22 @@ export interface Review {
   response_source: ReviewResponseSource | null;
   external_response_id: string | null;
   is_spam: boolean;
+  hidden: boolean;
+  hidden_at: string | null;
+  hidden_by: string | null;
+  spam_score: number | null;
+  spam_reason: string | null;
+  ai_analysis_id: string | null;
+  reply_posted_at: string | null;
+  reply_post_error: string | null;
   contact?: Contact | null;
   review_request?: ReviewRequest | null;
   responded_by_user?: User | null;
+  ai_analysis?: ReviewAIAnalysis | null;
 }
+
+export type AIProvider = 'openai' | 'anthropic' | 'both';
+export type ResponseTone = 'professional' | 'friendly' | 'apologetic' | 'casual';
 
 export interface ReputationSettings {
   organization_id: string;
@@ -2649,8 +2669,82 @@ export interface ReputationSettings {
   review_goal: number;
   ai_replies_enabled: boolean;
   spam_keywords: string[];
+  ai_provider: AIProvider;
+  brand_voice_description: string | null;
+  response_tone: ResponseTone;
+  auto_analyze_reviews: boolean;
+  negative_review_threshold: number;
+  negative_review_create_task: boolean;
+  negative_review_task_assignee: string | null;
+  negative_review_task_due_hours: number;
+  negative_review_notify_email: boolean;
+  negative_review_notify_sms: boolean;
+  notification_recipients: string[];
+  response_time_goal_hours: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface ReviewAIAnalysis {
+  id: string;
+  organization_id: string;
+  review_id: string;
+  sentiment_score: number;
+  sentiment_label: 'positive' | 'neutral' | 'negative';
+  themes: string[];
+  tags: string[];
+  summary: string | null;
+  key_phrases: string[];
+  suggested_reply: string | null;
+  ai_provider: 'openai' | 'anthropic';
+  model_used: string | null;
+  tokens_used: number | null;
+  analyzed_at: string;
+  created_at: string;
+}
+
+export interface ReviewTemplate {
+  id: string;
+  organization_id: string;
+  name: string;
+  channel: 'sms' | 'email';
+  subject: string | null;
+  body: string;
+  is_active: boolean;
+  is_default: boolean;
+  total_sent: number;
+  total_clicked: number;
+  total_completed: number;
+  conversion_rate: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReviewModerationLog {
+  id: string;
+  organization_id: string;
+  review_id: string;
+  action: 'spam_flagged' | 'spam_unflagged' | 'hidden' | 'unhidden' | 'reply_edited' | 'reply_deleted';
+  performed_by: string;
+  previous_value: Record<string, unknown> | null;
+  new_value: Record<string, unknown> | null;
+  reason: string | null;
+  created_at: string;
+}
+
+export interface NegativeReviewTask {
+  id: string;
+  organization_id: string;
+  review_id: string;
+  task_id: string;
+  contact_id: string | null;
+  notification_sent_at: string | null;
+  notification_method: 'email' | 'sms' | 'both' | null;
+  follow_up_completed: boolean;
+  follow_up_completed_at: string | null;
+  follow_up_notes: string | null;
+  created_at: string;
 }
 
 export interface ReputationCompetitor {

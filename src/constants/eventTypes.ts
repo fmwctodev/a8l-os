@@ -34,8 +34,12 @@ export const WorkflowTriggerType = {
   PAYMENT_RECEIVED: 'payment_received',
 
   REVIEW_RECEIVED: 'review_received',
+  REVIEW_POSITIVE_RECEIVED: 'review_positive_received',
+  REVIEW_NEGATIVE_RECEIVED: 'review_negative_received',
   REVIEW_REQUEST_SENT: 'review_request_sent',
   REVIEW_REQUEST_CLICKED: 'review_request_clicked',
+  REVIEW_REPLIED: 'review_replied',
+  REVIEW_FLAGGED_SPAM: 'review_flagged_spam',
 
   PROPOSAL_SENT: 'proposal_sent',
   PROPOSAL_VIEWED: 'proposal_viewed',
@@ -103,6 +107,13 @@ export const ActivityEventType = {
 
   SCORE_ADJUSTED: 'score_adjusted',
   SCORE_RULE_TRIGGERED: 'score_rule_triggered',
+
+  REVIEW_SUBMITTED: 'review_submitted',
+  REVIEW_REPLIED: 'review_replied',
+  REVIEW_HIDDEN: 'review_hidden',
+  REVIEW_SPAM_FLAGGED: 'review_spam_flagged',
+  REVIEW_AI_ANALYZED: 'review_ai_analyzed',
+  NEGATIVE_FEEDBACK_RECEIVED: 'negative_feedback_received',
 
   LINK_CREATED: 'link_created',
   LINK_REMOVED: 'link_removed',
@@ -175,6 +186,10 @@ export const WebhookEventType = {
   PROPOSAL_DECLINED: 'proposal.declined',
 
   REVIEW_RECEIVED: 'review.received',
+  REVIEW_POSITIVE: 'review.positive',
+  REVIEW_NEGATIVE: 'review.negative',
+  REVIEW_REPLIED: 'review.replied',
+  REVIEW_SPAM_FLAGGED: 'review.spam_flagged',
 } as const;
 
 export type WebhookEventType = typeof WebhookEventType[keyof typeof WebhookEventType];
