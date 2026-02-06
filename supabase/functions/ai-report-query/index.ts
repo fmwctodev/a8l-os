@@ -596,6 +596,8 @@ Deno.serve(async (req: Request) => {
       .select("*, models:llm_models(*)")
       .eq("org_id", organization_id)
       .eq("enabled", true)
+      .order("created_at", { ascending: true })
+      .limit(1)
       .maybeSingle();
 
     if (providerError || !llmProvider) {
