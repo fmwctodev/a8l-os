@@ -7,6 +7,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+interface UploadedDocument {
+  name: string;
+  text: string;
+}
+
 interface RequestPayload {
   proposal_id: string;
   contact_id: string;
@@ -18,6 +23,7 @@ interface RequestPayload {
   include_contact_history?: boolean;
   include_opportunity_data?: boolean;
   user_id: string;
+  uploaded_documents?: UploadedDocument[];
 }
 
 interface ContactData {
@@ -81,6 +87,7 @@ Deno.serve(async (req: Request) => {
       include_contact_history,
       include_opportunity_data,
       user_id,
+      uploaded_documents,
     } = payload;
 
     if (!proposal_id || !contact_id || !user_id) {
@@ -275,7 +282,8 @@ Deno.serve(async (req: Request) => {
       meetingsData,
       contactHistory,
       sections_to_generate,
-      custom_instructions
+      custom_instructions,
+      uploaded_documents
     );
 
     const generatedSections = await callLLM(
@@ -302,6 +310,7 @@ Deno.serve(async (req: Request) => {
 
     const aiContext = {
       meetings_used: meeting_ids || [],
+      uploaded_documents: uploaded_documents?.map((d) => d.name) || [],
       contact_history_included: include_contact_history || false,
       opportunity_data_included: include_opportunity_data || false,
       custom_instructions: custom_instructions || null,
@@ -429,7 +438,8 @@ function buildUserPrompt(
   meetings: MeetingData[],
   contactHistory: string,
   sectionsToGenerate: string[],
-  customInstructions?: string
+  customInstructions?: string,
+  uploadedDocuments?: UploadedDocument[]
 ): string {
   let prompt = `Generate proposal content for the following sections: ${sectionsToGenerate.join(", ")}
 
@@ -465,6 +475,13 @@ Client Information:
       if (meeting.recording_url) {
         prompt += `\n[Meeting recording available]`;
       }
+    }
+  }
+
+  if (uploadedDocuments && uploadedDocuments.length > 0) {
+    prompt += `\n\nUploaded Document Context:`;
+    for (const doc of uploadedDocuments) {
+      prompt += `\n\n--- Document: ${doc.name} ---\n${doc.text}`;
     }
   }
 
