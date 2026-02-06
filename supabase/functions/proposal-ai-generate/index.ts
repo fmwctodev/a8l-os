@@ -247,26 +247,16 @@ Deno.serve(async (req: Request) => {
 
     const brandVoiceVersion = activeBrandVoice?.latest_version?.[0] || null;
 
-    const { data: llmProvider } = await supabase
+    const { data: llmProviders } = await supabase
       .from("llm_providers")
       .select("*, models:llm_models(*)")
       .eq("org_id", proposal.org_id)
       .eq("enabled", true)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+      .order("created_at", { ascending: true });
 
-    if (!llmProvider) {
+    if (!llmProviders || llmProviders.length === 0) {
       return new Response(
         JSON.stringify({ error: "No LLM provider configured" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const defaultModel = llmProvider.models?.find((m: { is_default: boolean }) => m.is_default) || llmProvider.models?.[0];
-    if (!defaultModel) {
-      return new Response(
-        JSON.stringify({ error: "No LLM model configured" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -288,13 +278,34 @@ Deno.serve(async (req: Request) => {
       uploaded_documents
     );
 
-    const generatedSections = await callLLM(
-      llmProvider.provider,
-      llmProvider.api_key_encrypted,
-      defaultModel.model_key,
-      systemPrompt,
-      userPrompt
-    );
+    let generatedSections: GeneratedSection[] | null = null;
+    let lastError = "";
+
+    for (const provider of llmProviders) {
+      const model = provider.models?.find((m: { is_default: boolean }) => m.is_default) || provider.models?.[0];
+      if (!model) continue;
+
+      try {
+        generatedSections = await callLLM(
+          provider.provider,
+          provider.api_key_encrypted,
+          model.model_key,
+          systemPrompt,
+          userPrompt
+        );
+        break;
+      } catch (err) {
+        lastError = String(err);
+        console.error(`Provider ${provider.provider} failed: ${lastError}`);
+      }
+    }
+
+    if (!generatedSections) {
+      return new Response(
+        JSON.stringify({ error: `All LLM providers failed. Last error: ${lastError}` }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     for (const section of generatedSections) {
       const maxSortOrder = await getMaxSectionSortOrder(supabase, proposal_id);
@@ -527,7 +538,8 @@ async function callLLM(
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
+      const errBody = await response.text();
+      throw new Error(`OpenAI API error ${response.status}: ${errBody}`);
     }
 
     const data = await response.json();
@@ -549,7 +561,8 @@ async function callLLM(
     });
 
     if (!response.ok) {
-      throw new Error(`Anthropic API error: ${response.status}`);
+      const errBody = await response.text();
+      throw new Error(`Anthropic API error ${response.status}: ${errBody}`);
     }
 
     const data = await response.json();
