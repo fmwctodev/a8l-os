@@ -17,10 +17,12 @@ import {
 } from '../../services/teamMessaging';
 import { MessageSquare, Loader2 } from 'lucide-react';
 import { usePermission } from '../../hooks/usePermission';
+import { useToast } from '../../contexts/ToastContext';
 
 export function TeamMessagingTab() {
   const { user } = useAuth();
   const canManageTeamMessaging = usePermission('team_messaging.manage');
+  const { showToast } = useToast();
 
   const [channels, setChannels] = useState<ChannelWithDetails[]>([]);
   const [channelsLoading, setChannelsLoading] = useState(true);
@@ -187,6 +189,8 @@ export function TeamMessagingTab() {
 
         if (newMessage.sender_id !== user?.id) {
           markChannelAsRead(selectedChannel.id);
+          const senderName = (newMessage as any).sender?.name || 'Someone';
+          showToast('message', `New message from ${senderName}`, newMessage.content?.slice(0, 80));
         }
 
         setChannels((prev) =>
