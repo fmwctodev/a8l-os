@@ -267,6 +267,7 @@ async function fetchOpenAIModels(
       id.startsWith("gpt-") ||
       id.startsWith("o1") ||
       id.startsWith("o3") ||
+      id.startsWith("o4") ||
       id.includes("chatgpt")
     ) && !id.includes("instruct") && !id.includes("audio") && !id.includes("realtime");
   });
@@ -298,12 +299,16 @@ async function fetchAnthropicModels(
   _baseUrl: string | null
 ): Promise<ProviderModel[]> {
   const knownModels = [
-    { id: "claude-sonnet-4-20250514", name: "Claude Sonnet 4", context: 200000 },
-    { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", context: 200000 },
-    { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku", context: 200000 },
-    { id: "claude-3-opus-20240229", name: "Claude 3 Opus", context: 200000 },
-    { id: "claude-3-sonnet-20240229", name: "Claude 3 Sonnet", context: 200000 },
-    { id: "claude-3-haiku-20240307", name: "Claude 3 Haiku", context: 200000 },
+    { id: "claude-opus-4-6-20260101", name: "Claude Opus 4.6", context: 200000, legacy: false },
+    { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5", context: 200000, legacy: false },
+    { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5", context: 200000, legacy: false },
+    { id: "claude-opus-4-20250514", name: "Claude Opus 4", context: 200000, legacy: false },
+    { id: "claude-sonnet-4-20250514", name: "Claude Sonnet 4", context: 200000, legacy: false },
+    { id: "claude-3-7-sonnet-20250219", name: "Claude 3.7 Sonnet", context: 200000, legacy: true },
+    { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", context: 200000, legacy: true },
+    { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku", context: 200000, legacy: true },
+    { id: "claude-3-opus-20240229", name: "Claude 3 Opus", context: 200000, legacy: true },
+    { id: "claude-3-haiku-20240307", name: "Claude 3 Haiku", context: 200000, legacy: true },
   ];
 
   const models: ProviderModel[] = [];
@@ -320,7 +325,7 @@ async function fetchAnthropicModels(
           function_calling: true,
           streaming: true,
         },
-        is_deprecated: model.id.includes("20240229") && !model.id.includes("opus"),
+        is_deprecated: model.legacy,
       });
     }
   }
@@ -398,12 +403,15 @@ async function fetchGoogleModels(apiKey: string): Promise<ProviderModel[]> {
 }
 
 function getOpenAIContextWindow(modelId: string): number {
+  if (modelId.startsWith("gpt-4.1")) return 1047576;
+  if (modelId.startsWith("o4-mini")) return 200000;
+  if (modelId.startsWith("o3")) return 200000;
+  if (modelId.startsWith("o1")) return 200000;
   if (modelId.includes("gpt-4o") || modelId.includes("gpt-4-turbo")) return 128000;
   if (modelId.includes("gpt-4-32k")) return 32768;
   if (modelId.includes("gpt-4")) return 8192;
   if (modelId.includes("gpt-3.5-turbo-16k")) return 16384;
   if (modelId.includes("gpt-3.5")) return 4096;
-  if (modelId.startsWith("o1") || modelId.startsWith("o3")) return 200000;
   return 8192;
 }
 
@@ -413,11 +421,19 @@ function getOpenAICapabilities(modelId: string): Record<string, boolean> {
     function_calling: true,
   };
 
-  if (modelId.includes("gpt-4o") || modelId.includes("gpt-4-vision")) {
+  if (
+    modelId.startsWith("gpt-4.1") ||
+    modelId.includes("gpt-4o") ||
+    modelId.includes("gpt-4-vision")
+  ) {
     capabilities.vision = true;
   }
 
-  if (modelId.startsWith("o1") || modelId.startsWith("o3")) {
+  if (
+    modelId.startsWith("o1") ||
+    modelId.startsWith("o3") ||
+    modelId.startsWith("o4")
+  ) {
     capabilities.reasoning = true;
   }
 
@@ -426,16 +442,22 @@ function getOpenAICapabilities(modelId: string): Record<string, boolean> {
 
 function formatOpenAIModelName(modelId: string): string {
   const mappings: Record<string, string> = {
-    "gpt-4o": "GPT-4o",
+    "gpt-4.1-nano": "GPT-4.1 Nano",
+    "gpt-4.1-mini": "GPT-4.1 Mini",
+    "gpt-4.1": "GPT-4.1",
+    "o4-mini": "o4 Mini",
+    "o3-pro": "o3 Pro",
+    "o3-mini": "o3 Mini",
+    "o3": "o3",
     "gpt-4o-mini": "GPT-4o Mini",
-    "gpt-4-turbo": "GPT-4 Turbo",
+    "gpt-4o": "GPT-4o",
     "gpt-4-turbo-preview": "GPT-4 Turbo Preview",
+    "gpt-4-turbo": "GPT-4 Turbo",
     "gpt-4": "GPT-4",
     "gpt-3.5-turbo": "GPT-3.5 Turbo",
-    "o1": "o1",
     "o1-mini": "o1 Mini",
     "o1-preview": "o1 Preview",
-    "o3-mini": "o3 Mini",
+    "o1": "o1",
   };
 
   for (const [key, value] of Object.entries(mappings)) {
@@ -465,22 +487,30 @@ function formatGoogleModelName(modelId: string): string {
 
 function getModelSortScore(modelId: string, provider: string): number {
   if (provider === "openai") {
-    if (modelId.includes("gpt-4o") && !modelId.includes("mini")) return 100;
-    if (modelId.includes("gpt-4o-mini")) return 90;
-    if (modelId.startsWith("o3")) return 85;
-    if (modelId.startsWith("o1") && !modelId.includes("mini")) return 80;
-    if (modelId.startsWith("o1-mini")) return 75;
-    if (modelId.includes("gpt-4-turbo")) return 70;
-    if (modelId.includes("gpt-4")) return 60;
-    if (modelId.includes("gpt-3.5")) return 40;
+    if (modelId.startsWith("gpt-4.1") && !modelId.includes("mini") && !modelId.includes("nano")) return 100;
+    if (modelId === "gpt-4.1-mini" || modelId.startsWith("gpt-4.1-mini-")) return 95;
+    if (modelId === "gpt-4.1-nano" || modelId.startsWith("gpt-4.1-nano-")) return 93;
+    if (modelId.startsWith("o4-mini")) return 90;
+    if (modelId === "o3-pro" || modelId.startsWith("o3-pro-")) return 88;
+    if (modelId === "o3" || (modelId.startsWith("o3-") && !modelId.includes("mini") && !modelId.includes("pro"))) return 85;
+    if (modelId.startsWith("o3-mini")) return 83;
+    if (modelId.includes("gpt-4o") && !modelId.includes("mini")) return 70;
+    if (modelId.includes("gpt-4o-mini")) return 65;
+    if (modelId.startsWith("o1") && !modelId.includes("mini")) return 60;
+    if (modelId.startsWith("o1-mini")) return 55;
+    if (modelId.includes("gpt-4-turbo")) return 50;
+    if (modelId.includes("gpt-4")) return 40;
+    if (modelId.includes("gpt-3.5")) return 20;
     return 0;
   }
 
   if (provider === "google") {
-    if (modelId.includes("2.0")) return 100;
-    if (modelId.includes("1.5-pro")) return 90;
-    if (modelId.includes("1.5-flash")) return 80;
-    if (modelId.includes("1.0-pro")) return 60;
+    if (modelId.includes("2.5-pro")) return 100;
+    if (modelId.includes("2.5-flash")) return 95;
+    if (modelId.includes("2.0")) return 90;
+    if (modelId.includes("1.5-pro")) return 70;
+    if (modelId.includes("1.5-flash")) return 65;
+    if (modelId.includes("1.0-pro")) return 40;
     return 0;
   }
 

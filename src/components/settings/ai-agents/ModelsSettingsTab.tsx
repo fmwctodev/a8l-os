@@ -1,10 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Plus, Check, X, AlertCircle, Loader2, Star, Trash2 } from 'lucide-react';
+import { Check, AlertCircle, Loader2, Star, Trash2, Clock } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import * as providersService from '../../../services/llmProviders';
 import * as modelsService from '../../../services/llmModels';
 import type { LLMProvider, LLMModel, LLMProviderType } from '../../../types';
 import { LLM_PROVIDER_LABELS } from '../../../types';
+
+const LEGACY_MODEL_KEYS = new Set([
+  'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo',
+  'o1', 'o1-mini', 'o1-preview',
+  'claude-3-7-sonnet-20250219',
+  'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022',
+  'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307',
+  'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro',
+]);
 
 const PROVIDER_CONFIGS: Array<{
   id: LLMProviderType;
@@ -15,19 +24,19 @@ const PROVIDER_CONFIGS: Array<{
   {
     id: 'openai',
     name: 'OpenAI',
-    description: 'GPT-4, GPT-4o, and other OpenAI models',
+    description: 'GPT-4.1, o3, o4-mini, and other OpenAI models',
     docsUrl: 'https://platform.openai.com/api-keys',
   },
   {
     id: 'anthropic',
     name: 'Anthropic',
-    description: 'Claude 3.5, Claude 3, and other Anthropic models',
+    description: 'Claude Opus 4.6, Sonnet 4.5, Haiku 4.5, and other Anthropic models',
     docsUrl: 'https://console.anthropic.com/settings/keys',
   },
   {
     id: 'google',
     name: 'Google AI',
-    description: 'Gemini 1.5 Pro, Gemini Flash, and other Google models',
+    description: 'Gemini 2.5 Pro, Gemini 2.5 Flash, and other Google models',
     docsUrl: 'https://makersuite.google.com/app/apikey',
   },
 ];
@@ -466,6 +475,12 @@ export function ModelsSettingsTab() {
                         {model.is_default && (
                           <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
                         )}
+                        {LEGACY_MODEL_KEYS.has(model.model_key) && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            <Clock className="w-3 h-3" />
+                            Legacy
+                          </span>
+                        )}
                       </div>
                       <span className="text-xs text-slate-500">{model.model_key}</span>
                     </td>
@@ -480,16 +495,18 @@ export function ModelsSettingsTab() {
                         : '-'}
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => handleToggleModelEnabled(model.id, !model.enabled)}
-                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                      <select
+                        value={model.enabled ? 'enabled' : 'disabled'}
+                        onChange={(e) => handleToggleModelEnabled(model.id, e.target.value === 'enabled')}
+                        className={`px-2 py-1 rounded text-xs font-medium border-0 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500 ${
                           model.enabled
                             ? 'bg-emerald-500/10 text-emerald-400'
                             : 'bg-slate-500/10 text-slate-400'
                         }`}
                       >
-                        {model.enabled ? 'Enabled' : 'Disabled'}
-                      </button>
+                        <option value="enabled">Enabled</option>
+                        <option value="disabled">Disabled</option>
+                      </select>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">

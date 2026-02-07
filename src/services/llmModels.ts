@@ -181,13 +181,28 @@ export const DEFAULT_MODELS: Array<{
   model_key: string;
   display_name: string;
   context_window: number;
+  is_legacy?: boolean;
 }> = [
-  { provider: 'openai', model_key: 'gpt-4o', display_name: 'GPT-4o', context_window: 128000 },
-  { provider: 'openai', model_key: 'gpt-4o-mini', display_name: 'GPT-4o Mini', context_window: 128000 },
-  { provider: 'openai', model_key: 'gpt-4-turbo', display_name: 'GPT-4 Turbo', context_window: 128000 },
+  { provider: 'openai', model_key: 'gpt-4.1', display_name: 'GPT-4.1', context_window: 1047576 },
+  { provider: 'openai', model_key: 'gpt-4.1-mini', display_name: 'GPT-4.1 Mini', context_window: 1047576 },
+  { provider: 'openai', model_key: 'gpt-4.1-nano', display_name: 'GPT-4.1 Nano', context_window: 1047576 },
+  { provider: 'openai', model_key: 'o3', display_name: 'o3', context_window: 200000 },
+  { provider: 'openai', model_key: 'o3-pro', display_name: 'o3 Pro', context_window: 200000 },
+  { provider: 'openai', model_key: 'o4-mini', display_name: 'o4 Mini', context_window: 200000 },
+  { provider: 'openai', model_key: 'gpt-4o', display_name: 'GPT-4o', context_window: 128000, is_legacy: true },
+  { provider: 'openai', model_key: 'gpt-4o-mini', display_name: 'GPT-4o Mini', context_window: 128000, is_legacy: true },
+  { provider: 'openai', model_key: 'gpt-4-turbo', display_name: 'GPT-4 Turbo', context_window: 128000, is_legacy: true },
+  { provider: 'anthropic', model_key: 'claude-opus-4-6-20260101', display_name: 'Claude Opus 4.6', context_window: 200000 },
+  { provider: 'anthropic', model_key: 'claude-sonnet-4-5-20250929', display_name: 'Claude Sonnet 4.5', context_window: 200000 },
+  { provider: 'anthropic', model_key: 'claude-haiku-4-5-20251001', display_name: 'Claude Haiku 4.5', context_window: 200000 },
+  { provider: 'anthropic', model_key: 'claude-opus-4-20250514', display_name: 'Claude Opus 4', context_window: 200000 },
   { provider: 'anthropic', model_key: 'claude-sonnet-4-20250514', display_name: 'Claude Sonnet 4', context_window: 200000 },
-  { provider: 'anthropic', model_key: 'claude-3-5-sonnet-20241022', display_name: 'Claude 3.5 Sonnet', context_window: 200000 },
-  { provider: 'anthropic', model_key: 'claude-3-5-haiku-20241022', display_name: 'Claude 3.5 Haiku', context_window: 200000 },
-  { provider: 'google', model_key: 'gemini-1.5-pro', display_name: 'Gemini 1.5 Pro', context_window: 1000000 },
-  { provider: 'google', model_key: 'gemini-1.5-flash', display_name: 'Gemini 1.5 Flash', context_window: 1000000 },
+  { provider: 'anthropic', model_key: 'claude-3-7-sonnet-20250219', display_name: 'Claude 3.7 Sonnet', context_window: 200000, is_legacy: true },
+  { provider: 'anthropic', model_key: 'claude-3-5-sonnet-20241022', display_name: 'Claude 3.5 Sonnet', context_window: 200000, is_legacy: true },
+  { provider: 'anthropic', model_key: 'claude-3-5-haiku-20241022', display_name: 'Claude 3.5 Haiku', context_window: 200000, is_legacy: true },
+  { provider: 'google', model_key: 'gemini-2.5-pro', display_name: 'Gemini 2.5 Pro', context_window: 1048576 },
+  { provider: 'google', model_key: 'gemini-2.5-flash', display_name: 'Gemini 2.5 Flash', context_window: 1048576 },
+  { provider: 'google', model_key: 'gemini-2.0-flash', display_name: 'Gemini 2.0 Flash', context_window: 1048576 },
+  { provider: 'google', model_key: 'gemini-1.5-pro', display_name: 'Gemini 1.5 Pro', context_window: 1048576, is_legacy: true },
+  { provider: 'google', model_key: 'gemini-1.5-flash', display_name: 'Gemini 1.5 Flash', context_window: 1048576, is_legacy: true },
 ];
