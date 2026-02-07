@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { LogOut, User, ChevronDown } from 'lucide-react';
+import { NotificationBell } from './NotificationBell';
 
 export function Header() {
   const { user, signOut } = useAuth();
@@ -36,6 +37,9 @@ export function Header() {
     <header className="h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6">
       <div />
 
+      <div className="flex items-center gap-2">
+        <NotificationBell />
+        <div className="w-px h-8 bg-slate-700/60" />
       <div className="relative" ref={dropdownRef}>
         <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -86,6 +90,7 @@ export function Header() {
             </div>
           </div>
         )}
+      </div>
       </div>
     </header>
   );
