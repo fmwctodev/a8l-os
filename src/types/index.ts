@@ -16,6 +16,9 @@ export interface Organization {
   id: string;
   name: string;
   created_at: string;
+  email?: string | null;
+  phone?: string | null;
+  website?: string | null;
   business_address?: string | null;
   business_city?: string | null;
   business_state?: string | null;

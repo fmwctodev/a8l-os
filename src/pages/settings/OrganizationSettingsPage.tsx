@@ -16,6 +16,9 @@ import {
   ToggleLeft,
   ToggleRight,
   X,
+  Mail,
+  Phone,
+  Globe,
 } from 'lucide-react';
 
 export function OrganizationSettingsPage() {
@@ -25,6 +28,9 @@ export function OrganizationSettingsPage() {
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [orgName, setOrgName] = useState('');
+  const [orgEmail, setOrgEmail] = useState('');
+  const [orgPhone, setOrgPhone] = useState('');
+  const [orgWebsite, setOrgWebsite] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +57,9 @@ export function OrganizationSettingsPage() {
       ]);
       setOrganization(org);
       setOrgName(org?.name || '');
+      setOrgEmail(org?.email || '');
+      setOrgPhone(org?.phone || '');
+      setOrgWebsite(org?.website || '');
       setDepartments(depts);
       setFeatureFlags(flags);
     } catch (err) {
@@ -68,7 +77,12 @@ export function OrganizationSettingsPage() {
     setError(null);
 
     try {
-      await updateOrganization(organization.id, { name: orgName }, user);
+      await updateOrganization(organization.id, {
+        name: orgName,
+        email: orgEmail || null,
+        phone: orgPhone || null,
+        website: orgWebsite || null,
+      }, user);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
@@ -170,32 +184,90 @@ export function OrganizationSettingsPage() {
             <label className="block text-sm font-medium text-slate-300 mb-2">
               Organization Name
             </label>
-            <div className="flex gap-3">
+            <div className="relative">
+              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
               <input
                 type="text"
                 value={orgName}
                 onChange={(e) => setOrgName(e.target.value)}
                 disabled={!canManage}
-                className="flex-1 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent disabled:opacity-50"
+                className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent disabled:opacity-50"
               />
-              {canManage && (
-                <button
-                  onClick={handleSaveOrg}
-                  disabled={isSaving || orgName === organization?.name}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-white font-medium hover:from-cyan-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isSaving ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : saveSuccess ? (
-                    <CheckCircle2 className="w-4 h-4" />
-                  ) : (
-                    <Save className="w-4 h-4" />
-                  )}
-                  {saveSuccess ? 'Saved' : 'Save'}
-                </button>
-              )}
             </div>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Email
+            </label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input
+                type="email"
+                value={orgEmail}
+                onChange={(e) => setOrgEmail(e.target.value)}
+                disabled={!canManage}
+                placeholder="info@example.com"
+                className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent disabled:opacity-50"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Phone
+              </label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <input
+                  type="tel"
+                  value={orgPhone}
+                  onChange={(e) => setOrgPhone(e.target.value)}
+                  disabled={!canManage}
+                  placeholder="(555) 000-0000"
+                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent disabled:opacity-50"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Website
+              </label>
+              <div className="relative">
+                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <input
+                  type="url"
+                  value={orgWebsite}
+                  onChange={(e) => setOrgWebsite(e.target.value)}
+                  disabled={!canManage}
+                  placeholder="https://example.com"
+                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent disabled:opacity-50"
+                />
+              </div>
+            </div>
+          </div>
+          {canManage && (
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={handleSaveOrg}
+                disabled={isSaving || (
+                  orgName === (organization?.name || '') &&
+                  orgEmail === (organization?.email || '') &&
+                  orgPhone === (organization?.phone || '') &&
+                  orgWebsite === (organization?.website || '')
+                )}
+                className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-white font-medium hover:from-cyan-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : saveSuccess ? (
+                  <CheckCircle2 className="w-4 h-4" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                {saveSuccess ? 'Saved' : 'Save'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
