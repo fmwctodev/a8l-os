@@ -672,31 +672,6 @@ function buildStyles(accentColor: string): string {
       color: #64748b;
     }
 
-    /* Page footer */
-    .page-footer {
-      position: absolute;
-      bottom: 30px;
-      right: 50px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .page-footer-brand {
-      background: #fff;
-      color: #1e293b;
-      border-radius: 20px;
-      padding: 6px 16px;
-      font-size: 11px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .page-footer-brand svg {
-      width: 16px;
-      height: 16px;
-    }
-
     @media print {
       html, body {
         width: 210mm;
@@ -710,21 +685,6 @@ function buildStyles(accentColor: string): string {
         page-break-after: auto;
       }
     }
-  `;
-}
-
-function buildPageFooter(): string {
-  return `
-    <div class="page-footer">
-      <div class="page-footer-brand">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M12 16v-4"/>
-          <path d="M12 8h.01"/>
-        </svg>
-        ${COMPANY.name} Support
-      </div>
-    </div>
   `;
 }
 
@@ -756,10 +716,6 @@ export function generateProposalHTML(
   pagesHtml += buildAcceptancePage(proposal, accentColor);
   pagesHtml += buildClosingPage(proposal);
 
-  const pagesWithFooters = pagesHtml.replace(/<\/div>\s*(?=<div class="page|$)/g, (match) => {
-    return buildPageFooter() + match;
-  });
-
   return `
 <!DOCTYPE html>
 <html>
@@ -769,7 +725,7 @@ export function generateProposalHTML(
   <style>${buildStyles(accentColor)}</style>
 </head>
 <body>
-  ${pagesWithFooters}
+  ${pagesHtml}
 </body>
 </html>
   `.trim();
