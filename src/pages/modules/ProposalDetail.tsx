@@ -26,6 +26,7 @@ import type { Proposal, ProposalComment, ProposalActivity, ProposalSection, Prop
 import {
   ArrowLeft,
   FileText,
+  FileDown,
   Send,
   Edit3,
   Trash2,
@@ -51,6 +52,8 @@ import {
   ArchiveRestore,
   Copy as CopyIcon,
 } from 'lucide-react';
+import { exportProposalToPDF } from '../../services/proposalPdfExport';
+import { getBrandKits } from '../../services/brandboard';
 
 const STATUS_STYLES = {
   draft: { bg: 'bg-slate-500/20', text: 'text-slate-300', icon: Clock, label: 'Draft' },
@@ -79,6 +82,7 @@ export function ProposalDetail() {
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
   const [showConvertModal, setShowConvertModal] = useState(false);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
 
   const canEdit = hasPermission('proposals.edit');
   const canSend = hasPermission('proposals.send');
@@ -108,6 +112,24 @@ export function ProposalDetail() {
       console.error('Failed to load proposal:', err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!proposal) return;
+    try {
+      setIsExportingPDF(true);
+      let brandKit = null;
+      try {
+        const kits = await getBrandKits(proposal.org_id, { active: true });
+        if (kits.length > 0) brandKit = kits[0];
+      } catch {}
+      await exportProposalToPDF(proposal, brandKit);
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+      alert('Failed to open print window. Please allow popups for this site.');
+    } finally {
+      setIsExportingPDF(false);
     }
   };
 
@@ -347,6 +369,18 @@ export function ProposalDetail() {
                 </a>
               </>
             )}
+            <button
+              onClick={handleExportPDF}
+              disabled={isExportingPDF}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors disabled:opacity-50"
+            >
+              {isExportingPDF ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileDown className="w-4 h-4" />
+              )}
+              Export PDF
+            </button>
             <div className="relative">
               <button
                 onClick={() => setShowActionMenu(!showActionMenu)}

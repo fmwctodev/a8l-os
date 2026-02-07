@@ -5,6 +5,7 @@ import { getProposals, getProposalStats, deleteProposal, sendProposal } from '..
 import type { Proposal, ProposalStats, ProposalStatus } from '../../types';
 import {
   FileText,
+  FileDown,
   Plus,
   Search,
   Filter,
@@ -26,6 +27,8 @@ import {
   Copy,
 } from 'lucide-react';
 import { CreateProposalModal } from '../../components/proposals/CreateProposalModal';
+import { exportProposalToPDF } from '../../services/proposalPdfExport';
+import { getBrandKits } from '../../services/brandboard';
 
 const STATUS_STYLES: Record<ProposalStatus, { bg: string; text: string; icon: typeof Clock; label: string }> = {
   draft: { bg: 'bg-slate-500/20', text: 'text-slate-300', icon: Clock, label: 'Draft' },
@@ -46,6 +49,7 @@ export function Proposals() {
   const [statusFilter, setStatusFilter] = useState<ProposalStatus | 'all'>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+  const [exportingId, setExportingId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const pageSize = 25;
@@ -114,6 +118,24 @@ export function Proposals() {
   const copyPublicLink = (token: string) => {
     const url = `${window.location.origin}/p/${token}`;
     navigator.clipboard.writeText(url);
+  };
+
+  const handleExportPDF = async (proposal: Proposal) => {
+    try {
+      setExportingId(proposal.id);
+      setActionMenuId(null);
+      let brandKit = null;
+      try {
+        const kits = await getBrandKits(proposal.org_id, { active: true });
+        if (kits.length > 0) brandKit = kits[0];
+      } catch {}
+      await exportProposalToPDF(proposal, brandKit);
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+      alert('Failed to open print window. Please allow popups for this site.');
+    } finally {
+      setExportingId(null);
+    }
   };
 
   const formatCurrency = (amount: number, currency = 'USD') => {
@@ -363,6 +385,18 @@ export function Proposals() {
                             >
                               <Eye className="w-4 h-4" />
                               View Details
+                            </button>
+                            <button
+                              onClick={() => handleExportPDF(proposal)}
+                              disabled={exportingId === proposal.id}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors disabled:opacity-50"
+                            >
+                              {exportingId === proposal.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <FileDown className="w-4 h-4" />
+                              )}
+                              Export PDF
                             </button>
                             {canSend && proposal.status === 'draft' && (
                               <button
