@@ -521,7 +521,7 @@ export function ProposalDetail() {
                           </div>
                         </div>
                       ) : (
-                        <div className="prose prose-invert prose-sm max-w-none">
+                        <div className="proposal-content max-w-none text-sm">
                           <div dangerouslySetInnerHTML={{ __html: section.content.replace(/\n/g, '<br>') }} />
                         </div>
                       )}

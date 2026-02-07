@@ -1,3 +1,70 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.proposal-content {
+  color: #e2e8f0;
+  line-height: 1.7;
+}
+.proposal-content h1,
+.proposal-content h2,
+.proposal-content h3,
+.proposal-content h4,
+.proposal-content h5,
+.proposal-content h6 {
+  color: #f1f5f9;
+  font-weight: 600;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+}
+.proposal-content h3 {
+  font-size: 1.125rem;
+}
+.proposal-content p {
+  margin-bottom: 0.75em;
+}
+.proposal-content ul,
+.proposal-content ol {
+  padding-left: 1.5em;
+  margin-bottom: 0.75em;
+}
+.proposal-content ul {
+  list-style-type: disc;
+}
+.proposal-content ol {
+  list-style-type: decimal;
+}
+.proposal-content li {
+  margin-bottom: 0.25em;
+}
+.proposal-content strong,
+.proposal-content b {
+  color: #f8fafc;
+  font-weight: 600;
+}
+.proposal-content a {
+  color: #22d3ee;
+  text-decoration: underline;
+}
+.proposal-content blockquote {
+  border-left: 3px solid #334155;
+  padding-left: 1em;
+  color: #94a3b8;
+  margin: 1em 0;
+}
+.proposal-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+}
+.proposal-content th,
+.proposal-content td {
+  border: 1px solid #334155;
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+.proposal-content th {
+  background: rgba(30, 41, 59, 0.5);
+  color: #f1f5f9;
+  font-weight: 600;
+}
