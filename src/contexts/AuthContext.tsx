@@ -11,6 +11,7 @@ interface AuthContextValue {
   featureFlags: FeatureFlag[];
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   hasPermission: (permission: PermissionKey) => boolean;
   isFeatureEnabled: (featureKey: string) => boolean;
@@ -101,6 +102,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const signInWithGoogle = async () => {
+    await authService.signInWithGoogle();
+  };
+
   const signOut = async () => {
     await authService.signOut();
     setSession(null);
@@ -129,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         featureFlags,
         isLoading,
         signIn,
+        signInWithGoogle,
         signOut,
         hasPermission,
         isFeatureEnabled,
