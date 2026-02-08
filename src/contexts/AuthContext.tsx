@@ -47,7 +47,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
-    let initialLoadDone = false;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!isMounted) return;
@@ -62,30 +61,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setSession(newSession);
 
-      if (newSession && initialLoadDone) {
+      if (newSession) {
         setTimeout(() => {
           if (!isMounted) return;
-          setIsLoading(true);
           loadUser().finally(() => {
             if (isMounted) setIsLoading(false);
           });
         }, 0);
-      }
-    });
-
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-      if (!isMounted) return;
-      setSession(currentSession);
-      if (currentSession) {
-        loadUser().finally(() => {
-          if (isMounted) {
-            setIsLoading(false);
-            initialLoadDone = true;
-          }
-        });
-      } else {
+      } else if (event === 'INITIAL_SESSION') {
         setIsLoading(false);
-        initialLoadDone = true;
       }
     });
 
