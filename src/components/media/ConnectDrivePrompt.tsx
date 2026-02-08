@@ -1,13 +1,15 @@
-import { HardDrive, Shield, FolderSync, Link2 } from 'lucide-react';
+import { HardDrive, Shield, FolderSync, Link2, AlertTriangle } from 'lucide-react';
 
 interface ConnectDrivePromptProps {
   onConnect: () => void;
   loading?: boolean;
+  error?: string | null;
 }
 
 export default function ConnectDrivePrompt({
   onConnect,
   loading,
+  error,
 }: ConnectDrivePromptProps) {
   return (
     <div className="flex-1 flex items-center justify-center bg-gray-50 p-8">
@@ -54,6 +56,16 @@ export default function ConnectDrivePrompt({
             </div>
           </div>
         </div>
+
+        {error && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-3 text-left">
+            <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">Unable to connect</p>
+              <p className="text-sm text-amber-700 mt-0.5">{error}</p>
+            </div>
+          </div>
+        )}
 
         <button
           onClick={onConnect}

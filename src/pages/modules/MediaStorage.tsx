@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import {
   getConnectionStatus,
   disconnectDrive,
@@ -61,10 +62,12 @@ interface BreadcrumbItem {
 
 export function MediaStorage() {
   const { user, refreshUser } = useAuth();
+  const { showToast } = useToast();
   const [connectionStatus, setConnectionStatus] = useState<DriveConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('my-drive');
   const [files, setFiles] = useState<GoogleDriveFileInfo[]>([]);
@@ -131,12 +134,15 @@ export function MediaStorage() {
 
   const handleConnect = async () => {
     setConnecting(true);
+    setConnectError(null);
     try {
       const authUrl = await initiateDriveOAuth(`${window.location.origin}/media`);
       window.location.href = authUrl;
     } catch (err) {
       console.error('Failed to start Drive OAuth:', err);
-      alert((err as Error).message || 'Failed to connect Google Drive.');
+      const message = (err as Error).message || 'Failed to connect Google Drive.';
+      setConnectError(message);
+      showToast('warning', 'Connection Failed', message);
       setConnecting(false);
     }
   };
@@ -262,7 +268,7 @@ export function MediaStorage() {
   }
 
   if (!connectionStatus?.connected) {
-    return <ConnectDrivePrompt onConnect={handleConnect} loading={connecting} />;
+    return <ConnectDrivePrompt onConnect={handleConnect} loading={connecting} error={connectError} />;
   }
 
   const showSharedDrivesList = activeTab === 'shared-drives' && !selectedDriveId;
