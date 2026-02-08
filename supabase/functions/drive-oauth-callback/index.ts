@@ -121,8 +121,7 @@ Deno.serve(async (req: Request) => {
           refresh_token_encrypted: refresh_token,
           token_expiry: tokenExpiry,
           scopes: [
-            "https://www.googleapis.com/auth/drive.file",
-            "https://www.googleapis.com/auth/drive.metadata.readonly",
+            "https://www.googleapis.com/auth/drive",
           ],
           is_active: true,
           updated_at: new Date().toISOString(),

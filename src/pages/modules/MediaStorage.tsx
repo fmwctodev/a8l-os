@@ -1,26 +1,38 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
-  LayoutGrid,
-  List,
   Search,
   RefreshCw,
   Filter,
   ChevronRight,
-  HardDrive,
-  AlertCircle,
-  X,
+  Cloud,
+  Users,
+  Upload,
+  FolderPlus,
+  Folder,
   Unplug,
+  HardDrive,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getConnectionStatus, disconnectDrive, initiateDriveOAuth } from '../../services/googleDrive';
-import { getDriveFiles, getDriveFolders, getFolderPath } from '../../services/driveFiles';
-import type { DriveFile, DriveFolder, DriveConnectionStatus } from '../../types';
-import FolderTree from '../../components/media/FolderTree';
-import FileGrid from '../../components/media/FileGrid';
-import FilePreviewPanel from '../../components/media/FilePreviewPanel';
+import {
+  getConnectionStatus,
+  disconnectDrive,
+  initiateDriveOAuth,
+  listDriveFilesViaApi,
+  listSharedDrives,
+  deleteDriveFileViaApi,
+  downloadDriveFile,
+  isFolder,
+} from '../../services/googleDrive';
+import type { GoogleDriveFileInfo, SharedDriveInfo } from '../../services/googleDrive';
+import type { DriveConnectionStatus } from '../../types';
 import ConnectDrivePrompt from '../../components/media/ConnectDrivePrompt';
+import FileCard from '../../components/media/FileCard';
+import ShareFileModal from '../../components/media/ShareFileModal';
+import UploadFilesModal from '../../components/media/UploadFilesModal';
+import CreateFolderModal from '../../components/media/CreateFolderModal';
 
-type ViewMode = 'grid' | 'list';
+type ActiveTab = 'my-drive' | 'shared-drives';
 type FileTypeFilter = 'all' | 'images' | 'documents' | 'videos' | 'spreadsheets';
 
 const FILE_TYPE_FILTERS: Record<FileTypeFilter, string[]> = {
@@ -42,27 +54,35 @@ const FILE_TYPE_FILTERS: Record<FileTypeFilter, string[]> = {
   ],
 };
 
+interface BreadcrumbItem {
+  id: string;
+  name: string;
+}
+
 export function MediaStorage() {
-  const { user, refreshUser, isSuperAdmin } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [connectionStatus, setConnectionStatus] = useState<DriveConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
-  const [selectedFolderName, setSelectedFolderName] = useState<string>('All Files');
-  const [folderPath, setFolderPath] = useState<DriveFolder[]>([]);
-
-  const [files, setFiles] = useState<DriveFile[]>([]);
-  const [folders, setFolders] = useState<DriveFolder[]>([]);
+  const [activeTab, setActiveTab] = useState<ActiveTab>('my-drive');
+  const [files, setFiles] = useState<GoogleDriveFileInfo[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
-
-  const [selectedFile, setSelectedFile] = useState<DriveFile | null>(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<FileTypeFilter>('all');
-  const [showUnavailable, setShowUnavailable] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
+
+  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
+  const [currentFolderId, setCurrentFolderId] = useState<string>('root');
+
+  const [sharedDrives, setSharedDrives] = useState<SharedDriveInfo[]>([]);
+  const [selectedDriveId, setSelectedDriveId] = useState<string | undefined>(undefined);
+  const [loadingDrives, setLoadingDrives] = useState(false);
+
+  const [shareFile, setShareFile] = useState<GoogleDriveFileInfo | null>(null);
+  const [showUpload, setShowUpload] = useState(false);
+  const [showCreateFolder, setShowCreateFolder] = useState(false);
 
   const userId = user?.id || '';
 
@@ -84,9 +104,17 @@ export function MediaStorage() {
 
   useEffect(() => {
     if (connectionStatus?.connected) {
-      loadFilesAndFolders();
+      if (activeTab === 'my-drive') {
+        loadFiles();
+      } else {
+        if (!selectedDriveId) {
+          loadSharedDrives();
+        } else {
+          loadFiles();
+        }
+      }
     }
-  }, [selectedFolderId, connectionStatus?.connected]);
+  }, [connectionStatus?.connected, activeTab, currentFolderId, selectedDriveId]);
 
   const checkConnection = async () => {
     if (!userId) return;
@@ -108,23 +136,20 @@ export function MediaStorage() {
       window.location.href = authUrl;
     } catch (err) {
       console.error('Failed to start Drive OAuth:', err);
-      alert((err as Error).message || 'Failed to connect Google Drive. Please try again.');
+      alert((err as Error).message || 'Failed to connect Google Drive.');
       setConnecting(false);
     }
   };
 
   const handleDisconnect = async () => {
-    if (!confirm('Are you sure you want to disconnect Google Drive? Your files will remain in Google Drive but will no longer be accessible from the CRM.')) {
-      return;
-    }
+    if (!confirm('Disconnect Google Drive? Your files will remain in Google Drive but won\'t be accessible from the CRM.')) return;
     setDisconnecting(true);
     try {
       await disconnectDrive(userId);
       await refreshUser();
       setConnectionStatus(null);
       setFiles([]);
-      setFolders([]);
-      setSelectedFile(null);
+      setSharedDrives([]);
       await checkConnection();
     } catch (err) {
       console.error('Failed to disconnect Drive:', err);
@@ -133,57 +158,97 @@ export function MediaStorage() {
     }
   };
 
-  const loadFilesAndFolders = async () => {
+  const loadFiles = useCallback(async () => {
     setLoadingFiles(true);
     try {
-      const [filesData, foldersData] = await Promise.all([
-        getDriveFiles(userId, {
-          folderId: selectedFolderId,
-          showDeleted: false,
-          showUnavailable,
-        }),
-        selectedFolderId
-          ? getDriveFolders(userId, selectedFolderId)
-          : [],
-      ]);
-      setFiles(filesData);
-      setFolders(foldersData);
-
-      if (selectedFolderId && selectedFolderId !== 'root') {
-        const path = await getFolderPath(userId, selectedFolderId);
-        setFolderPath(path);
-      } else {
-        setFolderPath([]);
-      }
+      const result = await listDriveFilesViaApi(currentFolderId, undefined, selectedDriveId);
+      setFiles(result.files);
     } catch (err) {
       console.error('Failed to load files:', err);
     } finally {
       setLoadingFiles(false);
     }
+  }, [currentFolderId, selectedDriveId]);
+
+  const loadSharedDrives = async () => {
+    setLoadingDrives(true);
+    try {
+      const drives = await listSharedDrives();
+      setSharedDrives(drives);
+    } catch (err) {
+      console.error('Failed to load shared drives:', err);
+    } finally {
+      setLoadingDrives(false);
+    }
   };
 
-  const handleSelectFolder = (folderId: string | null, folderName: string) => {
-    setSelectedFolderId(folderId);
-    setSelectedFolderName(folderName);
-    setSelectedFile(null);
+  const navigateToFolder = (folderId: string, folderName: string) => {
+    setBreadcrumbs((prev) => [...prev, { id: folderId, name: folderName }]);
+    setCurrentFolderId(folderId);
   };
 
-  const handleRefresh = () => {
-    loadFilesAndFolders();
+  const navigateToBreadcrumb = (index: number) => {
+    if (index === -1) {
+      setBreadcrumbs([]);
+      setCurrentFolderId('root');
+      if (activeTab === 'shared-drives') {
+        setSelectedDriveId(undefined);
+      }
+    } else {
+      const crumb = breadcrumbs[index];
+      setBreadcrumbs(breadcrumbs.slice(0, index + 1));
+      setCurrentFolderId(crumb.id);
+    }
+  };
+
+  const handleTabChange = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    setFiles([]);
+    setBreadcrumbs([]);
+    setCurrentFolderId('root');
+    setSelectedDriveId(undefined);
+    setSearch('');
+    setTypeFilter('all');
+  };
+
+  const handleSelectSharedDrive = (drive: SharedDriveInfo) => {
+    setSelectedDriveId(drive.id);
+    setCurrentFolderId(drive.id);
+    setBreadcrumbs([{ id: drive.id, name: drive.name }]);
+  };
+
+  const handleOpenFile = (file: GoogleDriveFileInfo) => {
+    if (file.webViewLink) {
+      window.open(file.webViewLink, '_blank');
+    }
+  };
+
+  const handleDownloadFile = async (file: GoogleDriveFileInfo) => {
+    try {
+      await downloadDriveFile(file.id, file.name);
+    } catch (err) {
+      console.error('Download failed:', err);
+      alert('Failed to download file. It may be a Google Workspace file - try opening in Drive instead.');
+    }
+  };
+
+  const handleDeleteFile = async (file: GoogleDriveFileInfo) => {
+    const label = isFolder(file.mimeType) ? 'folder' : 'file';
+    if (!confirm(`Delete this ${label}? It will be permanently removed from Google Drive.`)) return;
+    try {
+      await deleteDriveFileViaApi(file.id);
+      loadFiles();
+    } catch (err) {
+      console.error('Delete failed:', err);
+      alert('Failed to delete. You may not have permission.');
+    }
   };
 
   const filteredFiles = files.filter((file) => {
-    if (search && !file.name.toLowerCase().includes(search.toLowerCase())) {
-      return false;
-    }
-    if (!showUnavailable && (file.is_deleted || file.access_revoked)) {
-      return false;
-    }
+    if (search && !file.name.toLowerCase().includes(search.toLowerCase())) return false;
     if (typeFilter !== 'all') {
-      const allowedTypes = FILE_TYPE_FILTERS[typeFilter];
-      if (!allowedTypes.some((t) => file.mime_type.includes(t) || file.mime_type === t)) {
-        return false;
-      }
+      const allowed = FILE_TYPE_FILTERS[typeFilter];
+      if (!allowed.some((t) => file.mimeType.includes(t) || file.mimeType === t)) return false;
     }
     return true;
   });
@@ -197,204 +262,295 @@ export function MediaStorage() {
   }
 
   if (!connectionStatus?.connected) {
-    return (
-      <ConnectDrivePrompt
-        onConnect={handleConnect}
-        loading={connecting}
-      />
-    );
+    return <ConnectDrivePrompt onConnect={handleConnect} loading={connecting} />;
   }
 
+  const showSharedDrivesList = activeTab === 'shared-drives' && !selectedDriveId;
+
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">File Manager</h1>
-          <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
-            <HardDrive className="w-4 h-4" />
-            <span>Connected to {connectionStatus.email}</span>
-            {connectionStatus.tokenExpired && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs">
-                <AlertCircle className="w-3 h-3" />
-                Token expired
-              </span>
-            )}
+    <div className="h-full flex flex-col bg-gray-50">
+      <div className="bg-white border-b border-gray-200">
+        <div className="px-6 pt-6 pb-0">
+          <div className="flex items-center justify-between mb-5">
+            <h1 className="text-2xl font-bold text-gray-900">File Manager</h1>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 text-xs text-gray-400 mr-2">
+                <HardDrive className="w-3.5 h-3.5" />
+                <span>{connectionStatus.email}</span>
+              </div>
+              <button
+                onClick={() => activeTab === 'my-drive' ? loadFiles() : (selectedDriveId ? loadFiles() : loadSharedDrives())}
+                disabled={loadingFiles || loadingDrives}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Refresh"
+              >
+                <RefreshCw className={`w-4 h-4 text-gray-500 ${loadingFiles || loadingDrives ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+              >
+                <Unplug className="w-3.5 h-3.5" />
+                {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+              </button>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleRefresh}
-            disabled={loadingFiles}
-            className="p-2 hover:bg-gray-100 rounded-md transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw className={`w-5 h-5 text-gray-500 ${loadingFiles ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            onClick={handleDisconnect}
-            disabled={disconnecting}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
-            title="Disconnect Google Drive"
-          >
-            <Unplug className="w-4 h-4" />
-            {disconnecting ? 'Disconnecting...' : 'Disconnect'}
-          </button>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleTabChange('my-drive')}
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-t-lg text-sm font-medium transition-colors ${
+                activeTab === 'my-drive'
+                  ? 'bg-gray-900 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <Cloud className="w-4 h-4" />
+              My Drive
+            </button>
+            <button
+              onClick={() => handleTabChange('shared-drives')}
+              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-t-lg text-sm font-medium transition-colors ${
+                activeTab === 'shared-drives'
+                  ? 'bg-red-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              Shared Drives
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="w-64 border-r border-gray-200 bg-gray-50 overflow-y-auto">
-          <FolderTree
-            userId={userId}
-            selectedFolderId={selectedFolderId}
-            onSelectFolder={handleSelectFolder}
-          />
-        </div>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="bg-white border-b border-gray-200">
+          <div className="flex items-center justify-between px-6 py-3">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="relative w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search files..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50"
+                />
+              </div>
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex items-center gap-4 px-4 py-3 border-b border-gray-200 bg-white">
-            <div className="flex items-center gap-1 text-sm text-gray-600">
-              <button
-                onClick={() => handleSelectFolder(null, 'All Files')}
-                className="hover:text-blue-600"
-              >
-                All Files
-              </button>
-              {folderPath.map((folder) => (
-                <span key={folder.id} className="flex items-center gap-1">
-                  <ChevronRight className="w-4 h-4 text-gray-400" />
-                  <button
-                    onClick={() => handleSelectFolder(folder.drive_folder_id, folder.name)}
-                    className="hover:text-blue-600"
-                  >
-                    {folder.name}
-                  </button>
-                </span>
-              ))}
-              {selectedFolderName && selectedFolderId && (
-                <span className="flex items-center gap-1">
-                  <ChevronRight className="w-4 h-4 text-gray-400" />
-                  <span className="font-medium text-gray-900">{selectedFolderName}</span>
-                </span>
-              )}
-            </div>
-
-            <div className="flex-1" />
-
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search files..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-64 pl-9 pr-4 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-
-            <div className="relative">
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`p-2 rounded-md transition-colors ${
-                  showFilters || typeFilter !== 'all'
-                    ? 'bg-blue-100 text-blue-600'
-                    : 'hover:bg-gray-100 text-gray-500'
-                }`}
-              >
-                <Filter className="w-5 h-5" />
-              </button>
-              {showFilters && (
-                <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-                  <div className="px-3 py-2 border-b border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-gray-500 uppercase">
-                        File Type
-                      </span>
-                      <button
-                        onClick={() => setShowFilters(false)}
-                        className="p-1 hover:bg-gray-100 rounded"
-                      >
-                        <X className="w-3 h-3 text-gray-400" />
+              <div className="relative">
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`inline-flex items-center gap-2 px-3 py-2 text-sm border rounded-lg transition-colors ${
+                    showFilters || typeFilter !== 'all'
+                      ? 'bg-blue-50 border-blue-200 text-blue-700'
+                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <Filter className="w-4 h-4" />
+                  Filter & sort
+                </button>
+                {showFilters && (
+                  <div className="absolute left-0 top-full mt-2 w-52 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50">
+                    <div className="px-3 py-2 border-b border-gray-100 flex items-center justify-between">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">File Type</span>
+                      <button onClick={() => setShowFilters(false)} className="p-0.5 hover:bg-gray-100 rounded">
+                        <X className="w-3.5 h-3.5 text-gray-400" />
                       </button>
                     </div>
-                  </div>
-                  {(['all', 'images', 'documents', 'videos', 'spreadsheets'] as FileTypeFilter[]).map(
-                    (type) => (
+                    {(['all', 'images', 'documents', 'videos', 'spreadsheets'] as FileTypeFilter[]).map((type) => (
                       <button
                         key={type}
-                        onClick={() => setTypeFilter(type)}
-                        className={`w-full px-3 py-1.5 text-left text-sm ${
-                          typeFilter === type
-                            ? 'bg-blue-50 text-blue-700'
-                            : 'text-gray-700 hover:bg-gray-50'
+                        onClick={() => { setTypeFilter(type); setShowFilters(false); }}
+                        className={`w-full px-3 py-2 text-left text-sm transition-colors ${
+                          typeFilter === type ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700 hover:bg-gray-50'
                         }`}
                       >
                         {type.charAt(0).toUpperCase() + type.slice(1)}
                       </button>
-                    )
-                  )}
-                  <div className="border-t border-gray-100 mt-2 pt-2 px-3">
-                    <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={showUnavailable}
-                        onChange={(e) => setShowUnavailable(e.target.checked)}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      Show unavailable files
-                    </label>
+                    ))}
                   </div>
-                </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {!showSharedDrivesList && (
+                <>
+                  <button
+                    onClick={() => setShowCreateFolder(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <FolderPlus className="w-4 h-4 text-gray-500" />
+                    Create Folder
+                  </button>
+                  <button
+                    onClick={() => setShowUpload(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Upload Files
+                  </button>
+                </>
               )}
             </div>
-
-            <div className="flex items-center border border-gray-300 rounded-md">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`p-1.5 ${
-                  viewMode === 'grid'
-                    ? 'bg-gray-100 text-gray-900'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`p-1.5 ${
-                  viewMode === 'list'
-                    ? 'bg-gray-100 text-gray-900'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <List className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto bg-gray-50">
-            <FileGrid
-              files={filteredFiles}
-              selectedFileId={selectedFile?.id || null}
-              onSelectFile={setSelectedFile}
-              onOpenFile={(file) => {
-                if (file.web_view_link) {
-                  window.open(file.web_view_link, '_blank');
-                }
-              }}
-              loading={loadingFiles}
-            />
           </div>
         </div>
 
-        {selectedFile && (
-          <div className="w-80 flex-shrink-0">
-            <FilePreviewPanel
-              file={selectedFile}
-              onClose={() => setSelectedFile(null)}
-            />
+        <div className="px-6 py-3">
+          <div className="flex items-center gap-1 text-sm">
+            <button
+              onClick={() => navigateToBreadcrumb(-1)}
+              className="text-gray-500 hover:text-gray-900 font-medium transition-colors"
+            >
+              Home
+            </button>
+            {breadcrumbs.map((crumb, index) => (
+              <span key={crumb.id} className="flex items-center gap-1">
+                <ChevronRight className="w-4 h-4 text-gray-300" />
+                {index === breadcrumbs.length - 1 ? (
+                  <span className="font-medium text-gray-900">{crumb.name}</span>
+                ) : (
+                  <button
+                    onClick={() => navigateToBreadcrumb(index)}
+                    className="text-gray-500 hover:text-gray-900 font-medium transition-colors"
+                  >
+                    {crumb.name}
+                  </button>
+                )}
+              </span>
+            ))}
           </div>
-        )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
+          {showSharedDrivesList ? (
+            <SharedDrivesList
+              drives={sharedDrives}
+              loading={loadingDrives}
+              onSelect={handleSelectSharedDrive}
+            />
+          ) : loadingFiles ? (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 mb-4">Files</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="animate-pulse">
+                    <div className="bg-gray-200 rounded-xl h-48" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : filteredFiles.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+              <Folder className="w-16 h-16 mb-4 text-gray-300" />
+              <p className="text-lg font-medium text-gray-500">No files found</p>
+              <p className="text-sm mt-1">
+                {search ? 'Try a different search term' : 'This folder is empty'}
+              </p>
+            </div>
+          ) : (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-500 mb-4">Files</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                {filteredFiles.map((file) => (
+                  <FileCard
+                    key={file.id}
+                    file={file}
+                    onOpen={handleOpenFile}
+                    onDownload={handleDownloadFile}
+                    onShare={(f) => setShareFile(f)}
+                    onDelete={handleDeleteFile}
+                    onNavigateFolder={navigateToFolder}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {shareFile && (
+        <ShareFileModal
+          file={shareFile}
+          isOpen={true}
+          onClose={() => setShareFile(null)}
+        />
+      )}
+
+      <UploadFilesModal
+        isOpen={showUpload}
+        onClose={() => setShowUpload(false)}
+        parentId={currentFolderId}
+        driveId={selectedDriveId}
+        onUploadComplete={loadFiles}
+      />
+
+      <CreateFolderModal
+        isOpen={showCreateFolder}
+        onClose={() => setShowCreateFolder(false)}
+        parentId={currentFolderId}
+        driveId={selectedDriveId}
+        onCreated={loadFiles}
+      />
+    </div>
+  );
+}
+
+function SharedDrivesList({
+  drives,
+  loading,
+  onSelect,
+}: {
+  drives: SharedDriveInfo[];
+  loading: boolean;
+  onSelect: (drive: SharedDriveInfo) => void;
+}) {
+  if (loading) {
+    return (
+      <div>
+        <h3 className="text-sm font-semibold text-gray-500 mb-4">Shared Drives</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="animate-pulse">
+              <div className="bg-gray-200 rounded-xl h-36" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (drives.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+        <Users className="w-16 h-16 mb-4 text-gray-300" />
+        <p className="text-lg font-medium text-gray-500">No shared drives</p>
+        <p className="text-sm mt-1">You don't have access to any shared drives</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-gray-500 mb-4">Shared Drives</h3>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        {drives.map((drive) => (
+          <button
+            key={drive.id}
+            onClick={() => onSelect(drive)}
+            className="group bg-white rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all text-left overflow-hidden"
+          >
+            <div className="h-28 bg-gradient-to-br from-gray-100 to-gray-50 flex items-center justify-center">
+              <HardDrive className="w-10 h-10 text-gray-400 group-hover:text-gray-500 transition-colors" />
+            </div>
+            <div className="px-3 py-3">
+              <h4 className="text-sm font-medium text-gray-900 truncate">{drive.name}</h4>
+              <p className="text-xs text-gray-400 mt-0.5">Shared Drive</p>
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   );

@@ -10,8 +10,7 @@ const corsHeaders = {
 
 const GOOGLE_OAUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const SCOPES = [
-  "https://www.googleapis.com/auth/drive.file",
-  "https://www.googleapis.com/auth/drive.metadata.readonly",
+  "https://www.googleapis.com/auth/drive",
 ].join(" ");
 
 Deno.serve(async (req: Request) => {

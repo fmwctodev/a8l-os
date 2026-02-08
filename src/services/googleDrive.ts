@@ -1,14 +1,8 @@
 import { supabase } from '../lib/supabase';
 import type { DriveConnection, DriveConnectionStatus } from '../types';
 
-const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const GOOGLE_DRIVE_API = 'https://www.googleapis.com/drive/v3';
-const GOOGLE_OAUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
-const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo';
-
 const SCOPES = [
-  'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/drive.metadata.readonly',
+  'https://www.googleapis.com/auth/drive',
 ].join(' ');
 
 export interface GoogleDriveFileInfo {
@@ -24,6 +18,8 @@ export interface GoogleDriveFileInfo {
   trashed?: boolean;
   createdTime?: string;
   modifiedTime?: string;
+  shared?: boolean;
+  driveId?: string;
 }
 
 export interface GoogleDriveFolderInfo {
@@ -32,22 +28,34 @@ export interface GoogleDriveFolderInfo {
   parents?: string[];
 }
 
-export function getDriveOAuthUrl(
-  clientId: string,
-  redirectUri: string,
-  state: string
-): string {
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    response_type: 'code',
-    scope: SCOPES,
-    access_type: 'offline',
-    prompt: 'consent',
-    state,
+export interface SharedDriveInfo {
+  id: string;
+  name: string;
+  backgroundImageLink?: string;
+  createdTime?: string;
+}
+
+async function callDriveApi(action: string, body?: Record<string, unknown>) {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('No active session');
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/drive-api`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ action, ...body }),
   });
 
-  return `${GOOGLE_OAUTH_URL}?${params.toString()}`;
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Drive API ${action} failed`);
+  }
+
+  return response.json();
 }
 
 export async function initiateDriveOAuth(redirectUri?: string): Promise<string> {
@@ -78,73 +86,6 @@ export async function initiateDriveOAuth(redirectUri?: string): Promise<string> 
 
   const data = await response.json();
   return data.authUrl;
-}
-
-export async function exchangeCodeForTokens(
-  code: string,
-  clientId: string,
-  clientSecret: string,
-  redirectUri: string
-): Promise<{
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-}> {
-  const response = await fetch(GOOGLE_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      code,
-      client_id: clientId,
-      client_secret: clientSecret,
-      redirect_uri: redirectUri,
-      grant_type: 'authorization_code',
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to exchange code: ${error}`);
-  }
-
-  return response.json();
-}
-
-export async function refreshAccessToken(
-  refreshToken: string,
-  clientId: string,
-  clientSecret: string
-): Promise<{ access_token: string; expires_in: number }> {
-  const response = await fetch(GOOGLE_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      refresh_token: refreshToken,
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: 'refresh_token',
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Failed to refresh token: ${error}`);
-  }
-
-  return response.json();
-}
-
-export async function getUserEmail(accessToken: string): Promise<string> {
-  const response = await fetch(GOOGLE_USERINFO_URL, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to fetch user info');
-  }
-
-  const data = await response.json();
-  return data.email;
 }
 
 export async function autoConnectDrive(
@@ -192,48 +133,6 @@ export async function getDriveConnection(
   return data;
 }
 
-export async function saveDriveConnection(
-  userId: string,
-  organizationId: string,
-  tokens: { access_token: string; refresh_token: string; expires_in: number },
-  email: string
-): Promise<DriveConnection> {
-  const tokenExpiry = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
-
-  const { data, error } = await supabase
-    .from('drive_connections')
-    .upsert({
-      user_id: userId,
-      organization_id: organizationId,
-      connected_by: userId,
-      access_token_encrypted: tokens.access_token,
-      refresh_token_encrypted: tokens.refresh_token,
-      token_expiry: tokenExpiry,
-      email,
-      scopes: SCOPES.split(' '),
-      is_active: true,
-    }, {
-      onConflict: 'user_id',
-    })
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
-}
-
-export async function updateDriveConnection(
-  connectionId: string,
-  updates: Partial<Pick<DriveConnection, 'is_active' | 'root_folder_id'>>
-): Promise<void> {
-  const { error } = await supabase
-    .from('drive_connections')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', connectionId);
-
-  if (error) throw error;
-}
-
 export async function disconnectDrive(userId: string): Promise<void> {
   const { error: connError } = await supabase
     .from('drive_connections')
@@ -256,12 +155,7 @@ export async function getConnectionStatus(
   const connection = await getDriveConnection(userId);
 
   if (!connection || !connection.is_active) {
-    return {
-      connected: false,
-      email: null,
-      tokenExpired: false,
-      lastSyncAt: null,
-    };
+    return { connected: false, email: null, tokenExpired: false, lastSyncAt: null };
   }
 
   const expiry = new Date(connection.token_expiry);
@@ -275,166 +169,111 @@ export async function getConnectionStatus(
   };
 }
 
-export async function getValidAccessToken(
-  connection: DriveConnection,
-  clientId: string,
-  clientSecret: string
-): Promise<string> {
-  const expiry = new Date(connection.token_expiry);
-  const now = new Date();
-
-  if (expiry.getTime() - now.getTime() > 5 * 60 * 1000) {
-    return connection.access_token_encrypted;
-  }
-
-  const { access_token, expires_in } = await refreshAccessToken(
-    connection.refresh_token_encrypted,
-    clientId,
-    clientSecret
-  );
-
-  const newExpiry = new Date(Date.now() + expires_in * 1000).toISOString();
-
-  await supabase
-    .from('drive_connections')
-    .update({
-      access_token_encrypted: access_token,
-      token_expiry: newExpiry,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', connection.id);
-
-  return access_token;
-}
-
-export async function listDriveFiles(
-  accessToken: string,
+export async function listDriveFilesViaApi(
   folderId: string = 'root',
-  pageToken?: string
+  pageToken?: string,
+  driveId?: string
 ): Promise<{ files: GoogleDriveFileInfo[]; nextPageToken?: string }> {
-  const params = new URLSearchParams({
-    q: `'${folderId}' in parents and trashed = false`,
-    fields: 'nextPageToken,files(id,name,mimeType,size,owners,parents,thumbnailLink,webViewLink,iconLink,trashed,createdTime,modifiedTime)',
-    pageSize: '100',
-    orderBy: 'folder,name',
-  });
-
-  if (pageToken) {
-    params.set('pageToken', pageToken);
-  }
-
-  const response = await fetch(`${GOOGLE_DRIVE_API}/files?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to list files');
-  }
-
-  const data = await response.json();
-  return {
-    files: data.files || [],
-    nextPageToken: data.nextPageToken,
-  };
+  return callDriveApi('list', { folderId, pageToken, driveId });
 }
 
-export async function searchDriveFiles(
-  accessToken: string,
+export async function listSharedDrives(): Promise<SharedDriveInfo[]> {
+  const data = await callDriveApi('list-shared-drives');
+  return data.drives || [];
+}
+
+export async function searchDriveFilesViaApi(
   query: string,
-  mimeTypes?: string[]
+  mimeTypes?: string[],
+  driveId?: string
 ): Promise<GoogleDriveFileInfo[]> {
-  let q = `name contains '${query.replace(/'/g, "\\'")}' and trashed = false`;
-
-  if (mimeTypes && mimeTypes.length > 0) {
-    const mimeQuery = mimeTypes.map((m) => `mimeType = '${m}'`).join(' or ');
-    q = `${q} and (${mimeQuery})`;
-  }
-
-  const params = new URLSearchParams({
-    q,
-    fields: 'files(id,name,mimeType,size,owners,parents,thumbnailLink,webViewLink,iconLink,trashed,createdTime,modifiedTime)',
-    pageSize: '50',
-    orderBy: 'modifiedTime desc',
-  });
-
-  const response = await fetch(`${GOOGLE_DRIVE_API}/files?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to search files');
-  }
-
-  const data = await response.json();
+  const data = await callDriveApi('search', { query, mimeTypes, driveId });
   return data.files || [];
 }
 
-export async function getDriveFileMetadata(
-  accessToken: string,
-  fileId: string
-): Promise<GoogleDriveFileInfo> {
-  const params = new URLSearchParams({
-    fields: 'id,name,mimeType,size,owners,parents,thumbnailLink,webViewLink,iconLink,trashed,createdTime,modifiedTime',
-  });
-
-  const response = await fetch(`${GOOGLE_DRIVE_API}/files/${fileId}?${params.toString()}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error('File not found');
-    }
-    throw new Error('Failed to get file metadata');
-  }
-
-  return response.json();
-}
-
-export async function createDriveFolder(
-  accessToken: string,
+export async function createDriveFolderViaApi(
   name: string,
-  parentId: string = 'root'
+  parentId: string = 'root',
+  driveId?: string
 ): Promise<GoogleDriveFolderInfo> {
-  const response = await fetch(`${GOOGLE_DRIVE_API}/files`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      name,
-      mimeType: 'application/vnd.google-apps.folder',
-      parents: [parentId],
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to create folder');
-  }
-
-  return response.json();
+  const data = await callDriveApi('create-folder', { name, parentId, driveId });
+  return data.folder;
 }
 
-export async function deleteDriveFile(
-  accessToken: string,
-  fileId: string
+export async function deleteDriveFileViaApi(fileId: string): Promise<void> {
+  await callDriveApi('delete', { fileId });
+}
+
+export async function getDownloadUrl(fileId: string): Promise<{ url: string; accessToken: string }> {
+  return callDriveApi('get-download-url', { fileId });
+}
+
+export async function uploadFileToDrive(
+  file: File,
+  parentId: string = 'root',
+  driveId?: string
+): Promise<GoogleDriveFileInfo> {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error('No active session');
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const params = new URLSearchParams({ action: 'upload', parentId });
+  if (driveId) params.set('driveId', driveId);
+
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/drive-api?${params.toString()}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: formData,
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to upload file');
+  }
+
+  const data = await response.json();
+  return data.file;
+}
+
+export async function shareDriveFile(
+  fileId: string,
+  email: string,
+  role: string = 'reader'
 ): Promise<void> {
-  const response = await fetch(`${GOOGLE_DRIVE_API}/files/${fileId}`, {
-    method: 'DELETE',
+  await callDriveApi('share', { fileId, email, role, type: 'user' });
+}
+
+export async function getShareLink(fileId: string): Promise<string> {
+  const data = await callDriveApi('get-share-link', { fileId });
+  return data.link;
+}
+
+export async function downloadDriveFile(fileId: string, fileName: string): Promise<void> {
+  const { url, accessToken } = await getDownloadUrl(fileId);
+  const response = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 
-  if (!response.ok && response.status !== 404) {
-    throw new Error('Failed to delete file');
-  }
-}
+  if (!response.ok) throw new Error('Failed to download file');
 
-export async function getFileDownloadUrl(
-  accessToken: string,
-  fileId: string
-): Promise<string> {
-  return `${GOOGLE_DRIVE_API}/files/${fileId}?alt=media&access_token=${encodeURIComponent(accessToken)}`;
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(blobUrl);
 }
 
 export function isFolder(mimeType: string): boolean {
