@@ -100,7 +100,9 @@ Deno.serve(async (req: Request) => {
     });
 
     if (!userinfoResponse.ok) {
-      return redirectWithError("Failed to get user info");
+      const infoErr = await userinfoResponse.text();
+      console.error("Userinfo fetch failed:", infoErr);
+      return redirectWithError(`Failed to get user info: ${userinfoResponse.status}`);
     }
 
     const userinfo = await userinfoResponse.json();
@@ -123,6 +125,8 @@ Deno.serve(async (req: Request) => {
           token_expiry: tokenExpiry,
           scopes: [
             "https://www.googleapis.com/auth/drive",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "https://www.googleapis.com/auth/userinfo.profile",
           ],
           is_active: true,
           updated_at: new Date().toISOString(),
