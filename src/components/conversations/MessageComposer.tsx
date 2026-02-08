@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
-import { Send, Phone, Mail, PhoneCall, MessageCircle, ChevronDown, Bot, FileText } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Send, Phone, Mail, PhoneCall, MessageCircle, ChevronDown, Bot, FileText, Check } from 'lucide-react';
 import { calculateSMSSegments } from '../../services/channels/twilio';
 import { useAuth } from '../../contexts/AuthContext';
 import { AskAIModal } from './AskAIModal';
 import { SnippetPicker } from './SnippetPicker';
+import { createGmailDraft, updateGmailDraft, deleteGmailDraft } from '../../services/gmailApi';
 import type { MessageChannel, Contact, Conversation } from '../../types';
 
 interface MessageComposerProps {
@@ -16,6 +17,7 @@ interface MessageComposerProps {
   showSubject: boolean;
   contact?: Contact;
   conversation?: Conversation;
+  gmailConnected?: boolean;
 }
 
 export function MessageComposer({
@@ -28,6 +30,7 @@ export function MessageComposer({
   showSubject,
   contact,
   conversation,
+  gmailConnected = false,
 }: MessageComposerProps) {
   const { hasPermission, isFeatureEnabled } = useAuth();
   const [body, setBody] = useState('');
@@ -35,10 +38,14 @@ export function MessageComposer({
   const [showChannelMenu, setShowChannelMenu] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
   const [showSnippetPicker, setShowSnippetPicker] = useState(false);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [draftSaved, setDraftSaved] = useState(false);
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const canUseAI = hasPermission('ai_agents.run') && isFeatureEnabled('ai_agents');
   const canUseSnippets = hasPermission('snippets.view') && isFeatureEnabled('snippets');
+  const isGmailEmail = gmailConnected && selectedChannel === 'email';
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -47,12 +54,84 @@ export function MessageComposer({
     }
   }, [body]);
 
+  const saveDraftToGmail = useCallback(async (draftBody: string, draftSubject: string) => {
+    if (!isGmailEmail || !draftBody.trim()) return;
+    const channelConfig = availableChannels.find((c) => c.channel === 'email');
+    if (!channelConfig) return;
+
+    try {
+      if (draftId) {
+        await updateGmailDraft({
+          draftId,
+          to: channelConfig.identifier,
+          subject: draftSubject || undefined,
+          htmlBody: draftBody,
+        });
+      } else {
+        const result = await createGmailDraft({
+          to: channelConfig.identifier,
+          subject: draftSubject || undefined,
+          htmlBody: draftBody,
+        });
+        if (result?.draftId) {
+          setDraftId(result.draftId);
+        }
+      }
+      setDraftSaved(true);
+      setTimeout(() => setDraftSaved(false), 3000);
+    } catch (err) {
+      console.error('Failed to save Gmail draft:', err);
+    }
+  }, [isGmailEmail, draftId, availableChannels]);
+
+  useEffect(() => {
+    if (!isGmailEmail || !body.trim()) return;
+
+    if (draftTimerRef.current) {
+      clearTimeout(draftTimerRef.current);
+    }
+
+    draftTimerRef.current = setTimeout(() => {
+      saveDraftToGmail(body, subject);
+    }, 30000);
+
+    return () => {
+      if (draftTimerRef.current) {
+        clearTimeout(draftTimerRef.current);
+      }
+    };
+  }, [body, subject, isGmailEmail, saveDraftToGmail]);
+
+  useEffect(() => {
+    return () => {
+      if (draftTimerRef.current) {
+        clearTimeout(draftTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    setDraftId(null);
+    setDraftSaved(false);
+  }, [conversation?.id]);
+
   const handleSubmit = async () => {
     if (!body.trim() || sending || disabled) return;
 
+    if (draftTimerRef.current) {
+      clearTimeout(draftTimerRef.current);
+    }
+
     await onSend(body.trim(), showSubject ? subject.trim() : undefined);
+
+    if (draftId) {
+      deleteGmailDraft(draftId).catch(() => {});
+      setDraftId(null);
+    }
+
     setBody('');
     setSubject('');
+    setDraftSaved(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -235,8 +314,16 @@ export function MessageComposer({
       </div>
 
       {selectedChannelConfig && (
-        <div className="mt-2 text-xs text-slate-500">
-          Sending via {selectedChannel} to {selectedChannelConfig.identifier}
+        <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+          <span>
+            Sending via {isGmailEmail ? 'Gmail' : selectedChannel} to {selectedChannelConfig.identifier}
+          </span>
+          {draftSaved && isGmailEmail && (
+            <span className="flex items-center gap-1 text-emerald-400">
+              <Check size={12} />
+              Draft saved to Gmail
+            </span>
+          )}
         </div>
       )}
 

@@ -56,6 +56,51 @@ function extractEmailBody(payload: {
   return '';
 }
 
+async function refreshAccessToken(
+  supabase: ReturnType<typeof createClient>,
+  tokenData: { id: string; refresh_token: string; access_token: string; token_expiry: string }
+): Promise<string> {
+  const tokenExpiry = new Date(tokenData.token_expiry);
+  if (tokenExpiry > new Date(Date.now() + 5 * 60 * 1000)) {
+    return tokenData.access_token;
+  }
+
+  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
+
+  if (!clientId || !clientSecret) {
+    throw new Error("Missing Google OAuth credentials");
+  }
+
+  const refreshResponse = await fetch(GOOGLE_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      refresh_token: tokenData.refresh_token,
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  if (!refreshResponse.ok) {
+    throw new Error("Failed to refresh token");
+  }
+
+  const refreshData = await refreshResponse.json();
+
+  await supabase
+    .from("gmail_oauth_tokens")
+    .update({
+      access_token: refreshData.access_token,
+      token_expiry: new Date(Date.now() + refreshData.expires_in * 1000).toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", tokenData.id);
+
+  return refreshData.access_token;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -91,6 +136,12 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    await supabase
+      .from("gmail_sync_state")
+      .update({ sync_status: "syncing", error_message: null, updated_at: new Date().toISOString() })
+      .eq("organization_id", orgId)
+      .eq("user_id", userId);
+
     const { data: tokenData } = await supabase
       .from("gmail_oauth_tokens")
       .select("*")
@@ -108,65 +159,15 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    let accessToken = tokenData.access_token;
-    const tokenExpiry = new Date(tokenData.token_expiry);
+    const accessToken = await refreshAccessToken(supabase, tokenData);
 
-    if (tokenExpiry < new Date(Date.now() + 5 * 60 * 1000)) {
-      const { data: gmailConfig } = await supabase
-        .from("channel_configurations")
-        .select("config")
-        .eq("organization_id", orgId)
-        .eq("channel_type", "gmail")
-        .maybeSingle();
-
-      if (!gmailConfig?.config) {
-        throw new Error("Gmail not configured");
-      }
-
-      const config = gmailConfig.config as {
-        client_id: string;
-        client_secret: string;
-      };
-
-      const refreshResponse = await fetch(GOOGLE_TOKEN_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          refresh_token: tokenData.refresh_token,
-          client_id: config.client_id,
-          client_secret: config.client_secret,
-          grant_type: "refresh_token",
-        }),
-      });
-
-      if (!refreshResponse.ok) {
-        throw new Error("Failed to refresh token");
-      }
-
-      const refreshData = await refreshResponse.json();
-      accessToken = refreshData.access_token;
-
-      await supabase
-        .from("gmail_oauth_tokens")
-        .update({
-          access_token: accessToken,
-          token_expiry: new Date(Date.now() + refreshData.expires_in * 1000).toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", tokenData.id);
-    }
-
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const query = `after:${Math.floor(oneDayAgo.getTime() / 1000)} in:inbox`;
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    const query = `after:${Math.floor(threeDaysAgo.getTime() / 1000)}`;
 
     const listResponse = await fetch(
-      `${GMAIL_API_URL}/users/me/messages?q=${encodeURIComponent(query)}&maxResults=50`,
+      `${GMAIL_API_URL}/users/me/messages?q=${encodeURIComponent(query)}&maxResults=100`,
       {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+        headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
 
@@ -195,9 +196,7 @@ Deno.serve(async (req: Request) => {
       const msgResponse = await fetch(
         `${GMAIL_API_URL}/users/me/messages/${ref.id}`,
         {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
+          headers: { Authorization: `Bearer ${accessToken}` },
         }
       );
 
@@ -286,6 +285,7 @@ Deno.serve(async (req: Request) => {
           to_email: toEmail,
           thread_id: msgData.threadId,
           gmail_message_id: ref.id,
+          sent_via: "gmail",
         },
         status: "delivered",
         external_id: ref.id,
@@ -320,6 +320,25 @@ Deno.serve(async (req: Request) => {
       processedCount++;
     }
 
+    const now = new Date().toISOString();
+    await supabase
+      .from("gmail_sync_state")
+      .update({
+        sync_status: "idle",
+        last_full_sync_at: now,
+        last_incremental_sync_at: now,
+        error_message: null,
+        updated_at: now,
+      })
+      .eq("organization_id", orgId)
+      .eq("user_id", userId);
+
+    await supabase
+      .from("user_connected_accounts")
+      .update({ last_synced_at: now })
+      .eq("user_id", userId)
+      .eq("provider", "google_gmail");
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -333,6 +352,28 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error) {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (supabaseUrl && serviceRoleKey) {
+      try {
+        const body = await req.clone().json().catch(() => ({}));
+        const supabase = createClient(supabaseUrl, serviceRoleKey, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        });
+        await supabase
+          .from("gmail_sync_state")
+          .update({
+            sync_status: "error",
+            error_message: error.message,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("organization_id", body.org_id)
+          .eq("user_id", body.user_id);
+      } catch {
+        // best-effort error logging
+      }
+    }
+
     console.error("Gmail sync error:", error);
     return new Response(
       JSON.stringify({ error: error.message }),

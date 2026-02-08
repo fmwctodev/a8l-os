@@ -77,6 +77,7 @@ export interface User {
   last_sign_in_at: string | null;
   google_login_connected: boolean;
   google_drive_connected: boolean;
+  gmail_connected: boolean;
   created_at: string;
   updated_at: string;
   role?: Role;

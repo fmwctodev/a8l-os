@@ -6,6 +6,7 @@ import { ConversationHeader } from './ConversationHeader';
 import { getRecentMessages, createMessage } from '../../services/messages';
 import { getInboxEvents } from '../../services/inboxEvents';
 import { getContactChannels } from '../../services/contactLinking';
+import { sendGmailEmail, replyToGmailThread } from '../../services/gmailApi';
 import type { Conversation, Message, InboxEvent, MessageChannel, Contact } from '../../types';
 
 interface MessageThreadProps {
@@ -73,6 +74,22 @@ export function MessageThread({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const getThreadInfo = (): { threadId?: string; inReplyTo?: string; references?: string; lastSubject?: string } => {
+    const emailMessages = messages.filter(
+      (m) => m.channel === 'email' && (m.metadata as Record<string, unknown>)?.gmail_message_id
+    );
+    if (emailMessages.length === 0) return {};
+
+    const lastEmail = emailMessages[emailMessages.length - 1];
+    const meta = lastEmail.metadata as Record<string, unknown> | undefined;
+    return {
+      threadId: meta?.thread_id as string | undefined,
+      inReplyTo: meta?.gmail_message_id as string | undefined,
+      references: meta?.gmail_message_id as string | undefined,
+      lastSubject: lastEmail.subject || undefined,
+    };
+  };
+
   const handleSendMessage = async (body: string, subject?: string) => {
     if (!user?.organization_id || !conversation.contact) return;
 
@@ -80,26 +97,100 @@ export function MessageThread({
       setSending(true);
 
       const channelConfig = availableChannels.find((c) => c.channel === selectedChannel);
-      const metadata: Record<string, unknown> = {};
+      const isGmailConnected = user.gmail_connected;
+      const isEmailChannel = selectedChannel === 'email';
 
-      if (selectedChannel === 'sms' && channelConfig) {
-        metadata.to_number = channelConfig.identifier;
-      } else if (selectedChannel === 'email' && channelConfig) {
-        metadata.to_email = channelConfig.identifier;
+      if (isEmailChannel && isGmailConnected && channelConfig) {
+        const threadInfo = getThreadInfo();
+
+        const optimisticMessage: Message = {
+          id: `temp-${Date.now()}`,
+          organization_id: user.organization_id,
+          conversation_id: conversation.id,
+          contact_id: conversation.contact_id,
+          channel: 'email',
+          direction: 'outbound',
+          body,
+          subject: subject || threadInfo.lastSubject || '',
+          metadata: { to_email: channelConfig.identifier, sent_via: 'gmail' },
+          status: 'pending',
+          external_id: null,
+          sent_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          hidden_at: null,
+          hidden_by_user_id: null,
+        };
+
+        setMessages((prev) => [...prev, optimisticMessage]);
+
+        try {
+          const emailSubject = subject || threadInfo.lastSubject || 'No Subject';
+
+          if (threadInfo.threadId) {
+            await replyToGmailThread({
+              to: channelConfig.identifier,
+              subject: emailSubject.startsWith('Re:') ? emailSubject : `Re: ${emailSubject}`,
+              htmlBody: body,
+              threadId: threadInfo.threadId,
+              inReplyTo: threadInfo.inReplyTo,
+              references: threadInfo.references,
+              conversationId: conversation.id,
+              contactId: conversation.contact_id,
+            });
+          } else {
+            await sendGmailEmail({
+              to: channelConfig.identifier,
+              subject: emailSubject,
+              htmlBody: body,
+              conversationId: conversation.id,
+              contactId: conversation.contact_id,
+            });
+          }
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === optimisticMessage.id ? { ...m, status: 'delivered' } : m
+            )
+          );
+        } catch (gmailError) {
+          console.error('Gmail send failed, falling back:', gmailError);
+          setMessages((prev) => prev.filter((m) => m.id !== optimisticMessage.id));
+
+          const metadata: Record<string, unknown> = { to_email: channelConfig.identifier };
+          const newMessage = await createMessage(
+            user.organization_id,
+            conversation.id,
+            conversation.contact_id,
+            selectedChannel,
+            'outbound',
+            body,
+            metadata,
+            subject
+          );
+          setMessages((prev) => [...prev, newMessage]);
+        }
+      } else {
+        const metadata: Record<string, unknown> = {};
+        if (selectedChannel === 'sms' && channelConfig) {
+          metadata.to_number = channelConfig.identifier;
+        } else if (selectedChannel === 'email' && channelConfig) {
+          metadata.to_email = channelConfig.identifier;
+        }
+
+        const newMessage = await createMessage(
+          user.organization_id,
+          conversation.id,
+          conversation.contact_id,
+          selectedChannel,
+          'outbound',
+          body,
+          metadata,
+          subject
+        );
+        setMessages((prev) => [...prev, newMessage]);
       }
 
-      const newMessage = await createMessage(
-        user.organization_id,
-        conversation.id,
-        conversation.contact_id,
-        selectedChannel,
-        'outbound',
-        body,
-        metadata,
-        subject
-      );
-
-      setMessages((prev) => [...prev, newMessage]);
       onConversationUpdate();
     } catch (error) {
       console.error('Failed to send message:', error);
@@ -160,6 +251,7 @@ export function MessageThread({
         showSubject={selectedChannel === 'email'}
         contact={conversation.contact as Contact}
         conversation={conversation}
+        gmailConnected={user?.gmail_connected || false}
       />
     </div>
   );
