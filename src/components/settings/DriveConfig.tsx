@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { HardDrive, Check, X, RefreshCw, AlertCircle, Unlink } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getConnectionStatus, disconnectDrive } from '../../services/googleDrive';
-import { signInWithGoogle } from '../../services/auth';
+import { getConnectionStatus, disconnectDrive, getDriveOAuthUrl } from '../../services/googleDrive';
 import type { DriveConnectionStatus } from '../../types';
 
 export default function DriveConfig() {
@@ -31,14 +30,29 @@ export default function DriveConfig() {
     }
   };
 
-  const handleConnect = async () => {
+  const handleConnect = () => {
     setConnecting(true);
-    try {
-      await signInWithGoogle();
-    } catch (err) {
-      console.error('Failed to initiate Google sign-in:', err);
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+    if (!clientId || !supabaseUrl) {
+      alert('Google Drive integration is not configured. Please contact your administrator.');
       setConnecting(false);
+      return;
     }
+
+    const oauthRedirectUri = `${supabaseUrl}/functions/v1/drive-oauth-callback`;
+    const appRedirectUri = `${window.location.origin}/media`;
+
+    const state = btoa(
+      JSON.stringify({
+        user_id: userId,
+        redirect_uri: appRedirectUri,
+        oauth_redirect_uri: oauthRedirectUri,
+      })
+    );
+
+    window.location.href = getDriveOAuthUrl(clientId, oauthRedirectUri, state);
   };
 
   const handleDisconnect = async () => {

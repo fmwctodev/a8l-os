@@ -12,9 +12,8 @@ import {
   Unplug,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getConnectionStatus, disconnectDrive } from '../../services/googleDrive';
+import { getConnectionStatus, disconnectDrive, getDriveOAuthUrl } from '../../services/googleDrive';
 import { getDriveFiles, getDriveFolders, getFolderPath } from '../../services/driveFiles';
-import { signInWithGoogle } from '../../services/auth';
 import type { DriveFile, DriveFolder, DriveConnectionStatus } from '../../types';
 import FolderTree from '../../components/media/FolderTree';
 import FileGrid from '../../components/media/FileGrid';
@@ -102,14 +101,29 @@ export function MediaStorage() {
     }
   };
 
-  const handleConnect = async () => {
+  const handleConnect = () => {
     setConnecting(true);
-    try {
-      await signInWithGoogle();
-    } catch (err) {
-      console.error('Failed to initiate Google sign-in:', err);
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+    if (!clientId || !supabaseUrl) {
+      alert('Google Drive integration is not configured. Please contact your administrator.');
       setConnecting(false);
+      return;
     }
+
+    const oauthRedirectUri = `${supabaseUrl}/functions/v1/drive-oauth-callback`;
+    const appRedirectUri = `${window.location.origin}/media`;
+
+    const state = btoa(
+      JSON.stringify({
+        user_id: userId,
+        redirect_uri: appRedirectUri,
+        oauth_redirect_uri: oauthRedirectUri,
+      })
+    );
+
+    window.location.href = getDriveOAuthUrl(clientId, oauthRedirectUri, state);
   };
 
   const handleDisconnect = async () => {
@@ -200,8 +214,6 @@ export function MediaStorage() {
       <ConnectDrivePrompt
         onConnect={handleConnect}
         loading={connecting}
-        googleLoginConnected={user?.google_login_connected}
-        userEmail={user?.email}
       />
     );
   }
