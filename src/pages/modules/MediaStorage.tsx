@@ -12,7 +12,7 @@ import {
   Unplug,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getConnectionStatus, disconnectDrive, getDriveOAuthUrl } from '../../services/googleDrive';
+import { getConnectionStatus, disconnectDrive, initiateDriveOAuth } from '../../services/googleDrive';
 import { getDriveFiles, getDriveFolders, getFolderPath } from '../../services/driveFiles';
 import type { DriveFile, DriveFolder, DriveConnectionStatus } from '../../types';
 import FolderTree from '../../components/media/FolderTree';
@@ -101,29 +101,16 @@ export function MediaStorage() {
     }
   };
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     setConnecting(true);
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-
-    if (!clientId || !supabaseUrl) {
-      alert('Google Drive integration is not configured. Please contact your administrator.');
+    try {
+      const authUrl = await initiateDriveOAuth(`${window.location.origin}/media`);
+      window.location.href = authUrl;
+    } catch (err) {
+      console.error('Failed to start Drive OAuth:', err);
+      alert((err as Error).message || 'Failed to connect Google Drive. Please try again.');
       setConnecting(false);
-      return;
     }
-
-    const oauthRedirectUri = `${supabaseUrl}/functions/v1/drive-oauth-callback`;
-    const appRedirectUri = `${window.location.origin}/media`;
-
-    const state = btoa(
-      JSON.stringify({
-        user_id: userId,
-        redirect_uri: appRedirectUri,
-        oauth_redirect_uri: oauthRedirectUri,
-      })
-    );
-
-    window.location.href = getDriveOAuthUrl(clientId, oauthRedirectUri, state);
   };
 
   const handleDisconnect = async () => {

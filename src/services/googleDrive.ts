@@ -50,6 +50,36 @@ export function getDriveOAuthUrl(
   return `${GOOGLE_OAUTH_URL}?${params.toString()}`;
 }
 
+export async function initiateDriveOAuth(redirectUri?: string): Promise<string> {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session) throw new Error('No active session');
+
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/drive-oauth-start`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        redirect_uri: redirectUri || `${window.location.origin}/media`,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to start Google Drive OAuth');
+  }
+
+  const data = await response.json();
+  return data.authUrl;
+}
+
 export async function exchangeCodeForTokens(
   code: string,
   clientId: string,
