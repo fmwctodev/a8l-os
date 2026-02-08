@@ -82,7 +82,8 @@ Deno.serve(async (req: Request) => {
     if (!tokenResponse.ok) {
       const tokenError = await tokenResponse.json();
       console.error("Token exchange failed:", tokenError);
-      return redirectWithError("Failed to exchange authorization code");
+      const detail = tokenError?.error_description || tokenError?.error || "Unknown error";
+      return redirectWithError(`Failed to exchange authorization code: ${detail}`);
     }
 
     const tokens = await tokenResponse.json();
