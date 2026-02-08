@@ -75,6 +75,8 @@ export interface User {
   disabled_at: string | null;
   disabled_by: string | null;
   last_sign_in_at: string | null;
+  google_login_connected: boolean;
+  google_drive_connected: boolean;
   created_at: string;
   updated_at: string;
   role?: Role;
@@ -2818,6 +2820,8 @@ export type FileAttachmentEntityType = 'contacts' | 'opportunities' | 'conversat
 export interface DriveConnection {
   id: string;
   organization_id: string;
+  user_id: string;
+  connected_by: string | null;
   email: string;
   access_token_encrypted: string;
   refresh_token_encrypted: string;
@@ -2832,6 +2836,7 @@ export interface DriveConnection {
 export interface DriveFolder {
   id: string;
   organization_id: string;
+  user_id: string;
   drive_folder_id: string;
   name: string;
   parent_drive_folder_id: string | null;
@@ -2844,6 +2849,7 @@ export interface DriveFolder {
 export interface DriveFile {
   id: string;
   organization_id: string;
+  user_id: string;
   drive_file_id: string;
   name: string;
   mime_type: string;

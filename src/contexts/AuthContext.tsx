@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import type { UserWithDetails, PermissionKey, FeatureFlag } from '../types';
 import * as authService from '../services/auth';
 import { getFeatureFlags } from '../services/featureFlags';
+import { autoConnectDrive } from '../services/googleDrive';
 
 interface AuthContextValue {
   session: Session | null;
@@ -27,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [driveAutoConnectAttempted, setDriveAutoConnectAttempted] = useState(false);
 
   const loadUser = useCallback(async () => {
     try {
@@ -73,10 +75,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(null);
         setUser(null);
         setFeatureFlags([]);
+        setDriveAutoConnectAttempted(false);
         return;
       }
 
       setSession(newSession);
+
+      if (event === 'SIGNED_IN' && newSession?.provider_token && newSession?.provider_refresh_token) {
+        const providerToken = newSession.provider_token;
+        const providerRefreshToken = newSession.provider_refresh_token;
+        setDriveAutoConnectAttempted(true);
+        (async () => {
+          try {
+            await autoConnectDrive(providerToken, providerRefreshToken);
+          } catch (err) {
+            console.error('Drive auto-connect failed:', err);
+          }
+          if (isMounted) {
+            setIsLoading(true);
+            loadUser().finally(() => {
+              if (isMounted) setIsLoading(false);
+            });
+          }
+        })();
+        return;
+      }
+
       if (newSession && isInitialized) {
         setIsLoading(true);
         loadUser().finally(() => {

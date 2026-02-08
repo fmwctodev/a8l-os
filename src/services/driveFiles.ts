@@ -3,13 +3,13 @@ import type { DriveFile, DriveFolder, DriveFilters, DriveStats } from '../types'
 import type { GoogleDriveFileInfo } from './googleDrive';
 
 export async function getDriveFolders(
-  organizationId: string,
+  userId: string,
   parentId?: string | null
 ): Promise<DriveFolder[]> {
   let query = supabase
     .from('drive_folders')
     .select('*')
-    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
     .order('name');
 
   if (parentId === null || parentId === undefined) {
@@ -26,13 +26,13 @@ export async function getDriveFolders(
 }
 
 export async function getDriveFolderById(
-  organizationId: string,
+  userId: string,
   driveFolderId: string
 ): Promise<DriveFolder | null> {
   const { data, error } = await supabase
     .from('drive_folders')
     .select('*')
-    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
     .eq('drive_folder_id', driveFolderId)
     .maybeSingle();
 
@@ -41,13 +41,13 @@ export async function getDriveFolderById(
 }
 
 export async function getDriveFiles(
-  organizationId: string,
+  userId: string,
   filters: DriveFilters = {}
 ): Promise<DriveFile[]> {
   let query = supabase
     .from('drive_files')
     .select('*')
-    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
     .order('name');
 
   if (filters.folderId) {
@@ -87,13 +87,13 @@ export async function getDriveFileById(
 }
 
 export async function getDriveFileByDriveId(
-  organizationId: string,
+  userId: string,
   driveFileId: string
 ): Promise<DriveFile | null> {
   const { data, error } = await supabase
     .from('drive_files')
     .select('*')
-    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
     .eq('drive_file_id', driveFileId)
     .maybeSingle();
 
@@ -102,6 +102,7 @@ export async function getDriveFileByDriveId(
 }
 
 export async function upsertDriveFolder(
+  userId: string,
   organizationId: string,
   folder: {
     drive_folder_id: string;
@@ -113,6 +114,7 @@ export async function upsertDriveFolder(
   const { data, error } = await supabase
     .from('drive_folders')
     .upsert({
+      user_id: userId,
       organization_id: organizationId,
       drive_folder_id: folder.drive_folder_id,
       name: folder.name,
@@ -120,7 +122,7 @@ export async function upsertDriveFolder(
       path: folder.path,
       last_synced_at: new Date().toISOString(),
     }, {
-      onConflict: 'organization_id,drive_folder_id',
+      onConflict: 'user_id,drive_folder_id',
     })
     .select()
     .single();
@@ -130,6 +132,7 @@ export async function upsertDriveFolder(
 }
 
 export async function upsertDriveFile(
+  userId: string,
   organizationId: string,
   file: GoogleDriveFileInfo,
   parentFolderId?: string | null
@@ -137,6 +140,7 @@ export async function upsertDriveFile(
   const { data, error } = await supabase
     .from('drive_files')
     .upsert({
+      user_id: userId,
       organization_id: organizationId,
       drive_file_id: file.id,
       name: file.name,
@@ -151,7 +155,7 @@ export async function upsertDriveFile(
       access_revoked: false,
       last_synced_at: new Date().toISOString(),
     }, {
-      onConflict: 'organization_id,drive_file_id',
+      onConflict: 'user_id,drive_file_id',
     })
     .select()
     .single();
@@ -214,20 +218,20 @@ export async function deleteDriveFolderRecord(folderId: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function getDriveStats(organizationId: string): Promise<DriveStats> {
+export async function getDriveStats(userId: string): Promise<DriveStats> {
   const [filesResult, foldersResult, attachmentsResult] = await Promise.all([
     supabase
       .from('drive_files')
       .select('is_deleted,access_revoked', { count: 'exact' })
-      .eq('organization_id', organizationId),
+      .eq('user_id', userId),
     supabase
       .from('drive_folders')
       .select('id', { count: 'exact' })
-      .eq('organization_id', organizationId),
+      .eq('user_id', userId),
     supabase
       .from('file_attachments')
       .select('id', { count: 'exact' })
-      .eq('organization_id', organizationId),
+      .eq('attached_by', userId),
   ]);
 
   const files = filesResult.data || [];
@@ -246,14 +250,14 @@ export async function getDriveStats(organizationId: string): Promise<DriveStats>
 }
 
 export async function getFolderPath(
-  organizationId: string,
+  userId: string,
   driveFolderId: string
 ): Promise<DriveFolder[]> {
   const path: DriveFolder[] = [];
   let currentId: string | null = driveFolderId;
 
   while (currentId && currentId !== 'root') {
-    const folder = await getDriveFolderById(organizationId, currentId);
+    const folder = await getDriveFolderById(userId, currentId);
     if (!folder) break;
     path.unshift(folder);
     currentId = folder.parent_drive_folder_id;

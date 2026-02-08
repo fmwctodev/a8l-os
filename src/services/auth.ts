@@ -59,6 +59,11 @@ export async function signInWithGoogle() {
     provider: 'google',
     options: {
       redirectTo: window.location.origin,
+      scopes: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly',
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      },
     },
   });
   if (error) throw error;

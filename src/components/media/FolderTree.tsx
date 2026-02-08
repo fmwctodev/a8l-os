@@ -4,7 +4,7 @@ import type { DriveFolder } from '../../types';
 import { getDriveFolders } from '../../services/driveFiles';
 
 interface FolderTreeProps {
-  organizationId: string;
+  userId: string;
   selectedFolderId: string | null;
   onSelectFolder: (folderId: string | null, folderName: string) => void;
 }
@@ -14,7 +14,7 @@ interface FolderNodeProps {
   level: number;
   selectedFolderId: string | null;
   onSelectFolder: (folderId: string | null, folderName: string) => void;
-  organizationId: string;
+  userId: string;
 }
 
 function FolderNode({
@@ -22,7 +22,7 @@ function FolderNode({
   level,
   selectedFolderId,
   onSelectFolder,
-  organizationId,
+  userId,
 }: FolderNodeProps) {
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<DriveFolder[]>([]);
@@ -36,7 +36,7 @@ function FolderNode({
     if (hasLoaded) return;
     setLoading(true);
     try {
-      const folders = await getDriveFolders(organizationId, folder.drive_folder_id);
+      const folders = await getDriveFolders(userId, folder.drive_folder_id);
       setChildren(folders);
       setHasLoaded(true);
     } catch (err) {
@@ -99,7 +99,7 @@ function FolderNode({
               level={level + 1}
               selectedFolderId={selectedFolderId}
               onSelectFolder={onSelectFolder}
-              organizationId={organizationId}
+              userId={userId}
             />
           ))}
         </div>
@@ -109,7 +109,7 @@ function FolderNode({
 }
 
 export default function FolderTree({
-  organizationId,
+  userId,
   selectedFolderId,
   onSelectFolder,
 }: FolderTreeProps) {
@@ -118,17 +118,18 @@ export default function FolderTree({
 
   useEffect(() => {
     loadRootFolders();
-  }, [organizationId]);
+  }, [userId]);
 
   const loadRootFolders = async () => {
     setLoading(true);
     try {
-      const folders = await getDriveFolders(organizationId, null);
+      const folders = await getDriveFolders(userId, null);
       if (folders.length === 0) {
         setRootFolders([
           {
             id: 'root',
-            organization_id: organizationId,
+            organization_id: '',
+            user_id: userId,
             drive_folder_id: 'root',
             name: 'My Drive',
             parent_drive_folder_id: null,

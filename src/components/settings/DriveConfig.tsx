@@ -2,26 +2,27 @@ import { useState, useEffect } from 'react';
 import { HardDrive, Check, X, RefreshCw, AlertCircle, Unlink } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getConnectionStatus, disconnectDrive } from '../../services/googleDrive';
+import { signInWithGoogle } from '../../services/auth';
 import type { DriveConnectionStatus } from '../../types';
 
 export default function DriveConfig() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [status, setStatus] = useState<DriveConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [disconnecting, setDisconnecting] = useState(false);
   const [connecting, setConnecting] = useState(false);
 
-  const organizationId = user?.organization_id || '';
+  const userId = user?.id || '';
 
   useEffect(() => {
     loadStatus();
-  }, [organizationId]);
+  }, [userId]);
 
   const loadStatus = async () => {
-    if (!organizationId) return;
+    if (!userId) return;
     setLoading(true);
     try {
-      const data = await getConnectionStatus(organizationId);
+      const data = await getConnectionStatus(userId);
       setStatus(data);
     } catch (err) {
       console.error('Failed to load Drive status:', err);
@@ -32,46 +33,12 @@ export default function DriveConfig() {
 
   const handleConnect = async () => {
     setConnecting(true);
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    const clientSecret = import.meta.env.VITE_GOOGLE_CLIENT_SECRET;
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-
-    if (!clientId || !supabaseUrl) {
-      alert('Google Drive integration is not configured. Please contact your administrator.');
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      console.error('Failed to initiate Google sign-in:', err);
       setConnecting(false);
-      return;
     }
-
-    const oauthRedirectUri = `${supabaseUrl}/functions/v1/drive-oauth-callback`;
-    const appRedirectUri = window.location.href.split('?')[0];
-
-    const state = btoa(
-      JSON.stringify({
-        org_id: organizationId,
-        user_id: user?.id,
-        redirect_uri: appRedirectUri,
-        client_id: clientId,
-        client_secret: clientSecret,
-        oauth_redirect_uri: oauthRedirectUri,
-      })
-    );
-
-    const scopes = [
-      'https://www.googleapis.com/auth/drive.file',
-      'https://www.googleapis.com/auth/drive.metadata.readonly',
-    ].join(' ');
-
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: oauthRedirectUri,
-      response_type: 'code',
-      scope: scopes,
-      access_type: 'offline',
-      prompt: 'consent',
-      state,
-    });
-
-    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   };
 
   const handleDisconnect = async () => {
@@ -81,7 +48,8 @@ export default function DriveConfig() {
 
     setDisconnecting(true);
     try {
-      await disconnectDrive(organizationId);
+      await disconnectDrive(userId);
+      await refreshUser();
       await loadStatus();
     } catch (err) {
       console.error('Failed to disconnect:', err);

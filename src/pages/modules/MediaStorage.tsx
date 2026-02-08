@@ -9,10 +9,12 @@ import {
   HardDrive,
   AlertCircle,
   X,
+  Unplug,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getConnectionStatus } from '../../services/googleDrive';
+import { getConnectionStatus, disconnectDrive } from '../../services/googleDrive';
 import { getDriveFiles, getDriveFolders, getFolderPath } from '../../services/driveFiles';
+import { signInWithGoogle } from '../../services/auth';
 import type { DriveFile, DriveFolder, DriveConnectionStatus } from '../../types';
 import FolderTree from '../../components/media/FolderTree';
 import FileGrid from '../../components/media/FileGrid';
@@ -42,10 +44,11 @@ const FILE_TYPE_FILTERS: Record<FileTypeFilter, string[]> = {
 };
 
 export function MediaStorage() {
-  const { user } = useAuth();
+  const { user, refreshUser, isSuperAdmin } = useAuth();
   const [connectionStatus, setConnectionStatus] = useState<DriveConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
@@ -62,11 +65,23 @@ export function MediaStorage() {
   const [showUnavailable, setShowUnavailable] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
 
-  const organizationId = user?.organization_id || '';
+  const userId = user?.id || '';
 
   useEffect(() => {
     checkConnection();
-  }, [organizationId]);
+  }, [userId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('drive_connected') === 'true') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('drive_connected');
+      url.searchParams.delete('email');
+      window.history.replaceState({}, '', url.toString());
+      refreshUser();
+      checkConnection();
+    }
+  }, []);
 
   useEffect(() => {
     if (connectionStatus?.connected) {
@@ -75,10 +90,10 @@ export function MediaStorage() {
   }, [selectedFolderId, connectionStatus?.connected]);
 
   const checkConnection = async () => {
-    if (!organizationId) return;
+    if (!userId) return;
     setLoading(true);
     try {
-      const status = await getConnectionStatus(organizationId);
+      const status = await getConnectionStatus(userId);
       setConnectionStatus(status);
     } catch (err) {
       console.error('Failed to check connection:', err);
@@ -89,66 +104,52 @@ export function MediaStorage() {
 
   const handleConnect = async () => {
     setConnecting(true);
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    const clientSecret = import.meta.env.VITE_GOOGLE_CLIENT_SECRET;
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-
-    if (!clientId || !supabaseUrl) {
-      alert('Google Drive integration is not configured. Please contact your administrator.');
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      console.error('Failed to initiate Google sign-in:', err);
       setConnecting(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!confirm('Are you sure you want to disconnect Google Drive? Your files will remain in Google Drive but will no longer be accessible from the CRM.')) {
       return;
     }
-
-    const oauthRedirectUri = `${supabaseUrl}/functions/v1/drive-oauth-callback`;
-    const appRedirectUri = window.location.href.split('?')[0];
-
-    const state = btoa(
-      JSON.stringify({
-        org_id: organizationId,
-        user_id: user?.id,
-        redirect_uri: appRedirectUri,
-        client_id: clientId,
-        client_secret: clientSecret,
-        oauth_redirect_uri: oauthRedirectUri,
-      })
-    );
-
-    const scopes = [
-      'https://www.googleapis.com/auth/drive.file',
-      'https://www.googleapis.com/auth/drive.metadata.readonly',
-    ].join(' ');
-
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: oauthRedirectUri,
-      response_type: 'code',
-      scope: scopes,
-      access_type: 'offline',
-      prompt: 'consent',
-      state,
-    });
-
-    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+    setDisconnecting(true);
+    try {
+      await disconnectDrive(userId);
+      await refreshUser();
+      setConnectionStatus(null);
+      setFiles([]);
+      setFolders([]);
+      setSelectedFile(null);
+      await checkConnection();
+    } catch (err) {
+      console.error('Failed to disconnect Drive:', err);
+    } finally {
+      setDisconnecting(false);
+    }
   };
 
   const loadFilesAndFolders = async () => {
     setLoadingFiles(true);
     try {
       const [filesData, foldersData] = await Promise.all([
-        getDriveFiles(organizationId, {
+        getDriveFiles(userId, {
           folderId: selectedFolderId,
           showDeleted: false,
           showUnavailable,
         }),
         selectedFolderId
-          ? getDriveFolders(organizationId, selectedFolderId)
+          ? getDriveFolders(userId, selectedFolderId)
           : [],
       ]);
       setFiles(filesData);
       setFolders(foldersData);
 
       if (selectedFolderId && selectedFolderId !== 'root') {
-        const path = await getFolderPath(organizationId, selectedFolderId);
+        const path = await getFolderPath(userId, selectedFolderId);
         setFolderPath(path);
       } else {
         setFolderPath([]);
@@ -195,7 +196,14 @@ export function MediaStorage() {
   }
 
   if (!connectionStatus?.connected) {
-    return <ConnectDrivePrompt onConnect={handleConnect} loading={connecting} />;
+    return (
+      <ConnectDrivePrompt
+        onConnect={handleConnect}
+        loading={connecting}
+        googleLoginConnected={user?.google_login_connected}
+        userEmail={user?.email}
+      />
+    );
   }
 
   return (
@@ -223,13 +231,22 @@ export function MediaStorage() {
           >
             <RefreshCw className={`w-5 h-5 text-gray-500 ${loadingFiles ? 'animate-spin' : ''}`} />
           </button>
+          <button
+            onClick={handleDisconnect}
+            disabled={disconnecting}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
+            title="Disconnect Google Drive"
+          >
+            <Unplug className="w-4 h-4" />
+            {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+          </button>
         </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
         <div className="w-64 border-r border-gray-200 bg-gray-50 overflow-y-auto">
           <FolderTree
-            organizationId={organizationId}
+            userId={userId}
             selectedFolderId={selectedFolderId}
             onSelectFolder={handleSelectFolder}
           />

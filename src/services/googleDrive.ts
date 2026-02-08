@@ -117,13 +117,45 @@ export async function getUserEmail(accessToken: string): Promise<string> {
   return data.email;
 }
 
+export async function autoConnectDrive(
+  providerToken: string,
+  providerRefreshToken: string
+): Promise<{ connected: boolean; email?: string }> {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session) throw new Error('No active session');
+
+  const response = await fetch(
+    `${supabaseUrl}/functions/v1/drive-auto-connect`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        provider_token: providerToken,
+        provider_refresh_token: providerRefreshToken,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to auto-connect Drive');
+  }
+
+  return response.json();
+}
+
 export async function getDriveConnection(
-  organizationId: string
+  userId: string
 ): Promise<DriveConnection | null> {
   const { data, error } = await supabase
     .from('drive_connections')
     .select('*')
-    .eq('organization_id', organizationId)
+    .eq('user_id', userId)
     .maybeSingle();
 
   if (error) throw error;
@@ -131,6 +163,7 @@ export async function getDriveConnection(
 }
 
 export async function saveDriveConnection(
+  userId: string,
   organizationId: string,
   tokens: { access_token: string; refresh_token: string; expires_in: number },
   email: string
@@ -140,13 +173,17 @@ export async function saveDriveConnection(
   const { data, error } = await supabase
     .from('drive_connections')
     .upsert({
+      user_id: userId,
       organization_id: organizationId,
+      connected_by: userId,
       access_token_encrypted: tokens.access_token,
       refresh_token_encrypted: tokens.refresh_token,
       token_expiry: tokenExpiry,
       email,
       scopes: SCOPES.split(' '),
       is_active: true,
+    }, {
+      onConflict: 'user_id',
     })
     .select()
     .single();
@@ -167,19 +204,26 @@ export async function updateDriveConnection(
   if (error) throw error;
 }
 
-export async function disconnectDrive(organizationId: string): Promise<void> {
-  const { error } = await supabase
+export async function disconnectDrive(userId: string): Promise<void> {
+  const { error: connError } = await supabase
     .from('drive_connections')
     .update({ is_active: false, updated_at: new Date().toISOString() })
-    .eq('organization_id', organizationId);
+    .eq('user_id', userId);
 
-  if (error) throw error;
+  if (connError) throw connError;
+
+  const { error: flagError } = await supabase
+    .from('users')
+    .update({ google_drive_connected: false, updated_at: new Date().toISOString() })
+    .eq('id', userId);
+
+  if (flagError) throw flagError;
 }
 
 export async function getConnectionStatus(
-  organizationId: string
+  userId: string
 ): Promise<DriveConnectionStatus> {
-  const connection = await getDriveConnection(organizationId);
+  const connection = await getDriveConnection(userId);
 
   if (!connection || !connection.is_active) {
     return {

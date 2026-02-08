@@ -4,7 +4,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -12,25 +13,21 @@ const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+    const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
 
-    if (!supabaseUrl || !serviceRoleKey) {
+    if (!supabaseUrl || !serviceRoleKey || !clientId || !clientSecret) {
       throw new Error("Missing environment variables");
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
+      auth: { autoRefreshToken: false, persistSession: false },
     });
 
     const url = new URL(req.url);
@@ -47,11 +44,8 @@ Deno.serve(async (req: Request) => {
     }
 
     let stateData: {
-      org_id: string;
       user_id: string;
       redirect_uri: string;
-      client_id: string;
-      client_secret: string;
       oauth_redirect_uri: string;
     };
     try {
@@ -60,20 +54,22 @@ Deno.serve(async (req: Request) => {
       return redirectWithError("Invalid state parameter");
     }
 
-    const {
-      org_id: orgId,
-      user_id: userId,
-      redirect_uri: appRedirectUri,
-      client_id: clientId,
-      client_secret: clientSecret,
-      oauth_redirect_uri: oauthRedirectUri,
-    } = stateData;
+    const { user_id: userId, redirect_uri: appRedirectUri, oauth_redirect_uri: oauthRedirectUri } =
+      stateData;
+
+    const { data: userData } = await supabase
+      .from("users")
+      .select("organization_id")
+      .eq("id", userId)
+      .single();
+
+    if (!userData) {
+      return redirectWithError("User not found");
+    }
 
     const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         code,
         client_id: clientId,
@@ -93,13 +89,13 @@ Deno.serve(async (req: Request) => {
     const { access_token, refresh_token, expires_in } = tokens;
 
     if (!refresh_token) {
-      return redirectWithError("No refresh token received. Please revoke access and try again.");
+      return redirectWithError(
+        "No refresh token received. Please revoke access and try again."
+      );
     }
 
     const userinfoResponse = await fetch(GOOGLE_USERINFO_URL, {
-      headers: {
-        Authorization: `Bearer ${access_token}`,
-      },
+      headers: { Authorization: `Bearer ${access_token}` },
     });
 
     if (!userinfoResponse.ok) {
@@ -109,36 +105,49 @@ Deno.serve(async (req: Request) => {
     const userinfo = await userinfoResponse.json();
     const email = userinfo.email;
 
-    const tokenExpiry = new Date(Date.now() + expires_in * 1000).toISOString();
+    const tokenExpiry = new Date(
+      Date.now() + expires_in * 1000
+    ).toISOString();
 
     const { error: saveError } = await supabase
       .from("drive_connections")
-      .upsert({
-        organization_id: orgId,
-        email,
-        access_token_encrypted: access_token,
-        refresh_token_encrypted: refresh_token,
-        token_expiry: tokenExpiry,
-        scopes: [
-          "https://www.googleapis.com/auth/drive.file",
-          "https://www.googleapis.com/auth/drive.metadata.readonly",
-        ],
-        is_active: true,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: "organization_id",
-      });
+      .upsert(
+        {
+          user_id: userId,
+          organization_id: userData.organization_id,
+          connected_by: userId,
+          email,
+          access_token_encrypted: access_token,
+          refresh_token_encrypted: refresh_token,
+          token_expiry: tokenExpiry,
+          scopes: [
+            "https://www.googleapis.com/auth/drive.file",
+            "https://www.googleapis.com/auth/drive.metadata.readonly",
+          ],
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" }
+      );
 
     if (saveError) {
       console.error("Failed to save tokens:", saveError);
       return redirectWithError("Failed to save Google Drive connection");
     }
 
+    await supabase
+      .from("users")
+      .update({
+        google_drive_connected: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId);
+
     await supabase.from("audit_logs").insert({
       user_id: userId,
       action: "drive_connected",
       entity_type: "drive_connection",
-      after_state: { email, organization_id: orgId },
+      after_state: { email, organization_id: userData.organization_id },
     });
 
     const successUrl = new URL(appRedirectUri);
@@ -148,7 +157,7 @@ Deno.serve(async (req: Request) => {
     return Response.redirect(successUrl.toString(), 302);
   } catch (err) {
     console.error("Drive OAuth callback error:", err);
-    return redirectWithError(err.message || "An error occurred");
+    return redirectWithError((err as Error).message || "An error occurred");
   }
 });
 
@@ -159,11 +168,6 @@ function redirectWithError(message: string): Response {
       <p>${message}</p>
       <p>Please close this window and try again.</p>
     </body></html>`,
-    {
-      status: 200,
-      headers: {
-        "Content-Type": "text/html",
-      },
-    }
+    { status: 200, headers: { "Content-Type": "text/html" } }
   );
 }

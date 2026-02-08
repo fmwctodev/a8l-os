@@ -13,6 +13,7 @@ const GOOGLE_DRIVE_API = "https://www.googleapis.com/drive/v3";
 interface DriveConnection {
   id: string;
   organization_id: string;
+  user_id: string;
   email: string;
   access_token_encrypted: string;
   refresh_token_encrypted: string;
@@ -70,17 +71,15 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "User not found" }, 404);
     }
 
-    const orgId = userData.organization_id;
-
     const { data: connection } = await supabase
       .from("drive_connections")
       .select("*")
-      .eq("organization_id", orgId)
+      .eq("user_id", user.id)
       .eq("is_active", true)
       .maybeSingle() as { data: DriveConnection | null };
 
     if (!connection) {
-      return jsonResponse({ error: "Google Drive not connected" }, 400);
+      return jsonResponse({ error: "Your Google Drive is not connected" }, 400);
     }
 
     const accessToken = await getValidAccessToken(supabase, connection);
