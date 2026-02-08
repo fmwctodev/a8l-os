@@ -1,9 +1,22 @@
 import { supabase } from '../lib/supabase';
 
-async function callGmailApi(action: string, body?: Record<string, unknown>) {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+async function getFreshSession() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('No active session');
+
+  const expiresAt = session.expires_at;
+  if (expiresAt && expiresAt * 1000 < Date.now() + 60_000) {
+    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+    if (!refreshed) throw new Error('Session expired. Please log in again.');
+    return refreshed;
+  }
+
+  return session;
+}
+
+async function callGmailApi(action: string, body?: Record<string, unknown>) {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const session = await getFreshSession();
 
   const response = await fetch(`${supabaseUrl}/functions/v1/gmail-api`, {
     method: 'POST',
@@ -25,8 +38,7 @@ async function callGmailApi(action: string, body?: Record<string, unknown>) {
 
 export async function initiateGmailOAuth(redirectUri?: string): Promise<string> {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('No active session');
+  const session = await getFreshSession();
 
   const response = await fetch(`${supabaseUrl}/functions/v1/gmail-oauth-start`, {
     method: 'POST',
