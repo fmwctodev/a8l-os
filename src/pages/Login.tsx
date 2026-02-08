@@ -53,6 +53,19 @@ export function Login() {
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
 
   useEffect(() => {
+    const hash = window.location.hash;
+    if (hash) {
+      const params = new URLSearchParams(hash.replace('#', ''));
+      const errorDesc = params.get('error_description');
+      const errorCode = params.get('error');
+      if (errorDesc || errorCode) {
+        setError(`Google sign-in failed: ${errorDesc || errorCode}`);
+        window.location.hash = '';
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     if (!authLoading && user) {
       navigate(from, { replace: true });
     }
