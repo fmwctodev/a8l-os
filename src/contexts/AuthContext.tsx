@@ -25,7 +25,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserWithDetails | null>(null);
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isInitialized, setIsInitialized] = useState(false);
 
   const loadUser = useCallback(async () => {
     try {
@@ -48,22 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
-
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-      if (!isMounted) return;
-      setSession(currentSession);
-      if (currentSession) {
-        loadUser().finally(() => {
-          if (isMounted) {
-            setIsLoading(false);
-            setIsInitialized(true);
-          }
-        });
-      } else {
-        setIsLoading(false);
-        setIsInitialized(true);
-      }
-    });
+    let initialLoadDone = false;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!isMounted) return;
@@ -72,16 +56,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(null);
         setUser(null);
         setFeatureFlags([]);
+        setIsLoading(false);
         return;
       }
 
       setSession(newSession);
 
-      if (newSession && isInitialized) {
-        setIsLoading(true);
+      if (newSession && initialLoadDone) {
+        setTimeout(() => {
+          if (!isMounted) return;
+          setIsLoading(true);
+          loadUser().finally(() => {
+            if (isMounted) setIsLoading(false);
+          });
+        }, 0);
+      }
+    });
+
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      if (!isMounted) return;
+      setSession(currentSession);
+      if (currentSession) {
         loadUser().finally(() => {
-          if (isMounted) setIsLoading(false);
+          if (isMounted) {
+            setIsLoading(false);
+            initialLoadDone = true;
+          }
         });
+      } else {
+        setIsLoading(false);
+        initialLoadDone = true;
       }
     });
 
@@ -89,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isMounted = false;
       subscription.unsubscribe();
     };
-  }, [loadUser, isInitialized]);
+  }, [loadUser]);
 
   const signIn = async (email: string, password: string) => {
     setIsLoading(true);
