@@ -34,7 +34,7 @@ const googleServices: GoogleService[] = [
 
 export function ConnectedAccountsTab() {
   const { user } = useAuth();
-  const { addToast } = useToast();
+  const { showToast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showConfirmDisconnect, setShowConfirmDisconnect] = useState(false);
@@ -74,7 +74,7 @@ export function ConnectedAccountsTab() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('gmail_connected') === 'true') {
       const email = params.get('email');
-      addToast(`Gmail connected successfully${email ? ` as ${email}` : ''}`, 'success');
+      showToast('success', `Gmail connected successfully${email ? ` as ${email}` : ''}`);
       setGmailStatus(prev => ({
         ...prev,
         connected: true,
@@ -94,7 +94,7 @@ export function ConnectedAccountsTab() {
         }).catch(() => {});
       }
     }
-  }, [user, addToast]);
+  }, [user, showToast]);
 
   const handleDisconnectGmail = async () => {
     if (!user) return;
@@ -105,10 +105,10 @@ export function ConnectedAccountsTab() {
       setGmailStatus({ connected: false, email: null, lastSyncAt: null, syncStatus: null });
       setGoogleAccount(null);
       setShowConfirmDisconnect(false);
-      addToast('Gmail disconnected', 'success');
+      showToast('success', 'Gmail disconnected');
     } catch (error) {
       console.error('Failed to disconnect Gmail:', error);
-      addToast('Failed to disconnect Gmail', 'error');
+      showToast('warning', 'Failed to disconnect Gmail');
     } finally {
       setIsDisconnecting(false);
     }
