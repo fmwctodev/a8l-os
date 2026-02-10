@@ -122,16 +122,20 @@ export function MessageComposer({
       clearTimeout(draftTimerRef.current);
     }
 
-    await onSend(body.trim(), showSubject ? subject.trim() : undefined);
+    try {
+      await onSend(body.trim(), showSubject ? subject.trim() : undefined);
 
-    if (draftId) {
-      deleteGmailDraft(draftId).catch(() => {});
-      setDraftId(null);
+      if (draftId) {
+        deleteGmailDraft(draftId).catch(() => {});
+        setDraftId(null);
+      }
+
+      setBody('');
+      setSubject('');
+      setDraftSaved(false);
+    } catch {
+      // Keep input fields intact so user can retry
     }
-
-    setBody('');
-    setSubject('');
-    setDraftSaved(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

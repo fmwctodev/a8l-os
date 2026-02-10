@@ -5,7 +5,7 @@ async function getFreshSession() {
   if (!session) throw new Error('No active session');
 
   const expiresAt = session.expires_at;
-  if (expiresAt && expiresAt * 1000 < Date.now() + 60_000) {
+  if (!expiresAt || expiresAt * 1000 < Date.now() + 120_000) {
     const { data: { session: refreshed } } = await supabase.auth.refreshSession();
     if (!refreshed) throw new Error('Session expired. Please log in again.');
     return refreshed;
@@ -14,23 +14,41 @@ async function getFreshSession() {
   return session;
 }
 
+function parseErrorMessage(body: Record<string, unknown>, fallback: string): string {
+  return (body.error as string) || (body.msg as string) || (body.message as string) || fallback;
+}
+
 async function callGmailApi(action: string, body?: Record<string, unknown>) {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const session = await getFreshSession();
+  const payload = JSON.stringify({ action, ...body });
 
-  const response = await fetch(`${supabaseUrl}/functions/v1/gmail-api`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({ action, ...body }),
-  });
+  const attempt = async (session: { access_token: string }) => {
+    const response = await fetch(`${supabaseUrl}/functions/v1/gmail-api`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: payload,
+    });
+    return response;
+  };
+
+  let session = await getFreshSession();
+  let response = await attempt(session);
+
+  if (response.status === 401) {
+    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+    if (refreshed) {
+      session = refreshed;
+      response = await attempt(session);
+    }
+  }
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || `Gmail API ${action} failed`);
+    throw new Error(parseErrorMessage(err, `Gmail API ${action} failed`));
   }
 
   return response.json();

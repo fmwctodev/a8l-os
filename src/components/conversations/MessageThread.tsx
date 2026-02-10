@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { RefreshCw, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import { MessageBubble } from './MessageBubble';
 import { MessageComposer } from './MessageComposer';
 import { ConversationHeader } from './ConversationHeader';
@@ -30,6 +31,7 @@ export function MessageThread({
   showContactPanel,
 }: MessageThreadProps) {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [events, setEvents] = useState<InboxEvent[]>([]);
@@ -174,21 +176,24 @@ export function MessageThread({
             )
           );
         } catch (gmailError) {
-          console.error('Gmail send failed, falling back:', gmailError);
-          setMessages((prev) => prev.filter((m) => m.id !== optimisticMessage.id));
+          const errorMsg = gmailError instanceof Error ? gmailError.message : 'Unknown error';
+          console.error('Gmail send failed:', errorMsg);
 
-          const metadata: Record<string, unknown> = { to_email: channelConfig.identifier };
-          const newMessage = await createMessage(
-            user.organization_id,
-            conversation.id,
-            conversation.contact_id,
-            selectedChannel,
-            'outbound',
-            body,
-            metadata,
-            subject
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === optimisticMessage.id
+                ? { ...m, status: 'failed', metadata: { ...m.metadata, error_message: errorMsg } }
+                : m
+            )
           );
-          setMessages((prev) => [...prev, newMessage]);
+
+          const isAuthError = errorMsg.includes('Unauthorized') || errorMsg.includes('Session expired') || errorMsg.includes('No active session');
+          if (isAuthError) {
+            showToast('warning', 'Email send failed', 'Your session may have expired. Please refresh the page and try again.');
+          } else {
+            showToast('warning', 'Email send failed', 'Check your Gmail connection in Settings and try again.');
+          }
+          throw gmailError;
         }
       } else {
         const metadata: Record<string, unknown> = {};

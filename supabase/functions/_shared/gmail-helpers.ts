@@ -311,18 +311,26 @@ export async function getAccessToken(
     Date.now() + refreshData.expires_in * 1000
   ).toISOString();
 
-  const encryptedAccess = await encryptToken(newAccessToken);
+  let storedAccess: string;
+  try {
+    storedAccess = await encryptToken(newAccessToken);
+  } catch {
+    console.warn("Token encryption unavailable, storing plaintext");
+    storedAccess = newAccessToken;
+  }
 
   const updatePayload: Record<string, string> = {
-    access_token: encryptedAccess,
+    access_token: storedAccess,
     token_expiry: newExpiry,
     updated_at: new Date().toISOString(),
   };
 
   if (refreshData.refresh_token) {
-    updatePayload.refresh_token = await encryptToken(
-      refreshData.refresh_token
-    );
+    try {
+      updatePayload.refresh_token = await encryptToken(refreshData.refresh_token);
+    } catch {
+      updatePayload.refresh_token = refreshData.refresh_token;
+    }
   }
 
   await supabase
