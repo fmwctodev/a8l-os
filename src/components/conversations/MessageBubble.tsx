@@ -1,23 +1,40 @@
 import { useState, useEffect } from 'react';
-import { Phone, Mail, PhoneCall, MessageCircle, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal, Paperclip, Download, FileText, Image, File } from 'lucide-react';
+import { Phone, Mail, PhoneCall, MessageCircle, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal, Paperclip, Download, FileText, Image, File, ChevronDown, ChevronUp } from 'lucide-react';
 import { trashGmailMessage, archiveGmailMessage, downloadAttachment, listMessageAttachments } from '../../services/gmailApi';
 import type { Message, MessageChannel, MessageStatus } from '../../types';
+
+const EMAIL_PREVIEW_LENGTH = 250;
 
 interface MessageBubbleProps {
   message: Message;
   onMessageAction?: (messageId: string, action: 'archived' | 'trashed') => void;
 }
 
+function cleanEmailBody(body: string): string {
+  let cleaned = body
+    .replace(/\( https?:\/\/[^\s)]+\)/g, '')
+    .replace(/https?:\/\/\S+/g, '[link]')
+    .replace(/={3,}/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return cleaned;
+}
+
 export function MessageBubble({ message, onMessageAction }: MessageBubbleProps) {
   const [showActions, setShowActions] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [downloadingAttId, setDownloadingAttId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const isOutbound = message.direction === 'outbound';
   const isSystem = message.direction === 'system';
   const metadata = message.metadata as Record<string, unknown> | undefined;
   const isGmailMessage = message.channel === 'email' && metadata?.gmail_message_id;
+  const isEmailChannel = message.channel === 'email';
   const gmailMessageId = metadata?.gmail_message_id as string | undefined;
   const hasAttachments = metadata?.has_attachments === true;
+  const fromEmail = metadata?.from_email as string | undefined;
+  const fromName = metadata?.from_name as string | undefined;
 
   const handleArchive = async () => {
     if (!gmailMessageId) return;
@@ -57,45 +74,49 @@ export function MessageBubble({ message, onMessageAction }: MessageBubbleProps) 
     );
   }
 
+  if (isEmailChannel) {
+    return <EmailBubble
+      message={message}
+      isOutbound={isOutbound}
+      isGmailMessage={!!isGmailMessage}
+      gmailMessageId={gmailMessageId}
+      hasAttachments={hasAttachments}
+      fromEmail={fromEmail}
+      fromName={fromName}
+      expanded={expanded}
+      onToggleExpand={() => setExpanded(!expanded)}
+      showActions={showActions}
+      onToggleActions={() => setShowActions(!showActions)}
+      onCloseActions={() => setShowActions(false)}
+      onArchive={handleArchive}
+      onTrash={handleTrash}
+      actionLoading={actionLoading}
+      downloadingAttId={downloadingAttId}
+      onDownloadAttachment={async (attId: string, filename: string) => {
+        if (!message.external_id) return;
+        setDownloadingAttId(attId);
+        try {
+          const blob = await downloadAttachment(message.external_id, attId);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (err) {
+          console.error('Download failed:', err);
+        } finally {
+          setDownloadingAttId(null);
+        }
+      }}
+    />;
+  }
+
   return (
     <div
       className={`group flex ${isOutbound ? 'justify-end' : 'justify-start'}`}
       onMouseLeave={() => setShowActions(false)}
     >
-      {isOutbound && isGmailMessage && (
-        <div className="relative flex items-start mr-1">
-          <button
-            onClick={() => setShowActions(!showActions)}
-            className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
-          >
-            <MoreHorizontal size={14} />
-          </button>
-          {showActions && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setShowActions(false)} />
-              <div className="absolute right-0 top-full mt-1 z-20 bg-slate-800 border border-slate-600 rounded-lg shadow-lg min-w-[140px]">
-                <button
-                  onClick={handleArchive}
-                  disabled={actionLoading}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded-t-lg disabled:opacity-50"
-                >
-                  <Archive size={14} />
-                  Archive
-                </button>
-                <button
-                  onClick={handleTrash}
-                  disabled={actionLoading}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-slate-700 rounded-b-lg disabled:opacity-50"
-                >
-                  <Trash2 size={14} />
-                  Delete
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
       <div
         className={`max-w-[70%] rounded-2xl px-4 py-2.5 ${
           isOutbound
@@ -103,45 +124,10 @@ export function MessageBubble({ message, onMessageAction }: MessageBubbleProps) 
             : 'bg-slate-700 text-white rounded-bl-md'
         }`}
       >
-        {message.subject && (
-          <div className={`text-xs font-medium mb-1 ${isOutbound ? 'text-cyan-200' : 'text-slate-400'}`}>
-            Subject: {message.subject}
-          </div>
-        )}
-
         <div className="whitespace-pre-wrap break-words">{message.body}</div>
-
-        {hasAttachments && gmailMessageId && (
-          <AttachmentStrip
-            gmailMessageId={gmailMessageId}
-            externalId={message.external_id}
-            isOutbound={isOutbound}
-            downloadingAttId={downloadingAttId}
-            onDownload={async (attId: string, filename: string) => {
-              if (!message.external_id) return;
-              setDownloadingAttId(attId);
-              try {
-                const blob = await downloadAttachment(message.external_id, attId);
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                a.click();
-                URL.revokeObjectURL(url);
-              } catch (err) {
-                console.error('Download failed:', err);
-              } finally {
-                setDownloadingAttId(null);
-              }
-            }}
-          />
-        )}
 
         <div className={`flex items-center justify-end gap-2 mt-1.5 ${isOutbound ? 'text-cyan-200' : 'text-slate-400'}`}>
           <ChannelIndicator channel={message.channel} isOutbound={isOutbound} />
-          {isGmailMessage && (
-            <span className="text-[10px] opacity-70">Gmail</span>
-          )}
           <span className="text-xs">{formatTime(message.sent_at)}</span>
           {isOutbound && <StatusIndicator status={message.status} />}
         </div>
@@ -153,39 +139,215 @@ export function MessageBubble({ message, onMessageAction }: MessageBubbleProps) 
           </div>
         )}
       </div>
+    </div>
+  );
+}
 
-      {!isOutbound && isGmailMessage && (
-        <div className="relative flex items-start ml-1">
-          <button
-            onClick={() => setShowActions(!showActions)}
-            className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
-          >
-            <MoreHorizontal size={14} />
-          </button>
-          {showActions && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setShowActions(false)} />
-              <div className="absolute left-0 top-full mt-1 z-20 bg-slate-800 border border-slate-600 rounded-lg shadow-lg min-w-[140px]">
-                <button
-                  onClick={handleArchive}
-                  disabled={actionLoading}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded-t-lg disabled:opacity-50"
-                >
-                  <Archive size={14} />
-                  Archive
-                </button>
-                <button
-                  onClick={handleTrash}
-                  disabled={actionLoading}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-slate-700 rounded-b-lg disabled:opacity-50"
-                >
-                  <Trash2 size={14} />
-                  Delete
-                </button>
-              </div>
-            </>
+function EmailBubble({
+  message,
+  isOutbound,
+  isGmailMessage,
+  gmailMessageId,
+  hasAttachments,
+  fromEmail,
+  fromName,
+  expanded,
+  onToggleExpand,
+  showActions,
+  onToggleActions,
+  onCloseActions,
+  onArchive,
+  onTrash,
+  actionLoading,
+  downloadingAttId,
+  onDownloadAttachment,
+}: {
+  message: Message;
+  isOutbound: boolean;
+  isGmailMessage: boolean;
+  gmailMessageId?: string;
+  hasAttachments: boolean;
+  fromEmail?: string;
+  fromName?: string;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  showActions: boolean;
+  onToggleActions: () => void;
+  onCloseActions: () => void;
+  onArchive: () => void;
+  onTrash: () => void;
+  actionLoading: boolean;
+  downloadingAttId: string | null;
+  onDownloadAttachment: (attId: string, filename: string) => void;
+}) {
+  const cleanedBody = cleanEmailBody(message.body);
+  const isLong = cleanedBody.length > EMAIL_PREVIEW_LENGTH;
+  const displayBody = expanded || !isLong
+    ? cleanedBody
+    : cleanedBody.substring(0, EMAIL_PREVIEW_LENGTH) + '...';
+
+  const senderDisplay = fromName || fromEmail || (isOutbound ? 'You' : 'Unknown');
+
+  return (
+    <div
+      className={`group flex ${isOutbound ? 'justify-end' : 'justify-start'}`}
+      onMouseLeave={onCloseActions}
+    >
+      {isOutbound && isGmailMessage && (
+        <GmailActionMenu
+          position="left"
+          showActions={showActions}
+          onToggleActions={onToggleActions}
+          onCloseActions={onCloseActions}
+          onArchive={onArchive}
+          onTrash={onTrash}
+          actionLoading={actionLoading}
+        />
+      )}
+
+      <div className={`max-w-[75%] rounded-xl border overflow-hidden ${
+        isOutbound
+          ? 'bg-cyan-900/30 border-cyan-700/50'
+          : 'bg-slate-800 border-slate-600/50'
+      }`}>
+        <div className={`px-4 py-2.5 border-b ${
+          isOutbound ? 'border-cyan-700/30 bg-cyan-900/40' : 'border-slate-600/30 bg-slate-700/40'
+        }`}>
+          <div className="flex items-center gap-2">
+            <Mail size={14} className={isOutbound ? 'text-cyan-400' : 'text-slate-400'} />
+            <span className="text-sm font-medium text-white truncate">
+              {isOutbound ? 'You' : senderDisplay}
+            </span>
+            {!isOutbound && fromEmail && fromName && (
+              <span className="text-xs text-slate-500 truncate">&lt;{fromEmail}&gt;</span>
+            )}
+          </div>
+          {message.subject && (
+            <div className={`text-xs mt-1 ${isOutbound ? 'text-cyan-300' : 'text-slate-300'} font-medium`}>
+              {message.subject}
+            </div>
           )}
         </div>
+
+        <div className="px-4 py-3">
+          <div className={`text-sm whitespace-pre-wrap break-words leading-relaxed ${
+            isOutbound ? 'text-cyan-100' : 'text-slate-200'
+          }`}>
+            {displayBody}
+          </div>
+          {isLong && (
+            <button
+              onClick={onToggleExpand}
+              className={`flex items-center gap-1 mt-2 text-xs font-medium transition-colors ${
+                isOutbound
+                  ? 'text-cyan-400 hover:text-cyan-300'
+                  : 'text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              {expanded ? 'Show less' : 'Show more'}
+            </button>
+          )}
+        </div>
+
+        {hasAttachments && gmailMessageId && (
+          <div className="px-4 pb-3">
+            <AttachmentStrip
+              gmailMessageId={gmailMessageId}
+              externalId={message.external_id}
+              isOutbound={isOutbound}
+              downloadingAttId={downloadingAttId}
+              onDownload={onDownloadAttachment}
+            />
+          </div>
+        )}
+
+        <div className={`px-4 py-2 border-t flex items-center justify-between ${
+          isOutbound ? 'border-cyan-700/30' : 'border-slate-600/30'
+        }`}>
+          <div className="flex items-center gap-2">
+            {isGmailMessage && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                isOutbound ? 'bg-cyan-800/50 text-cyan-300' : 'bg-slate-600/50 text-slate-400'
+              }`}>Gmail</span>
+            )}
+          </div>
+          <div className={`flex items-center gap-2 ${isOutbound ? 'text-cyan-300' : 'text-slate-400'}`}>
+            <span className="text-xs">{formatTime(message.sent_at)}</span>
+            {isOutbound && <StatusIndicator status={message.status} />}
+          </div>
+        </div>
+
+        {message.status === 'failed' && message.metadata?.error_message && (
+          <div className="mx-4 mb-3 p-2 bg-red-900/50 rounded text-xs text-red-300 flex items-center gap-1">
+            <AlertCircle size={12} />
+            {String(message.metadata.error_message)}
+          </div>
+        )}
+      </div>
+
+      {!isOutbound && isGmailMessage && (
+        <GmailActionMenu
+          position="right"
+          showActions={showActions}
+          onToggleActions={onToggleActions}
+          onCloseActions={onCloseActions}
+          onArchive={onArchive}
+          onTrash={onTrash}
+          actionLoading={actionLoading}
+        />
+      )}
+    </div>
+  );
+}
+
+function GmailActionMenu({
+  position,
+  showActions,
+  onToggleActions,
+  onCloseActions,
+  onArchive,
+  onTrash,
+  actionLoading,
+}: {
+  position: 'left' | 'right';
+  showActions: boolean;
+  onToggleActions: () => void;
+  onCloseActions: () => void;
+  onArchive: () => void;
+  onTrash: () => void;
+  actionLoading: boolean;
+}) {
+  return (
+    <div className={`relative flex items-start ${position === 'left' ? 'mr-1' : 'ml-1'}`}>
+      <button
+        onClick={onToggleActions}
+        className="p-1 rounded text-slate-500 hover:text-slate-300 hover:bg-slate-700 opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <MoreHorizontal size={14} />
+      </button>
+      {showActions && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={onCloseActions} />
+          <div className={`absolute ${position === 'left' ? 'right-0' : 'left-0'} top-full mt-1 z-20 bg-slate-800 border border-slate-600 rounded-lg shadow-lg min-w-[140px]`}>
+            <button
+              onClick={onArchive}
+              disabled={actionLoading}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded-t-lg disabled:opacity-50"
+            >
+              <Archive size={14} />
+              Archive
+            </button>
+            <button
+              onClick={onTrash}
+              disabled={actionLoading}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-slate-700 rounded-b-lg disabled:opacity-50"
+            >
+              <Trash2 size={14} />
+              Delete
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

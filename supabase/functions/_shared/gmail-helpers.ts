@@ -343,13 +343,11 @@ export async function processGmailMessage(
 ): Promise<{ processed: boolean; messageId?: string }> {
   const parsed = parseGmailMessage(msgData);
 
-  const isInbound =
-    parsed.toEmails.some(
-      (e) => e.toLowerCase() === tokenEmail.toLowerCase()
-    ) ||
-    parsed.ccEmails.some(
-      (e) => e.toLowerCase() === tokenEmail.toLowerCase()
-    );
+  const isOutbound =
+    parsed.fromEmail.toLowerCase() === tokenEmail.toLowerCase() ||
+    parsed.labelIds.includes("SENT");
+
+  const isInbound = !isOutbound;
 
   const contactEmail = isInbound
     ? parsed.fromEmail

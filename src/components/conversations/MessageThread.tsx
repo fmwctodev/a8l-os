@@ -222,7 +222,7 @@ export function MessageThread({
   const threadItems = buildThreadItems(messages, events);
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col min-h-0">
       <ConversationHeader
         conversation={conversation}
         onConversationUpdate={onConversationUpdate}
@@ -230,7 +230,7 @@ export function MessageThread({
         showContactPanel={showContactPanel}
       />
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full" />

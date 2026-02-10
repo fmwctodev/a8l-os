@@ -133,7 +133,7 @@ export function Conversations() {
   };
 
   return (
-    <div className="h-[calc(100vh-64px)] flex flex-col bg-slate-900 relative isolate">
+    <div className="-m-6 h-[calc(100vh-64px)] flex flex-col bg-slate-900 relative isolate">
       <div className="border-b border-slate-700 bg-slate-800 px-4">
         <div className="flex items-center gap-1">
           <button
@@ -164,8 +164,8 @@ export function Conversations() {
       {activeTab === 'team-messaging' ? (
         <TeamMessagingTab />
       ) : (
-        <div className="flex-1 flex">
-          <div className="w-80 border-r border-slate-700 flex flex-col bg-slate-800">
+        <div className="flex-1 flex min-h-0">
+          <div className="w-80 border-r border-slate-700 flex flex-col bg-slate-800 min-h-0">
             <div className="p-4 border-b border-slate-700">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-lg font-semibold text-white">Conversations</h2>
@@ -252,10 +252,10 @@ export function Conversations() {
           </div>
 
           <ConversationErrorBoundary
-            key={selectedConversation?.id}
+            key={`thread-${selectedConversation?.id}`}
             onRetry={loadConversations}
           >
-            <div className="flex-1 flex flex-col bg-slate-900">
+            <div className="flex-1 flex flex-col bg-slate-900 min-h-0">
               {selectedConversation ? (
                 <MessageThread
                   conversation={selectedConversation}
@@ -279,16 +279,20 @@ export function Conversations() {
                 </div>
               )}
             </div>
+          </ConversationErrorBoundary>
 
-            {selectedConversation && showContactPanel && (
+          {selectedConversation && showContactPanel && (
+            <ConversationErrorBoundary
+              key={`contact-${selectedConversation?.id}`}
+            >
               <div className="w-80 border-l border-slate-700 bg-slate-800 overflow-y-auto">
                 <ContactPanel
                   conversation={selectedConversation}
                   onClose={() => setShowContactPanel(false)}
                 />
               </div>
-            )}
-          </ConversationErrorBoundary>
+            </ConversationErrorBoundary>
+          )}
         </div>
       )}
 
