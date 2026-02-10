@@ -441,7 +441,7 @@ export async function getAllPendingDraftsWithContext(
   }
 ): Promise<Array<AIDraft & {
   contact: { id: string; first_name: string; last_name: string; email: string | null };
-  conversation: { id: string; channel: string; status: string } | null;
+  conversation: { id: string; status: string } | null;
 }>> {
   let query = supabase
     .from('ai_drafts')
@@ -454,7 +454,7 @@ export async function getAllPendingDraftsWithContext(
         id, first_name, last_name, email
       ),
       conversation:conversations!conversation_id (
-        id, channel, status
+        id, status
       )
     `)
     .eq('organization_id', orgId)
@@ -475,6 +475,6 @@ export async function getAllPendingDraftsWithContext(
   if (error) throw error;
   return data as Array<AIDraft & {
     contact: { id: string; first_name: string; last_name: string; email: string | null };
-    conversation: { id: string; channel: string; status: string } | null;
+    conversation: { id: string; status: string } | null;
   }>;
 }

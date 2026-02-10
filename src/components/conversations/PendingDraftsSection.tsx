@@ -26,7 +26,6 @@ interface PendingDraftWithContext extends AIDraft {
   };
   conversation: {
     id: string;
-    channel: string;
     status: string;
   } | null;
 }
