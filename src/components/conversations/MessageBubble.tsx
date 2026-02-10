@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Phone, Mail, PhoneCall, MessageCircle, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal } from 'lucide-react';
-import { trashGmailMessage, archiveGmailMessage } from '../../services/gmailApi';
+import { Phone, Mail, PhoneCall, MessageCircle, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal, Paperclip, Download, FileText, Image, File } from 'lucide-react';
+import { trashGmailMessage, archiveGmailMessage, downloadAttachment, listMessageAttachments } from '../../services/gmailApi';
 import type { Message, MessageChannel, MessageStatus } from '../../types';
 
 interface MessageBubbleProps {
@@ -11,10 +11,13 @@ interface MessageBubbleProps {
 export function MessageBubble({ message, onMessageAction }: MessageBubbleProps) {
   const [showActions, setShowActions] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [downloadingAttId, setDownloadingAttId] = useState<string | null>(null);
   const isOutbound = message.direction === 'outbound';
   const isSystem = message.direction === 'system';
-  const isGmailMessage = message.channel === 'email' && (message.metadata as Record<string, unknown>)?.gmail_message_id;
-  const gmailMessageId = (message.metadata as Record<string, unknown>)?.gmail_message_id as string | undefined;
+  const metadata = message.metadata as Record<string, unknown> | undefined;
+  const isGmailMessage = message.channel === 'email' && metadata?.gmail_message_id;
+  const gmailMessageId = metadata?.gmail_message_id as string | undefined;
+  const hasAttachments = metadata?.has_attachments === true;
 
   const handleArchive = async () => {
     if (!gmailMessageId) return;
@@ -107,6 +110,32 @@ export function MessageBubble({ message, onMessageAction }: MessageBubbleProps) 
         )}
 
         <div className="whitespace-pre-wrap break-words">{message.body}</div>
+
+        {hasAttachments && gmailMessageId && (
+          <AttachmentStrip
+            gmailMessageId={gmailMessageId}
+            externalId={message.external_id}
+            isOutbound={isOutbound}
+            downloadingAttId={downloadingAttId}
+            onDownload={async (attId: string, filename: string) => {
+              if (!message.external_id) return;
+              setDownloadingAttId(attId);
+              try {
+                const blob = await downloadAttachment(message.external_id, attId);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch (err) {
+                console.error('Download failed:', err);
+              } finally {
+                setDownloadingAttId(null);
+              }
+            }}
+          />
+        )}
 
         <div className={`flex items-center justify-end gap-2 mt-1.5 ${isOutbound ? 'text-cyan-200' : 'text-slate-400'}`}>
           <ChannelIndicator channel={message.channel} isOutbound={isOutbound} />
@@ -201,4 +230,86 @@ function formatTime(dateString: string): string {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+function AttachmentIcon({ mimeType }: { mimeType: string }) {
+  if (mimeType.startsWith('image/')) return <Image size={14} />;
+  if (mimeType === 'application/pdf') return <FileText size={14} />;
+  return <File size={14} />;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+interface AttachmentInfo {
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
+function AttachmentStrip({
+  gmailMessageId,
+  externalId,
+  isOutbound,
+  downloadingAttId,
+  onDownload,
+}: {
+  gmailMessageId: string;
+  externalId?: string;
+  isOutbound: boolean;
+  downloadingAttId: string | null;
+  onDownload: (attachmentId: string, filename: string) => void;
+}) {
+  const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  if (!loaded) {
+    setLoaded(true);
+    if (externalId) {
+      listMessageAttachments(externalId)
+        .then((res: { attachments?: AttachmentInfo[] }) => {
+          setAttachments(res.attachments || []);
+        })
+        .catch(() => {});
+    }
+  }
+
+  if (!loaded || attachments.length === 0) {
+    return (
+      <div className={`flex items-center gap-1 mt-2 text-xs ${isOutbound ? 'text-cyan-200' : 'text-slate-400'}`}>
+        <Paperclip size={12} />
+        <span>Attachments</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 space-y-1">
+      {attachments.map((att) => (
+        <button
+          key={att.attachmentId}
+          onClick={() => onDownload(att.attachmentId, att.filename)}
+          disabled={downloadingAttId === att.attachmentId}
+          className={`flex items-center gap-2 w-full text-left px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+            isOutbound
+              ? 'bg-cyan-700/50 hover:bg-cyan-700 text-cyan-100'
+              : 'bg-slate-600/50 hover:bg-slate-600 text-slate-200'
+          } disabled:opacity-50`}
+        >
+          <AttachmentIcon mimeType={att.mimeType} />
+          <span className="flex-1 truncate">{att.filename}</span>
+          <span className="text-[10px] opacity-70 shrink-0">{formatFileSize(att.size)}</span>
+          {downloadingAttId === att.attachmentId ? (
+            <span className="animate-spin w-3 h-3 border border-current border-t-transparent rounded-full" />
+          ) : (
+            <Download size={12} className="shrink-0 opacity-70" />
+          )}
+        </button>
+      ))}
+    </div>
+  );
 }

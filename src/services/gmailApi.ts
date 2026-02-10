@@ -187,6 +187,115 @@ export async function disconnectGmail(userId: string): Promise<void> {
     .eq('id', userId);
 }
 
+export async function listMessageAttachments(messageExternalId: string) {
+  return callGmailApi('list-attachments', { messageId: messageExternalId });
+}
+
+export async function getMessageAttachment(messageExternalId: string, attachmentId: string) {
+  return callGmailApi('get-attachment', { messageId: messageExternalId, attachmentId });
+}
+
+export async function downloadAttachment(messageExternalId: string, attachmentId: string): Promise<Blob> {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const session = await getFreshSession();
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/gmail-api`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ action: 'get-attachment', messageId: messageExternalId, attachmentId }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to download attachment');
+  }
+
+  return response.blob();
+}
+
+export async function getAttachmentMetadata(orgId: string, gmailMessageId: string) {
+  const { data, error } = await supabase
+    .from('gmail_attachments')
+    .select('*')
+    .eq('organization_id', orgId)
+    .eq('gmail_message_id', gmailMessageId);
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function getEmailLinks(orgId: string, messageId: string) {
+  const { data, error } = await supabase
+    .from('crm_email_links')
+    .select('*')
+    .eq('organization_id', orgId)
+    .eq('message_id', messageId);
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function linkEmailToRecord(params: {
+  orgId: string;
+  userId: string;
+  messageId: string;
+  recordType: 'contact' | 'opportunity';
+  recordId: string;
+}) {
+  const { data, error } = await supabase
+    .from('crm_email_links')
+    .upsert(
+      {
+        organization_id: params.orgId,
+        user_id: params.userId,
+        message_id: params.messageId,
+        record_type: params.recordType,
+        record_id: params.recordId,
+      },
+      { onConflict: 'organization_id,message_id,record_type,record_id' }
+    )
+    .select()
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function unlinkEmailFromRecord(linkId: string) {
+  const { error } = await supabase
+    .from('crm_email_links')
+    .delete()
+    .eq('id', linkId);
+
+  if (error) throw error;
+}
+
+export async function triggerIncrementalSync(orgId: string, userId: string) {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const session = await getFreshSession();
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/gmail-sync-incremental`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ org_id: orgId, user_id: userId }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || 'Incremental sync failed');
+  }
+
+  return response.json();
+}
+
 export async function getGmailConnectionStatus(userId: string): Promise<{
   connected: boolean;
   email: string | null;

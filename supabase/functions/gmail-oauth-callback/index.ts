@@ -1,18 +1,13 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+import { encryptToken } from "../_shared/crypto.ts";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_API_URL = "https://gmail.googleapis.com/gmail/v1";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
+    return new Response(null, { status: 200 });
   }
 
   try {
@@ -112,14 +107,25 @@ Deno.serve(async (req: Request) => {
 
     const tokenExpiry = new Date(Date.now() + expires_in * 1000).toISOString();
 
+    let encryptedAccess: string;
+    let encryptedRefresh: string;
+    try {
+      encryptedAccess = await encryptToken(access_token);
+      encryptedRefresh = await encryptToken(refresh_token);
+    } catch (encErr) {
+      console.error("Token encryption failed, storing plain:", encErr);
+      encryptedAccess = access_token;
+      encryptedRefresh = refresh_token;
+    }
+
     const { error: saveError } = await supabase
       .from("gmail_oauth_tokens")
       .upsert(
         {
           organization_id: finalOrgId,
           user_id: userId,
-          access_token,
-          refresh_token,
+          access_token: encryptedAccess,
+          refresh_token: encryptedRefresh,
           token_expiry: tokenExpiry,
           email,
           updated_at: new Date().toISOString(),
@@ -140,11 +146,7 @@ Deno.serve(async (req: Request) => {
           provider: "google_gmail",
           provider_account_id: email,
           provider_account_email: email,
-          scopes: [
-            "gmail.readonly",
-            "gmail.send",
-            "gmail.modify",
-          ],
+          scopes: ["gmail.readonly", "gmail.send", "gmail.modify"],
           connected_at: new Date().toISOString(),
           last_synced_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -210,6 +212,14 @@ Deno.serve(async (req: Request) => {
       action: "gmail_connected",
       entity_type: "gmail_oauth",
       after_state: { email, organization_id: finalOrgId },
+    });
+
+    await supabase.from("gmail_sync_jobs").insert({
+      organization_id: finalOrgId,
+      user_id: userId,
+      job_type: "initial",
+      status: "queued",
+      run_at: new Date().toISOString(),
     });
 
     try {

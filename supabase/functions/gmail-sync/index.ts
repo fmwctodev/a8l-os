@@ -1,113 +1,26 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  getAccessToken,
+  processGmailMessage,
+  GMAIL_API_URL,
+  type GmailTokenRecord,
+} from "../_shared/gmail-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, X-Client-Info, Apikey",
 };
-
-const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
-const GMAIL_API_URL = "https://gmail.googleapis.com/gmail/v1";
-
-function extractEmailAddress(emailString: string): string {
-  const match = emailString.match(/<([^>]+)>/);
-  if (match) {
-    return match[1].toLowerCase();
-  }
-  return emailString.trim().toLowerCase();
-}
-
-function decodeBase64Url(data: string): string {
-  const base64 = data.replace(/-/g, '+').replace(/_/g, '/');
-  try {
-    return decodeURIComponent(
-      atob(base64)
-        .split('')
-        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    );
-  } catch {
-    return atob(base64);
-  }
-}
-
-function extractEmailBody(payload: {
-  body?: { data?: string };
-  parts?: Array<{ mimeType: string; body?: { data?: string }; parts?: unknown[] }>;
-}): string {
-  if (payload.body?.data) {
-    return decodeBase64Url(payload.body.data);
-  }
-
-  if (payload.parts) {
-    for (const part of payload.parts) {
-      if (part.mimeType === 'text/plain' && part.body?.data) {
-        return decodeBase64Url(part.body.data);
-      }
-    }
-    for (const part of payload.parts) {
-      if (part.mimeType === 'text/html' && part.body?.data) {
-        return decodeBase64Url(part.body.data);
-      }
-    }
-  }
-
-  return '';
-}
-
-async function refreshAccessToken(
-  supabase: ReturnType<typeof createClient>,
-  tokenData: { id: string; refresh_token: string; access_token: string; token_expiry: string }
-): Promise<string> {
-  const tokenExpiry = new Date(tokenData.token_expiry);
-  if (tokenExpiry > new Date(Date.now() + 5 * 60 * 1000)) {
-    return tokenData.access_token;
-  }
-
-  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
-  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-
-  if (!clientId || !clientSecret) {
-    throw new Error("Missing Google OAuth credentials");
-  }
-
-  const refreshResponse = await fetch(GOOGLE_TOKEN_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      refresh_token: tokenData.refresh_token,
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: "refresh_token",
-    }),
-  });
-
-  if (!refreshResponse.ok) {
-    throw new Error("Failed to refresh token");
-  }
-
-  const refreshData = await refreshResponse.json();
-
-  await supabase
-    .from("gmail_oauth_tokens")
-    .update({
-      access_token: refreshData.access_token,
-      token_expiry: new Date(Date.now() + refreshData.expires_in * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", tokenData.id);
-
-  return refreshData.access_token;
-}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
+
+  const reqBody = await req.json().catch(() => ({}));
+  const { org_id: orgId, user_id: userId } = reqBody;
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -118,27 +31,23 @@ Deno.serve(async (req: Request) => {
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
+      auth: { autoRefreshToken: false, persistSession: false },
     });
-
-    const { org_id: orgId, user_id: userId } = await req.json();
 
     if (!orgId || !userId) {
       return new Response(
         JSON.stringify({ error: "Missing org_id or user_id" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     await supabase
       .from("gmail_sync_state")
-      .update({ sync_status: "syncing", error_message: null, updated_at: new Date().toISOString() })
+      .update({
+        sync_status: "syncing",
+        error_message: null,
+        updated_at: new Date().toISOString(),
+      })
       .eq("organization_id", orgId)
       .eq("user_id", userId);
 
@@ -152,23 +61,21 @@ Deno.serve(async (req: Request) => {
     if (!tokenData) {
       return new Response(
         JSON.stringify({ error: "Gmail not connected" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const accessToken = await refreshAccessToken(supabase, tokenData);
+    const accessToken = await getAccessToken(
+      supabase,
+      tokenData as GmailTokenRecord
+    );
 
     const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
     const query = `after:${Math.floor(threeDaysAgo.getTime() / 1000)}`;
 
     const listResponse = await fetch(
       `${GMAIL_API_URL}/users/me/messages?q=${encodeURIComponent(query)}&maxResults=100`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
+      { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
     if (!listResponse.ok) {
@@ -195,129 +102,35 @@ Deno.serve(async (req: Request) => {
 
       const msgResponse = await fetch(
         `${GMAIL_API_URL}/users/me/messages/${ref.id}`,
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
+        { headers: { Authorization: `Bearer ${accessToken}` } }
       );
 
-      if (!msgResponse.ok) {
-        continue;
-      }
+      if (!msgResponse.ok) continue;
 
       const msgData = await msgResponse.json();
-      const headers = msgData.payload?.headers || [];
+      const result = await processGmailMessage(
+        supabase,
+        msgData,
+        orgId,
+        userId,
+        tokenData.email,
+        "initial_sync"
+      );
 
-      const getHeader = (name: string) =>
-        headers.find((h: { name: string }) => h.name.toLowerCase() === name.toLowerCase())?.value || '';
-
-      const from = getHeader('From');
-      const to = getHeader('To');
-      const subject = getHeader('Subject');
-      const date = getHeader('Date');
-
-      const fromEmail = extractEmailAddress(from);
-      const toEmail = extractEmailAddress(to);
-
-      const isInbound = toEmail.toLowerCase() === tokenData.email.toLowerCase();
-      const contactEmail = isInbound ? fromEmail : toEmail;
-
-      const { data: contact } = await supabase
-        .from("contacts")
-        .select("id, department_id, first_name, last_name")
-        .eq("organization_id", orgId)
-        .ilike("email", contactEmail)
-        .eq("status", "active")
-        .maybeSingle();
-
-      if (!contact) {
-        continue;
-      }
-
-      let conversation = null;
-      const { data: existingConv } = await supabase
-        .from("conversations")
-        .select("id")
-        .eq("organization_id", orgId)
-        .eq("contact_id", contact.id)
-        .neq("status", "closed")
-        .order("last_message_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (existingConv) {
-        conversation = existingConv;
+      if (result.processed) {
+        processedCount++;
       } else {
-        const { data: newConv } = await supabase
-          .from("conversations")
-          .insert({
-            organization_id: orgId,
-            contact_id: contact.id,
-            department_id: contact.department_id,
-            status: "open",
-            unread_count: 0,
-          })
-          .select()
-          .single();
-
-        conversation = newConv;
-
-        await supabase.from("inbox_events").insert({
-          organization_id: orgId,
-          conversation_id: conversation.id,
-          event_type: "conversation_created",
-          payload: { channel: "email", contact_name: `${contact.first_name} ${contact.last_name}` },
-        });
+        skippedCount++;
       }
+    }
 
-      const body = extractEmailBody(msgData.payload);
-      const sentAt = date ? new Date(date).toISOString() : new Date(parseInt(msgData.internalDate)).toISOString();
-
-      await supabase.from("messages").insert({
-        organization_id: orgId,
-        conversation_id: conversation.id,
-        contact_id: contact.id,
-        channel: "email",
-        direction: isInbound ? "inbound" : "outbound",
-        body: body.substring(0, 50000),
-        subject,
-        metadata: {
-          from_email: fromEmail,
-          to_email: toEmail,
-          thread_id: msgData.threadId,
-          gmail_message_id: ref.id,
-          sent_via: "gmail",
-        },
-        status: "delivered",
-        external_id: ref.id,
-        sent_at: sentAt,
-      });
-
-      if (isInbound) {
-        const { data: convData } = await supabase
-          .from("conversations")
-          .select("unread_count")
-          .eq("id", conversation.id)
-          .single();
-
-        await supabase
-          .from("conversations")
-          .update({
-            unread_count: (convData?.unread_count || 0) + 1,
-            last_message_at: sentAt,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", conversation.id);
-      } else {
-        await supabase
-          .from("conversations")
-          .update({
-            last_message_at: sentAt,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", conversation.id);
-      }
-
-      processedCount++;
+    const profileRes = await fetch(`${GMAIL_API_URL}/users/me/profile`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    let historyId: string | null = null;
+    if (profileRes.ok) {
+      const profile = await profileRes.json();
+      historyId = String(profile.historyId);
     }
 
     const now = new Date().toISOString();
@@ -327,6 +140,7 @@ Deno.serve(async (req: Request) => {
         sync_status: "idle",
         last_full_sync_at: now,
         last_incremental_sync_at: now,
+        history_id: historyId,
         error_message: null,
         updated_at: now,
       })
@@ -339,24 +153,29 @@ Deno.serve(async (req: Request) => {
       .eq("user_id", userId)
       .eq("provider", "google_gmail");
 
+    await supabase
+      .from("gmail_sync_jobs")
+      .update({ status: "done", updated_at: now })
+      .eq("organization_id", orgId)
+      .eq("user_id", userId)
+      .eq("job_type", "initial")
+      .eq("status", "running");
+
     return new Response(
       JSON.stringify({
         success: true,
         processed: processedCount,
         skipped: skippedCount,
         total: messageRefs.length,
+        historyId,
       }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (supabaseUrl && serviceRoleKey) {
+    if (supabaseUrl && serviceRoleKey && orgId && userId) {
       try {
-        const body = await req.clone().json().catch(() => ({}));
         const supabase = createClient(supabaseUrl, serviceRoleKey, {
           auth: { autoRefreshToken: false, persistSession: false },
         });
@@ -364,11 +183,11 @@ Deno.serve(async (req: Request) => {
           .from("gmail_sync_state")
           .update({
             sync_status: "error",
-            error_message: error.message,
+            error_message: (error as Error).message,
             updated_at: new Date().toISOString(),
           })
-          .eq("organization_id", body.org_id)
-          .eq("user_id", body.user_id);
+          .eq("organization_id", orgId)
+          .eq("user_id", userId);
       } catch {
         // best-effort error logging
       }
@@ -376,11 +195,8 @@ Deno.serve(async (req: Request) => {
 
     console.error("Gmail sync error:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      JSON.stringify({ error: (error as Error).message }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
