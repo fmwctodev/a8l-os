@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { RefreshCw, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { MessageBubble } from './MessageBubble';
 import { MessageComposer } from './MessageComposer';
@@ -33,57 +34,62 @@ export function MessageThread({
   const [messages, setMessages] = useState<Message[]>([]);
   const [events, setEvents] = useState<InboxEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [sending, setSending] = useState(false);
   const [availableChannels, setAvailableChannels] = useState<{ channel: MessageChannel; identifier: string }[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<MessageChannel>('sms');
 
-  useEffect(() => {
-    async function loadThread() {
-      try {
-        setLoading(true);
-        const [messagesResult, eventsResult] = await Promise.allSettled([
-          getRecentMessages(conversation.id, 100),
-          getInboxEvents(conversation.id),
-        ]);
+  const loadThread = useCallback(async () => {
+    try {
+      setLoading(true);
+      setLoadError(false);
+      const [messagesResult, eventsResult] = await Promise.allSettled([
+        getRecentMessages(conversation.id, 100),
+        getInboxEvents(conversation.id),
+      ]);
 
-        const messagesData = messagesResult.status === 'fulfilled' ? messagesResult.value : [];
-        const eventsData = eventsResult.status === 'fulfilled' ? eventsResult.value : [];
+      const messagesData = messagesResult.status === 'fulfilled' ? messagesResult.value : [];
+      const eventsData = eventsResult.status === 'fulfilled' ? eventsResult.value : [];
 
-        if (messagesResult.status === 'rejected') {
-          console.error('Failed to load messages:', messagesResult.reason);
-        }
-        if (eventsResult.status === 'rejected') {
-          console.error('Failed to load events:', eventsResult.reason);
-        }
-
-        setMessages(messagesData);
-        setEvents(eventsData);
-
-        if (conversation.contact) {
-          try {
-            const channels = await getContactChannels(conversation.contact as Contact);
-            setAvailableChannels(channels);
-
-            if (channels.length > 0) {
-              const lastMessage = messagesData[messagesData.length - 1];
-              if (lastMessage && channels.find((c) => c.channel === lastMessage.channel)) {
-                setSelectedChannel(lastMessage.channel);
-              } else {
-                setSelectedChannel(channels[0].channel);
-              }
-            }
-          } catch (channelError) {
-            console.error('Failed to load channels:', channelError);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load thread:', error);
-      } finally {
-        setLoading(false);
+      if (messagesResult.status === 'rejected') {
+        console.error('Failed to load messages:', messagesResult.reason);
+        setLoadError(true);
       }
+      if (eventsResult.status === 'rejected') {
+        console.error('Failed to load events:', eventsResult.reason);
+      }
+
+      setMessages(messagesData);
+      setEvents(eventsData);
+
+      if (conversation.contact) {
+        try {
+          const channels = await getContactChannels(conversation.contact as Contact);
+          setAvailableChannels(channels);
+
+          if (channels.length > 0) {
+            const lastMessage = messagesData[messagesData.length - 1];
+            if (lastMessage && channels.find((c) => c.channel === lastMessage.channel)) {
+              setSelectedChannel(lastMessage.channel);
+            } else {
+              setSelectedChannel(channels[0].channel);
+            }
+          }
+        } catch (channelError) {
+          console.error('Failed to load channels:', channelError);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load thread:', error);
+      setLoadError(true);
+    } finally {
+      setLoading(false);
     }
-    loadThread();
   }, [conversation.id, conversation.contact]);
+
+  useEffect(() => {
+    loadThread();
+  }, [loadThread]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -132,7 +138,6 @@ export function MessageThread({
           external_id: null,
           sent_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
           hidden_at: null,
           hidden_by_user_id: null,
         };
@@ -229,6 +234,18 @@ export function MessageThread({
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full" />
+          </div>
+        ) : loadError && messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3">
+            <AlertTriangle className="w-8 h-8 text-amber-400" />
+            <p className="text-slate-400 text-sm">Failed to load messages</p>
+            <button
+              onClick={loadThread}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm transition-colors"
+            >
+              <RefreshCw size={14} />
+              Retry
+            </button>
           </div>
         ) : threadItems.length === 0 ? (
           <div className="flex items-center justify-center h-full text-slate-400">

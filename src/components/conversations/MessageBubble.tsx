@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Phone, Mail, PhoneCall, MessageCircle, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal, Paperclip, Download, FileText, Image, File } from 'lucide-react';
 import { trashGmailMessage, archiveGmailMessage, downloadAttachment, listMessageAttachments } from '../../services/gmailApi';
 import type { Message, MessageChannel, MessageStatus } from '../../types';
@@ -267,16 +267,22 @@ function AttachmentStrip({
   const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  if (!loaded) {
-    setLoaded(true);
-    if (externalId) {
-      listMessageAttachments(externalId)
-        .then((res: { attachments?: AttachmentInfo[] }) => {
-          setAttachments(res.attachments || []);
-        })
-        .catch(() => {});
+  useEffect(() => {
+    if (!externalId) {
+      setLoaded(true);
+      return;
     }
-  }
+    let cancelled = false;
+    listMessageAttachments(externalId)
+      .then((res: { attachments?: AttachmentInfo[] }) => {
+        if (!cancelled) setAttachments(res.attachments || []);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, [externalId]);
 
   if (!loaded || attachments.length === 0) {
     return (

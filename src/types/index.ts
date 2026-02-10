@@ -398,6 +398,8 @@ export interface Message {
   external_id: string | null;
   sent_at: string;
   created_at: string;
+  hidden_at: string | null;
+  hidden_by_user_id: string | null;
   contact?: Contact;
 }
 

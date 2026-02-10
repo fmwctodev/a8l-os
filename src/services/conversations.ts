@@ -52,6 +52,28 @@ export async function getConversations(
 
   let conversations = data as Conversation[];
 
+  const convIds = conversations.map(c => c.id);
+  if (convIds.length > 0) {
+    const { data: msgs } = await supabase
+      .from('messages')
+      .select('conversation_id, id, body, channel, direction, sent_at, subject')
+      .in('conversation_id', convIds)
+      .is('hidden_at', null)
+      .order('sent_at', { ascending: false });
+
+    const lastMsgMap = new Map<string, Record<string, unknown>>();
+    for (const m of msgs || []) {
+      if (!lastMsgMap.has(m.conversation_id)) {
+        lastMsgMap.set(m.conversation_id, m);
+      }
+    }
+
+    conversations = conversations.map(c => ({
+      ...c,
+      last_message: lastMsgMap.get(c.id) as Conversation['last_message'],
+    }));
+  }
+
   if (filters.channels && filters.channels.length > 0) {
     const conversationIds = conversations.map(c => c.id);
     const { data: messages } = await supabase
