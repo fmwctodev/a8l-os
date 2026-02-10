@@ -16,7 +16,7 @@ export async function getAIDraftsByConversation(
     .select(`
       *,
       agent:ai_agents!agent_id (
-        id, name, type
+        id, name, agent_type
       ),
       triggered_by_rule:conversation_rules!triggered_by_rule_id (
         id, name
@@ -40,7 +40,7 @@ export async function getPendingDraft(
     .select(`
       *,
       agent:ai_agents!agent_id (
-        id, name, type
+        id, name, agent_type
       ),
       triggered_by_rule:conversation_rules!triggered_by_rule_id (
         id, name
@@ -62,7 +62,7 @@ export async function getAIDraftById(id: string): Promise<AIDraft | null> {
     .select(`
       *,
       agent:ai_agents!agent_id (
-        id, name, type
+        id, name, agent_type
       ),
       triggered_by_rule:conversation_rules!triggered_by_rule_id (
         id, name
@@ -113,7 +113,7 @@ export async function createAIDraft(input: CreateAIDraftInput): Promise<AIDraft>
     .select(`
       *,
       agent:ai_agents!agent_id (
-        id, name, type
+        id, name, agent_type
       ),
       triggered_by_rule:conversation_rules!triggered_by_rule_id (
         id, name
@@ -139,7 +139,7 @@ export async function updateAIDraft(
     .select(`
       *,
       agent:ai_agents!agent_id (
-        id, name, type
+        id, name, agent_type
       )
     `)
     .single();
@@ -165,7 +165,7 @@ export async function approveAIDraft(
     .select(`
       *,
       agent:ai_agents!agent_id (
-        id, name, type
+        id, name, agent_type
       )
     `)
     .single();
@@ -190,7 +190,7 @@ export async function rejectAIDraft(
     .select(`
       *,
       agent:ai_agents!agent_id (
-        id, name, type
+        id, name, agent_type
       )
     `)
     .single();
@@ -243,7 +243,7 @@ export async function regenerateAIDraft(
     .select(`
       *,
       agent:ai_agents!agent_id (
-        id, name, type
+        id, name, agent_type
       ),
       triggered_by_rule:conversation_rules!triggered_by_rule_id (
         id, name
@@ -318,7 +318,7 @@ export async function createWorkflowDraft(
     .select(`
       *,
       agent:ai_agents!agent_id (
-        id, name, type
+        id, name, agent_type
       )
     `)
     .single();
@@ -339,7 +339,7 @@ export async function getPendingWorkflowDrafts(
     .select(`
       *,
       agent:ai_agents!agent_id (
-        id, name, type
+        id, name, agent_type
       ),
       approved_by_user:users!approved_by (
         id, name, email, avatar_url
@@ -374,7 +374,7 @@ export async function getPendingDraftsBySource(
     .select(`
       *,
       agent:ai_agents!agent_id (
-        id, name, type
+        id, name, agent_type
       ),
       triggered_by_rule:conversation_rules!triggered_by_rule_id (
         id, name
@@ -448,7 +448,7 @@ export async function getAllPendingDraftsWithContext(
     .select(`
       *,
       agent:ai_agents!agent_id (
-        id, name, type
+        id, name, agent_type
       ),
       contact:contacts!contact_id (
         id, first_name, last_name, email
