@@ -8,6 +8,7 @@ import { ConversationFilters } from '../../components/conversations/Conversation
 import { TeamMessagingTab } from '../../components/conversations/TeamMessagingTab';
 import { NewConversationModal } from '../../components/conversations/NewConversationModal';
 import { PendingDraftsSection } from '../../components/conversations/PendingDraftsSection';
+import { ConversationErrorBoundary } from '../../components/ConversationErrorBoundary';
 import { getConversations, getConversationById, markConversationAsRead, findOrCreateConversation } from '../../services/conversations';
 import type { Conversation, ConversationFilters as FilterType } from '../../types';
 import { MessageSquare, Filter, Users, Inbox, Plus } from 'lucide-react';
@@ -250,39 +251,44 @@ export function Conversations() {
             />
           </div>
 
-          <div className="flex-1 flex flex-col bg-slate-900">
-            {selectedConversation ? (
-              <MessageThread
-                conversation={selectedConversation}
-                onConversationUpdate={loadConversations}
-                onToggleContactPanel={() => setShowContactPanel(!showContactPanel)}
-                showContactPanel={showContactPanel}
-              />
-            ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
-                    <MessageSquare className="w-8 h-8 text-slate-500" />
+          <ConversationErrorBoundary
+            key={selectedConversation?.id}
+            onRetry={loadConversations}
+          >
+            <div className="flex-1 flex flex-col bg-slate-900">
+              {selectedConversation ? (
+                <MessageThread
+                  conversation={selectedConversation}
+                  onConversationUpdate={loadConversations}
+                  onToggleContactPanel={() => setShowContactPanel(!showContactPanel)}
+                  showContactPanel={showContactPanel}
+                />
+              ) : (
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
+                      <MessageSquare className="w-8 h-8 text-slate-500" />
+                    </div>
+                    <h3 className="text-lg font-medium text-white mb-1">
+                      Select a conversation
+                    </h3>
+                    <p className="text-slate-400">
+                      Choose a conversation from the list to view messages
+                    </p>
                   </div>
-                  <h3 className="text-lg font-medium text-white mb-1">
-                    Select a conversation
-                  </h3>
-                  <p className="text-slate-400">
-                    Choose a conversation from the list to view messages
-                  </p>
                 </div>
+              )}
+            </div>
+
+            {selectedConversation && showContactPanel && (
+              <div className="w-80 border-l border-slate-700 bg-slate-800 overflow-y-auto">
+                <ContactPanel
+                  conversation={selectedConversation}
+                  onClose={() => setShowContactPanel(false)}
+                />
               </div>
             )}
-          </div>
-
-          {selectedConversation && showContactPanel && (
-            <div className="w-80 border-l border-slate-700 bg-slate-800 overflow-y-auto">
-              <ContactPanel
-                conversation={selectedConversation}
-                onClose={() => setShowContactPanel(false)}
-              />
-            </div>
-          )}
+          </ConversationErrorBoundary>
         </div>
       )}
 

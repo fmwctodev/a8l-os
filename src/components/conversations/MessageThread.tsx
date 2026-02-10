@@ -41,28 +41,43 @@ export function MessageThread({
     async function loadThread() {
       try {
         setLoading(true);
-        const [messagesData, eventsData] = await Promise.all([
+        const [messagesResult, eventsResult] = await Promise.allSettled([
           getRecentMessages(conversation.id, 100),
           getInboxEvents(conversation.id),
         ]);
+
+        const messagesData = messagesResult.status === 'fulfilled' ? messagesResult.value : [];
+        const eventsData = eventsResult.status === 'fulfilled' ? eventsResult.value : [];
+
+        if (messagesResult.status === 'rejected') {
+          console.error('Failed to load messages:', messagesResult.reason);
+        }
+        if (eventsResult.status === 'rejected') {
+          console.error('Failed to load events:', eventsResult.reason);
+        }
+
         setMessages(messagesData);
         setEvents(eventsData);
 
         if (conversation.contact) {
-          const channels = await getContactChannels(conversation.contact as Contact);
-          setAvailableChannels(channels);
+          try {
+            const channels = await getContactChannels(conversation.contact as Contact);
+            setAvailableChannels(channels);
 
-          if (channels.length > 0) {
-            const lastMessage = messagesData[messagesData.length - 1];
-            if (lastMessage && channels.find((c) => c.channel === lastMessage.channel)) {
-              setSelectedChannel(lastMessage.channel);
-            } else {
-              setSelectedChannel(channels[0].channel);
+            if (channels.length > 0) {
+              const lastMessage = messagesData[messagesData.length - 1];
+              if (lastMessage && channels.find((c) => c.channel === lastMessage.channel)) {
+                setSelectedChannel(lastMessage.channel);
+              } else {
+                setSelectedChannel(channels[0].channel);
+              }
             }
+          } catch (channelError) {
+            console.error('Failed to load channels:', channelError);
           }
         }
       } catch (error) {
-        console.error('Failed to load messages:', error);
+        console.error('Failed to load thread:', error);
       } finally {
         setLoading(false);
       }
