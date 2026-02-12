@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Phone, Mail, PhoneCall, MessageCircle, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal, Paperclip, Download, FileText, Image, File, ChevronDown, ChevronUp, StickyNote } from 'lucide-react';
+import { Phone, Mail, PhoneCall, MessageCircle, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal, Paperclip, Download, FileText, Image, File, ChevronDown, ChevronUp, StickyNote, ExternalLink } from 'lucide-react';
 import { trashGmailMessage, archiveGmailMessage, downloadAttachment, listMessageAttachments } from '../../services/gmailApi';
 import type { Message, MessageChannel, MessageStatus } from '../../types';
 
@@ -8,6 +8,7 @@ const EMAIL_PREVIEW_LENGTH = 250;
 interface MessageBubbleProps {
   message: Message;
   onMessageAction?: (messageId: string, action: 'archived' | 'trashed') => void;
+  onOpenThread?: (threadId: string, subject: string) => void;
 }
 
 function cleanEmailBody(body: string): string {
@@ -21,7 +22,7 @@ function cleanEmailBody(body: string): string {
   return cleaned;
 }
 
-export function MessageBubble({ message, onMessageAction }: MessageBubbleProps) {
+export function MessageBubble({ message, onMessageAction, onOpenThread }: MessageBubbleProps) {
   const [showActions, setShowActions] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [downloadingAttId, setDownloadingAttId] = useState<string | null>(null);
@@ -80,6 +81,7 @@ export function MessageBubble({ message, onMessageAction }: MessageBubbleProps) 
   }
 
   if (isEmailChannel) {
+    const threadId = metadata?.thread_id as string | undefined;
     return <EmailBubble
       message={message}
       isOutbound={isOutbound}
@@ -97,6 +99,8 @@ export function MessageBubble({ message, onMessageAction }: MessageBubbleProps) 
       onTrash={handleTrash}
       actionLoading={actionLoading}
       downloadingAttId={downloadingAttId}
+      threadId={threadId}
+      onOpenThread={onOpenThread}
       onDownloadAttachment={async (attId: string, filename: string) => {
         if (!message.external_id) return;
         setDownloadingAttId(attId);
@@ -191,6 +195,8 @@ function EmailBubble({
   actionLoading,
   downloadingAttId,
   onDownloadAttachment,
+  threadId,
+  onOpenThread,
 }: {
   message: Message;
   isOutbound: boolean;
@@ -209,6 +215,8 @@ function EmailBubble({
   actionLoading: boolean;
   downloadingAttId: string | null;
   onDownloadAttachment: (attId: string, filename: string) => void;
+  threadId?: string;
+  onOpenThread?: (threadId: string, subject: string) => void;
 }) {
   const cleanedBody = cleanEmailBody(message.body);
   const isLong = cleanedBody.length > EMAIL_PREVIEW_LENGTH;
@@ -300,6 +308,22 @@ function EmailBubble({
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                 isOutbound ? 'bg-cyan-800/50 text-cyan-300' : 'bg-slate-600/50 text-slate-400'
               }`}>Gmail</span>
+            )}
+            {threadId && onOpenThread && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenThread(threadId, message.subject || 'Email Thread');
+                }}
+                className={`flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded transition-colors ${
+                  isOutbound
+                    ? 'text-cyan-300 hover:bg-cyan-800/50 hover:text-cyan-200'
+                    : 'text-slate-400 hover:bg-slate-600/50 hover:text-slate-300'
+                }`}
+              >
+                <ExternalLink size={10} />
+                View thread
+              </button>
             )}
           </div>
           <div className={`flex items-center gap-2 ${isOutbound ? 'text-cyan-300' : 'text-slate-400'}`}>

@@ -5,6 +5,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { MessageBubble } from './MessageBubble';
 import { MessageComposer } from './MessageComposer';
 import { ConversationHeader } from './ConversationHeader';
+import { EmailThreadDrawer } from './EmailThreadDrawer';
 import { getRecentMessages, createMessage, getInternalComments } from '../../services/messages';
 import { getInboxEvents } from '../../services/inboxEvents';
 import { getContactChannels } from '../../services/contactLinking';
@@ -43,6 +44,7 @@ export function MessageThread({
   const [availableChannels, setAvailableChannels] = useState<{ channel: MessageChannel; identifier: string }[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<MessageChannel>('sms');
   const [fromNumbers, setFromNumbers] = useState<TwilioNumber[]>([]);
+  const [emailThread, setEmailThread] = useState<{ threadId: string; subject: string } | null>(null);
 
   const loadThread = useCallback(async () => {
     try {
@@ -319,7 +321,11 @@ export function MessageThread({
             }
 
             return (
-              <MessageBubble key={(item.data as Message).id} message={item.data as Message} />
+              <MessageBubble
+                key={(item.data as Message).id}
+                message={item.data as Message}
+                onOpenThread={(threadId, subject) => setEmailThread({ threadId, subject })}
+              />
             );
           })
         )}
@@ -340,6 +346,14 @@ export function MessageThread({
         gmailConnected={user?.gmail_connected || false}
         fromNumbers={fromNumbers}
       />
+
+      {emailThread && (
+        <EmailThreadDrawer
+          threadId={emailThread.threadId}
+          subject={emailThread.subject}
+          onClose={() => setEmailThread(null)}
+        />
+      )}
     </div>
   );
 }
