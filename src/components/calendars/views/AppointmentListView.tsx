@@ -12,15 +12,18 @@ import {
   Eye,
   Edit3,
   XCircle,
+  Plus,
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getVisibleAppointments, updateAppointment, cancelAppointment } from '../../../services/appointments';
 import { getCalendars } from '../../../services/calendars';
 import { getUsers } from '../../../services/users';
-import type { Appointment, Calendar, User, CalendarViewFilter, AppointmentStatus } from '../../../types';
+import { getDepartments } from '../../../services/departments';
+import type { Appointment, Calendar, User, Department, CalendarViewFilter, AppointmentStatus } from '../../../types';
 import { ManageViewPanel } from './ManageViewPanel';
 import { AppointmentDetailsModal } from './AppointmentDetailsModal';
 import { EditAppointmentModal } from './EditAppointmentModal';
+import { CreateCalendarModal } from '../CreateCalendarModal';
 
 type SortField = 'start_at_utc' | 'contact' | 'calendar' | 'type' | 'assigned_user' | 'status';
 type SortDirection = 'asc' | 'desc';
@@ -37,6 +40,8 @@ export function AppointmentListView() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [isCreateCalendarOpen, setIsCreateCalendarOpen] = useState(false);
 
   const [isManageViewOpen, setIsManageViewOpen] = useState(false);
   const [viewFilter, setViewFilter] = useState<CalendarViewFilter>('all');
@@ -60,12 +65,14 @@ export function AppointmentListView() {
 
     try {
       setIsLoading(true);
-      const [calendarsData, usersData] = await Promise.all([
+      const [calendarsData, usersData, departmentsData] = await Promise.all([
         getCalendars(currentUser.organization_id),
         getUsers(),
+        getDepartments(currentUser.organization_id),
       ]);
       setCalendars(calendarsData);
       setUsers(usersData);
+      setDepartments(departmentsData);
     } catch (err) {
       console.error('Failed to load initial data:', err);
     } finally {
@@ -248,11 +255,47 @@ export function AppointmentListView() {
     );
   };
 
+  const handleCreateCalendarSuccess = () => {
+    setIsCreateCalendarOpen(false);
+    loadInitialData();
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
       </div>
+    );
+  }
+
+  if (calendars.length === 0) {
+    return (
+      <>
+        <div className="flex flex-col items-center justify-center h-full px-4">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-teal-500/20 flex items-center justify-center mb-6">
+            <CalendarIcon className="w-8 h-8 text-cyan-400" />
+          </div>
+          <h3 className="text-xl font-semibold text-white mb-2">No calendars set up yet</h3>
+          <p className="text-slate-400 text-sm text-center max-w-md mb-6">
+            Create your first calendar to start scheduling appointments, managing availability, and booking time with contacts.
+          </p>
+          <button
+            onClick={() => setIsCreateCalendarOpen(true)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-white font-medium hover:from-cyan-600 hover:to-teal-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Create Calendar
+          </button>
+        </div>
+        {isCreateCalendarOpen && (
+          <CreateCalendarModal
+            departments={departments}
+            users={users}
+            onClose={() => setIsCreateCalendarOpen(false)}
+            onSuccess={handleCreateCalendarSuccess}
+          />
+        )}
+      </>
     );
   }
 
@@ -533,7 +576,7 @@ export function AppointmentListView() {
         />
       )}
 
-      {isEditModalOpen && editingAppointment && (
+      {isEditModalOpen && editingAppointment && calendars.length > 0 && (
         <EditAppointmentModal
           calendar={calendars.find((c) => c.id === editingAppointment.calendar_id) || calendars[0]}
           appointment={editingAppointment}
