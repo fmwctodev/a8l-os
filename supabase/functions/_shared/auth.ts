@@ -30,7 +30,7 @@ export async function extractUserContext(
     .select(`
       id,
       email,
-      org_id,
+      organization_id,
       role_id,
       department_id,
       role:roles!role_id(
@@ -80,7 +80,7 @@ export async function extractUserContext(
   return {
     id: userData.id,
     email: userData.email,
-    orgId: userData.org_id,
+    orgId: userData.organization_id,
     roleId: userData.role_id,
     roleName: userData.role?.name || "Unknown",
     departmentId: userData.department_id,
