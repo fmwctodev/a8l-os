@@ -1,14 +1,26 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Phone, Mail, PhoneCall, MessageCircle, ChevronDown, Bot, FileText, Check } from 'lucide-react';
-import { calculateSMSSegments } from '../../services/channels/twilio';
+import { Bot, Check } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { AskAIModal } from './AskAIModal';
 import { SnippetPicker } from './SnippetPicker';
 import { createGmailDraft, updateGmailDraft, deleteGmailDraft } from '../../services/gmailApi';
+import { ComposerTabBar } from './composer/ComposerTabBar';
+import { SMSComposerContent } from './composer/SMSComposerContent';
+import { EmailComposerContent } from './composer/EmailComposerContent';
+import { InternalCommentContent } from './composer/InternalCommentContent';
+import type { ComposerTab } from './composer/ComposerTabBar';
 import type { MessageChannel, Contact, Conversation } from '../../types';
+import type { TwilioNumber } from '../../services/phoneNumbers';
+
+interface EmailRecipient {
+  email: string;
+  name: string;
+  contactId?: string;
+}
 
 interface MessageComposerProps {
-  onSend: (body: string, subject?: string) => Promise<void>;
+  onSend: (body: string, subject?: string, metadata?: Record<string, unknown>) => Promise<void>;
+  onSendInternalComment?: (body: string, mentions: string[]) => Promise<void>;
   sending: boolean;
   disabled: boolean;
   availableChannels: { channel: MessageChannel; identifier: string }[];
@@ -18,41 +30,69 @@ interface MessageComposerProps {
   contact?: Contact;
   conversation?: Conversation;
   gmailConnected?: boolean;
+  fromNumbers?: TwilioNumber[];
 }
 
 export function MessageComposer({
   onSend,
+  onSendInternalComment,
   sending,
   disabled,
   availableChannels,
   selectedChannel,
   onChannelChange,
-  showSubject,
+  showSubject: _showSubject,
   contact,
   conversation,
   gmailConnected = false,
+  fromNumbers = [],
 }: MessageComposerProps) {
-  const { hasPermission, isFeatureEnabled } = useAuth();
+  const { user, hasPermission, isFeatureEnabled } = useAuth();
   const [body, setBody] = useState('');
   const [subject, setSubject] = useState('');
-  const [showChannelMenu, setShowChannelMenu] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
   const [showSnippetPicker, setShowSnippetPicker] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [ccRecipients, setCcRecipients] = useState<EmailRecipient[]>([]);
+  const [bccRecipients, setBccRecipients] = useState<EmailRecipient[]>([]);
+  const [internalMentions, setInternalMentions] = useState<string[]>([]);
+  const [selectedFromNumber, setSelectedFromNumber] = useState('');
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const canUseAI = hasPermission('ai_agents.run') && isFeatureEnabled('ai_agents');
   const canUseSnippets = hasPermission('snippets.view') && isFeatureEnabled('snippets');
-  const isGmailEmail = gmailConnected && selectedChannel === 'email';
+
+  const hasSms = availableChannels.some((c) => c.channel === 'sms');
+  const hasEmail = availableChannels.some((c) => c.channel === 'email');
+
+  const channelToTab = (ch: MessageChannel): ComposerTab => {
+    if (ch === 'email') return 'email';
+    return 'sms';
+  };
+
+  const [activeTab, setActiveTab] = useState<ComposerTab>(() => {
+    if (hasSms) return 'sms';
+    if (hasEmail) return 'email';
+    return 'internal_comment';
+  });
 
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+    const tab = channelToTab(selectedChannel);
+    if (tab === 'sms' && hasSms) setActiveTab('sms');
+    else if (tab === 'email' && hasEmail) setActiveTab('email');
+  }, [selectedChannel, hasSms, hasEmail]);
+
+  useEffect(() => {
+    if (fromNumbers.length > 0 && !selectedFromNumber) {
+      const defaultNum = fromNumbers.find((n) => n.is_default_sms) || fromNumbers[0];
+      setSelectedFromNumber(defaultNum.phone_number);
     }
-  }, [body]);
+  }, [fromNumbers, selectedFromNumber]);
+
+  const isGmailEmail = gmailConnected && activeTab === 'email';
 
   const saveDraftToGmail = useCallback(async (draftBody: string, draftSubject: string) => {
     if (!isGmailEmail || !draftBody.trim()) return;
@@ -86,27 +126,18 @@ export function MessageComposer({
 
   useEffect(() => {
     if (!isGmailEmail || !body.trim()) return;
-
-    if (draftTimerRef.current) {
-      clearTimeout(draftTimerRef.current);
-    }
-
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
     draftTimerRef.current = setTimeout(() => {
       saveDraftToGmail(body, subject);
     }, 30000);
-
     return () => {
-      if (draftTimerRef.current) {
-        clearTimeout(draftTimerRef.current);
-      }
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
     };
   }, [body, subject, isGmailEmail, saveDraftToGmail]);
 
   useEffect(() => {
     return () => {
-      if (draftTimerRef.current) {
-        clearTimeout(draftTimerRef.current);
-      }
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
     };
   }, []);
 
@@ -115,27 +146,63 @@ export function MessageComposer({
     setDraftSaved(false);
   }, [conversation?.id]);
 
+  const handleTabChange = (tab: ComposerTab) => {
+    setActiveTab(tab);
+    if (tab === 'sms' && hasSms) onChannelChange('sms');
+    else if (tab === 'email' && hasEmail) onChannelChange('email');
+  };
+
   const handleSubmit = async () => {
     if (!body.trim() || sending || disabled) return;
-
-    if (draftTimerRef.current) {
-      clearTimeout(draftTimerRef.current);
-    }
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
 
     try {
-      await onSend(body.trim(), showSubject ? subject.trim() : undefined);
+      if (activeTab === 'internal_comment') {
+        if (onSendInternalComment) {
+          await onSendInternalComment(body.trim(), internalMentions);
+        }
+      } else {
+        const metadata: Record<string, unknown> = {};
+        if (activeTab === 'sms' && selectedFromNumber) {
+          metadata.from_number = selectedFromNumber;
+        }
+        if (activeTab === 'email') {
+          if (ccRecipients.length > 0) {
+            metadata.cc = ccRecipients.map((r) => r.email).join(', ');
+          }
+          if (bccRecipients.length > 0) {
+            metadata.bcc = bccRecipients.map((r) => r.email).join(', ');
+          }
+        }
+        await onSend(
+          body.trim(),
+          activeTab === 'email' ? subject.trim() : undefined,
+          Object.keys(metadata).length > 0 ? metadata : undefined
+        );
 
-      if (draftId) {
-        deleteGmailDraft(draftId).catch(() => {});
-        setDraftId(null);
+        if (draftId) {
+          deleteGmailDraft(draftId).catch(() => {});
+          setDraftId(null);
+        }
       }
 
       setBody('');
       setSubject('');
+      setCcRecipients([]);
+      setBccRecipients([]);
+      setInternalMentions([]);
       setDraftSaved(false);
     } catch {
-      // Keep input fields intact so user can retry
+      // Keep input fields intact for retry
     }
+  };
+
+  const handleClear = () => {
+    setBody('');
+    setSubject('');
+    setCcRecipients([]);
+    setBccRecipients([]);
+    setInternalMentions([]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -148,9 +215,7 @@ export function MessageComposer({
     }
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 's') {
       e.preventDefault();
-      if (canUseSnippets) {
-        setShowSnippetPicker(true);
-      }
+      if (canUseSnippets) setShowSnippetPicker(true);
     }
   };
 
@@ -171,24 +236,23 @@ export function MessageComposer({
     setShowSnippetPicker(false);
   };
 
-  const smsInfo = selectedChannel === 'sms' ? calculateSMSSegments(body) : null;
-
-  const selectedChannelConfig = availableChannels.find((c) => c.channel === selectedChannel);
+  const smsChannel = availableChannels.find((c) => c.channel === 'sms');
+  const emailChannel = availableChannels.find((c) => c.channel === 'email');
 
   if (disabled) {
     return (
-      <div className="p-4 border-t border-slate-700 bg-slate-800/50">
-        <div className="text-center text-slate-400 text-sm py-2">
+      <div className="p-4 border-t border-gray-200 bg-gray-50">
+        <div className="text-center text-gray-400 text-sm py-2">
           This conversation is closed. Reopen it to send messages.
         </div>
       </div>
     );
   }
 
-  if (availableChannels.length === 0) {
+  if (availableChannels.length === 0 && !onSendInternalComment) {
     return (
-      <div className="p-4 border-t border-slate-700 bg-slate-800/50">
-        <div className="text-center text-slate-400 text-sm py-2">
+      <div className="p-4 border-t border-gray-200 bg-gray-50">
+        <div className="text-center text-gray-400 text-sm py-2">
           No contact channels available. Add a phone number or email to the contact to send messages.
         </div>
       </div>
@@ -196,138 +260,104 @@ export function MessageComposer({
   }
 
   return (
-    <div className="p-4 border-t border-slate-700 bg-slate-800">
-      {showSubject && (
-        <div className="mb-3">
-          <input
-            type="text"
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            placeholder="Subject..."
-            className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-          />
+    <div className="border-t border-gray-200 bg-white relative">
+      {canUseAI && contact && activeTab !== 'internal_comment' && (
+        <div className="absolute -top-9 left-4 z-10">
+          <button
+            onClick={() => setShowAIModal(true)}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-xs bg-gradient-to-r from-cyan-500 to-teal-600 text-white rounded-lg hover:from-cyan-600 hover:to-teal-700 transition-colors shadow-sm"
+          >
+            <Bot size={14} />
+            Ask AI
+          </button>
         </div>
       )}
 
-      <div className="flex items-end gap-3">
-        <div className="relative flex items-center gap-1">
-          <button
-            onClick={() => setShowChannelMenu(!showChannelMenu)}
-            className="flex items-center gap-2 px-3 py-2.5 border border-slate-600 rounded-lg hover:bg-slate-700 transition-colors"
-          >
-            <ChannelIcon channel={selectedChannel} />
-            <ChevronDown size={14} className="text-slate-500" />
-          </button>
+      <ComposerTabBar
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        hasSms={hasSms}
+        hasEmail={hasEmail}
+        expanded={expanded}
+        onToggleExpand={() => setExpanded(!expanded)}
+      />
 
-          {canUseSnippets && (
-            <button
-              onClick={() => setShowSnippetPicker(!showSnippetPicker)}
-              className="p-2.5 border border-slate-600 rounded-lg hover:bg-slate-700 transition-colors"
-              title="Insert Snippet (Cmd+Shift+S)"
-            >
-              <FileText size={20} className="text-slate-400" />
-            </button>
-          )}
+      {activeTab === 'sms' && smsChannel && (
+        <SMSComposerContent
+          body={body}
+          onBodyChange={setBody}
+          onSend={handleSubmit}
+          onClear={handleClear}
+          sending={sending}
+          sendDisabled={!body.trim() || sending}
+          expanded={expanded}
+          fromNumbers={fromNumbers.filter((n) => n.capabilities.sms && n.status === 'active')}
+          selectedFromNumber={selectedFromNumber}
+          onFromNumberChange={setSelectedFromNumber}
+          toNumber={smsChannel.identifier}
+          onKeyDown={handleKeyDown}
+          onSnippetClick={() => setShowSnippetPicker(!showSnippetPicker)}
+          canUseSnippets={canUseSnippets}
+          textareaRef={textareaRef}
+        />
+      )}
 
-          <div className="absolute -top-10 left-0 flex gap-1">
-            {canUseAI && contact && (
-              <button
-                onClick={() => setShowAIModal(true)}
-                className="flex items-center gap-1 px-2 py-1.5 text-xs bg-gradient-to-r from-cyan-500 to-teal-600 text-white rounded-lg hover:from-cyan-600 hover:to-teal-700 transition-colors"
-                title="Ask AI Assistant"
-              >
-                <Bot size={14} />
-                Ask AI
-              </button>
-            )}
-          </div>
+      {activeTab === 'email' && emailChannel && (
+        <EmailComposerContent
+          body={body}
+          onBodyChange={setBody}
+          subject={subject}
+          onSubjectChange={setSubject}
+          onSend={handleSubmit}
+          onClear={handleClear}
+          sending={sending}
+          sendDisabled={!body.trim() || sending}
+          expanded={expanded}
+          fromName={user?.name || ''}
+          fromEmail={user?.email || ''}
+          toEmail={emailChannel.identifier}
+          toName={contact ? `${contact.first_name} ${contact.last_name}`.trim() : ''}
+          ccRecipients={ccRecipients}
+          onCcChange={setCcRecipients}
+          bccRecipients={bccRecipients}
+          onBccChange={setBccRecipients}
+          onKeyDown={handleKeyDown}
+          onSnippetClick={() => setShowSnippetPicker(!showSnippetPicker)}
+          canUseSnippets={canUseSnippets}
+          textareaRef={textareaRef}
+        />
+      )}
 
-          {showSnippetPicker && (
-            <SnippetPicker
-              channel={selectedChannel}
-              contact={contact}
-              onSelect={handleSnippetSelect}
-              onClose={() => setShowSnippetPicker(false)}
-            />
-          )}
+      {activeTab === 'internal_comment' && (
+        <InternalCommentContent
+          body={body}
+          onBodyChange={setBody}
+          onSend={handleSubmit}
+          onClear={handleClear}
+          sending={sending}
+          sendDisabled={!body.trim() || sending}
+          expanded={expanded}
+          mentions={internalMentions}
+          onMentionsChange={setInternalMentions}
+          currentUserId={user?.id}
+        />
+      )}
 
-          {showChannelMenu && (
-            <>
-              <div
-                className="fixed inset-0 z-10"
-                onClick={() => setShowChannelMenu(false)}
-              />
-              <div className="absolute bottom-full left-0 mb-2 bg-slate-800 border border-slate-600 rounded-lg shadow-lg z-20 min-w-[200px]">
-                {availableChannels.map((channel) => (
-                  <button
-                    key={channel.channel}
-                    onClick={() => {
-                      onChannelChange(channel.channel);
-                      setShowChannelMenu(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-700 first:rounded-t-lg last:rounded-b-lg ${
-                      channel.channel === selectedChannel ? 'bg-slate-700' : ''
-                    }`}
-                  >
-                    <ChannelIcon channel={channel.channel} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-white capitalize">
-                        {channel.channel}
-                      </div>
-                      <div className="text-xs text-slate-400 truncate">
-                        {channel.identifier}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+      {activeTab !== 'internal_comment' && draftSaved && isGmailEmail && (
+        <div className="px-4 pb-2 flex items-center gap-1 text-xs text-emerald-600">
+          <Check size={12} />
+          Draft saved to Gmail
         </div>
+      )}
 
-        <div className="flex-1 relative">
-          <textarea
-            ref={textareaRef}
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type a message..."
-            rows={1}
-            className="w-full px-4 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-            style={{ maxHeight: '120px' }}
+      {showSnippetPicker && activeTab !== 'internal_comment' && (
+        <div className="absolute bottom-full left-4 mb-2 z-50">
+          <SnippetPicker
+            channel={selectedChannel}
+            contact={contact}
+            onSelect={handleSnippetSelect}
+            onClose={() => setShowSnippetPicker(false)}
           />
-
-          {smsInfo && body.length > 0 && (
-            <div className="absolute right-3 bottom-2 text-xs text-slate-500">
-              {body.length} / {smsInfo.segments} segment{smsInfo.segments !== 1 ? 's' : ''}
-            </div>
-          )}
-        </div>
-
-        <button
-          onClick={handleSubmit}
-          disabled={!body.trim() || sending}
-          className="p-3 bg-cyan-600 text-white rounded-lg hover:bg-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {sending ? (
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <Send size={20} />
-          )}
-        </button>
-      </div>
-
-      {selectedChannelConfig && (
-        <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-          <span>
-            Sending via {isGmailEmail ? 'Gmail' : selectedChannel} to {selectedChannelConfig.identifier}
-          </span>
-          {draftSaved && isGmailEmail && (
-            <span className="flex items-center gap-1 text-emerald-400">
-              <Check size={12} />
-              Draft saved to Gmail
-            </span>
-          )}
         </div>
       )}
 
@@ -339,10 +369,10 @@ export function MessageComposer({
           onAcceptDraft={(draft, channel, draftSubject) => {
             setBody(draft);
             if (draftSubject) setSubject(draftSubject);
-            if (channel === 'sms' && availableChannels.some(c => c.channel === 'sms')) {
-              onChannelChange('sms');
-            } else if (channel === 'email' && availableChannels.some(c => c.channel === 'email')) {
-              onChannelChange('email');
+            if (channel === 'sms' && hasSms) {
+              handleTabChange('sms');
+            } else if (channel === 'email' && hasEmail) {
+              handleTabChange('email');
             }
             setShowAIModal(false);
           }}
@@ -350,21 +380,4 @@ export function MessageComposer({
       )}
     </div>
   );
-}
-
-function ChannelIcon({ channel }: { channel: MessageChannel }) {
-  const iconClass = "w-5 h-5 text-slate-400";
-
-  switch (channel) {
-    case 'sms':
-      return <Phone className={iconClass} />;
-    case 'email':
-      return <Mail className={iconClass} />;
-    case 'voice':
-      return <PhoneCall className={iconClass} />;
-    case 'webchat':
-      return <MessageCircle className={iconClass} />;
-    default:
-      return <MessageCircle className={iconClass} />;
-  }
 }

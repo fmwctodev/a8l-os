@@ -5,11 +5,13 @@ import { useToast } from '../../contexts/ToastContext';
 import { MessageBubble } from './MessageBubble';
 import { MessageComposer } from './MessageComposer';
 import { ConversationHeader } from './ConversationHeader';
-import { getRecentMessages, createMessage } from '../../services/messages';
+import { getRecentMessages, createMessage, getInternalComments } from '../../services/messages';
 import { getInboxEvents } from '../../services/inboxEvents';
 import { getContactChannels } from '../../services/contactLinking';
 import { sendGmailEmail, replyToGmailThread } from '../../services/gmailApi';
+import { getNumbers } from '../../services/phoneNumbers';
 import type { Conversation, Message, InboxEvent, MessageChannel, Contact } from '../../types';
+import type { TwilioNumber } from '../../services/phoneNumbers';
 
 interface MessageThreadProps {
   conversation: Conversation;
@@ -40,18 +42,21 @@ export function MessageThread({
   const [sending, setSending] = useState(false);
   const [availableChannels, setAvailableChannels] = useState<{ channel: MessageChannel; identifier: string }[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<MessageChannel>('sms');
+  const [fromNumbers, setFromNumbers] = useState<TwilioNumber[]>([]);
 
   const loadThread = useCallback(async () => {
     try {
       setLoading(true);
       setLoadError(false);
-      const [messagesResult, eventsResult] = await Promise.allSettled([
+      const [messagesResult, eventsResult, commentsResult] = await Promise.allSettled([
         getRecentMessages(conversation.id, 100),
         getInboxEvents(conversation.id),
+        getInternalComments(conversation.id),
       ]);
 
       const messagesData = messagesResult.status === 'fulfilled' ? messagesResult.value : [];
       const eventsData = eventsResult.status === 'fulfilled' ? eventsResult.value : [];
+      const commentsData = commentsResult.status === 'fulfilled' ? commentsResult.value : [];
 
       if (messagesResult.status === 'rejected') {
         console.error('Failed to load messages:', messagesResult.reason);
@@ -61,7 +66,7 @@ export function MessageThread({
         console.error('Failed to load events:', eventsResult.reason);
       }
 
-      setMessages(messagesData);
+      setMessages([...messagesData, ...commentsData]);
       setEvents(eventsData);
 
       if (conversation.contact) {
@@ -94,6 +99,12 @@ export function MessageThread({
   }, [loadThread]);
 
   useEffect(() => {
+    getNumbers()
+      .then(setFromNumbers)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
@@ -113,7 +124,7 @@ export function MessageThread({
     };
   };
 
-  const handleSendMessage = async (body: string, subject?: string) => {
+  const handleSendMessage = async (body: string, subject?: string, extraMetadata?: Record<string, unknown>) => {
     if (!user?.organization_id || !conversation.contact) return;
 
     try {
@@ -148,6 +159,8 @@ export function MessageThread({
 
         try {
           const emailSubject = subject || threadInfo.lastSubject || 'No Subject';
+          const cc = extraMetadata?.cc as string | undefined;
+          const bcc = extraMetadata?.bcc as string | undefined;
 
           if (threadInfo.threadId) {
             await replyToGmailThread({
@@ -159,6 +172,8 @@ export function MessageThread({
               references: threadInfo.references,
               conversationId: conversation.id,
               contactId: conversation.contact_id,
+              cc,
+              bcc,
             });
           } else {
             await sendGmailEmail({
@@ -167,6 +182,8 @@ export function MessageThread({
               htmlBody: body,
               conversationId: conversation.id,
               contactId: conversation.contact_id,
+              cc,
+              bcc,
             });
           }
 
@@ -196,7 +213,7 @@ export function MessageThread({
           throw gmailError;
         }
       } else {
-        const metadata: Record<string, unknown> = {};
+        const metadata: Record<string, unknown> = { ...extraMetadata };
         if (selectedChannel === 'sms' && channelConfig) {
           metadata.to_number = channelConfig.identifier;
         } else if (selectedChannel === 'email' && channelConfig) {
@@ -219,6 +236,37 @@ export function MessageThread({
       onConversationUpdate();
     } catch (error) {
       console.error('Failed to send message:', error);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleSendInternalComment = async (body: string, mentions: string[]) => {
+    if (!user?.organization_id) return;
+
+    try {
+      setSending(true);
+
+      const newMessage = await createMessage(
+        user.organization_id,
+        conversation.id,
+        conversation.contact_id,
+        'sms',
+        'system',
+        body,
+        {
+          type: 'internal_comment',
+          author_id: user.id,
+          author_name: user.name,
+          mentions,
+        }
+      );
+      setMessages((prev) => [...prev, newMessage]);
+      onConversationUpdate();
+    } catch (error) {
+      console.error('Failed to send internal comment:', error);
+      showToast('warning', 'Failed to send comment', 'Please try again.');
+      throw error;
     } finally {
       setSending(false);
     }
@@ -280,6 +328,7 @@ export function MessageThread({
 
       <MessageComposer
         onSend={handleSendMessage}
+        onSendInternalComment={handleSendInternalComment}
         sending={sending}
         disabled={conversation.status === 'closed'}
         availableChannels={availableChannels}
@@ -289,6 +338,7 @@ export function MessageThread({
         contact={conversation.contact as Contact}
         conversation={conversation}
         gmailConnected={user?.gmail_connected || false}
+        fromNumbers={fromNumbers}
       />
     </div>
   );

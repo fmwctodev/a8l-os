@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Phone, Mail, PhoneCall, MessageCircle, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal, Paperclip, Download, FileText, Image, File, ChevronDown, ChevronUp } from 'lucide-react';
+import { Phone, Mail, PhoneCall, MessageCircle, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal, Paperclip, Download, FileText, Image, File, ChevronDown, ChevronUp, StickyNote } from 'lucide-react';
 import { trashGmailMessage, archiveGmailMessage, downloadAttachment, listMessageAttachments } from '../../services/gmailApi';
 import type { Message, MessageChannel, MessageStatus } from '../../types';
 
@@ -65,6 +65,11 @@ export function MessageBubble({ message, onMessageAction }: MessageBubbleProps) 
   };
 
   if (isSystem) {
+    const isInternalComment = metadata?.type === 'internal_comment';
+    if (isInternalComment) {
+      return <InternalCommentBubble message={message} metadata={metadata} />;
+    }
+
     return (
       <div className="flex items-center justify-center my-2">
         <span className="text-xs text-slate-400 bg-slate-700 px-3 py-1 rounded-full">
@@ -138,6 +143,31 @@ export function MessageBubble({ message, onMessageAction }: MessageBubbleProps) 
             {String(message.metadata.error_message)}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function InternalCommentBubble({ message, metadata }: { message: Message; metadata?: Record<string, unknown> }) {
+  const authorName = (metadata?.author_name as string) || 'Team member';
+  const displayBody = message.body.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1');
+
+  return (
+    <div className="flex justify-center my-3">
+      <div className="max-w-[85%] w-full rounded-lg border border-amber-200 bg-amber-50 overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-amber-200/60 bg-amber-100/40">
+          <StickyNote size={14} className="text-amber-600" />
+          <span className="text-xs font-medium text-amber-800">{authorName}</span>
+          <span className="text-xs text-amber-500 ml-auto">{formatTime(message.sent_at)}</span>
+        </div>
+        <div className="px-4 py-3">
+          <p className="text-sm text-amber-900 whitespace-pre-wrap break-words leading-relaxed">
+            {displayBody}
+          </p>
+        </div>
+        <div className="px-4 pb-2">
+          <span className="text-[10px] text-amber-500 italic">Internal note - not visible to contact</span>
+        </div>
       </div>
     </div>
   );

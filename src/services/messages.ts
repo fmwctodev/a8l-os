@@ -54,6 +54,39 @@ export async function getRecentMessages(
   return (data as Message[]).reverse();
 }
 
+export async function getInternalComments(
+  conversationId: string,
+  limit = 50
+): Promise<Message[]> {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversationId)
+    .eq('direction', 'system')
+    .containedBy('metadata', { type: 'internal_comment' })
+    .is('hidden_at', null)
+    .order('sent_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .eq('direction', 'system')
+      .is('hidden_at', null)
+      .order('sent_at', { ascending: false })
+      .limit(limit);
+
+    if (fallbackError) throw fallbackError;
+    return ((fallbackData || []) as Message[])
+      .filter((m) => (m.metadata as Record<string, unknown>)?.type === 'internal_comment')
+      .reverse();
+  }
+
+  return ((data || []) as Message[]).reverse();
+}
+
 export async function createMessage(
   orgId: string,
   conversationId: string,
