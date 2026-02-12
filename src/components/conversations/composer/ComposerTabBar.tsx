@@ -22,12 +22,12 @@ export function ComposerTabBar({
   const tabClass = (tab: ComposerTab) =>
     `px-1 pb-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
       activeTab === tab
-        ? 'text-blue-600 border-blue-600'
-        : 'text-gray-500 border-transparent hover:text-gray-700'
+        ? 'text-cyan-400 border-cyan-500'
+        : 'text-slate-400 border-transparent hover:text-slate-300'
     }`;
 
   return (
-    <div className="flex items-center justify-between px-4 pt-3 border-b border-gray-200">
+    <div className="flex items-center justify-between px-4 pt-3 border-b border-slate-700">
       <div className="flex items-center gap-5">
         {hasSms && (
           <button className={tabClass('sms')} onClick={() => onTabChange('sms')}>
@@ -47,7 +47,7 @@ export function ComposerTabBar({
         </button>
         <button
           onClick={onToggleExpand}
-          className="p-1 text-gray-400 hover:text-gray-600 transition-colors mb-2"
+          className="p-1 text-slate-400 hover:text-white transition-colors mb-2"
           title={expanded ? 'Collapse' : 'Expand'}
         >
           {expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}

@@ -94,7 +94,7 @@ export function MentionDropdown({
   return (
     <div
       ref={containerRef}
-      className="absolute bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-64 max-h-48 overflow-y-auto"
+      className="absolute bg-slate-800 border border-slate-600 rounded-lg shadow-lg z-50 w-64 max-h-48 overflow-y-auto"
       style={{ bottom: position.top, left: position.left }}
     >
       {filteredUsers.map((user, index) => (
@@ -102,10 +102,10 @@ export function MentionDropdown({
           key={user.id}
           onClick={() => onSelect(user)}
           className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
-            index === selectedIndex ? 'bg-blue-50' : 'hover:bg-gray-50'
+            index === selectedIndex ? 'bg-cyan-500/20' : 'hover:bg-slate-700'
           }`}
         >
-          <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-medium shrink-0">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 text-white flex items-center justify-center text-xs font-medium shrink-0">
             {user.avatar_url ? (
               <img src={user.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover" />
             ) : (
@@ -113,8 +113,8 @@ export function MentionDropdown({
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="text-gray-800 truncate">{user.name}</div>
-            <div className="text-gray-400 text-xs truncate">{user.email}</div>
+            <div className="text-white truncate">{user.name}</div>
+            <div className="text-slate-500 text-xs truncate">{user.email}</div>
           </div>
         </button>
       ))}

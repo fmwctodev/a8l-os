@@ -241,8 +241,8 @@ export function MessageComposer({
 
   if (disabled) {
     return (
-      <div className="p-4 border-t border-gray-200 bg-gray-50">
-        <div className="text-center text-gray-400 text-sm py-2">
+      <div className="p-4 border-t border-slate-700 bg-slate-800">
+        <div className="text-center text-slate-500 text-sm py-2">
           This conversation is closed. Reopen it to send messages.
         </div>
       </div>
@@ -251,8 +251,8 @@ export function MessageComposer({
 
   if (availableChannels.length === 0 && !onSendInternalComment) {
     return (
-      <div className="p-4 border-t border-gray-200 bg-gray-50">
-        <div className="text-center text-gray-400 text-sm py-2">
+      <div className="p-4 border-t border-slate-700 bg-slate-800">
+        <div className="text-center text-slate-500 text-sm py-2">
           No contact channels available. Add a phone number or email to the contact to send messages.
         </div>
       </div>
@@ -260,7 +260,7 @@ export function MessageComposer({
   }
 
   return (
-    <div className="border-t border-gray-200 bg-white relative">
+    <div className="border-t border-slate-700 bg-slate-800 relative">
       {canUseAI && contact && activeTab !== 'internal_comment' && (
         <div className="absolute -top-9 left-4 z-10">
           <button

@@ -69,17 +69,17 @@ export function SMSComposerContent({
     <div className="flex flex-col">
       <div className="flex items-center justify-between px-4 py-2.5">
         <div className="flex items-center gap-2" ref={fromRef}>
-          <span className="text-sm text-gray-500">From:</span>
+          <span className="text-sm text-slate-400">From:</span>
           <div className="relative">
             <button
               onClick={() => setShowFromDropdown(!showFromDropdown)}
-              className="flex items-center gap-1.5 text-sm font-medium text-gray-800 hover:text-gray-900"
+              className="flex items-center gap-1.5 text-sm font-medium text-white hover:text-slate-200"
             >
               {formatPhone(selectedFromNumber || (fromNumbers[0]?.phone_number ?? ''))}
-              <ChevronDown size={14} className="text-gray-400" />
+              <ChevronDown size={14} className="text-slate-500" />
             </button>
             {showFromDropdown && fromNumbers.length > 0 && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 min-w-[200px]">
+              <div className="absolute top-full left-0 mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg z-30 min-w-[200px]">
                 {fromNumbers.map((num) => (
                   <button
                     key={num.id}
@@ -87,13 +87,13 @@ export function SMSComposerContent({
                       onFromNumberChange(num.phone_number);
                       setShowFromDropdown(false);
                     }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg ${
-                      num.phone_number === selectedFromNumber ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-slate-700 first:rounded-t-lg last:rounded-b-lg ${
+                      num.phone_number === selectedFromNumber ? 'bg-cyan-500/20 text-cyan-400' : 'text-slate-300'
                     }`}
                   >
                     <span>{formatPhone(num.phone_number)}</span>
                     {num.is_default_sms && (
-                      <span className="text-xs text-gray-400">(Default)</span>
+                      <span className="text-xs text-slate-500">(Default)</span>
                     )}
                   </button>
                 ))}
@@ -103,15 +103,15 @@ export function SMSComposerContent({
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">To:</span>
-          <span className="text-sm font-medium text-gray-800 flex items-center gap-1.5">
+          <span className="text-sm text-slate-400">To:</span>
+          <span className="text-sm font-medium text-white flex items-center gap-1.5">
             {formatPhone(toNumber)}
-            <ChevronDown size={14} className="text-gray-400" />
+            <ChevronDown size={14} className="text-slate-500" />
           </span>
         </div>
       </div>
 
-      <div className="border-t border-gray-100" />
+      <div className="border-t border-slate-700" />
 
       <div className="px-4 pt-3 pb-2">
         <textarea
@@ -120,7 +120,7 @@ export function SMSComposerContent({
           onChange={(e) => onBodyChange(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Type a message"
-          className={`w-full text-sm text-gray-800 placeholder-gray-400 resize-y border-none outline-none bg-transparent ${
+          className={`w-full text-sm text-white placeholder-slate-500 resize-y border-none outline-none bg-transparent ${
             expanded ? 'min-h-[200px]' : 'min-h-[100px]'
           }`}
           style={{ maxHeight: expanded ? '400px' : '200px' }}
@@ -133,20 +133,20 @@ export function SMSComposerContent({
             {canUseSnippets && (
               <button
                 onClick={onSnippetClick}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                className="p-2 text-slate-400 hover:text-white rounded transition-colors"
                 title="Insert Snippet"
               >
                 <FileText size={18} />
               </button>
             )}
             <button
-              className="p-2 text-gray-400 hover:text-gray-600 rounded transition-colors"
+              className="p-2 text-slate-400 hover:text-white rounded transition-colors"
               title="Merge Fields"
             >
               <Braces size={18} />
             </button>
             <button
-              className="p-2 text-gray-400 hover:text-gray-600 rounded transition-colors"
+              className="p-2 text-slate-400 hover:text-white rounded transition-colors"
               title="More options"
             >
               <MoreVertical size={18} />

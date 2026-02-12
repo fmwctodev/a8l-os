@@ -69,37 +69,37 @@ export function EmailComposerContent({
     <div className="flex flex-col">
       <div className="flex items-center justify-between px-4 py-2.5 gap-4">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-sm text-gray-500 shrink-0">From Name:</span>
-          <span className="text-sm font-medium text-gray-800 truncate">{fromName}</span>
-          <button className="p-1 text-gray-400 hover:text-gray-600 shrink-0">
+          <span className="text-sm text-slate-400 shrink-0">From Name:</span>
+          <span className="text-sm font-medium text-white truncate">{fromName}</span>
+          <button className="p-1 text-slate-400 hover:text-white shrink-0">
             <MoreHorizontal size={16} />
           </button>
         </div>
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-sm text-gray-500 shrink-0">From email:</span>
-          <span className="text-sm text-gray-800 truncate">{fromEmail}</span>
+          <span className="text-sm text-slate-400 shrink-0">From email:</span>
+          <span className="text-sm text-white truncate">{fromEmail}</span>
         </div>
       </div>
 
-      <div className="border-t border-gray-100" />
+      <div className="border-t border-slate-700" />
 
       <div className="flex items-center justify-between px-4 py-2">
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <span className="text-sm text-gray-500 shrink-0">To:</span>
-          <div className="w-7 h-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-medium shrink-0">
+          <span className="text-sm text-slate-400 shrink-0">To:</span>
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 text-white flex items-center justify-center text-xs font-medium shrink-0">
             {toInitial}
           </div>
-          <span className="text-sm text-gray-800 truncate">
+          <span className="text-sm text-white truncate">
             {toEmail}
-            <span className="text-gray-400 ml-1">(Primary)</span>
+            <span className="text-slate-500 ml-1">(Primary)</span>
           </span>
-          <ChevronDown size={14} className="text-gray-400 shrink-0" />
+          <ChevronDown size={14} className="text-slate-500 shrink-0" />
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setShowCc(!showCc)}
             className={`text-sm font-medium transition-colors ${
-              showCc ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'
+              showCc ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-300'
             }`}
           >
             CC
@@ -107,7 +107,7 @@ export function EmailComposerContent({
           <button
             onClick={() => setShowBcc(!showBcc)}
             className={`text-sm font-medium transition-colors ${
-              showBcc ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'
+              showBcc ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-300'
             }`}
           >
             BCC
@@ -117,7 +117,7 @@ export function EmailComposerContent({
 
       {showCc && (
         <>
-          <div className="border-t border-gray-100" />
+          <div className="border-t border-slate-700" />
           <ContactEmailAutocomplete
             label="CC"
             recipients={ccRecipients}
@@ -128,7 +128,7 @@ export function EmailComposerContent({
 
       {showBcc && (
         <>
-          <div className="border-t border-gray-100" />
+          <div className="border-t border-slate-700" />
           <ContactEmailAutocomplete
             label="BCC"
             recipients={bccRecipients}
@@ -137,7 +137,7 @@ export function EmailComposerContent({
         </>
       )}
 
-      <div className="border-t border-gray-100" />
+      <div className="border-t border-slate-700" />
 
       <div className="px-4 py-2">
         <input
@@ -145,11 +145,11 @@ export function EmailComposerContent({
           value={subject}
           onChange={(e) => onSubjectChange(e.target.value)}
           placeholder="Subject:"
-          className="w-full text-sm text-gray-800 placeholder-gray-400 border-none outline-none bg-transparent"
+          className="w-full text-sm text-white placeholder-slate-500 border-none outline-none bg-transparent"
         />
       </div>
 
-      <div className="border-t border-gray-100" />
+      <div className="border-t border-slate-700" />
 
       <div className="px-4 pt-3 pb-2">
         <textarea
@@ -158,7 +158,7 @@ export function EmailComposerContent({
           onChange={(e) => onBodyChange(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder="Write your email..."
-          className={`w-full text-sm text-gray-800 placeholder-gray-400 resize-y border-none outline-none bg-transparent ${
+          className={`w-full text-sm text-white placeholder-slate-500 resize-y border-none outline-none bg-transparent ${
             expanded ? 'min-h-[200px]' : 'min-h-[100px]'
           }`}
           style={{ maxHeight: expanded ? '400px' : '200px' }}
@@ -169,7 +169,7 @@ export function EmailComposerContent({
         leftIcons={
           <>
             <button
-              className="p-2 text-gray-400 hover:text-gray-600 rounded transition-colors"
+              className="p-2 text-slate-400 hover:text-white rounded transition-colors"
               title="Text formatting"
             >
               <Type size={18} />
@@ -177,32 +177,32 @@ export function EmailComposerContent({
             {canUseSnippets && (
               <button
                 onClick={onSnippetClick}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                className="p-2 text-slate-400 hover:text-white rounded transition-colors"
                 title="Insert Snippet"
               >
                 <FileText size={18} />
               </button>
             )}
             <button
-              className="p-2 text-gray-400 hover:text-gray-600 rounded transition-colors"
+              className="p-2 text-slate-400 hover:text-white rounded transition-colors"
               title="Insert link"
             >
               <Link size={18} />
             </button>
             <button
-              className="p-2 text-gray-400 hover:text-gray-600 rounded transition-colors"
+              className="p-2 text-slate-400 hover:text-white rounded transition-colors"
               title="Insert image"
             >
               <Image size={18} />
             </button>
             <button
-              className="p-2 text-gray-400 hover:text-gray-600 rounded transition-colors"
+              className="p-2 text-slate-400 hover:text-white rounded transition-colors"
               title="Merge Fields"
             >
               <Braces size={18} />
             </button>
             <button
-              className="p-2 text-gray-400 hover:text-gray-600 rounded transition-colors"
+              className="p-2 text-slate-400 hover:text-white rounded transition-colors"
               title="More options"
             >
               <MoreVertical size={18} />

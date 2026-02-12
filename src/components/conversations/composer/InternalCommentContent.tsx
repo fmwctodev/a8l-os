@@ -116,7 +116,7 @@ export function InternalCommentContent({
   };
 
   return (
-    <div className="flex flex-col bg-amber-50/80">
+    <div className="flex flex-col bg-amber-900/20">
       <div className="px-4 pt-3 pb-2 relative">
         <textarea
           ref={textareaRef}
@@ -136,7 +136,7 @@ export function InternalCommentContent({
           }}
           onKeyDown={handleKeyDown}
           placeholder="Write a comment and use @ to mention users. This is not visible to the contact."
-          className={`w-full text-sm text-gray-800 placeholder-gray-400 resize-y border-none outline-none bg-transparent ${
+          className={`w-full text-sm text-white placeholder-slate-400 resize-y border-none outline-none bg-transparent ${
             expanded ? 'min-h-[200px]' : 'min-h-[100px]'
           }`}
           style={{ maxHeight: expanded ? '400px' : '200px' }}
@@ -153,10 +153,10 @@ export function InternalCommentContent({
         )}
       </div>
 
-      <div className="flex items-center justify-between px-4 py-2 border-t border-amber-200/60">
+      <div className="flex items-center justify-between px-4 py-2 border-t border-amber-700/30">
         <div className="flex items-center gap-1">
           <button
-            className="p-2 text-gray-400 hover:text-gray-600 rounded transition-colors"
+            className="p-2 text-slate-400 hover:text-amber-400 rounded transition-colors"
             title="Emoji"
           >
             <Smile size={18} />
@@ -166,14 +166,14 @@ export function InternalCommentContent({
         <div className="flex items-center gap-3">
           <button
             onClick={onClear}
-            className="px-4 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-white/60 transition-colors"
+            className="px-4 py-1.5 text-sm text-slate-300 border border-slate-600 rounded-lg hover:bg-slate-700 transition-colors"
           >
             Clear
           </button>
           <button
             onClick={onSend}
             disabled={sendDisabled}
-            className="px-6 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-6 py-1.5 text-sm font-medium text-white bg-gradient-to-r from-cyan-500 to-teal-600 rounded-lg hover:from-cyan-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {sending ? (
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mx-2" />
