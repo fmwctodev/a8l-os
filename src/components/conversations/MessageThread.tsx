@@ -187,9 +187,9 @@ export function MessageThread({
             )
           );
 
-          const isAuthError = errorMsg.includes('Unauthorized') || errorMsg.includes('Session expired') || errorMsg.includes('No active session');
+          const isAuthError = errorMsg.includes('Unauthorized') || errorMsg.includes('Session expired') || errorMsg.includes('No active session') || errorMsg.toLowerCase().includes('invalid jwt');
           if (isAuthError) {
-            showToast('warning', 'Email send failed', 'Your session may have expired. Please refresh the page and try again.');
+            showToast('warning', 'Email send failed', 'Your session has expired. Please log out and log back in, then try again.');
           } else {
             showToast('warning', 'Email send failed', 'Check your Gmail connection in Settings and try again.');
           }

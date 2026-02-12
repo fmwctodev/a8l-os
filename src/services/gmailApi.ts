@@ -2,10 +2,21 @@ import { supabase } from '../lib/supabase';
 
 async function getFreshSession() {
   const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('No active session');
+  if (!session) {
+    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+    if (!refreshed) throw new Error('Session expired. Please log in again.');
+    return refreshed;
+  }
 
   const expiresAt = session.expires_at;
-  if (!expiresAt || expiresAt * 1000 < Date.now() + 120_000) {
+  if (!expiresAt || expiresAt * 1000 < Date.now() + 300_000) {
+    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+    if (!refreshed) throw new Error('Session expired. Please log in again.');
+    return refreshed;
+  }
+
+  const { error: validateError } = await supabase.auth.getUser(session.access_token);
+  if (validateError) {
     const { data: { session: refreshed } } = await supabase.auth.refreshSession();
     if (!refreshed) throw new Error('Session expired. Please log in again.');
     return refreshed;
@@ -41,8 +52,10 @@ async function callGmailApi(action: string, body?: Record<string, unknown>) {
   if (response.status === 401) {
     const { data: { session: refreshed } } = await supabase.auth.refreshSession();
     if (refreshed) {
-      session = refreshed;
-      response = await attempt(session);
+      response = await attempt(refreshed);
+    }
+    if (response.status === 401) {
+      throw new Error('Invalid JWT');
     }
   }
 
