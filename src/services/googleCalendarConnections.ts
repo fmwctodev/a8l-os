@@ -1,20 +1,31 @@
+import { supabase } from '../lib/supabase';
+
 const EDGE_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-oauth`;
 
-function getHeaders() {
-  const token = localStorage.getItem('supabase.auth.token');
-  let accessToken = '';
+async function getHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+    if (!refreshed) throw new Error('Session expired. Please log in again.');
+    return {
+      'Authorization': `Bearer ${refreshed.access_token}`,
+      'Content-Type': 'application/json',
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+    };
+  }
 
-  if (token) {
-    try {
-      const parsed = JSON.parse(token);
-      accessToken = parsed.currentSession?.access_token || '';
-    } catch {
-      accessToken = '';
-    }
+  if (session.expires_at && session.expires_at * 1000 < Date.now() + 300_000) {
+    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+    if (!refreshed) throw new Error('Session expired. Please log in again.');
+    return {
+      'Authorization': `Bearer ${refreshed.access_token}`,
+      'Content-Type': 'application/json',
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+    };
   }
 
   return {
-    'Authorization': `Bearer ${accessToken}`,
+    'Authorization': `Bearer ${session.access_token}`,
     'Content-Type': 'application/json',
     'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
   };
@@ -54,7 +65,7 @@ export interface TestSyncResult {
 
 export async function getGoogleConnection(): Promise<GoogleConnection> {
   const response = await fetch(`${EDGE_FUNCTION_URL}/connection`, {
-    headers: getHeaders(),
+    headers: await getHeaders(),
   });
 
   if (!response.ok) {
@@ -69,7 +80,7 @@ export async function initiateGoogleOAuth(): Promise<string> {
 
   const response = await fetch(
     `${EDGE_FUNCTION_URL}/auth-url?redirect_uri=${encodeURIComponent(redirectUri)}`,
-    { headers: getHeaders() }
+    { headers: await getHeaders() }
   );
 
   if (!response.ok) {
@@ -83,7 +94,7 @@ export async function initiateGoogleOAuth(): Promise<string> {
 export async function disconnectGoogle(): Promise<void> {
   const response = await fetch(`${EDGE_FUNCTION_URL}/disconnect`, {
     method: 'POST',
-    headers: getHeaders(),
+    headers: await getHeaders(),
   });
 
   if (!response.ok) {
@@ -96,7 +107,7 @@ export async function getGoogleCalendarList(): Promise<{
   selectedCalendarIds: string[];
 }> {
   const response = await fetch(`${EDGE_FUNCTION_URL}/calendars`, {
-    headers: getHeaders(),
+    headers: await getHeaders(),
   });
 
   if (!response.ok) {
@@ -109,7 +120,7 @@ export async function getGoogleCalendarList(): Promise<{
 export async function updateSelectedCalendars(calendarIds: string[]): Promise<void> {
   const response = await fetch(`${EDGE_FUNCTION_URL}/calendars`, {
     method: 'POST',
-    headers: getHeaders(),
+    headers: await getHeaders(),
     body: JSON.stringify({ calendarIds }),
   });
 
@@ -121,7 +132,7 @@ export async function updateSelectedCalendars(calendarIds: string[]): Promise<vo
 export async function testGoogleSync(): Promise<TestSyncResult> {
   const response = await fetch(`${EDGE_FUNCTION_URL}/test-sync`, {
     method: 'POST',
-    headers: getHeaders(),
+    headers: await getHeaders(),
   });
 
   return response.json();
@@ -129,7 +140,7 @@ export async function testGoogleSync(): Promise<TestSyncResult> {
 
 export async function getTeamConnections(): Promise<TeamConnectionItem[]> {
   const response = await fetch(`${EDGE_FUNCTION_URL}/team-connections`, {
-    headers: getHeaders(),
+    headers: await getHeaders(),
   });
 
   if (!response.ok) {
