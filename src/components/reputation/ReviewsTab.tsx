@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Review, ReviewFilters, ReviewProvider } from '../../types';
-import { getReviews, respondToReview, getSentimentStats } from '../../services/reviews';
+import { getReviews, respondToReview, getSentimentStats, generateAIReply } from '../../services/reviews';
 
 interface ReviewsTabProps {
   onRequestReview: () => void;
@@ -136,14 +136,17 @@ export function ReviewsTab({ onRequestReview, onAddReview }: ReviewsTabProps) {
     }
   }
 
-  function generateAiReply(review: Review) {
-    const responses = [
-      `Thank you for your fantastic feedback! We're thrilled to hear that you had a great experience with us. It's always our goal to provide the right support and strategy to help our clients succeed. We appreciate your recommendation and look forward to continuing to assist you in the future!`,
-      `We truly appreciate you taking the time to share your experience. Your kind words mean a lot to our team. Thank you for trusting us with your business needs!`,
-      `Thank you so much for this wonderful review! We're delighted that you're satisfied with our services. We look forward to continuing our partnership.`,
-    ];
-    setReplyText(responses[Math.floor(Math.random() * responses.length)]);
+  async function generateAiReply(review: Review) {
     setReplyingTo(review.id);
+    setReplyText('Generating AI reply...');
+    try {
+      const { reply } = await generateAIReply(review.id);
+      setReplyText(reply);
+    } catch (err) {
+      console.error('AI reply generation failed:', err);
+      setReplyText('');
+      setReplyingTo(null);
+    }
   }
 
   function getProviderIcon(provider: ReviewProvider) {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import {
   X, Mail, Phone, Building2, Briefcase, MapPin, ExternalLink, Tag, Brain,
@@ -7,7 +7,12 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getContactAIInsights } from '../../services/aiAgents';
-import type { Conversation, Contact, Tag as TagType, AIAgentMemory, AIAgentRun } from '../../types';
+import { getOpportunitiesByContact } from '../../services/opportunities';
+import { getAppointmentsByContact } from '../../services/appointments';
+import { getAttachments } from '../../services/fileAttachments';
+import { getContactNotes, createNote } from '../../services/contactNotes';
+import type { Conversation, Contact, Tag as TagType, AIAgentMemory, AIAgentRun, Opportunity, Appointment, ContactNote } from '../../types';
+import type { FileAttachmentWithFile } from '../../services/fileAttachments';
 
 function normalizeTagsArray(rawTags: unknown): TagType[] {
   if (!rawTags || !Array.isArray(rawTags)) return [];
@@ -174,7 +179,7 @@ export function ContactPanel({ conversation, onClose }: ContactPanelProps) {
         {activeTab === 'opportunities' && <OpportunitiesTab contactId={contact.id} />}
         {activeTab === 'appointments' && <AppointmentsTab contactId={contact.id} />}
         {activeTab === 'files' && <FilesTab conversationId={conversation.id} />}
-        {activeTab === 'notes' && <NotesTab conversationId={conversation.id} />}
+        {activeTab === 'notes' && <NotesTab contactId={contact.id} />}
       </div>
 
       <div className="p-4 border-t border-slate-700">
@@ -343,101 +348,173 @@ function OverviewTab({ contact, conversation, tags, canViewAI, loadingInsights, 
 }
 
 function OpportunitiesTab({ contactId }: { contactId: string }) {
-  const mockOpportunities = [
-    { id: '1', name: 'Software License', stage: 'Proposal', value: 5000, probability: 60 },
-    { id: '2', name: 'Consulting Services', stage: 'Negotiation', value: 12000, probability: 80 },
-  ];
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getOpportunitiesByContact(contactId);
+        if (!cancelled) setOpportunities(data);
+      } catch (err) {
+        console.error('Failed to load opportunities:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [contactId]);
+
+  if (loading) {
+    return <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-slate-400" /></div>;
+  }
 
   return (
     <div className="space-y-3">
-      {mockOpportunities.map((opp) => (
-        <Link
-          key={opp.id}
-          to={`/opportunities/${opp.id}`}
-          className="block p-3 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors"
-        >
-          <div className="flex items-start justify-between mb-1">
-            <p className="text-sm font-medium text-white">{opp.name}</p>
-            <span className="text-sm font-semibold text-emerald-400">
-              ${opp.value.toLocaleString()}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 text-xs rounded bg-slate-600 text-slate-300">
-              {opp.stage}
-            </span>
-            <span className="text-xs text-slate-400">{opp.probability}% likely</span>
-          </div>
-        </Link>
-      ))}
-      <button className="w-full flex items-center justify-center gap-2 py-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors">
+      {opportunities.length === 0 ? (
+        <p className="text-sm text-slate-400 text-center py-4">No opportunities yet</p>
+      ) : (
+        opportunities.map((opp) => (
+          <Link
+            key={opp.id}
+            to={`/opportunities/${opp.id}`}
+            className="block p-3 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors"
+          >
+            <div className="flex items-start justify-between mb-1">
+              <p className="text-sm font-medium text-white">{opp.name}</p>
+              <span className="text-sm font-semibold text-emerald-400">
+                ${(opp.value || 0).toLocaleString()}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {opp.stage && (
+                <span className="px-2 py-0.5 text-xs rounded bg-slate-600 text-slate-300">
+                  {(opp.stage as { name?: string })?.name || 'Unknown'}
+                </span>
+              )}
+              {opp.probability != null && (
+                <span className="text-xs text-slate-400">{opp.probability}% likely</span>
+              )}
+            </div>
+          </Link>
+        ))
+      )}
+      <Link
+        to={`/opportunities/new?contact_id=${contactId}`}
+        className="w-full flex items-center justify-center gap-2 py-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+      >
         <Plus size={14} />
         Create Opportunity
-      </button>
+      </Link>
     </div>
   );
 }
 
 function AppointmentsTab({ contactId }: { contactId: string }) {
-  const mockAppointments = [
-    { id: '1', title: 'Discovery Call', date: '2026-01-24', time: '10:00 AM', status: 'confirmed' },
-    { id: '2', title: 'Demo', date: '2026-01-28', time: '2:00 PM', status: 'pending' },
-  ];
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getAppointmentsByContact(contactId);
+        if (!cancelled) setAppointments(data);
+      } catch (err) {
+        console.error('Failed to load appointments:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [contactId]);
+
+  if (loading) {
+    return <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-slate-400" /></div>;
+  }
+
+  const statusColors: Record<string, string> = {
+    scheduled: 'bg-blue-500/20 text-blue-400',
+    confirmed: 'bg-emerald-500/20 text-emerald-400',
+    completed: 'bg-slate-500/20 text-slate-400',
+    cancelled: 'bg-red-500/20 text-red-400',
+    no_show: 'bg-amber-500/20 text-amber-400',
+  };
 
   return (
     <div className="space-y-3">
-      {mockAppointments.map((appt) => (
-        <div
-          key={appt.id}
-          className="p-3 bg-slate-700/50 rounded-lg"
-        >
-          <div className="flex items-start justify-between mb-1">
-            <p className="text-sm font-medium text-white">{appt.title}</p>
-            <span className={`px-2 py-0.5 text-xs rounded capitalize ${
-              appt.status === 'confirmed'
-                ? 'bg-emerald-500/20 text-emerald-400'
-                : 'bg-amber-500/20 text-amber-400'
-            }`}>
-              {appt.status}
-            </span>
+      {appointments.length === 0 ? (
+        <p className="text-sm text-slate-400 text-center py-4">No appointments yet</p>
+      ) : (
+        appointments.map((appt) => (
+          <div key={appt.id} className="p-3 bg-slate-700/50 rounded-lg">
+            <div className="flex items-start justify-between mb-1">
+              <p className="text-sm font-medium text-white">
+                {(appt.appointment_type as { name?: string })?.name || 'Appointment'}
+              </p>
+              <span className={`px-2 py-0.5 text-xs rounded capitalize ${statusColors[appt.status] || 'bg-slate-500/20 text-slate-400'}`}>
+                {appt.status.replace('_', ' ')}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <Calendar size={12} />
+              {new Date(appt.start_at_utc).toLocaleDateString()}
+              <Clock size={12} />
+              {new Date(appt.start_at_utc).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+            </div>
           </div>
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Calendar size={12} />
-            {appt.date}
-            <Clock size={12} />
-            {appt.time}
-          </div>
-        </div>
-      ))}
-      <button className="w-full flex items-center justify-center gap-2 py-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors">
+        ))
+      )}
+      <Link
+        to={`/calendars?book=${contactId}`}
+        className="w-full flex items-center justify-center gap-2 py-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+      >
         <Plus size={14} />
         Book Appointment
-      </button>
+      </Link>
     </div>
   );
 }
 
 function FilesTab({ conversationId }: { conversationId: string }) {
-  const mockFiles = [
-    { id: '1', name: 'Proposal.pdf', type: 'application/pdf', size: 245000, date: '2026-01-20' },
-    { id: '2', name: 'Screenshot.png', type: 'image/png', size: 89000, date: '2026-01-19' },
-  ];
+  const [files, setFiles] = useState<FileAttachmentWithFile[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getAttachments('conversations', conversationId);
+        if (!cancelled) setFiles(data);
+      } catch (err) {
+        console.error('Failed to load files:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [conversationId]);
+
+  if (loading) {
+    return <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-slate-400" /></div>;
+  }
 
   return (
     <div className="space-y-2">
-      {mockFiles.length > 0 ? (
-        mockFiles.map((file) => (
+      {files.length > 0 ? (
+        files.map((attachment) => (
           <div
-            key={file.id}
+            key={attachment.id}
             className="flex items-center gap-3 p-3 bg-slate-700/50 hover:bg-slate-700 rounded-lg cursor-pointer transition-colors"
           >
             <div className="w-10 h-10 rounded-lg bg-slate-600 flex items-center justify-center">
               <FileText className="w-5 h-5 text-slate-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">{file.name}</p>
+              <p className="text-sm font-medium text-white truncate">{attachment.drive_file?.name || 'File'}</p>
               <p className="text-xs text-slate-400">
-                {formatFileSize(file.size)} - {file.date}
+                {formatFileSize(attachment.drive_file?.size_bytes || 0)} - {new Date(attachment.created_at).toLocaleDateString()}
               </p>
             </div>
           </div>
@@ -449,12 +526,43 @@ function FilesTab({ conversationId }: { conversationId: string }) {
   );
 }
 
-function NotesTab({ conversationId }: { conversationId: string }) {
+function NotesTab({ contactId }: { contactId: string }) {
+  const { user } = useAuth();
+  const [notes, setNotes] = useState<ContactNote[]>([]);
+  const [loading, setLoading] = useState(true);
   const [newNote, setNewNote] = useState('');
-  const mockNotes = [
-    { id: '1', content: 'Interested in premium plan. Follow up next week.', isPinned: true, author: 'John D.', date: '2026-01-20' },
-    { id: '2', content: 'Budget approved for Q1.', isPinned: false, author: 'Sarah M.', date: '2026-01-18' },
-  ];
+  const [saving, setSaving] = useState(false);
+
+  const loadNotes = useCallback(async () => {
+    try {
+      const data = await getContactNotes(contactId);
+      setNotes(data);
+    } catch (err) {
+      console.error('Failed to load notes:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [contactId]);
+
+  useEffect(() => { loadNotes(); }, [loadNotes]);
+
+  const handleAddNote = async () => {
+    if (!newNote.trim() || !user || saving) return;
+    try {
+      setSaving(true);
+      await createNote(contactId, newNote.trim(), user as Parameters<typeof createNote>[2]);
+      setNewNote('');
+      await loadNotes();
+    } catch (err) {
+      console.error('Failed to create note:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-slate-400" /></div>;
+  }
 
   return (
     <div className="space-y-3">
@@ -463,39 +571,45 @@ function NotesTab({ conversationId }: { conversationId: string }) {
           type="text"
           value={newNote}
           onChange={(e) => setNewNote(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleAddNote(); }}
           placeholder="Add a note..."
           className="flex-1 px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
         />
         <button
-          disabled={!newNote.trim()}
+          onClick={handleAddNote}
+          disabled={!newNote.trim() || saving}
           className="px-3 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          <Plus size={16} />
+          {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
         </button>
       </div>
 
-      {mockNotes.map((note) => (
-        <div
-          key={note.id}
-          className={`p-3 rounded-lg ${
-            note.isPinned ? 'bg-cyan-500/10 border border-cyan-500/20' : 'bg-slate-700/50'
-          }`}
-        >
-          {note.isPinned && (
-            <div className="flex items-center gap-1 text-xs text-cyan-400 mb-2">
-              <Pin size={10} />
-              Pinned
+      {notes.length === 0 ? (
+        <p className="text-sm text-slate-400 text-center py-4">No notes yet</p>
+      ) : (
+        notes.map((note) => (
+          <div
+            key={note.id}
+            className={`p-3 rounded-lg ${
+              note.is_pinned ? 'bg-cyan-500/10 border border-cyan-500/20' : 'bg-slate-700/50'
+            }`}
+          >
+            {note.is_pinned && (
+              <div className="flex items-center gap-1 text-xs text-cyan-400 mb-2">
+                <Pin size={10} />
+                Pinned
+              </div>
+            )}
+            <p className="text-sm text-white mb-2">{note.content}</p>
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <User size={10} />
+              {(note.user as { name?: string })?.name || 'Unknown'}
+              <span>-</span>
+              {new Date(note.created_at).toLocaleDateString()}
             </div>
-          )}
-          <p className="text-sm text-white mb-2">{note.content}</p>
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <User size={10} />
-            {note.author}
-            <span>-</span>
-            {note.date}
           </div>
-        </div>
-      ))}
+        ))
+      )}
     </div>
   );
 }

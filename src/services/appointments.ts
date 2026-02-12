@@ -512,6 +512,26 @@ export async function getUpcomingAppointmentsForUser(
   return data || [];
 }
 
+export async function getAppointmentsByContact(
+  contactId: string,
+  limit: number = 10
+): Promise<Appointment[]> {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select(`
+      *,
+      calendar:calendars(id, name),
+      appointment_type:appointment_types(id, name, duration_minutes, location_type),
+      assigned_user:users!appointments_assigned_user_id_fkey(id, name, email, avatar_url)
+    `)
+    .eq('contact_id', contactId)
+    .order('start_at_utc', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data || [];
+}
+
 export async function getAppointmentCountForDateRange(
   calendarId: string,
   userId: string,
