@@ -78,8 +78,10 @@ export async function getGoogleConnection(): Promise<GoogleConnection> {
 export async function initiateGoogleOAuth(): Promise<string> {
   const redirectUri = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-oauth/callback`;
 
+  const appOrigin = window.location.origin;
+
   const response = await fetch(
-    `${EDGE_FUNCTION_URL}/auth-url?redirect_uri=${encodeURIComponent(redirectUri)}`,
+    `${EDGE_FUNCTION_URL}/auth-url?redirect_uri=${encodeURIComponent(redirectUri)}&app_origin=${encodeURIComponent(appOrigin)}`,
     { headers: await getHeaders() }
   );
 

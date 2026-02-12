@@ -65,10 +65,13 @@ async function handleGetAuthUrl(req: Request): Promise<Response> {
   const redirectUri = url.searchParams.get("redirect_uri") ||
     `${url.origin}/google-calendar-oauth/callback`;
 
+  const appOrigin = url.searchParams.get("app_origin") || "";
+
   const state = btoa(JSON.stringify({
     userId: user.id,
     orgId: userDetails.organization_id,
     redirectUri,
+    appOrigin,
   }));
 
   const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
@@ -92,19 +95,17 @@ async function handleCallback(req: Request): Promise<Response> {
   const error = url.searchParams.get("error");
 
   if (error) {
+    let stateForError: { appOrigin?: string } = {};
+    try { if (stateParam) stateForError = JSON.parse(atob(stateParam)); } catch {}
+    if (stateForError.appOrigin) {
+      const errorRedirect = new URL(`${stateForError.appOrigin}/oauth/google-calendar/callback`);
+      errorRedirect.searchParams.set("status", "error");
+      errorRedirect.searchParams.set("error", error);
+      return Response.redirect(errorRedirect.toString(), 302);
+    }
     return new Response(`
-      <html>
-        <body>
-          <script>
-            window.opener?.postMessage({ type: 'google-oauth-error', error: '${error}' }, '*');
-            window.close();
-          </script>
-          <p>Authentication failed. You can close this window.</p>
-        </body>
-      </html>
-    `, {
-      headers: { ...corsHeaders, "Content-Type": "text/html" },
-    });
+      <html><body><p>Authentication failed: ${error}. You can close this window.</p></body></html>
+    `, { headers: { ...corsHeaders, "Content-Type": "text/html" } });
   }
 
   if (!code || !stateParam) {
@@ -114,7 +115,7 @@ async function handleCallback(req: Request): Promise<Response> {
     });
   }
 
-  let state: { userId: string; orgId: string; redirectUri: string };
+  let state: { userId: string; orgId: string; redirectUri: string; appOrigin?: string };
   try {
     state = JSON.parse(atob(stateParam));
   } catch {
@@ -138,19 +139,15 @@ async function handleCallback(req: Request): Promise<Response> {
 
   const tokenData = await tokenResponse.json();
   if (!tokenResponse.ok) {
+    if (state.appOrigin) {
+      const errorRedirect = new URL(`${state.appOrigin}/oauth/google-calendar/callback`);
+      errorRedirect.searchParams.set("status", "error");
+      errorRedirect.searchParams.set("error", "Token exchange failed");
+      return Response.redirect(errorRedirect.toString(), 302);
+    }
     return new Response(`
-      <html>
-        <body>
-          <script>
-            window.opener?.postMessage({ type: 'google-oauth-error', error: 'Token exchange failed' }, '*');
-            window.close();
-          </script>
-          <p>Authentication failed. You can close this window.</p>
-        </body>
-      </html>
-    `, {
-      headers: { ...corsHeaders, "Content-Type": "text/html" },
-    });
+      <html><body><p>Authentication failed. You can close this window.</p></body></html>
+    `, { headers: { ...corsHeaders, "Content-Type": "text/html" } });
   }
 
   const userInfoResponse = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
@@ -176,34 +173,27 @@ async function handleCallback(req: Request): Promise<Response> {
     });
 
   if (upsertError) {
+    if (state.appOrigin) {
+      const errorRedirect = new URL(`${state.appOrigin}/oauth/google-calendar/callback`);
+      errorRedirect.searchParams.set("status", "error");
+      errorRedirect.searchParams.set("error", "Failed to save connection");
+      return Response.redirect(errorRedirect.toString(), 302);
+    }
     return new Response(`
-      <html>
-        <body>
-          <script>
-            window.opener?.postMessage({ type: 'google-oauth-error', error: 'Failed to save connection' }, '*');
-            window.close();
-          </script>
-          <p>Failed to save connection. You can close this window.</p>
-        </body>
-      </html>
-    `, {
-      headers: { ...corsHeaders, "Content-Type": "text/html" },
-    });
+      <html><body><p>Failed to save connection. You can close this window.</p></body></html>
+    `, { headers: { ...corsHeaders, "Content-Type": "text/html" } });
+  }
+
+  if (state.appOrigin) {
+    const successRedirect = new URL(`${state.appOrigin}/oauth/google-calendar/callback`);
+    successRedirect.searchParams.set("status", "success");
+    successRedirect.searchParams.set("email", userInfo.email || "");
+    return Response.redirect(successRedirect.toString(), 302);
   }
 
   return new Response(`
-    <html>
-      <body>
-        <script>
-          window.opener?.postMessage({ type: 'google-oauth-success', email: '${userInfo.email}' }, '*');
-          window.close();
-        </script>
-        <p>Connected successfully! You can close this window.</p>
-      </body>
-    </html>
-  `, {
-    headers: { ...corsHeaders, "Content-Type": "text/html" },
-  });
+    <html><body><p>Connected successfully! You can close this window.</p></body></html>
+  `, { headers: { ...corsHeaders, "Content-Type": "text/html" } });
 }
 
 async function handleDisconnect(req: Request): Promise<Response> {

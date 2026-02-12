@@ -81,6 +81,7 @@ import { PublicSurveyPage } from './pages/public/PublicSurveyPage';
 import { ReviewPage } from './pages/public/ReviewPage';
 import PublicProposalPage from './pages/public/PublicProposalPage';
 import PostApprovalPage from './pages/public/PostApprovalPage';
+import { OAuthCallbackPage } from './pages/public/OAuthCallbackPage';
 
 function App() {
   return (
@@ -594,6 +595,7 @@ function App() {
             <Route path="/r/:slug" element={<ReviewPage />} />
             <Route path="/p/:token" element={<PublicProposalPage />} />
             <Route path="/marketing/social/approve/:token" element={<PostApprovalPage />} />
+            <Route path="/oauth/google-calendar/callback" element={<OAuthCallbackPage />} />
             <Route path="*" element={<NotFound />} />
             </Routes>
           </SidebarProvider>
