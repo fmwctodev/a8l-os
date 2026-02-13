@@ -15,13 +15,20 @@ export async function extractUserContext(
 ): Promise<UserContext | null> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) {
+    console.error("[Auth] No Authorization header");
     return null;
   }
 
   const token = authHeader.replace("Bearer ", "");
   const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
-  if (authError || !user) {
+  if (authError) {
+    console.error("[Auth] JWT validation failed:", authError.message);
+    return null;
+  }
+
+  if (!user) {
+    console.error("[Auth] No user found in JWT");
     return null;
   }
 
@@ -31,7 +38,13 @@ export async function extractUserContext(
     .eq("id", user.id)
     .maybeSingle();
 
-  if (userError || !userData) {
+  if (userError) {
+    console.error("[Auth] Failed to fetch user data:", userError.message);
+    return null;
+  }
+
+  if (!userData) {
+    console.error("[Auth] User not found in database:", user.id);
     return null;
   }
 

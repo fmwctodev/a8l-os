@@ -36,8 +36,20 @@ export async function logAudit({
   afterState,
   ipAddress,
 }: LogAuditParams) {
+  const { data: user } = await supabase
+    .from('users')
+    .select('organization_id')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (!user?.organization_id) {
+    console.error('Failed to log audit: Could not determine user organization');
+    return;
+  }
+
   const { error } = await supabase.from('audit_logs').insert({
     user_id: userId,
+    organization_id: user.organization_id,
     action,
     entity_type: entityType,
     entity_id: entityId || null,
