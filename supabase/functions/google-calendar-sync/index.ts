@@ -158,6 +158,7 @@ async function handleSync(req: Request): Promise<Response> {
   const timeMax = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
 
   let totalSynced = 0;
+  const errors: string[] = [];
 
   const { data: calendarListRecords } = await supabase
     .from("google_calendar_list")
@@ -172,10 +173,11 @@ async function handleSync(req: Request): Promise<Response> {
   for (const calendarId of selectedCalendarIds) {
     try {
       const events = await fetchGoogleEvents(accessToken, calendarId, timeMin, timeMax);
+      console.log(`Fetched ${events.length} events for calendar ${calendarId}`);
 
       let calendarListId = calListMap.get(calendarId);
       if (!calendarListId) {
-        const { data: newEntry } = await supabase
+        const { data: newEntry, error: listErr } = await supabase
           .from("google_calendar_list")
           .upsert({
             org_id: userCtx.orgId,
@@ -188,6 +190,9 @@ async function handleSync(req: Request): Promise<Response> {
           .select("id")
           .maybeSingle();
 
+        if (listErr) {
+          console.error(`Calendar list upsert error for ${calendarId}:`, listErr);
+        }
         calendarListId = newEntry?.id || crypto.randomUUID();
       }
 
@@ -235,16 +240,23 @@ async function handleSync(req: Request): Promise<Response> {
           };
         });
 
-        await supabase
+        const { error: upsertErr } = await supabase
           .from("google_calendar_events")
           .upsert(rows, {
             onConflict: "connection_id,google_calendar_id,google_event_id",
           });
 
-        totalSynced += rows.length;
+        if (upsertErr) {
+          console.error(`Event upsert error for ${calendarId}:`, upsertErr);
+          errors.push(`Upsert error for ${calendarId}: ${upsertErr.message}`);
+        } else {
+          totalSynced += rows.length;
+        }
       }
     } catch (calErr) {
-      console.error(`Error syncing calendar ${calendarId}:`, calErr);
+      const errMsg = (calErr as Error).message || String(calErr);
+      console.error(`Error syncing calendar ${calendarId}:`, errMsg);
+      errors.push(`Calendar ${calendarId}: ${errMsg}`);
     }
   }
 
@@ -253,7 +265,11 @@ async function handleSync(req: Request): Promise<Response> {
     .update({ last_full_sync_at: new Date().toISOString() })
     .eq("id", connection.id);
 
-  return successResponse({ synced: totalSynced });
+  if (totalSynced === 0 && errors.length > 0) {
+    return successResponse({ synced: 0, errors });
+  }
+
+  return successResponse({ synced: totalSynced, errors: errors.length > 0 ? errors : undefined });
 }
 
 async function handleUpdateEvent(req: Request, body?: Record<string, unknown>): Promise<Response> {

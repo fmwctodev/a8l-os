@@ -82,7 +82,8 @@ export function UnifiedCalendarView() {
     if (isSyncing || !hasGoogleConnection) return;
     setIsSyncing(true);
     try {
-      await syncGoogleCalendar();
+      const result = await syncGoogleCalendar();
+      console.log('Google Calendar sync result:', result);
     } catch (err) {
       console.error('Google sync failed:', err);
     } finally {

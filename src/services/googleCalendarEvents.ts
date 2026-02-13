@@ -141,9 +141,13 @@ export async function getAllOrgGoogleCalendarEvents(
   return data || [];
 }
 
-export async function syncGoogleCalendar(): Promise<{ synced: number }> {
+export async function syncGoogleCalendar(): Promise<{ synced: number; errors?: string[] }> {
   const result = await callGoogleCalendarApi('sync');
-  return result.data || { synced: 0 };
+  const data = result.data || result;
+  if (data.errors?.length) {
+    console.warn('Google Calendar sync errors:', data.errors);
+  }
+  return data;
 }
 
 export async function updateGoogleCalendarEvent(
