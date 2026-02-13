@@ -2,10 +2,12 @@ import { useState, useMemo } from 'react';
 import {
   X, Calendar as CalendarIcon, Clock, MapPin, Video, ExternalLink,
   Users, Edit3, Trash2, Save, Loader2, AlertTriangle,
+  Check, XCircle, HelpCircle,
 } from 'lucide-react';
 import type { GoogleCalendarEvent } from '../../../types';
 import { formatTimeRange } from '../../../utils/calendarViewUtils';
-import { updateGoogleCalendarEvent, deleteGoogleCalendarEvent } from '../../../services/googleCalendarEvents';
+import { useAuth } from '../../../contexts/AuthContext';
+import { updateGoogleCalendarEvent, deleteGoogleCalendarEvent, rsvpGoogleCalendarEvent } from '../../../services/googleCalendarEvents';
 
 interface GoogleEventDetailModalProps {
   event: GoogleCalendarEvent;
@@ -20,11 +22,44 @@ export function GoogleEventDetailModal({
   onUpdated,
   canEdit = true,
 }: GoogleEventDetailModalProps) {
+  const { user } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isRsvping, setIsRsvping] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [localAttendees, setLocalAttendees] = useState(event.attendees);
+
+  const currentUserEmail = user?.email?.toLowerCase();
+  const currentUserAttendee = useMemo(() => {
+    if (!localAttendees || !currentUserEmail) return null;
+    return localAttendees.find(
+      (att: { email?: string }) => att.email?.toLowerCase() === currentUserEmail
+    ) || null;
+  }, [localAttendees, currentUserEmail]);
+
+  const currentRsvpStatus = currentUserAttendee?.responseStatus || null;
+
+  const handleRsvp = async (response: 'accepted' | 'declined' | 'tentative') => {
+    setIsRsvping(true);
+    setError(null);
+    try {
+      await rsvpGoogleCalendarEvent(event.id, response);
+      setLocalAttendees((prev: typeof localAttendees) =>
+        (prev || []).map((att: { email?: string; responseStatus?: string; [key: string]: unknown }) =>
+          att.email?.toLowerCase() === currentUserEmail
+            ? { ...att, responseStatus: response }
+            : att
+        )
+      );
+      onUpdated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update RSVP');
+    } finally {
+      setIsRsvping(false);
+    }
+  };
 
   const [editSummary, setEditSummary] = useState(event.summary || '');
   const [editDescription, setEditDescription] = useState(event.description || '');
@@ -243,13 +278,58 @@ export function GoogleEventDetailModal({
                   </div>
                 )}
 
-                {event.attendees && event.attendees.length > 0 && (
+                {currentUserAttendee && (
+                  <div className="pt-2 border-t border-slate-800">
+                    <p className="text-xs text-slate-500 mb-2">Your Response</p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleRsvp('accepted')}
+                        disabled={isRsvping}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          currentRsvpStatus === 'accepted'
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                            : 'bg-slate-800 text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-400'
+                        }`}
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Yes
+                      </button>
+                      <button
+                        onClick={() => handleRsvp('declined')}
+                        disabled={isRsvping}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          currentRsvpStatus === 'declined'
+                            ? 'bg-red-500/20 text-red-400 border border-red-500/40'
+                            : 'bg-slate-800 text-slate-300 hover:bg-red-500/10 hover:text-red-400'
+                        }`}
+                      >
+                        <XCircle className="w-3.5 h-3.5" />
+                        No
+                      </button>
+                      <button
+                        onClick={() => handleRsvp('tentative')}
+                        disabled={isRsvping}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          currentRsvpStatus === 'tentative'
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                            : 'bg-slate-800 text-slate-300 hover:bg-amber-500/10 hover:text-amber-400'
+                        }`}
+                      >
+                        <HelpCircle className="w-3.5 h-3.5" />
+                        Maybe
+                      </button>
+                      {isRsvping && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
+                    </div>
+                  </div>
+                )}
+
+                {localAttendees && localAttendees.length > 0 && (
                   <div className="pt-2 border-t border-slate-800">
                     <p className="text-xs text-slate-500 mb-2">
-                      Attendees ({event.attendees.length})
+                      Attendees ({localAttendees.length})
                     </p>
                     <div className="space-y-1.5 max-h-32 overflow-y-auto">
-                      {event.attendees.map((att, i) => (
+                      {localAttendees.map((att, i) => (
                         <div key={i} className="flex items-center gap-2">
                           <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center">
                             <span className="text-xs text-slate-400">

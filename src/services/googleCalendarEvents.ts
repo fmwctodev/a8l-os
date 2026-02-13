@@ -169,6 +169,13 @@ export async function deleteGoogleCalendarEvent(eventId: string): Promise<void> 
   await callGoogleCalendarApi('delete-event', { eventId });
 }
 
+export async function rsvpGoogleCalendarEvent(
+  eventId: string,
+  response: 'accepted' | 'declined' | 'tentative'
+): Promise<void> {
+  await callGoogleCalendarApi('rsvp', { eventId, response });
+}
+
 export async function hasGoogleCalendarConnection(userId: string): Promise<boolean> {
   const { data } = await supabase
     .from('google_calendar_connections')

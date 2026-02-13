@@ -402,6 +402,81 @@ async function handleDeleteEvent(req: Request, body?: Record<string, unknown>): 
   return successResponse({ deleted: true });
 }
 
+async function handleRsvp(req: Request, body?: Record<string, unknown>): Promise<Response> {
+  const supabase = getSupabaseClient();
+  const userCtx = requireAuth(await extractUserContext(req, supabase));
+
+  const parsed = body || await req.json();
+  const { eventId, response: rsvpResponse } = parsed as { eventId?: string; response?: string };
+  if (!eventId) throw new ValidationError("eventId is required");
+  if (!rsvpResponse || !["accepted", "declined", "tentative"].includes(rsvpResponse as string)) {
+    throw new ValidationError("response must be accepted, declined, or tentative");
+  }
+
+  const { data: event } = await supabase
+    .from("google_calendar_events")
+    .select("*, connection:google_calendar_connections(*)")
+    .eq("id", eventId)
+    .eq("user_id", userCtx.id)
+    .maybeSingle();
+
+  if (!event) throw new ValidationError("Event not found");
+
+  const conn = event.connection;
+  const accessToken = await getValidToken(conn, supabase);
+
+  const getResp = await fetch(
+    `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(event.google_calendar_id)}/events/${event.google_event_id}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  if (!getResp.ok) {
+    const errText = await getResp.text();
+    throw new Error(`Failed to fetch Google event: ${errText}`);
+  }
+
+  const googleEvent = await getResp.json();
+  const userEmail = conn.email?.toLowerCase();
+  const updatedAttendees = (googleEvent.attendees || []).map(
+    (att: { email?: string; responseStatus?: string; [key: string]: unknown }) => {
+      if (att.email?.toLowerCase() === userEmail) {
+        return { ...att, responseStatus: rsvpResponse };
+      }
+      return att;
+    }
+  );
+
+  const patchResp = await fetch(
+    `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(event.google_calendar_id)}/events/${event.google_event_id}?sendUpdates=all`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ attendees: updatedAttendees }),
+    }
+  );
+
+  if (!patchResp.ok) {
+    const errText = await patchResp.text();
+    throw new Error(`Failed to update RSVP: ${errText}`);
+  }
+
+  const updatedEvent = await patchResp.json();
+
+  await supabase
+    .from("google_calendar_events")
+    .update({
+      attendees: updatedEvent.attendees || null,
+      last_modified: updatedEvent.updated ? new Date(updatedEvent.updated).toISOString() : new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", eventId);
+
+  return successResponse({ updated: true, response: rsvpResponse });
+}
+
 Deno.serve(async (req: Request) => {
   try {
     const corsResp = handleCors(req);
@@ -430,6 +505,9 @@ Deno.serve(async (req: Request) => {
     }
     if (action === "delete-event") {
       return await handleDeleteEvent(req, body);
+    }
+    if (action === "rsvp") {
+      return await handleRsvp(req, body);
     }
 
     return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400 });
