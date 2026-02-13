@@ -301,6 +301,10 @@ async function handleUpdateEvent(req: Request, body?: Record<string, unknown>): 
   if (!event) throw new ValidationError("Event not found");
 
   const conn = event.connection;
+  if (!conn) {
+    throw new ValidationError("No Google Calendar connection found. Please reconnect your Google Calendar.");
+  }
+
   const accessToken = await getValidToken(conn, supabase);
 
   const googleUpdate: Record<string, unknown> = {};
@@ -333,7 +337,7 @@ async function handleUpdateEvent(req: Request, body?: Record<string, unknown>): 
 
   if (!resp.ok) {
     const errText = await resp.text();
-    throw new Error(`Failed to update Google event: ${errText}`);
+    throwGoogleApiError(resp.status, errText, "update");
   }
 
   const updatedGoogleEvent = await resp.json();
@@ -379,6 +383,9 @@ async function handleDeleteEvent(req: Request, body?: Record<string, unknown>): 
   if (!event) throw new ValidationError("Event not found");
 
   const conn = event.connection;
+  if (!conn) {
+    throw new ValidationError("No Google Calendar connection found. Please reconnect your Google Calendar.");
+  }
   const accessToken = await getValidToken(conn, supabase);
 
   const resp = await fetch(
@@ -423,6 +430,9 @@ async function handleRsvp(req: Request, body?: Record<string, unknown>): Promise
   if (!event) throw new ValidationError("Event not found");
 
   const conn = event.connection;
+  if (!conn) {
+    throw new ValidationError("No Google Calendar connection found. Please reconnect your Google Calendar.");
+  }
   const accessToken = await getValidToken(conn, supabase);
 
   const getResp = await fetch(
@@ -491,6 +501,26 @@ async function getUserConnection(
   return connection;
 }
 
+function throwGoogleApiError(status: number, body: string, operation: string): never {
+  if (status === 403 || status === 401) {
+    const lower = body.toLowerCase();
+    if (lower.includes("insufficientpermissions") || lower.includes("forbidden") || lower.includes("accessdenied")) {
+      throw new ValidationError(
+        "Insufficient Google Calendar permissions. Please reconnect your Google Calendar with write access."
+      );
+    }
+    if (lower.includes("invalid_grant") || lower.includes("token")) {
+      throw new ValidationError(
+        "Google Calendar authorization expired. Please reconnect your Google Calendar."
+      );
+    }
+  }
+  if (status === 404 || status === 410) {
+    throw new ValidationError(`Google Calendar event not found. It may have been deleted externally.`);
+  }
+  throw new Error(`Failed to ${operation} Google event (${status}): ${body}`);
+}
+
 async function createGoogleCalendarEvent(
   accessToken: string,
   calendarId: string,
@@ -519,7 +549,7 @@ async function createGoogleCalendarEvent(
 
   if (!resp.ok) {
     const errText = await resp.text();
-    throw new Error(`Failed to create Google event: ${errText}`);
+    throwGoogleApiError(resp.status, errText, "create");
   }
 
   return resp.json();
@@ -545,7 +575,7 @@ async function updateGoogleCalendarEventById(
 
   if (!resp.ok) {
     const errText = await resp.text();
-    throw new Error(`Failed to update Google event: ${errText}`);
+    throwGoogleApiError(resp.status, errText, "update");
   }
 
   return resp.json();

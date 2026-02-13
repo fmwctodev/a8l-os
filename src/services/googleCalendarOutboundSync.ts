@@ -49,14 +49,22 @@ async function callSyncApi(action: string, body: Record<string, unknown>) {
 
     if (!retry.ok) {
       const err = await retry.json().catch(() => ({}));
-      throw new Error((err as Record<string, string>).error || 'Sync failed');
+      const errObj = (err as Record<string, unknown>).error;
+      const errMsg = typeof errObj === 'string'
+        ? errObj
+        : (errObj as Record<string, string>)?.message || 'Sync failed';
+      throw new Error(errMsg);
     }
     return retry.json();
   }
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error((err as Record<string, string>).error || 'Sync failed');
+    const errObj = (err as Record<string, unknown>).error;
+    const errMsg = typeof errObj === 'string'
+      ? errObj
+      : (errObj as Record<string, string>)?.message || 'Sync failed';
+    throw new Error(errMsg);
   }
 
   return response.json();

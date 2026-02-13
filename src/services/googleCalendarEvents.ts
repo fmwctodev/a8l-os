@@ -65,11 +65,13 @@ async function callGoogleCalendarApi(action: string, body?: Record<string, unkno
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(
-      (err as Record<string, string>).error
-      || (err as Record<string, string>).message
-      || `Google Calendar API call failed`
-    );
+    const errObj = (err as Record<string, unknown>).error;
+    const errMsg = typeof errObj === 'string'
+      ? errObj
+      : (errObj as Record<string, string>)?.message
+        || (err as Record<string, string>).message
+        || 'Google Calendar API call failed';
+    throw new Error(errMsg);
   }
 
   return response.json();
