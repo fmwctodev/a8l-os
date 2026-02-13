@@ -4,6 +4,8 @@ import { Loader2, Calendar as CalendarIcon, Plus } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getVisibleAppointments, updateAppointment, cancelAppointment } from '../../../services/appointments';
 import { getBlockedSlots } from '../../../services/blockedSlots';
+import { getCalendarEvents } from '../../../services/calendarEvents';
+import { getCalendarTasks } from '../../../services/calendarTasks';
 import { getCalendars } from '../../../services/calendars';
 import { getUsers } from '../../../services/users';
 import { getDepartments } from '../../../services/departments';
@@ -17,7 +19,8 @@ import {
 import { mergeDisplayItems } from '../../../utils/calendarDisplayItems';
 import type {
   Appointment, BlockedSlot, Calendar, User, Department,
-  CalendarViewFilter, AppointmentStatus, GoogleCalendarEvent, CalendarDisplayItem,
+  CalendarViewFilter, AppointmentStatus, GoogleCalendarEvent,
+  CalendarDisplayItem, CalendarEvent, CalendarTask,
 } from '../../../types';
 import type { CalendarViewType } from '../../../utils/calendarViewUtils';
 import { getDateRangeForView } from '../../../utils/calendarViewUtils';
@@ -30,6 +33,10 @@ import { AppointmentDetailsModal } from './AppointmentDetailsModal';
 import { GoogleEventDetailModal } from './GoogleEventDetailModal';
 import { NewAppointmentModal } from './NewAppointmentModal';
 import { EditAppointmentModal } from './EditAppointmentModal';
+import { NewEventModal } from './NewEventModal';
+import { NewTaskModal } from './NewTaskModal';
+import { EventDetailModal } from './EventDetailModal';
+import { TaskDetailModal } from './TaskDetailModal';
 import { CreateCalendarModal } from '../CreateCalendarModal';
 
 export function UnifiedCalendarView() {
@@ -45,6 +52,8 @@ export function UnifiedCalendarView() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [blockedSlots, setBlockedSlots] = useState<BlockedSlot[]>([]);
   const [googleEvents, setGoogleEvents] = useState<GoogleCalendarEvent[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [calendarTasks, setCalendarTasks] = useState<CalendarTask[]>([]);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -63,7 +72,11 @@ export function UnifiedCalendarView() {
 
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [selectedGoogleEvent, setSelectedGoogleEvent] = useState<GoogleCalendarEvent | null>(null);
+  const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<CalendarEvent | null>(null);
+  const [selectedCalendarTask, setSelectedCalendarTask] = useState<CalendarTask | null>(null);
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
+  const [isNewEventOpen, setIsNewEventOpen] = useState(false);
+  const [isNewTaskOpen, setIsNewTaskOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
 
@@ -154,15 +167,19 @@ export function UnifiedCalendarView() {
         );
       }
 
-      const [appointmentsData, blockedSlotsData, googleEventsData] = await Promise.all([
+      const [appointmentsData, blockedSlotsData, googleEventsData, eventsData, tasksData] = await Promise.all([
         getVisibleAppointments(currentUser.organization_id, currentUser, filters),
         getBlockedSlots(currentUser.organization_id, filters),
         googleEventsPromise,
+        getCalendarEvents(currentUser.organization_id, filters),
+        getCalendarTasks(currentUser.organization_id, filters),
       ]);
 
       setAppointments(appointmentsData);
       setBlockedSlots(blockedSlotsData);
       setGoogleEvents(googleEventsData);
+      setCalendarEvents(eventsData);
+      setCalendarTasks(tasksData);
     } catch (err) {
       console.error('Failed to load calendar data:', err);
     }
@@ -195,15 +212,15 @@ export function UnifiedCalendarView() {
   }, [viewType, currentDate, selectedCalendarIds, setSearchParams]);
 
   const displayItems: CalendarDisplayItem[] = useMemo(() => {
-    const filteredAppointments = viewFilter === 'blocked_slots' || viewFilter === 'google_events'
-      ? [] : appointments;
-    const filteredBlocked = viewFilter === 'appointments' || viewFilter === 'google_events'
-      ? [] : blockedSlots;
-    const filteredGoogle = !showGoogleEvents || viewFilter === 'appointments' || viewFilter === 'blocked_slots'
-      ? [] : googleEvents;
+    const showAll = viewFilter === 'all';
+    const filteredAppointments = showAll || viewFilter === 'appointments' ? appointments : [];
+    const filteredBlocked = showAll || viewFilter === 'blocked_slots' ? blockedSlots : [];
+    const filteredGoogle = showGoogleEvents && (showAll || viewFilter === 'google_events') ? googleEvents : [];
+    const filteredEvents = showAll || viewFilter === 'events' ? calendarEvents : [];
+    const filteredTasks = showAll || viewFilter === 'tasks' ? calendarTasks : [];
 
-    return mergeDisplayItems(filteredAppointments, filteredGoogle, filteredBlocked);
-  }, [appointments, blockedSlots, googleEvents, viewFilter, showGoogleEvents]);
+    return mergeDisplayItems(filteredAppointments, filteredGoogle, filteredBlocked, filteredEvents, filteredTasks);
+  }, [appointments, blockedSlots, googleEvents, calendarEvents, calendarTasks, viewFilter, showGoogleEvents]);
 
   const handleDateChange = (date: Date) => setCurrentDate(date);
   const handleViewTypeChange = (type: CalendarViewType) => setViewType(type);
@@ -218,6 +235,10 @@ export function UnifiedCalendarView() {
       setSelectedAppointment(item.originalAppointment);
     } else if (item.source === 'google' && item.originalGoogleEvent) {
       setSelectedGoogleEvent(item.originalGoogleEvent);
+    } else if (item.source === 'event' && item.originalCalendarEvent) {
+      setSelectedCalendarEvent(item.originalCalendarEvent);
+    } else if (item.source === 'task' && item.originalCalendarTask) {
+      setSelectedCalendarTask(item.originalCalendarTask);
     }
   };
 
@@ -257,6 +278,26 @@ export function UnifiedCalendarView() {
 
   const handleGoogleEventUpdated = async () => {
     setSelectedGoogleEvent(null);
+    await loadCalendarData();
+  };
+
+  const handleCalendarEventUpdated = async () => {
+    setSelectedCalendarEvent(null);
+    await loadCalendarData();
+  };
+
+  const handleCalendarTaskUpdated = async () => {
+    setSelectedCalendarTask(null);
+    await loadCalendarData();
+  };
+
+  const handleNewEventSuccess = async () => {
+    setIsNewEventOpen(false);
+    await loadCalendarData();
+  };
+
+  const handleNewTaskSuccess = async () => {
+    setIsNewTaskOpen(false);
     await loadCalendarData();
   };
 
@@ -319,6 +360,20 @@ export function UnifiedCalendarView() {
               setIsCreateCalendarOpen(true);
             } else if (canCreate) {
               setIsNewAppointmentOpen(true);
+            }
+          }}
+          onNewEvent={() => {
+            if (calendars.length === 0) {
+              setIsCreateCalendarOpen(true);
+            } else {
+              setIsNewEventOpen(true);
+            }
+          }}
+          onNewTask={() => {
+            if (calendars.length === 0) {
+              setIsCreateCalendarOpen(true);
+            } else {
+              setIsNewTaskOpen(true);
             }
           }}
           onManageViewToggle={() => setIsManageViewOpen(!isManageViewOpen)}
@@ -414,6 +469,42 @@ export function UnifiedCalendarView() {
             setEditingAppointment(null);
           }}
           onSuccess={handleEditSuccess}
+        />
+      )}
+
+      {selectedCalendarEvent && (
+        <EventDetailModal
+          event={selectedCalendarEvent}
+          onClose={() => setSelectedCalendarEvent(null)}
+          onUpdated={handleCalendarEventUpdated}
+        />
+      )}
+
+      {selectedCalendarTask && (
+        <TaskDetailModal
+          task={selectedCalendarTask}
+          onClose={() => setSelectedCalendarTask(null)}
+          onUpdated={handleCalendarTaskUpdated}
+        />
+      )}
+
+      {isNewEventOpen && calendars.length > 0 && (
+        <NewEventModal
+          calendar={selectedCalendar || calendars[0]}
+          calendars={calendars}
+          preselectedDate={currentDate}
+          onClose={() => setIsNewEventOpen(false)}
+          onSuccess={handleNewEventSuccess}
+        />
+      )}
+
+      {isNewTaskOpen && calendars.length > 0 && (
+        <NewTaskModal
+          calendar={selectedCalendar || calendars[0]}
+          calendars={calendars}
+          preselectedDate={currentDate}
+          onClose={() => setIsNewTaskOpen(false)}
+          onSuccess={handleNewTaskSuccess}
         />
       )}
 

@@ -9,6 +9,7 @@ import type {
 import { logAudit } from './audit';
 import { addTimelineEvent } from './contactTimeline';
 import { publishEvent } from './eventOutbox';
+import { syncAppointmentToGoogle } from './googleCalendarOutboundSync';
 
 export interface CreateAppointmentData {
   calendar_id: string;
@@ -274,6 +275,8 @@ export async function createAppointment(
     }
   }
 
+  syncAppointmentToGoogle(data.id, 'create').catch(() => {});
+
   return data;
 }
 
@@ -328,6 +331,9 @@ export async function updateAppointment(
       new_time: updates.start_at_utc,
     });
   }
+
+  const syncOp = historyEntry.action === 'rescheduled' ? 'reschedule' : 'update';
+  syncAppointmentToGoogle(id, syncOp as 'update' | 'reschedule').catch(() => {});
 
   return data;
 }
@@ -404,6 +410,8 @@ export async function rescheduleAppointment(
     }
   }
 
+  syncAppointmentToGoogle(id, 'reschedule').catch(() => {});
+
   return data;
 }
 
@@ -475,6 +483,8 @@ export async function cancelAppointment(
     } catch {
     }
   }
+
+  syncAppointmentToGoogle(id, 'delete').catch(() => {});
 
   return data;
 }

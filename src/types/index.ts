@@ -877,7 +877,72 @@ export interface BlockedSlotFilters {
   endDate?: string;
 }
 
-export type CalendarViewFilter = 'all' | 'appointments' | 'blocked_slots' | 'google_events';
+export interface CalendarEvent {
+  id: string;
+  org_id: string;
+  calendar_id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  location: string | null;
+  start_at_utc: string;
+  end_at_utc: string;
+  all_day: boolean;
+  timezone: string;
+  attendees: { email?: string; name?: string; responseStatus?: string }[];
+  google_meet_link: string | null;
+  color: string | null;
+  status: 'confirmed' | 'tentative' | 'cancelled';
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  calendar?: { id: string; name: string; slug: string; type: string };
+  user?: { id: string; name: string; email: string; avatar_url?: string | null };
+}
+
+export interface CalendarEventFilters {
+  calendarId?: string;
+  calendarIds?: string[];
+  userId?: string;
+  userIds?: string[];
+  startDate?: string;
+  endDate?: string;
+}
+
+export type TaskPriority = 'low' | 'medium' | 'high';
+export type TaskStatus = 'pending' | 'in_progress' | 'completed';
+
+export interface CalendarTask {
+  id: string;
+  org_id: string;
+  calendar_id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  due_at_utc: string;
+  duration_minutes: number;
+  completed: boolean;
+  completed_at: string | null;
+  priority: TaskPriority;
+  status: TaskStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  calendar?: { id: string; name: string; slug: string; type: string };
+  user?: { id: string; name: string; email: string; avatar_url?: string | null };
+}
+
+export interface CalendarTaskFilters {
+  calendarId?: string;
+  calendarIds?: string[];
+  userId?: string;
+  userIds?: string[];
+  startDate?: string;
+  endDate?: string;
+  completed?: boolean;
+}
+
+export type CalendarViewFilter = 'all' | 'appointments' | 'blocked_slots' | 'google_events' | 'events' | 'tasks';
 
 export interface GoogleCalendarEvent {
   id: string;
@@ -919,7 +984,7 @@ export interface GoogleCalendarEvent {
   updated_at: string;
 }
 
-export type CalendarDisplayItemSource = 'crm' | 'google' | 'blocked';
+export type CalendarDisplayItemSource = 'crm' | 'google' | 'blocked' | 'event' | 'task';
 
 export interface CalendarDisplayItem {
   id: string;
@@ -931,6 +996,8 @@ export interface CalendarDisplayItem {
   originalAppointment?: Appointment;
   originalGoogleEvent?: GoogleCalendarEvent;
   originalBlockedSlot?: BlockedSlot;
+  originalCalendarEvent?: CalendarEvent;
+  originalCalendarTask?: CalendarTask;
 }
 
 export type WorkflowStatus = 'draft' | 'published' | 'archived';

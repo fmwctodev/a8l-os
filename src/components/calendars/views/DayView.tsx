@@ -8,6 +8,8 @@ import {
 } from '../../../utils/calendarViewUtils';
 import { AppointmentBlock } from './AppointmentBlock';
 import { GoogleEventBlock } from './GoogleEventBlock';
+import { EventBlock } from './EventBlock';
+import { TaskBlock } from './TaskBlock';
 
 interface DayViewProps {
   date: Date;
@@ -159,6 +161,28 @@ function DayItemBlock({
     return (
       <GoogleEventBlock
         event={item.originalGoogleEvent}
+        onClick={() => onItemClick(item)}
+        compact={compact}
+        style={style}
+      />
+    );
+  }
+
+  if (item.source === 'event' && item.originalCalendarEvent) {
+    return (
+      <EventBlock
+        event={item.originalCalendarEvent}
+        onClick={() => onItemClick(item)}
+        compact={compact}
+        style={style}
+      />
+    );
+  }
+
+  if (item.source === 'task' && item.originalCalendarTask) {
+    return (
+      <TaskBlock
+        task={item.originalCalendarTask}
         onClick={() => onItemClick(item)}
         compact={compact}
         style={style}

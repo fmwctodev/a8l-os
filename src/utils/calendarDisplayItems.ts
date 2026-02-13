@@ -1,4 +1,7 @@
-import type { Appointment, GoogleCalendarEvent, BlockedSlot, CalendarDisplayItem } from '../types';
+import type {
+  Appointment, GoogleCalendarEvent, BlockedSlot,
+  CalendarEvent, CalendarTask, CalendarDisplayItem,
+} from '../types';
 
 export function appointmentToDisplayItem(apt: Appointment): CalendarDisplayItem {
   const contactName = apt.contact
@@ -40,15 +43,47 @@ export function blockedSlotToDisplayItem(slot: BlockedSlot): CalendarDisplayItem
   };
 }
 
+export function calendarEventToDisplayItem(evt: CalendarEvent): CalendarDisplayItem {
+  return {
+    id: evt.id,
+    title: evt.title,
+    startTime: evt.start_at_utc,
+    endTime: evt.end_at_utc,
+    allDay: evt.all_day,
+    source: 'event',
+    originalCalendarEvent: evt,
+  };
+}
+
+export function calendarTaskToDisplayItem(task: CalendarTask): CalendarDisplayItem {
+  const endTime = new Date(
+    new Date(task.due_at_utc).getTime() + (task.duration_minutes || 30) * 60000
+  ).toISOString();
+
+  return {
+    id: task.id,
+    title: task.title,
+    startTime: task.due_at_utc,
+    endTime,
+    allDay: false,
+    source: 'task',
+    originalCalendarTask: task,
+  };
+}
+
 export function mergeDisplayItems(
   appointments: Appointment[],
   googleEvents: GoogleCalendarEvent[],
-  blockedSlots: BlockedSlot[]
+  blockedSlots: BlockedSlot[],
+  calendarEvents: CalendarEvent[] = [],
+  calendarTasks: CalendarTask[] = []
 ): CalendarDisplayItem[] {
   const items: CalendarDisplayItem[] = [
     ...appointments.map(appointmentToDisplayItem),
     ...googleEvents.map(googleEventToDisplayItem),
     ...blockedSlots.map(blockedSlotToDisplayItem),
+    ...calendarEvents.map(calendarEventToDisplayItem),
+    ...calendarTasks.map(calendarTaskToDisplayItem),
   ];
 
   items.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());

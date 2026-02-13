@@ -477,6 +477,472 @@ async function handleRsvp(req: Request, body?: Record<string, unknown>): Promise
   return successResponse({ updated: true, response: rsvpResponse });
 }
 
+async function getUserConnection(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  userId: string,
+  orgId: string
+) {
+  const { data: connection } = await supabase
+    .from("google_calendar_connections")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+  return connection;
+}
+
+async function createGoogleCalendarEvent(
+  accessToken: string,
+  calendarId: string,
+  eventData: Record<string, unknown>,
+  generateMeet = false
+): Promise<{ id: string; htmlLink?: string; hangoutLink?: string; conferenceData?: Record<string, unknown> }> {
+  const url = new URL(`${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events`);
+  if (generateMeet) {
+    url.searchParams.set("conferenceDataVersion", "1");
+    eventData.conferenceData = {
+      createRequest: {
+        requestId: crypto.randomUUID(),
+        conferenceSolutionKey: { type: "hangoutsMeet" },
+      },
+    };
+  }
+
+  const resp = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(eventData),
+  });
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`Failed to create Google event: ${errText}`);
+  }
+
+  return resp.json();
+}
+
+async function updateGoogleCalendarEventById(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+  updates: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const resp = await fetch(
+    `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(updates),
+    }
+  );
+
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`Failed to update Google event: ${errText}`);
+  }
+
+  return resp.json();
+}
+
+async function deleteGoogleCalendarEventById(
+  accessToken: string,
+  calendarId: string,
+  eventId: string
+): Promise<void> {
+  const resp = await fetch(
+    `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  if (!resp.ok && resp.status !== 404 && resp.status !== 410) {
+    const errText = await resp.text();
+    throw new Error(`Failed to delete Google event: ${errText}`);
+  }
+}
+
+async function handleSyncAppointment(req: Request, body: Record<string, unknown>): Promise<Response> {
+  const supabase = getSupabaseClient();
+  const userCtx = requireAuth(await extractUserContext(req, supabase));
+
+  const { appointmentId, operation } = body as { appointmentId?: string; operation?: string };
+  if (!appointmentId) throw new ValidationError("appointmentId is required");
+
+  const op = operation || "create";
+
+  const { data: appointment } = await supabase
+    .from("appointments")
+    .select("*, appointment_type:appointment_types(*), contact:contacts(first_name, last_name, email)")
+    .eq("id", appointmentId)
+    .maybeSingle();
+
+  if (!appointment) throw new ValidationError("Appointment not found");
+
+  const targetUserId = appointment.assigned_user_id || userCtx.id;
+  const { data: targetUser } = await supabase
+    .from("users")
+    .select("organization_id")
+    .eq("id", targetUserId)
+    .maybeSingle();
+
+  const connection = await getUserConnection(supabase, targetUserId, targetUser?.organization_id || userCtx.orgId);
+  if (!connection) {
+    return successResponse({ synced: false, reason: "no_connection" });
+  }
+
+  const accessToken = await getValidToken(connection, supabase);
+  const calendarId = "primary";
+
+  const { data: existingSync } = await supabase
+    .from("appointment_sync")
+    .select("*")
+    .eq("appointment_id", appointmentId)
+    .eq("provider", "google")
+    .maybeSingle();
+
+  const appointmentType = appointment.appointment_type;
+  const contact = appointment.contact;
+  const summary = `${appointmentType?.name || "Appointment"} - ${contact?.first_name || "Guest"} ${contact?.last_name || ""}`.trim();
+
+  if (op === "delete" || appointment.status === "canceled") {
+    if (existingSync?.external_event_id) {
+      await deleteGoogleCalendarEventById(accessToken, calendarId, existingSync.external_event_id);
+      await supabase
+        .from("appointment_sync")
+        .update({ sync_status: "synced", last_error: null, updated_at: new Date().toISOString() })
+        .eq("id", existingSync.id);
+    }
+    return successResponse({ synced: true, operation: "deleted" });
+  }
+
+  const generateMeet = appointmentType?.generate_google_meet && appointmentType?.location_type === "google_meet";
+
+  const eventPayload: Record<string, unknown> = {
+    summary,
+    description: `Booked via CRM\n${appointment.notes || ""}`.trim(),
+    start: { dateTime: appointment.start_at_utc, timeZone: "UTC" },
+    end: { dateTime: appointment.end_at_utc, timeZone: "UTC" },
+    attendees: contact?.email ? [{ email: contact.email }] : undefined,
+  };
+
+  if (appointment.location || appointmentType?.location_value?.address) {
+    eventPayload.location = appointment.location || appointmentType?.location_value?.address;
+  }
+
+  if (existingSync?.external_event_id && (op === "update" || op === "reschedule")) {
+    await updateGoogleCalendarEventById(accessToken, calendarId, existingSync.external_event_id, eventPayload);
+    await supabase
+      .from("appointment_sync")
+      .update({ sync_status: "synced", last_error: null, updated_at: new Date().toISOString() })
+      .eq("id", existingSync.id);
+    return successResponse({ synced: true, operation: "updated" });
+  }
+
+  const googleEvent = await createGoogleCalendarEvent(accessToken, calendarId, eventPayload, generateMeet);
+
+  const meetLink = googleEvent.conferenceData
+    ? ((googleEvent.conferenceData as { entryPoints?: { entryPointType: string; uri: string }[] }).entryPoints || [])
+        .find((ep) => ep.entryPointType === "video")?.uri
+    : googleEvent.hangoutLink || null;
+
+  await supabase
+    .from("appointment_sync")
+    .upsert({
+      org_id: appointment.org_id,
+      appointment_id: appointmentId,
+      user_id: targetUserId,
+      provider: "google",
+      external_event_id: googleEvent.id,
+      google_calendar_id: calendarId,
+      sync_status: "synced",
+      last_error: null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "appointment_id,provider" });
+
+  if (meetLink) {
+    await supabase
+      .from("appointments")
+      .update({ google_meet_link: meetLink })
+      .eq("id", appointmentId);
+  }
+
+  return successResponse({ synced: true, operation: "created", googleEventId: googleEvent.id, meetLink });
+}
+
+async function handleSyncBlockedSlot(req: Request, body: Record<string, unknown>): Promise<Response> {
+  const supabase = getSupabaseClient();
+  const userCtx = requireAuth(await extractUserContext(req, supabase));
+
+  const { blockedSlotId, operation } = body as { blockedSlotId?: string; operation?: string };
+  if (!blockedSlotId) throw new ValidationError("blockedSlotId is required");
+
+  const op = operation || "create";
+
+  const { data: slot } = await supabase
+    .from("blocked_slots")
+    .select("*")
+    .eq("id", blockedSlotId)
+    .maybeSingle();
+
+  if (!slot) throw new ValidationError("Blocked slot not found");
+
+  const targetUserId = slot.user_id || slot.created_by || userCtx.id;
+  const connection = await getUserConnection(supabase, targetUserId, slot.org_id);
+  if (!connection) {
+    return successResponse({ synced: false, reason: "no_connection" });
+  }
+
+  const accessToken = await getValidToken(connection, supabase);
+  const calendarId = "primary";
+
+  const { data: existingSync } = await supabase
+    .from("blocked_slot_sync")
+    .select("*")
+    .eq("blocked_slot_id", blockedSlotId)
+    .eq("provider", "google")
+    .maybeSingle();
+
+  if (op === "delete") {
+    if (existingSync?.external_event_id) {
+      await deleteGoogleCalendarEventById(accessToken, calendarId, existingSync.external_event_id);
+      await supabase.from("blocked_slot_sync").delete().eq("id", existingSync.id);
+    }
+    return successResponse({ synced: true, operation: "deleted" });
+  }
+
+  const eventPayload: Record<string, unknown> = {
+    summary: slot.title || "Blocked Time",
+    description: "Blocked time (from CRM)",
+    start: slot.all_day
+      ? { date: slot.start_at_utc.split("T")[0] }
+      : { dateTime: slot.start_at_utc, timeZone: "UTC" },
+    end: slot.all_day
+      ? { date: slot.end_at_utc.split("T")[0] }
+      : { dateTime: slot.end_at_utc, timeZone: "UTC" },
+    transparency: "opaque",
+  };
+
+  if (slot.recurring && slot.recurrence_rule) {
+    eventPayload.recurrence = [slot.recurrence_rule];
+  }
+
+  if (existingSync?.external_event_id && op === "update") {
+    await updateGoogleCalendarEventById(accessToken, calendarId, existingSync.external_event_id, eventPayload);
+    await supabase
+      .from("blocked_slot_sync")
+      .update({ sync_status: "synced", last_error: null, updated_at: new Date().toISOString() })
+      .eq("id", existingSync.id);
+    return successResponse({ synced: true, operation: "updated" });
+  }
+
+  const googleEvent = await createGoogleCalendarEvent(accessToken, calendarId, eventPayload);
+
+  await supabase
+    .from("blocked_slot_sync")
+    .upsert({
+      org_id: slot.org_id,
+      blocked_slot_id: blockedSlotId,
+      user_id: targetUserId,
+      provider: "google",
+      external_event_id: googleEvent.id,
+      google_calendar_id: calendarId,
+      sync_status: "synced",
+      last_error: null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "blocked_slot_id,provider" });
+
+  return successResponse({ synced: true, operation: "created", googleEventId: googleEvent.id });
+}
+
+async function handleSyncCalendarEvent(req: Request, body: Record<string, unknown>): Promise<Response> {
+  const supabase = getSupabaseClient();
+  const userCtx = requireAuth(await extractUserContext(req, supabase));
+
+  const { calendarEventId, operation, generateMeet } = body as {
+    calendarEventId?: string; operation?: string; generateMeet?: boolean;
+  };
+  if (!calendarEventId) throw new ValidationError("calendarEventId is required");
+
+  const op = operation || "create";
+
+  const { data: calEvent } = await supabase
+    .from("calendar_events")
+    .select("*")
+    .eq("id", calendarEventId)
+    .maybeSingle();
+
+  if (!calEvent) throw new ValidationError("Calendar event not found");
+
+  const connection = await getUserConnection(supabase, calEvent.user_id, calEvent.org_id);
+  if (!connection) {
+    return successResponse({ synced: false, reason: "no_connection" });
+  }
+
+  const accessToken = await getValidToken(connection, supabase);
+  const calendarId = "primary";
+
+  const { data: existingSync } = await supabase
+    .from("calendar_event_sync")
+    .select("*")
+    .eq("calendar_event_id", calendarEventId)
+    .eq("provider", "google")
+    .maybeSingle();
+
+  if (op === "delete" || calEvent.status === "cancelled") {
+    if (existingSync?.external_event_id) {
+      await deleteGoogleCalendarEventById(accessToken, calendarId, existingSync.external_event_id);
+      await supabase.from("calendar_event_sync").delete().eq("id", existingSync.id);
+    }
+    return successResponse({ synced: true, operation: "deleted" });
+  }
+
+  const attendees = Array.isArray(calEvent.attendees)
+    ? calEvent.attendees.map((a: { email?: string; name?: string }) => ({
+        email: a.email, displayName: a.name,
+      }))
+    : undefined;
+
+  const eventPayload: Record<string, unknown> = {
+    summary: calEvent.title,
+    description: calEvent.description || undefined,
+    location: calEvent.location || undefined,
+    start: calEvent.all_day
+      ? { date: calEvent.start_at_utc.split("T")[0] }
+      : { dateTime: calEvent.start_at_utc, timeZone: calEvent.timezone || "UTC" },
+    end: calEvent.all_day
+      ? { date: calEvent.end_at_utc.split("T")[0] }
+      : { dateTime: calEvent.end_at_utc, timeZone: calEvent.timezone || "UTC" },
+    attendees,
+  };
+
+  if (existingSync?.external_event_id && op === "update") {
+    await updateGoogleCalendarEventById(accessToken, calendarId, existingSync.external_event_id, eventPayload);
+    await supabase
+      .from("calendar_event_sync")
+      .update({ sync_status: "synced", last_error: null, updated_at: new Date().toISOString() })
+      .eq("id", existingSync.id);
+    return successResponse({ synced: true, operation: "updated" });
+  }
+
+  const googleEvent = await createGoogleCalendarEvent(accessToken, calendarId, eventPayload, !!generateMeet);
+
+  const meetLink = googleEvent.conferenceData
+    ? ((googleEvent.conferenceData as { entryPoints?: { entryPointType: string; uri: string }[] }).entryPoints || [])
+        .find((ep) => ep.entryPointType === "video")?.uri
+    : googleEvent.hangoutLink || null;
+
+  await supabase
+    .from("calendar_event_sync")
+    .upsert({
+      org_id: calEvent.org_id,
+      calendar_event_id: calendarEventId,
+      user_id: calEvent.user_id,
+      provider: "google",
+      external_event_id: googleEvent.id,
+      google_calendar_id: calendarId,
+      sync_status: "synced",
+      last_error: null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "calendar_event_id,provider" });
+
+  if (meetLink) {
+    await supabase
+      .from("calendar_events")
+      .update({ google_meet_link: meetLink })
+      .eq("id", calendarEventId);
+  }
+
+  return successResponse({ synced: true, operation: "created", googleEventId: googleEvent.id, meetLink });
+}
+
+async function handleSyncTask(req: Request, body: Record<string, unknown>): Promise<Response> {
+  const supabase = getSupabaseClient();
+  const userCtx = requireAuth(await extractUserContext(req, supabase));
+
+  const { taskId, operation } = body as { taskId?: string; operation?: string };
+  if (!taskId) throw new ValidationError("taskId is required");
+
+  const op = operation || "create";
+
+  const { data: task } = await supabase
+    .from("calendar_tasks")
+    .select("*")
+    .eq("id", taskId)
+    .maybeSingle();
+
+  if (!task) throw new ValidationError("Task not found");
+
+  const connection = await getUserConnection(supabase, task.user_id, task.org_id);
+  if (!connection) {
+    return successResponse({ synced: false, reason: "no_connection" });
+  }
+
+  const accessToken = await getValidToken(connection, supabase);
+  const calendarId = "primary";
+
+  const { data: existingSync } = await supabase
+    .from("calendar_task_sync")
+    .select("*")
+    .eq("calendar_task_id", taskId)
+    .eq("provider", "google")
+    .maybeSingle();
+
+  if (op === "delete") {
+    if (existingSync?.external_event_id) {
+      await deleteGoogleCalendarEventById(accessToken, calendarId, existingSync.external_event_id);
+      await supabase.from("calendar_task_sync").delete().eq("id", existingSync.id);
+    }
+    return successResponse({ synced: true, operation: "deleted" });
+  }
+
+  const endTime = new Date(new Date(task.due_at_utc).getTime() + (task.duration_minutes || 30) * 60000).toISOString();
+  const priorityLabel = task.priority === "high" ? "[HIGH] " : task.priority === "low" ? "[LOW] " : "";
+
+  const eventPayload: Record<string, unknown> = {
+    summary: `${priorityLabel}[Task] ${task.title}`,
+    description: task.description || "Calendar task from CRM",
+    start: { dateTime: task.due_at_utc, timeZone: "UTC" },
+    end: { dateTime: endTime, timeZone: "UTC" },
+    colorId: task.completed ? "8" : task.priority === "high" ? "11" : "5",
+  };
+
+  if (existingSync?.external_event_id && op === "update") {
+    await updateGoogleCalendarEventById(accessToken, calendarId, existingSync.external_event_id, eventPayload);
+    await supabase
+      .from("calendar_task_sync")
+      .update({ sync_status: "synced", last_error: null, updated_at: new Date().toISOString() })
+      .eq("id", existingSync.id);
+    return successResponse({ synced: true, operation: "updated" });
+  }
+
+  const googleEvent = await createGoogleCalendarEvent(accessToken, calendarId, eventPayload);
+
+  await supabase
+    .from("calendar_task_sync")
+    .upsert({
+      org_id: task.org_id,
+      calendar_task_id: taskId,
+      user_id: task.user_id,
+      provider: "google",
+      external_event_id: googleEvent.id,
+      google_calendar_id: calendarId,
+      sync_status: "synced",
+      last_error: null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "calendar_task_id,provider" });
+
+  return successResponse({ synced: true, operation: "created", googleEventId: googleEvent.id });
+}
+
 Deno.serve(async (req: Request) => {
   try {
     const corsResp = handleCors(req);
@@ -508,6 +974,18 @@ Deno.serve(async (req: Request) => {
     }
     if (action === "rsvp") {
       return await handleRsvp(req, body);
+    }
+    if (action === "sync-appointment") {
+      return await handleSyncAppointment(req, body);
+    }
+    if (action === "sync-blocked-slot") {
+      return await handleSyncBlockedSlot(req, body);
+    }
+    if (action === "sync-calendar-event") {
+      return await handleSyncCalendarEvent(req, body);
+    }
+    if (action === "sync-task") {
+      return await handleSyncTask(req, body);
     }
 
     return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400 });

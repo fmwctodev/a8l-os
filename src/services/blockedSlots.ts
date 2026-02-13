@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { BlockedSlot, BlockedSlotFilters, User } from '../types';
 import { logAudit } from './audit';
+import { syncBlockedSlotToGoogle } from './googleCalendarOutboundSync';
 
 export interface CreateBlockedSlotData {
   calendar_id: string;
@@ -127,6 +128,8 @@ export async function createBlockedSlot(
     afterState: blockedSlot,
   });
 
+  syncBlockedSlotToGoogle(blockedSlot.id, 'create').catch(() => {});
+
   return blockedSlot;
 }
 
@@ -161,6 +164,8 @@ export async function updateBlockedSlot(
     afterState: blockedSlot,
   });
 
+  syncBlockedSlotToGoogle(id, 'update').catch(() => {});
+
   return blockedSlot;
 }
 
@@ -185,4 +190,6 @@ export async function deleteBlockedSlot(
     entityId: id,
     beforeState: existing,
   });
+
+  syncBlockedSlotToGoogle(id, 'delete').catch(() => {});
 }

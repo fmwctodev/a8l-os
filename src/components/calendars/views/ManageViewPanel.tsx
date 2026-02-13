@@ -23,6 +23,8 @@ const MAX_VISIBLE_ITEMS = 5;
 const VIEW_FILTER_OPTIONS: { value: CalendarViewFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'appointments', label: 'Appointments' },
+  { value: 'events', label: 'Events' },
+  { value: 'tasks', label: 'Tasks' },
   { value: 'google_events', label: 'Google Events' },
   { value: 'blocked_slots', label: 'Blocked Slots' },
 ];

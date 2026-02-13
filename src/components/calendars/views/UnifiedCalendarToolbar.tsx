@@ -7,6 +7,9 @@ import {
   ChevronDown,
   RefreshCw,
   Loader2,
+  CalendarDays,
+  CheckSquare,
+  Calendar,
 } from 'lucide-react';
 import type { CalendarViewType } from '../../../utils/calendarViewUtils';
 import { addDays, addWeeks, addMonths } from '../../../utils/calendarViewUtils';
@@ -17,6 +20,8 @@ interface UnifiedCalendarToolbarProps {
   onDateChange: (date: Date) => void;
   onViewTypeChange: (viewType: CalendarViewType) => void;
   onNewAppointment: () => void;
+  onNewEvent?: () => void;
+  onNewTask?: () => void;
   onManageViewToggle: () => void;
   isManageViewOpen: boolean;
   hasGoogleConnection?: boolean;
@@ -36,6 +41,8 @@ export function UnifiedCalendarToolbar({
   onDateChange,
   onViewTypeChange,
   onNewAppointment,
+  onNewEvent,
+  onNewTask,
   onManageViewToggle,
   isManageViewOpen,
   hasGoogleConnection = false,
@@ -43,7 +50,9 @@ export function UnifiedCalendarToolbar({
   onSyncGoogle,
 }: UnifiedCalendarToolbarProps) {
   const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
+  const [isNewDropdownOpen, setIsNewDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const newDropdownRef = useRef<HTMLDivElement>(null);
 
   const monthYearLabel = date.toLocaleDateString('en-US', {
     month: 'long',
@@ -54,6 +63,9 @@ export function UnifiedCalendarToolbar({
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsViewDropdownOpen(false);
+      }
+      if (newDropdownRef.current && !newDropdownRef.current.contains(event.target as Node)) {
+        setIsNewDropdownOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -186,13 +198,46 @@ export function UnifiedCalendarToolbar({
           Manage View
         </button>
 
-        <button
-          onClick={onNewAppointment}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-white text-sm font-medium hover:from-cyan-600 hover:to-teal-700 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New
-        </button>
+        <div className="relative" ref={newDropdownRef}>
+          <button
+            onClick={() => setIsNewDropdownOpen(!isNewDropdownOpen)}
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-white text-sm font-medium hover:from-cyan-600 hover:to-teal-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New
+            <ChevronDown className="w-3.5 h-3.5" />
+          </button>
+
+          {isNewDropdownOpen && (
+            <div className="absolute top-full right-0 mt-1 w-44 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-20 py-1">
+              <button
+                onClick={() => { setIsNewDropdownOpen(false); onNewAppointment(); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
+              >
+                <Calendar className="w-4 h-4 text-cyan-400" />
+                Appointment
+              </button>
+              {onNewEvent && (
+                <button
+                  onClick={() => { setIsNewDropdownOpen(false); onNewEvent(); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
+                >
+                  <CalendarDays className="w-4 h-4 text-blue-400" />
+                  Event
+                </button>
+              )}
+              {onNewTask && (
+                <button
+                  onClick={() => { setIsNewDropdownOpen(false); onNewTask(); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
+                >
+                  <CheckSquare className="w-4 h-4 text-amber-400" />
+                  Task
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
