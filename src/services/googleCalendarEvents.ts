@@ -85,6 +85,7 @@ export async function syncGoogleCalendar(): Promise<{ synced: number }> {
     headers: {
       'Authorization': `Bearer ${session.access_token}`,
       'Content-Type': 'application/json',
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
     },
   });
 
@@ -119,6 +120,7 @@ export async function updateGoogleCalendarEvent(
     headers: {
       'Authorization': `Bearer ${session.access_token}`,
       'Content-Type': 'application/json',
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
     },
     body: JSON.stringify({ eventId, updates }),
   });
@@ -140,6 +142,7 @@ export async function deleteGoogleCalendarEvent(eventId: string): Promise<void> 
     headers: {
       'Authorization': `Bearer ${session.access_token}`,
       'Content-Type': 'application/json',
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
     },
     body: JSON.stringify({ eventId }),
   });
