@@ -8,6 +8,74 @@ interface GoogleEventFilters {
   googleCalendarIds?: string[];
 }
 
+async function getFreshSession() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+    if (!refreshed) throw new Error('Session expired. Please log in again.');
+    return refreshed;
+  }
+
+  const expiresAt = session.expires_at;
+  if (!expiresAt || expiresAt * 1000 < Date.now() + 300_000) {
+    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+    if (!refreshed) throw new Error('Session expired. Please log in again.');
+    return refreshed;
+  }
+
+  const { error: validateError } = await supabase.auth.getUser(session.access_token);
+  if (validateError) {
+    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+    if (!refreshed) throw new Error('Session expired. Please log in again.');
+    return refreshed;
+  }
+
+  return session;
+}
+
+async function callGoogleCalendarApi(path: string, body?: Record<string, unknown>) {
+  const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-sync`;
+  const url = path ? `${baseUrl}/${path}` : baseUrl;
+  const payload = body ? JSON.stringify(body) : undefined;
+
+  const attempt = async (session: { access_token: string }) => {
+    return fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: payload,
+    });
+  };
+
+  let session = await getFreshSession();
+  let response = await attempt(session);
+
+  if (response.status === 401) {
+    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+    if (refreshed) {
+      session = refreshed;
+      response = await attempt(session);
+    }
+    if (response.status === 401) {
+      throw new Error('Authentication failed. Please log in again.');
+    }
+  }
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(
+      (err as Record<string, string>).error
+      || (err as Record<string, string>).message
+      || `Google Calendar API call failed`
+    );
+  }
+
+  return response.json();
+}
+
 export async function getGoogleCalendarEvents(
   organizationId: string,
   userId: string,
@@ -75,26 +143,7 @@ export async function getAllOrgGoogleCalendarEvents(
 }
 
 export async function syncGoogleCalendar(): Promise<{ synced: number }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-sync/sync`;
-
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-    },
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Sync failed' }));
-    throw new Error(err.error?.message || 'Google Calendar sync failed');
-  }
-
-  const result = await response.json();
+  const result = await callGoogleCalendarApi('sync');
   return result.data || { synced: 0 };
 }
 
@@ -110,47 +159,11 @@ export async function updateGoogleCalendarEvent(
     timezone?: string;
   }
 ): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-sync/update-event`;
-
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({ eventId, updates }),
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Update failed' }));
-    throw new Error(err.error?.message || 'Failed to update event');
-  }
+  await callGoogleCalendarApi('update-event', { eventId, updates });
 }
 
 export async function deleteGoogleCalendarEvent(eventId: string): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-sync/delete-event`;
-
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({ eventId }),
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Delete failed' }));
-    throw new Error(err.error?.message || 'Failed to delete event');
-  }
+  await callGoogleCalendarApi('delete-event', { eventId });
 }
 
 export async function hasGoogleCalendarConnection(userId: string): Promise<boolean> {
