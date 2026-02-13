@@ -299,9 +299,15 @@ async function handleGetCalendars(req: Request): Promise<Response> {
     accessRole: cal.accessRole,
   })) || [];
 
+  const primaryCal = calendars.find((c: { primary: boolean }) => c.primary);
+  const primaryEmail = primaryCal?.id || connection.email;
+  const normalizedSelected = (connection.selected_calendar_ids || []).map(
+    (id: string) => id === "primary" && primaryEmail ? primaryEmail : id
+  ).filter((id: string, idx: number, arr: string[]) => arr.indexOf(id) === idx);
+
   return new Response(JSON.stringify({
     calendars,
-    selectedCalendarIds: connection.selected_calendar_ids,
+    selectedCalendarIds: normalizedSelected,
   }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
@@ -327,9 +333,23 @@ async function handleUpdateSelectedCalendars(req: Request): Promise<Response> {
   }
 
   const supabase = getSupabaseClient();
+
+  const { data: connection } = await supabase
+    .from("google_calendar_connections")
+    .select("email")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const connEmail = connection?.email?.toLowerCase();
+  const hasPrimary = calendarIds.includes("primary");
+  const hasEmail = connEmail && calendarIds.some((id: string) => id.toLowerCase() === connEmail);
+  const deduped = hasPrimary && hasEmail
+    ? calendarIds.filter((id: string) => id !== "primary")
+    : calendarIds;
+
   const { error } = await supabase
     .from("google_calendar_connections")
-    .update({ selected_calendar_ids: calendarIds })
+    .update({ selected_calendar_ids: deduped })
     .eq("user_id", user.id);
 
   if (error) {

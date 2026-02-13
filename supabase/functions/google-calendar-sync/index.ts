@@ -151,7 +151,11 @@ async function handleSync(req: Request): Promise<Response> {
   }
 
   const accessToken = await getValidToken(connection, supabase);
-  const selectedCalendarIds: string[] = connection.selected_calendar_ids || ["primary"];
+  const rawCalendarIds: string[] = connection.selected_calendar_ids || ["primary"];
+  const connectionEmail = connection.email?.toLowerCase();
+  const selectedCalendarIds = connectionEmail && rawCalendarIds.includes("primary") && rawCalendarIds.some((id: string) => id.toLowerCase() === connectionEmail)
+    ? rawCalendarIds.filter((id: string) => id !== "primary")
+    : rawCalendarIds;
 
   const lookbackDays = connection.sync_lookback_days || 60;
   const timeMin = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
