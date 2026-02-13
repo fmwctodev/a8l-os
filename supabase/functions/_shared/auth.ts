@@ -1,6 +1,14 @@
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type { UserContext } from "./types.ts";
 
+export function getAnonClient(): SupabaseClient {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  return createClient(supabaseUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
 export function getSupabaseClient(): SupabaseClient {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -20,10 +28,13 @@ export async function extractUserContext(
   }
 
   const token = authHeader.replace("Bearer ", "");
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+  // Use anon client for JWT validation (this is the key fix!)
+  const anonClient = getAnonClient();
+  const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
 
   if (authError) {
-    console.error("[Auth] JWT validation failed:", authError.message);
+    console.error("[Auth] JWT validation failed:", authError.message, authError);
     return null;
   }
 
@@ -32,6 +43,9 @@ export async function extractUserContext(
     return null;
   }
 
+  console.log("[Auth] JWT validated successfully for user:", user.id);
+
+  // Use service role client for database queries (bypass RLS)
   const { data: userData, error: userError } = await supabase
     .from("users")
     .select("id, email, organization_id, role_id, department_id")
@@ -47,6 +61,8 @@ export async function extractUserContext(
     console.error("[Auth] User not found in database:", user.id);
     return null;
   }
+
+  console.log("[Auth] User data loaded successfully");
 
   let roleName = "Unknown";
   if (userData.role_id) {
