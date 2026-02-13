@@ -185,6 +185,7 @@ async function handleSync(req: Request): Promise<Response> {
             user_id: userCtx.id,
             google_calendar_id: calendarId,
             summary: calendarId === "primary" ? "Primary Calendar" : calendarId,
+            access_role: "owner",
             selected: true,
           }, { onConflict: "connection_id,google_calendar_id" })
           .select("id")
@@ -192,8 +193,14 @@ async function handleSync(req: Request): Promise<Response> {
 
         if (listErr) {
           console.error(`Calendar list upsert error for ${calendarId}:`, listErr);
+          errors.push(`Calendar list error for ${calendarId}: ${listErr.message}`);
+          continue;
         }
-        calendarListId = newEntry?.id || crypto.randomUUID();
+        if (!newEntry?.id) {
+          errors.push(`Failed to create calendar list entry for ${calendarId}`);
+          continue;
+        }
+        calendarListId = newEntry.id;
       }
 
       const batchSize = 50;
