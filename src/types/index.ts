@@ -877,7 +877,61 @@ export interface BlockedSlotFilters {
   endDate?: string;
 }
 
-export type CalendarViewFilter = 'all' | 'appointments' | 'blocked_slots';
+export type CalendarViewFilter = 'all' | 'appointments' | 'blocked_slots' | 'google_events';
+
+export interface GoogleCalendarEvent {
+  id: string;
+  org_id: string;
+  connection_id: string;
+  user_id: string;
+  calendar_list_id: string;
+  google_calendar_id: string;
+  google_event_id: string;
+  ical_uid: string | null;
+  summary: string | null;
+  description: string | null;
+  location: string | null;
+  start_time: string;
+  end_time: string;
+  all_day: boolean;
+  timezone: string;
+  recurrence: string[] | null;
+  recurring_event_id: string | null;
+  status: string;
+  organizer_email: string | null;
+  organizer_display_name: string | null;
+  creator_email: string | null;
+  attendees: { email?: string; displayName?: string; responseStatus?: string }[] | null;
+  event_type: string | null;
+  visibility: string | null;
+  transparency: string | null;
+  html_link: string | null;
+  hangout_link: string | null;
+  conference_data: Record<string, unknown> | null;
+  reminders: Record<string, unknown> | null;
+  source: Record<string, unknown> | null;
+  attachments: Record<string, unknown>[] | null;
+  appointment_id: string | null;
+  synced_to_crm: boolean;
+  sync_direction: string | null;
+  last_modified: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type CalendarDisplayItemSource = 'crm' | 'google' | 'blocked';
+
+export interface CalendarDisplayItem {
+  id: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  allDay: boolean;
+  source: CalendarDisplayItemSource;
+  originalAppointment?: Appointment;
+  originalGoogleEvent?: GoogleCalendarEvent;
+  originalBlockedSlot?: BlockedSlot;
+}
 
 export type WorkflowStatus = 'draft' | 'published' | 'archived';
 export type EnrollmentStatus = 'active' | 'completed' | 'stopped' | 'errored';

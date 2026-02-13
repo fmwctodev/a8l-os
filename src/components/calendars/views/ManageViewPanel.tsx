@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Search, ChevronDown, ChevronRight, Check } from 'lucide-react';
+import { X, Search, ChevronDown, ChevronRight, Check, Calendar as CalendarIcon } from 'lucide-react';
 import type { Calendar, User, CalendarViewFilter } from '../../../types';
 
 interface ManageViewPanelProps {
@@ -13,9 +13,19 @@ interface ManageViewPanelProps {
   selectedCalendarIds: string[];
   onUserSelectionChange: (userIds: string[]) => void;
   onCalendarSelectionChange: (calendarIds: string[]) => void;
+  showGoogleEvents: boolean;
+  onShowGoogleEventsChange: (show: boolean) => void;
+  hasGoogleConnection: boolean;
 }
 
 const MAX_VISIBLE_ITEMS = 5;
+
+const VIEW_FILTER_OPTIONS: { value: CalendarViewFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'appointments', label: 'Appointments' },
+  { value: 'google_events', label: 'Google Events' },
+  { value: 'blocked_slots', label: 'Blocked Slots' },
+];
 
 export function ManageViewPanel({
   isOpen,
@@ -28,6 +38,9 @@ export function ManageViewPanel({
   selectedCalendarIds,
   onUserSelectionChange,
   onCalendarSelectionChange,
+  showGoogleEvents,
+  onShowGoogleEventsChange,
+  hasGoogleConnection,
 }: ManageViewPanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [usersExpanded, setUsersExpanded] = useState(true);
@@ -67,21 +80,10 @@ export function ManageViewPanel({
     }
   };
 
-  const selectAllUsers = () => {
-    onUserSelectionChange(filteredUsers.map((u) => u.id));
-  };
-
-  const clearAllUsers = () => {
-    onUserSelectionChange([]);
-  };
-
-  const selectAllCalendars = () => {
-    onCalendarSelectionChange(filteredCalendars.map((c) => c.id));
-  };
-
-  const clearAllCalendars = () => {
-    onCalendarSelectionChange([]);
-  };
+  const selectAllUsers = () => onUserSelectionChange(filteredUsers.map((u) => u.id));
+  const clearAllUsers = () => onUserSelectionChange([]);
+  const selectAllCalendars = () => onCalendarSelectionChange(filteredCalendars.map((c) => c.id));
+  const clearAllCalendars = () => onCalendarSelectionChange([]);
 
   if (!isOpen) return null;
 
@@ -101,29 +103,54 @@ export function ManageViewPanel({
         <div className="p-4 border-b border-slate-800">
           <h4 className="text-sm font-medium text-slate-300 mb-3">View By Type</h4>
           <div className="space-y-2">
-            {(['all', 'appointments', 'blocked_slots'] as CalendarViewFilter[]).map((filter) => (
-              <label
-                key={filter}
-                className="flex items-center gap-3 cursor-pointer group"
-              >
+            {VIEW_FILTER_OPTIONS.map(({ value, label }) => (
+              <label key={value} className="flex items-center gap-3 cursor-pointer group">
                 <div
                   className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${
-                    viewFilter === filter
+                    viewFilter === value
                       ? 'border-cyan-500 bg-cyan-500'
                       : 'border-slate-500 group-hover:border-slate-400'
                   }`}
+                  onClick={() => onViewFilterChange(value)}
                 >
-                  {viewFilter === filter && (
+                  {viewFilter === value && (
                     <div className="w-1.5 h-1.5 rounded-full bg-white" />
                   )}
                 </div>
-                <span className="text-sm text-slate-300 group-hover:text-white transition-colors capitalize">
-                  {filter === 'blocked_slots' ? 'Blocked Slots' : filter === 'all' ? 'All' : 'Appointments'}
+                <span className="text-sm text-slate-300 group-hover:text-white transition-colors">
+                  {label}
                 </span>
               </label>
             ))}
           </div>
         </div>
+
+        {hasGoogleConnection && (
+          <div className="p-4 border-b border-slate-800">
+            <h4 className="text-sm font-medium text-slate-300 mb-3">Google Calendar</h4>
+            <label className="flex items-center justify-between cursor-pointer group">
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="w-4 h-4 text-teal-400" />
+                <span className="text-sm text-slate-300 group-hover:text-white transition-colors">
+                  Show Google Events
+                </span>
+              </div>
+              <button
+                onClick={() => onShowGoogleEventsChange(!showGoogleEvents)}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                  showGoogleEvents ? 'bg-teal-500' : 'bg-slate-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+                    showGoogleEvents ? 'translate-x-4.5' : 'translate-x-0.5'
+                  }`}
+                  style={{ transform: showGoogleEvents ? 'translateX(18px)' : 'translateX(2px)' }}
+                />
+              </button>
+            </label>
+          </div>
+        )}
 
         <div className="p-4">
           <h4 className="text-sm font-medium text-slate-300 mb-3">Filters</h4>
@@ -162,20 +189,14 @@ export function ManageViewPanel({
                 {usersExpanded && (
                   <div className="flex items-center gap-2 text-xs">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        selectAllUsers();
-                      }}
+                      onClick={(e) => { e.stopPropagation(); selectAllUsers(); }}
                       className="text-cyan-400 hover:text-cyan-300"
                     >
                       All
                     </button>
                     <span className="text-slate-600">|</span>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        clearAllUsers();
-                      }}
+                      onClick={(e) => { e.stopPropagation(); clearAllUsers(); }}
                       className="text-slate-400 hover:text-slate-300"
                     >
                       None
@@ -265,20 +286,14 @@ export function ManageViewPanel({
                 {calendarsExpanded && (
                   <div className="flex items-center gap-2 text-xs">
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        selectAllCalendars();
-                      }}
+                      onClick={(e) => { e.stopPropagation(); selectAllCalendars(); }}
                       className="text-cyan-400 hover:text-cyan-300"
                     >
                       All
                     </button>
                     <span className="text-slate-600">|</span>
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        clearAllCalendars();
-                      }}
+                      onClick={(e) => { e.stopPropagation(); clearAllCalendars(); }}
                       className="text-slate-400 hover:text-slate-300"
                     >
                       None

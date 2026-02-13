@@ -1,41 +1,42 @@
 import { useMemo } from 'react';
-import type { Appointment } from '../../../types';
-import { getMonthGrid, formatDateString, isSameDay } from '../../../utils/calendarViewUtils';
+import type { CalendarDisplayItem } from '../../../types';
+import { getMonthGrid, formatDateString } from '../../../utils/calendarViewUtils';
 import { AppointmentBlock } from './AppointmentBlock';
+import { GoogleEventBlock } from './GoogleEventBlock';
 
 interface MonthViewProps {
   date: Date;
-  appointments: Appointment[];
-  onAppointmentClick: (appointment: Appointment) => void;
+  items: CalendarDisplayItem[];
+  onItemClick: (item: CalendarDisplayItem) => void;
   onDayClick: (date: Date) => void;
 }
 
-const MAX_VISIBLE_APPOINTMENTS = 3;
+const MAX_VISIBLE_ITEMS = 3;
 
-export function MonthView({ date, appointments, onAppointmentClick, onDayClick }: MonthViewProps) {
+export function MonthView({ date, items, onItemClick, onDayClick }: MonthViewProps) {
   const monthGrid = useMemo(() => getMonthGrid(date), [date]);
   const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-  const appointmentsByDay = useMemo(() => {
-    const grouped: Record<string, Appointment[]> = {};
+  const itemsByDay = useMemo(() => {
+    const grouped: Record<string, CalendarDisplayItem[]> = {};
 
-    appointments.forEach((apt) => {
-      const aptDate = new Date(apt.start_at_utc);
-      const dateKey = formatDateString(aptDate);
+    items.forEach((item) => {
+      const itemDate = new Date(item.startTime);
+      const dateKey = formatDateString(itemDate);
       if (!grouped[dateKey]) {
         grouped[dateKey] = [];
       }
-      grouped[dateKey].push(apt);
+      grouped[dateKey].push(item);
     });
 
     Object.keys(grouped).forEach((key) => {
       grouped[key].sort(
-        (a, b) => new Date(a.start_at_utc).getTime() - new Date(b.start_at_utc).getTime()
+        (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
       );
     });
 
     return grouped;
-  }, [appointments]);
+  }, [items]);
 
   return (
     <div className="flex flex-col h-full">
@@ -51,9 +52,9 @@ export function MonthView({ date, appointments, onAppointmentClick, onDayClick }
         {monthGrid.slice(0, 6).map((week, weekIndex) => (
           <div key={weekIndex} className="grid grid-cols-7 border-b border-slate-800 min-h-0">
             {week.map((day) => {
-              const dayAppointments = appointmentsByDay[day.dateString] || [];
-              const visibleAppointments = dayAppointments.slice(0, MAX_VISIBLE_APPOINTMENTS);
-              const hiddenCount = dayAppointments.length - MAX_VISIBLE_APPOINTMENTS;
+              const dayItems = itemsByDay[day.dateString] || [];
+              const visibleItems = dayItems.slice(0, MAX_VISIBLE_ITEMS);
+              const hiddenCount = dayItems.length - MAX_VISIBLE_ITEMS;
 
               return (
                 <button
@@ -75,19 +76,14 @@ export function MonthView({ date, appointments, onAppointmentClick, onDayClick }
                     >
                       {day.dayOfMonth}
                     </span>
-                    {dayAppointments.length > 0 && (
-                      <span className="text-xs text-slate-500">{dayAppointments.length}</span>
+                    {dayItems.length > 0 && (
+                      <span className="text-xs text-slate-500">{dayItems.length}</span>
                     )}
                   </div>
 
                   <div className="space-y-0.5 overflow-hidden">
-                    {visibleAppointments.map((appointment) => (
-                      <AppointmentBlock
-                        key={appointment.id}
-                        appointment={appointment}
-                        onClick={() => onAppointmentClick(appointment)}
-                        compact
-                      />
+                    {visibleItems.map((item) => (
+                      <MonthItemBlock key={item.id} item={item} onItemClick={onItemClick} />
                     ))}
                     {hiddenCount > 0 && (
                       <p className="text-xs text-slate-500 pl-2">+{hiddenCount} more</p>
@@ -101,4 +97,45 @@ export function MonthView({ date, appointments, onAppointmentClick, onDayClick }
       </div>
     </div>
   );
+}
+
+function MonthItemBlock({
+  item,
+  onItemClick,
+}: {
+  item: CalendarDisplayItem;
+  onItemClick: (item: CalendarDisplayItem) => void;
+}) {
+  if (item.source === 'crm' && item.originalAppointment) {
+    return (
+      <AppointmentBlock
+        appointment={item.originalAppointment}
+        onClick={() => onItemClick(item)}
+        compact
+      />
+    );
+  }
+
+  if (item.source === 'google' && item.originalGoogleEvent) {
+    return (
+      <GoogleEventBlock
+        event={item.originalGoogleEvent}
+        onClick={() => onItemClick(item)}
+        compact
+      />
+    );
+  }
+
+  if (item.source === 'blocked') {
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); onItemClick(item); }}
+        className="w-full text-left px-2 py-1 rounded text-xs truncate bg-slate-500/20 text-slate-400 border-l-2 border-l-slate-500 hover:opacity-80 transition-opacity"
+      >
+        <span className="font-medium">{item.title}</span>
+      </button>
+    );
+  }
+
+  return null;
 }

@@ -560,6 +560,9 @@ export function AppointmentListView() {
         selectedCalendarIds={selectedCalendarIds}
         onUserSelectionChange={setSelectedUserIds}
         onCalendarSelectionChange={setSelectedCalendarIds}
+        showGoogleEvents={false}
+        onShowGoogleEventsChange={() => {}}
+        hasGoogleConnection={false}
       />
 
       {selectedAppointment && (

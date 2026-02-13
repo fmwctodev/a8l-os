@@ -5,6 +5,8 @@ import {
   Plus,
   SlidersHorizontal,
   ChevronDown,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import type { CalendarViewType } from '../../../utils/calendarViewUtils';
 import { addDays, addWeeks, addMonths } from '../../../utils/calendarViewUtils';
@@ -17,6 +19,9 @@ interface UnifiedCalendarToolbarProps {
   onNewAppointment: () => void;
   onManageViewToggle: () => void;
   isManageViewOpen: boolean;
+  hasGoogleConnection?: boolean;
+  isSyncing?: boolean;
+  onSyncGoogle?: () => void;
 }
 
 const VIEW_TYPE_LABELS: Record<CalendarViewType, string> = {
@@ -33,6 +38,9 @@ export function UnifiedCalendarToolbar({
   onNewAppointment,
   onManageViewToggle,
   isManageViewOpen,
+  hasGoogleConnection = false,
+  isSyncing = false,
+  onSyncGoogle,
 }: UnifiedCalendarToolbarProps) {
   const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -151,6 +159,21 @@ export function UnifiedCalendarToolbar({
       </div>
 
       <div className="flex items-center gap-3">
+        {hasGoogleConnection && onSyncGoogle && (
+          <button
+            onClick={onSyncGoogle}
+            disabled={isSyncing}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-300 border border-slate-600 rounded-lg hover:bg-slate-800 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSyncing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            {isSyncing ? 'Syncing...' : 'Sync'}
+          </button>
+        )}
+
         <button
           onClick={onManageViewToggle}
           className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${

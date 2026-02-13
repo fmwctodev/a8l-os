@@ -10,3 +10,5 @@ export { EditAppointmentModal } from './EditAppointmentModal';
 export { ManageViewPanel } from './ManageViewPanel';
 export { UnifiedCalendarView } from './UnifiedCalendarView';
 export { AppointmentListView } from './AppointmentListView';
+export { GoogleEventBlock } from './GoogleEventBlock';
+export { GoogleEventDetailModal } from './GoogleEventDetailModal';
