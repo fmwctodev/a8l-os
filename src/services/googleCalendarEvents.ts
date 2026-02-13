@@ -33,10 +33,9 @@ async function getFreshSession() {
   return session;
 }
 
-async function callGoogleCalendarApi(path: string, body?: Record<string, unknown>) {
-  const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-sync`;
-  const url = path ? `${baseUrl}/${path}` : baseUrl;
-  const payload = body ? JSON.stringify(body) : undefined;
+async function callGoogleCalendarApi(action: string, body?: Record<string, unknown>) {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-sync`;
+  const payload = JSON.stringify({ action, ...body });
 
   const attempt = async (session: { access_token: string }) => {
     return fetch(url, {

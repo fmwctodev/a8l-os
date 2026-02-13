@@ -256,11 +256,12 @@ async function handleSync(req: Request): Promise<Response> {
   return successResponse({ synced: totalSynced });
 }
 
-async function handleUpdateEvent(req: Request): Promise<Response> {
+async function handleUpdateEvent(req: Request, body?: Record<string, unknown>): Promise<Response> {
   const supabase = getSupabaseClient();
   const userCtx = requireAuth(await extractUserContext(req, supabase));
 
-  const { eventId, updates } = await req.json();
+  const parsed = body || await req.json();
+  const { eventId, updates } = parsed;
   if (!eventId) throw new ValidationError("eventId is required");
 
   const { data: event } = await supabase
@@ -333,11 +334,12 @@ async function handleUpdateEvent(req: Request): Promise<Response> {
   return successResponse({ updated: true });
 }
 
-async function handleDeleteEvent(req: Request): Promise<Response> {
+async function handleDeleteEvent(req: Request, body?: Record<string, unknown>): Promise<Response> {
   const supabase = getSupabaseClient();
   const userCtx = requireAuth(await extractUserContext(req, supabase));
 
-  const { eventId } = await req.json();
+  const parsed = body || await req.json();
+  const { eventId } = parsed;
   if (!eventId) throw new ValidationError("eventId is required");
 
   const { data: event } = await supabase
@@ -378,20 +380,32 @@ Deno.serve(async (req: Request) => {
     const corsResp = handleCors(req);
     if (corsResp) return corsResp;
 
-    const url = new URL(req.url);
-    const path = url.pathname.replace(/^\/google-calendar-sync\/?/, "").replace(/^\/+/, "");
+    if (req.method !== "POST") {
+      return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
+    }
 
-    if (req.method === "POST" && (path === "sync" || path === "")) {
+    let body: Record<string, unknown> = {};
+    try {
+      body = await req.json();
+    } catch {
+      // empty body is fine for sync action
+    }
+
+    const url = new URL(req.url);
+    const pathSegment = url.pathname.replace(/^\/google-calendar-sync\/?/, "").replace(/^\/+/, "");
+    const action = (body.action as string) || pathSegment || "sync";
+
+    if (action === "sync" || action === "") {
       return await handleSync(req);
     }
-    if (req.method === "POST" && path === "update-event") {
-      return await handleUpdateEvent(req);
+    if (action === "update-event") {
+      return await handleUpdateEvent(req, body);
     }
-    if (req.method === "POST" && path === "delete-event") {
-      return await handleDeleteEvent(req);
+    if (action === "delete-event") {
+      return await handleDeleteEvent(req, body);
     }
 
-    return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
+    return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400 });
   } catch (error) {
     return handleError(error);
   }
