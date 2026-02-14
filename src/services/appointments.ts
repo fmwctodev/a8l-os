@@ -275,7 +275,10 @@ export async function createAppointment(
     }
   }
 
-  syncAppointmentToGoogle(data.id, 'create').catch(() => {});
+  try {
+    await syncAppointmentToGoogle(data.id, 'create');
+  } catch {
+  }
 
   return data;
 }
@@ -333,7 +336,10 @@ export async function updateAppointment(
   }
 
   const syncOp = historyEntry.action === 'rescheduled' ? 'reschedule' : 'update';
-  syncAppointmentToGoogle(id, syncOp as 'update' | 'reschedule').catch(() => {});
+  try {
+    await syncAppointmentToGoogle(id, syncOp as 'update' | 'reschedule');
+  } catch {
+  }
 
   return data;
 }
@@ -410,7 +416,10 @@ export async function rescheduleAppointment(
     }
   }
 
-  syncAppointmentToGoogle(id, 'reschedule').catch(() => {});
+  try {
+    await syncAppointmentToGoogle(id, 'reschedule');
+  } catch {
+  }
 
   return data;
 }
@@ -484,7 +493,10 @@ export async function cancelAppointment(
     }
   }
 
-  syncAppointmentToGoogle(id, 'delete').catch(() => {});
+  try {
+    await syncAppointmentToGoogle(id, 'delete');
+  } catch {
+  }
 
   return data;
 }

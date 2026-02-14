@@ -17,11 +17,7 @@ export async function syncAppointmentToGoogle(
 ): Promise<{ synced: boolean; googleEventId?: string; meetLink?: string }> {
   try {
     const result = await callSyncApi('sync-appointment', { appointmentId, operation });
-    const data = result.data || result;
-    if (data.synced) {
-      callSyncApi('sync-incremental', {}).catch(() => {});
-    }
-    return data;
+    return result.data || result;
   } catch (err) {
     console.error('Appointment sync failed:', err);
     return { synced: false };

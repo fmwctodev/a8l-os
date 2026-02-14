@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getSupabaseClient, extractUserContext, requireAuth } from "../_shared/auth.ts";
-import { handleCors, successResponse } from "../_shared/cors.ts";
+import { handleCors, successResponse, errorResponse } from "../_shared/cors.ts";
 import { handleError, ValidationError } from "../_shared/errors.ts";
 
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3";
@@ -939,6 +939,10 @@ async function handleSyncAppointment(req: Request, body: Record<string, unknown>
           .update({ is_deleted: true, sync_status: "synced", updated_at: new Date().toISOString() })
           .eq("id", existingMap.id);
       }
+      await supabase.from("google_calendar_events")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .eq("connection_id", connection.id)
+        .eq("google_event_id", existingGoogleEventId);
     }
     return successResponse({ synced: true, operation: "deleted" });
   }
@@ -986,6 +990,37 @@ async function handleSyncAppointment(req: Request, body: Record<string, unknown>
       updated_at: now,
     }, { onConflict: "connection_id,google_event_id" });
 
+    const start = parseEventTime(updatedEvent.start);
+    const end = parseEventTime(updatedEvent.end);
+    await supabase.from("google_calendar_events").upsert({
+      org_id: targetOrgId,
+      connection_id: connection.id,
+      user_id: targetUserId,
+      google_calendar_id: calendarId,
+      google_event_id: existingGoogleEventId,
+      summary: updatedEvent.summary || null,
+      description: updatedEvent.description || null,
+      location: updatedEvent.location || null,
+      start_time: start.time,
+      end_time: end.time,
+      all_day: start.allDay,
+      timezone: start.timezone,
+      status: updatedEvent.status || "confirmed",
+      organizer_email: updatedEvent.organizer?.email || null,
+      organizer_display_name: updatedEvent.organizer?.displayName || null,
+      attendees: updatedEvent.attendees || null,
+      html_link: updatedEvent.htmlLink || null,
+      hangout_link: updatedEvent.hangoutLink || null,
+      conference_data: updatedEvent.conferenceData || null,
+      etag: updatedEvent.etag || null,
+      extended_properties: updatedEvent.extendedProperties || null,
+      appointment_id: appointmentId,
+      synced_to_crm: true,
+      sync_direction: "to_google",
+      last_modified: updatedEvent.updated ? new Date(updatedEvent.updated).toISOString() : now,
+      updated_at: now,
+    }, { onConflict: "connection_id,google_calendar_id,google_event_id" });
+
     return successResponse({ synced: true, operation: "updated" });
   }
 
@@ -1027,6 +1062,59 @@ async function handleSyncAppointment(req: Request, body: Record<string, unknown>
     is_deleted: false,
     updated_at: now,
   }, { onConflict: "connection_id,google_event_id" });
+
+  const { data: calListEntry } = await supabase
+    .from("google_calendar_list")
+    .select("id")
+    .eq("connection_id", connection.id)
+    .eq("google_calendar_id", calendarId)
+    .maybeSingle();
+
+  const calendarListId = calListEntry?.id || null;
+
+  if (calendarListId) {
+    const start = parseEventTime(googleEvent.start);
+    const end = parseEventTime(googleEvent.end);
+    await supabase.from("google_calendar_events").upsert({
+      org_id: targetOrgId,
+      connection_id: connection.id,
+      user_id: targetUserId,
+      calendar_list_id: calendarListId,
+      google_calendar_id: calendarId,
+      google_event_id: googleEvent.id,
+      ical_uid: googleEvent.iCalUID || null,
+      summary: googleEvent.summary || null,
+      description: googleEvent.description || null,
+      location: googleEvent.location || null,
+      start_time: start.time,
+      end_time: end.time,
+      all_day: start.allDay,
+      timezone: start.timezone,
+      recurrence: googleEvent.recurrence || null,
+      recurring_event_id: googleEvent.recurringEventId || null,
+      status: googleEvent.status || "confirmed",
+      organizer_email: googleEvent.organizer?.email || null,
+      organizer_display_name: googleEvent.organizer?.displayName || null,
+      creator_email: googleEvent.creator?.email || null,
+      attendees: googleEvent.attendees || null,
+      event_type: googleEvent.eventType || null,
+      visibility: googleEvent.visibility || null,
+      transparency: googleEvent.transparency || null,
+      html_link: googleEvent.htmlLink || null,
+      hangout_link: googleEvent.hangoutLink || meetLink || null,
+      conference_data: googleEvent.conferenceData || null,
+      reminders: googleEvent.reminders || null,
+      source: googleEvent.source || null,
+      attachments: googleEvent.attachments || null,
+      last_modified: googleEvent.updated ? new Date(googleEvent.updated).toISOString() : null,
+      etag: googleEvent.etag || null,
+      extended_properties: googleEvent.extendedProperties || null,
+      appointment_id: appointmentId,
+      synced_to_crm: true,
+      sync_direction: "to_google",
+      updated_at: now,
+    }, { onConflict: "connection_id,google_calendar_id,google_event_id" });
+  }
 
   if (meetLink) {
     await supabase.from("appointments").update({ google_meet_link: meetLink }).eq("id", appointmentId);
@@ -1452,7 +1540,7 @@ Deno.serve(async (req: Request) => {
     if (corsResp) return corsResp;
 
     if (req.method !== "POST") {
-      return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
+      return errorResponse("METHOD_NOT_ALLOWED", "Method not allowed", 405);
     }
 
     let body: Record<string, unknown> = {};
@@ -1476,7 +1564,7 @@ Deno.serve(async (req: Request) => {
     if (action === "sync-calendar-event") return await handleSyncCalendarEvent(req, body);
     if (action === "sync-task") return await handleSyncTask(req, body);
 
-    return new Response(JSON.stringify({ error: "Unknown action" }), { status: 400 });
+    return errorResponse("UNKNOWN_ACTION", "Unknown action", 400);
   } catch (error) {
     return handleError(error);
   }
