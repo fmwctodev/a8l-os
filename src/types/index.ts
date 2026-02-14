@@ -795,6 +795,7 @@ export interface Appointment {
   created_at: string;
   updated_at: string;
   canceled_at: string | null;
+  google_event_id?: string | null;
   calendar?: Calendar;
   appointment_type?: AppointmentType;
   contact?: Contact | null;

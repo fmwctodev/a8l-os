@@ -6,7 +6,7 @@ import type {
 export function appointmentToDisplayItem(apt: Appointment): CalendarDisplayItem {
   const contactName = apt.contact
     ? `${apt.contact.first_name} ${apt.contact.last_name}`
-    : apt.answers?.name || 'Guest';
+    : apt.answers?.name || apt.notes || 'Guest';
 
   return {
     id: apt.id,
@@ -78,8 +78,13 @@ export function mergeDisplayItems(
   calendarEvents: CalendarEvent[] = [],
   calendarTasks: CalendarTask[] = []
 ): CalendarDisplayItem[] {
+  const googleEventIds = new Set(googleEvents.map(e => e.google_event_id));
+  const dedupedAppointments = googleEvents.length > 0
+    ? appointments.filter(apt => !apt.google_event_id || !googleEventIds.has(apt.google_event_id))
+    : appointments;
+
   const items: CalendarDisplayItem[] = [
-    ...appointments.map(appointmentToDisplayItem),
+    ...dedupedAppointments.map(appointmentToDisplayItem),
     ...googleEvents.map(googleEventToDisplayItem),
     ...blockedSlots.map(blockedSlotToDisplayItem),
     ...calendarEvents.map(calendarEventToDisplayItem),

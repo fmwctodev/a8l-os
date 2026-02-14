@@ -42,8 +42,8 @@ export function AppointmentDetailsModal({
     if (appointment.contact) {
       return `${appointment.contact.first_name} ${appointment.contact.last_name}`;
     }
-    return appointment.answers?.name || 'Guest';
-  }, [appointment.contact, appointment.answers]);
+    return appointment.answers?.name || appointment.notes || 'Guest';
+  }, [appointment.contact, appointment.answers, appointment.notes]);
 
   const timeDisplay = useMemo(
     () => formatTimeRange(appointment.start_at_utc, appointment.end_at_utc),

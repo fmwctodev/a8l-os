@@ -17,8 +17,8 @@ export function AppointmentBlock({ appointment, onClick, compact = false, style 
     if (appointment.contact) {
       return `${appointment.contact.first_name} ${appointment.contact.last_name}`;
     }
-    return appointment.answers?.name || 'Guest';
-  }, [appointment.contact, appointment.answers]);
+    return appointment.answers?.name || appointment.notes || 'Guest';
+  }, [appointment.contact, appointment.answers, appointment.notes]);
 
   const timeDisplay = useMemo(
     () => formatTimeRange(appointment.start_at_utc, appointment.end_at_utc),
@@ -87,7 +87,7 @@ export function AppointmentBlock({ appointment, onClick, compact = false, style 
           </div>
         )}
       </div>
-      {appointment.notes && (
+      {appointment.notes && appointment.contact && (
         <p className="text-xs text-slate-500 truncate mt-1 italic">{appointment.notes}</p>
       )}
     </button>

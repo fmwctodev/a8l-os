@@ -111,7 +111,7 @@ export function EditAppointmentModal({
     if (appointment.contact) {
       return `${appointment.contact.first_name} ${appointment.contact.last_name}`;
     }
-    return appointment.answers?.name || 'Guest';
+    return appointment.answers?.name || appointment.notes || 'Guest';
   }, [appointment]);
 
   const hasChanges = useMemo(() => {
