@@ -10,6 +10,7 @@ const corsHeaders = {
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID") || "";
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET") || "";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
 const SCOPES = [
@@ -18,19 +19,42 @@ const SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email",
 ].join(" ");
 
+function getAnonClient() {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
 function getSupabaseClient() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 }
 
 async function getUserFromRequest(req: Request) {
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return null;
+  if (!authHeader) {
+    console.error("[OAuth] No Authorization header");
+    return null;
+  }
 
   const token = authHeader.replace("Bearer ", "");
-  const supabase = getSupabaseClient();
-  const { data: { user }, error } = await supabase.auth.getUser(token);
 
-  if (error || !user) return null;
+  // Use anon client for JWT validation (this is the key fix!)
+  const anonClient = getAnonClient();
+  const { data: { user }, error } = await anonClient.auth.getUser(token);
+
+  if (error) {
+    console.error("[OAuth] JWT validation failed:", error.message);
+    return null;
+  }
+
+  if (!user) {
+    console.error("[OAuth] No user found in JWT");
+    return null;
+  }
+
+  console.log("[OAuth] JWT validated successfully for user:", user.id);
   return user;
 }
 
