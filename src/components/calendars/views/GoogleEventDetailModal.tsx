@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import {
   X, Calendar as CalendarIcon, Clock, MapPin, Video, ExternalLink,
   Users, Edit3, Trash2, Save, Loader2, AlertTriangle,
-  Check, XCircle, HelpCircle,
+  Check, XCircle, HelpCircle, ArrowLeftRight, ArrowRight, ArrowLeft,
 } from 'lucide-react';
 import type { GoogleCalendarEvent } from '../../../types';
 import { formatTimeRange } from '../../../utils/calendarViewUtils';
@@ -139,7 +139,27 @@ export function GoogleEventDetailModal({
               <h3 className="text-lg font-semibold text-white">
                 {isEditing ? 'Edit Event' : 'Google Calendar Event'}
               </h3>
-              <p className="text-xs text-teal-400">Synced from Google Calendar</p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-teal-400">Synced from Google Calendar</p>
+                {event.sync_direction && (
+                  <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    event.sync_direction === 'bidirectional'
+                      ? 'bg-cyan-500/15 text-cyan-400'
+                      : event.sync_direction === 'to_google'
+                        ? 'bg-blue-500/15 text-blue-400'
+                        : 'bg-teal-500/15 text-teal-400'
+                  }`}>
+                    {event.sync_direction === 'bidirectional' ? (
+                      <ArrowLeftRight className="w-2.5 h-2.5" />
+                    ) : event.sync_direction === 'to_google' ? (
+                      <ArrowRight className="w-2.5 h-2.5" />
+                    ) : (
+                      <ArrowLeft className="w-2.5 h-2.5" />
+                    )}
+                    {event.sync_direction === 'bidirectional' ? '2-way' : event.sync_direction === 'to_google' ? 'CRM > Google' : 'Google > CRM'}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <button

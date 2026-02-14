@@ -14,8 +14,7 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
 const SCOPES = [
-  "https://www.googleapis.com/auth/calendar.readonly",
-  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/userinfo.email",
 ].join(" ");
 
@@ -182,7 +181,7 @@ async function handleCallback(req: Request): Promise<Response> {
   const supabase = getSupabaseClient();
   const tokenExpiry = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
 
-  const { error: upsertError } = await supabase
+  const { data: upsertedConn, error: upsertError } = await supabase
     .from("google_calendar_connections")
     .upsert({
       org_id: state.orgId,
@@ -192,9 +191,13 @@ async function handleCallback(req: Request): Promise<Response> {
       token_expiry: tokenExpiry,
       email: userInfo.email,
       selected_calendar_ids: ["primary"],
+      sync_enabled: true,
+      scopes: SCOPES,
     }, {
       onConflict: "org_id,user_id",
-    });
+    })
+    .select("id")
+    .maybeSingle();
 
   if (upsertError) {
     if (state.appOrigin) {
@@ -206,6 +209,19 @@ async function handleCallback(req: Request): Promise<Response> {
     return new Response(`
       <html><body><p>Failed to save connection. You can close this window.</p></body></html>
     `, { headers: { ...corsHeaders, "Content-Type": "text/html" } });
+  }
+
+  if (upsertedConn?.id) {
+    await supabase.from("google_calendar_sync_jobs").insert({
+      org_id: state.orgId,
+      connection_id: upsertedConn.id,
+      user_id: state.userId,
+      job_type: "initial_sync",
+      status: "queued",
+      scheduled_at: new Date().toISOString(),
+      attempt: 0,
+      max_attempts: 5,
+    });
   }
 
   if (state.appOrigin) {
@@ -241,6 +257,20 @@ async function handleDisconnect(req: Request): Promise<Response> {
     await fetch(`https://oauth2.googleapis.com/revoke?token=${connection.access_token}`, {
       method: "POST",
     }).catch(() => {});
+  }
+
+  const { data: conn } = await supabase
+    .from("google_calendar_connections")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (conn?.id) {
+    await supabase.from("google_calendar_sync_jobs").delete().eq("connection_id", conn.id);
+    await supabase.from("calendar_event_map").delete().eq("connection_id", conn.id);
+    await supabase.from("calendar_sync_logs").delete().eq("connection_id", conn.id);
+    await supabase.from("google_calendar_events").delete().eq("connection_id", conn.id);
+    await supabase.from("google_calendar_list").delete().eq("connection_id", conn.id);
   }
 
   const { error } = await supabase

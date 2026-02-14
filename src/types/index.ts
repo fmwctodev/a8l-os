@@ -980,6 +980,8 @@ export interface GoogleCalendarEvent {
   synced_to_crm: boolean;
   sync_direction: string | null;
   last_modified: string | null;
+  etag: string | null;
+  extended_properties: { private?: Record<string, string>; shared?: Record<string, string> } | null;
   created_at: string;
   updated_at: string;
 }
