@@ -3,26 +3,19 @@ import { supabase } from '../lib/supabase';
 async function getFreshSession() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) {
-    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-    if (!refreshed) throw new Error('Session expired. Please log in again.');
-    return refreshed;
+    throw new Error('No active session. Please log in.');
   }
 
   const expiresAt = session.expires_at;
-  if (!expiresAt || expiresAt * 1000 < Date.now() + 300_000) {
-    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-    if (!refreshed) throw new Error('Session expired. Please log in again.');
-    return refreshed;
+  if (expiresAt && expiresAt * 1000 > Date.now() + 60_000) {
+    return session;
   }
 
-  const { error: validateError } = await supabase.auth.getUser(session.access_token);
-  if (validateError) {
-    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-    if (!refreshed) throw new Error('Session expired. Please log in again.');
-    return refreshed;
+  const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+  if (!refreshed) {
+    throw new Error('Session expired. Please log out and log back in.');
   }
-
-  return session;
+  return refreshed;
 }
 
 function parseErrorMessage(body: Record<string, unknown>, fallback: string): string {
