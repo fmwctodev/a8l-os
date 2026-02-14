@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { callEdgeFunction, parseEdgeFunctionError } from '../lib/edgeFunction';
 import type { GoogleCalendarEvent } from '../types';
 
 interface GoogleEventFilters {
@@ -8,70 +9,12 @@ interface GoogleEventFilters {
   googleCalendarIds?: string[];
 }
 
-async function getFreshSession() {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-    if (!refreshed) throw new Error('Session expired. Please log in again.');
-    return refreshed;
-  }
-
-  const expiresAt = session.expires_at;
-  if (!expiresAt || expiresAt * 1000 < Date.now() + 300_000) {
-    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-    if (!refreshed) throw new Error('Session expired. Please log in again.');
-    return refreshed;
-  }
-
-  const { error: validateError } = await supabase.auth.getUser(session.access_token);
-  if (validateError) {
-    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-    if (!refreshed) throw new Error('Session expired. Please log in again.');
-    return refreshed;
-  }
-
-  return session;
-}
-
 async function callGoogleCalendarApi(action: string, body?: Record<string, unknown>) {
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-sync`;
-  const payload = JSON.stringify({ action, ...body });
-
-  const attempt = async (session: { access_token: string }) => {
-    return fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-      },
-      body: payload,
-    });
-  };
-
-  let session = await getFreshSession();
-  let response = await attempt(session);
-
-  if (response.status === 401) {
-    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-    if (refreshed) {
-      session = refreshed;
-      response = await attempt(session);
-    }
-    if (response.status === 401) {
-      throw new Error('Authentication failed. Please log in again.');
-    }
-  }
+  const response = await callEdgeFunction('google-calendar-sync', { action, ...body });
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    const errObj = (err as Record<string, unknown>).error;
-    const errMsg = typeof errObj === 'string'
-      ? errObj
-      : (errObj as Record<string, string>)?.message
-        || (err as Record<string, string>).message
-        || 'Google Calendar API call failed';
-    throw new Error(errMsg);
+    throw new Error(parseEdgeFunctionError(err, 'Google Calendar API call failed'));
   }
 
   return response.json();

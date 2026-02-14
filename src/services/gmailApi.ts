@@ -1,84 +1,25 @@
 import { supabase } from '../lib/supabase';
-
-async function getFreshSession() {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    throw new Error('No active session. Please log in.');
-  }
-
-  const expiresAt = session.expires_at;
-  if (expiresAt && expiresAt * 1000 > Date.now() + 60_000) {
-    return session;
-  }
-
-  const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-  if (!refreshed) {
-    throw new Error('Session expired. Please log out and log back in.');
-  }
-  return refreshed;
-}
-
-function parseErrorMessage(body: Record<string, unknown>, fallback: string): string {
-  return (body.error as string) || (body.msg as string) || (body.message as string) || fallback;
-}
+import { callEdgeFunction, parseEdgeFunctionError } from '../lib/edgeFunction';
 
 async function callGmailApi(action: string, body?: Record<string, unknown>) {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const payload = JSON.stringify({ action, ...body });
-
-  const attempt = async (session: { access_token: string }) => {
-    const response = await fetch(`${supabaseUrl}/functions/v1/gmail-api`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-      },
-      body: payload,
-    });
-    return response;
-  };
-
-  let session = await getFreshSession();
-  let response = await attempt(session);
-
-  if (response.status === 401) {
-    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-    if (refreshed) {
-      response = await attempt(refreshed);
-    }
-    if (response.status === 401) {
-      throw new Error('Session expired. Please log out and log back in.');
-    }
-  }
+  const response = await callEdgeFunction('gmail-api', { action, ...body });
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(parseErrorMessage(err, `Gmail API ${action} failed`));
+    throw new Error(parseEdgeFunctionError(err, `Gmail API ${action} failed`));
   }
 
   return response.json();
 }
 
 export async function initiateGmailOAuth(redirectUri?: string): Promise<string> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const session = await getFreshSession();
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/gmail-oauth-start`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({
-      redirect_uri: redirectUri || `${window.location.origin}/settings/profile?tab=connected-accounts`,
-    }),
+  const response = await callEdgeFunction('gmail-oauth-start', {
+    redirect_uri: redirectUri || `${window.location.origin}/settings/profile?tab=connected-accounts`,
   });
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || 'Failed to start Gmail OAuth');
+    throw new Error(parseEdgeFunctionError(err, 'Failed to start Gmail OAuth'));
   }
 
   const data = await response.json();
@@ -220,22 +161,15 @@ export async function getMessageAttachment(messageExternalId: string, attachment
 }
 
 export async function downloadAttachment(messageExternalId: string, attachmentId: string): Promise<Blob> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const session = await getFreshSession();
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/gmail-api`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({ action: 'get-attachment', messageId: messageExternalId, attachmentId }),
+  const response = await callEdgeFunction('gmail-api', {
+    action: 'get-attachment',
+    messageId: messageExternalId,
+    attachmentId,
   });
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || 'Failed to download attachment');
+    throw new Error(parseEdgeFunctionError(err, 'Failed to download attachment'));
   }
 
   return response.blob();
@@ -299,22 +233,14 @@ export async function unlinkEmailFromRecord(linkId: string) {
 }
 
 export async function triggerIncrementalSync(orgId: string, userId: string) {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const session = await getFreshSession();
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/gmail-sync-incremental`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({ org_id: orgId, user_id: userId }),
+  const response = await callEdgeFunction('gmail-sync-incremental', {
+    org_id: orgId,
+    user_id: userId,
   });
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || 'Incremental sync failed');
+    throw new Error(parseEdgeFunctionError(err, 'Incremental sync failed'));
   }
 
   return response.json();
