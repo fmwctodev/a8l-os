@@ -55,7 +55,7 @@ async function callGmailApi(action: string, body?: Record<string, unknown>) {
       response = await attempt(refreshed);
     }
     if (response.status === 401) {
-      throw new Error('Invalid JWT');
+      throw new Error('Session expired. Please log out and log back in.');
     }
   }
 

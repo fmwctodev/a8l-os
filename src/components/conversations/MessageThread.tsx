@@ -39,7 +39,7 @@ export function MessageThread({
   const [messages, setMessages] = useState<Message[]>([]);
   const [events, setEvents] = useState<InboxEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState<string | false>(false);
   const [sending, setSending] = useState(false);
   const [availableChannels, setAvailableChannels] = useState<{ channel: MessageChannel; identifier: string }[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<MessageChannel>('sms');
@@ -62,7 +62,10 @@ export function MessageThread({
 
       if (messagesResult.status === 'rejected') {
         console.error('Failed to load messages:', messagesResult.reason);
-        setLoadError(true);
+        const reason = messagesResult.reason;
+        const msg = reason instanceof Error ? reason.message : String(reason);
+        const isJwtError = msg.toLowerCase().includes('jwt') || msg.toLowerCase().includes('unauthorized') || msg.includes('401');
+        setLoadError(isJwtError ? 'session' : 'generic');
       }
       if (eventsResult.status === 'rejected') {
         console.error('Failed to load events:', eventsResult.reason);
@@ -90,7 +93,9 @@ export function MessageThread({
       }
     } catch (error) {
       console.error('Failed to load thread:', error);
-      setLoadError(true);
+      const msg = error instanceof Error ? error.message : String(error);
+      const isJwtError = msg.toLowerCase().includes('jwt') || msg.toLowerCase().includes('unauthorized') || msg.includes('401');
+      setLoadError(isJwtError ? 'session' : 'generic');
     } finally {
       setLoading(false);
     }
@@ -293,7 +298,11 @@ export function MessageThread({
         ) : loadError && messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <AlertTriangle className="w-8 h-8 text-amber-400" />
-            <p className="text-slate-400 text-sm">Failed to load messages</p>
+            <p className="text-slate-400 text-sm">
+              {loadError === 'session'
+                ? 'Your session has expired. Please log out and log back in.'
+                : 'Failed to load messages'}
+            </p>
             <button
               onClick={loadThread}
               className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm transition-colors"

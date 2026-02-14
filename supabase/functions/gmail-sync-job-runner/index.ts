@@ -77,7 +77,7 @@ Deno.serve(async (req: Request) => {
           .from("gmail_sync_jobs")
           .update({
             status: "done",
-            error_message: null,
+            last_error: null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", job.id);
@@ -92,7 +92,7 @@ Deno.serve(async (req: Request) => {
             .from("gmail_sync_jobs")
             .update({
               status: "failed",
-              error_message: errMsg,
+              last_error: errMsg,
               updated_at: new Date().toISOString(),
             })
             .eq("id", job.id);
@@ -106,7 +106,7 @@ Deno.serve(async (req: Request) => {
             .from("gmail_sync_jobs")
             .update({
               status: "retry",
-              error_message: errMsg,
+              last_error: errMsg,
               run_at: retryAt,
               updated_at: new Date().toISOString(),
             })
