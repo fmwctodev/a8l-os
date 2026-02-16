@@ -46,7 +46,7 @@ Deno.serve(async (req: Request) => {
     let skipped = 0;
 
     for (const conn of connections) {
-      const intervalMinutes = conn.sync_interval_minutes || 2;
+      const intervalMinutes = conn.sync_interval_minutes || 1;
       const lastSync = conn.last_incremental_sync_at
         ? new Date(conn.last_incremental_sync_at).getTime()
         : 0;

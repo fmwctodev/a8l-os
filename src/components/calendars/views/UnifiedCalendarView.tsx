@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Loader2, Calendar as CalendarIcon, Plus } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
+import { supabase } from '../../../lib/supabase';
 import { getVisibleAppointments, updateAppointment, cancelAppointment } from '../../../services/appointments';
 import { getBlockedSlots } from '../../../services/blockedSlots';
 import { getCalendarEvents } from '../../../services/calendarEvents';
@@ -212,6 +213,50 @@ export function UnifiedCalendarView() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasGoogleConnection, isLoading]);
+
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!currentUser?.organization_id || isLoading) return;
+
+    const channel = supabase
+      .channel('google-calendar-events-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'google_calendar_events',
+          filter: `org_id=eq.${currentUser.organization_id}`,
+        },
+        () => {
+          if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+          realtimeDebounceRef.current = setTimeout(() => {
+            loadCalendarData();
+          }, 2000);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.organization_id, isLoading]);
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const POLL_INTERVAL_MS = 60_000;
+    const intervalId = setInterval(() => {
+      if (!isSyncing) {
+        loadCalendarData();
+      }
+    }, POLL_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+  }, [isLoading, isSyncing, loadCalendarData]);
 
   useEffect(() => {
     const params = new URLSearchParams();
