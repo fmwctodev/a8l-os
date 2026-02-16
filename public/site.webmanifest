@@ -1,0 +1,17 @@
+{
+  "name": "Autom8ion Lab OS",
+  "short_name": "Autom8ion",
+  "description": "All-in-one business operating system",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0F172A",
+  "theme_color": "#0F172A",
+  "icons": [
+    {
+      "src": "/assets/logo/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
