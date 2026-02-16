@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 import type { TimeRange } from '../components/analytics/TimeRangeSelector';
 import { exportDashboardToPDF } from '../services/pdfExport';
 import type { DashboardAnalytics } from '../services/userDashboardAnalytics';
@@ -66,22 +66,8 @@ export function useUserDashboardAnalytics(): UseUserDashboardAnalyticsResult {
       if (startDate) params.set('startDate', startDate);
       if (endDate) params.set('endDate', endDate);
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
-      if (!token) {
-        throw new Error('Not authenticated');
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analytics-dashboard?${params}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const queryParams: Record<string, string> = Object.fromEntries(params);
+      const response = await fetchEdge('analytics-dashboard', { method: 'GET', params: queryParams });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

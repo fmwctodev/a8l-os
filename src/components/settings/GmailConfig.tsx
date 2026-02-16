@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getChannelConfiguration, saveChannelConfiguration } from '../../services/channelConfigurations';
 import { getConnectedGmailAccounts, getGmailAuthUrl } from '../../services/channels/gmail';
 import { supabase } from '../../lib/supabase';
+import { fetchEdge } from '../../lib/edgeFunction';
 import type { GmailConfig as GmailConfigType, GmailOAuthToken } from '../../types';
 
 export function GmailConfig() {
@@ -101,16 +102,11 @@ export function GmailConfig() {
       setSyncing(true);
       setError(null);
 
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gmail-sync`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      const response = await fetchEdge('gmail-sync', {
+        body: {
           org_id: user.organization_id,
           user_id: account.user_id,
-        }),
+        },
       });
 
       const result = await response.json();

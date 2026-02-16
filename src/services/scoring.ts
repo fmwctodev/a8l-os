@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 
 export interface ScoringModel {
   id: string;
@@ -112,17 +113,8 @@ export const TRIGGER_TYPES = [
 ];
 
 async function callScoringApi<T>(action: string, params: Record<string, unknown> = {}): Promise<T> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scoring-api`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
-      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({ action, ...params }),
+  const response = await fetchEdge('scoring-api', {
+    body: { action, ...params },
   });
 
   const result = await response.json();

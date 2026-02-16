@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 import type {
   SocialProvider,
   SocialAIActionType,
@@ -161,23 +162,9 @@ export async function getOrganizationLocation(orgId: string): Promise<{
 }
 
 async function callAISocialContentFunction(action: string, payload: Record<string, unknown>): Promise<unknown> {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session) {
-    throw new Error('Not authenticated');
-  }
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-social-content`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.session.access_token}`,
-        'Content-Type': 'application/json',
-        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-      },
-      body: JSON.stringify({ action, ...payload }),
-    }
-  );
+  const response = await fetchEdge('ai-social-content', {
+    body: { action, ...payload },
+  });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));

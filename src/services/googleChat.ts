@@ -1,4 +1,7 @@
 import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
+
+const SLUG = 'google-chat-api';
 
 export interface GoogleChatConnectionStatus {
   connected: boolean;
@@ -78,52 +81,23 @@ export interface GoogleChatMember {
   state: 'MEMBER_JOINED' | 'MEMBER_INVITED' | 'MEMBER_NOT_A_MEMBER';
 }
 
-async function getApiUrl(): Promise<string> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  return `${supabaseUrl}/functions/v1/google-chat-api`;
-}
-
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.access_token) {
-    throw new Error('Not authenticated');
-  }
-  return {
-    'Authorization': `Bearer ${session.access_token}`,
-    'Content-Type': 'application/json',
-  };
-}
-
 export async function checkConnectionStatus(): Promise<GoogleChatConnectionStatus> {
-  const apiUrl = await getApiUrl();
-  const headers = await getAuthHeaders();
-
-  const response = await fetch(`${apiUrl}/status`, { headers });
-
+  const response = await fetchEdge(SLUG, { method: 'GET', path: '/status' });
   if (!response.ok) {
     if (response.status === 404) {
       return { connected: false, email: null, connectedAt: null, scopes: null };
     }
     throw new Error('Failed to check connection status');
   }
-
   return response.json();
 }
 
 export async function getAuthUrl(redirectUrl?: string): Promise<string> {
-  const apiUrl = await getApiUrl();
-  const headers = await getAuthHeaders();
+  const params: Record<string, string> = {};
+  if (redirectUrl) params.redirectUrl = redirectUrl;
 
-  const params = new URLSearchParams();
-  if (redirectUrl) {
-    params.set('redirectUrl', redirectUrl);
-  }
-
-  const response = await fetch(`${apiUrl}/auth-url?${params}`, { headers });
-
-  if (!response.ok) {
-    throw new Error('Failed to get auth URL');
-  }
+  const response = await fetchEdge(SLUG, { method: 'GET', path: '/auth-url', params });
+  if (!response.ok) throw new Error('Failed to get auth URL');
 
   const data = await response.json();
   return data.authUrl;
@@ -135,33 +109,17 @@ export async function initiateConnection(redirectUrl?: string): Promise<void> {
 }
 
 export async function disconnectAccount(): Promise<void> {
-  const apiUrl = await getApiUrl();
-  const headers = await getAuthHeaders();
-
-  const response = await fetch(`${apiUrl}/disconnect`, {
-    method: 'DELETE',
-    headers,
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to disconnect account');
-  }
+  const response = await fetchEdge(SLUG, { method: 'DELETE', path: '/disconnect' });
+  if (!response.ok) throw new Error('Failed to disconnect account');
 }
 
 export async function getSpaces(): Promise<GoogleChatSpace[]> {
-  const apiUrl = await getApiUrl();
-  const headers = await getAuthHeaders();
-
-  const response = await fetch(`${apiUrl}/spaces`, { headers });
-
+  const response = await fetchEdge(SLUG, { method: 'GET', path: '/spaces' });
   if (!response.ok) {
     const error = await response.json();
-    if (error.code === 'NOT_CONNECTED') {
-      throw new Error('NOT_CONNECTED');
-    }
+    if (error.code === 'NOT_CONNECTED') throw new Error('NOT_CONNECTED');
     throw new Error('Failed to fetch spaces');
   }
-
   const data = await response.json();
   return data.spaces || [];
 }
@@ -197,18 +155,8 @@ export async function getCachedSpaces(): Promise<GoogleChatSpaceCache[]> {
 }
 
 export async function syncSpaces(): Promise<{ synced: number; removed: number }> {
-  const apiUrl = await getApiUrl();
-  const headers = await getAuthHeaders();
-
-  const response = await fetch(`${apiUrl}/sync-spaces`, {
-    method: 'POST',
-    headers,
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to sync spaces');
-  }
-
+  const response = await fetchEdge(SLUG, { method: 'POST', path: '/sync-spaces' });
+  if (!response.ok) throw new Error('Failed to sync spaces');
   return response.json();
 }
 
@@ -217,23 +165,11 @@ export async function getMessages(
   pageToken?: string,
   pageSize = 50
 ): Promise<{ messages: GoogleChatMessage[]; nextPageToken?: string }> {
-  const apiUrl = await getApiUrl();
-  const headers = await getAuthHeaders();
+  const params: Record<string, string> = { spaceId, pageSize: pageSize.toString() };
+  if (pageToken) params.pageToken = pageToken;
 
-  const params = new URLSearchParams({
-    spaceId,
-    pageSize: pageSize.toString(),
-  });
-  if (pageToken) {
-    params.set('pageToken', pageToken);
-  }
-
-  const response = await fetch(`${apiUrl}/messages?${params}`, { headers });
-
-  if (!response.ok) {
-    throw new Error('Failed to fetch messages');
-  }
-
+  const response = await fetchEdge(SLUG, { method: 'GET', path: '/messages', params });
+  if (!response.ok) throw new Error('Failed to fetch messages');
   return response.json();
 }
 
@@ -261,36 +197,19 @@ export async function sendMessage(
   text: string,
   threadId?: string
 ): Promise<GoogleChatMessage> {
-  const apiUrl = await getApiUrl();
-  const headers = await getAuthHeaders();
-
-  const response = await fetch(`${apiUrl}/send`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ spaceId, text, threadId }),
+  const response = await fetchEdge(SLUG, {
+    method: 'POST', path: '/send', body: { spaceId, text, threadId },
   });
-
-  if (!response.ok) {
-    throw new Error('Failed to send message');
-  }
-
+  if (!response.ok) throw new Error('Failed to send message');
   const data = await response.json();
   return data.message;
 }
 
 export async function markAsRead(spaceId: string, messageIds?: string[]): Promise<void> {
-  const apiUrl = await getApiUrl();
-  const headers = await getAuthHeaders();
-
-  const response = await fetch(`${apiUrl}/mark-read`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ spaceId, messageIds }),
+  const response = await fetchEdge(SLUG, {
+    method: 'POST', path: '/mark-read', body: { spaceId, messageIds },
   });
-
-  if (!response.ok) {
-    throw new Error('Failed to mark as read');
-  }
+  if (!response.ok) throw new Error('Failed to mark as read');
 }
 
 export async function markCachedMessagesAsRead(spaceCacheId: string): Promise<void> {
@@ -307,17 +226,10 @@ export async function markCachedMessagesAsRead(spaceCacheId: string): Promise<vo
 }
 
 export async function getMembers(spaceId: string): Promise<GoogleChatMember[]> {
-  const apiUrl = await getApiUrl();
-  const headers = await getAuthHeaders();
-
-  const response = await fetch(`${apiUrl}/members?spaceId=${encodeURIComponent(spaceId)}`, {
-    headers,
+  const response = await fetchEdge(SLUG, {
+    method: 'GET', path: '/members', params: { spaceId },
   });
-
-  if (!response.ok) {
-    throw new Error('Failed to fetch members');
-  }
-
+  if (!response.ok) throw new Error('Failed to fetch members');
   const data = await response.json();
   return data.members || [];
 }

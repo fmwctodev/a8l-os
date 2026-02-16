@@ -1,5 +1,8 @@
 import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 import type { EmailProvider } from '../types';
+
+const SLUG = 'email-sendgrid-provider';
 
 export async function getProvider(orgId: string): Promise<EmailProvider | null> {
   const { data, error } = await supabase
@@ -16,74 +19,22 @@ export async function connectProvider(
   apiKey: string,
   nickname?: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-sendgrid-provider`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'connect',
-        apiKey,
-        nickname,
-      }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'connect', apiKey, nickname } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true };
 }
 
 export async function testConnection(): Promise<{ success: boolean; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-sendgrid-provider`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'test' }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'test' } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true };
 }
 
 export async function disconnectProvider(): Promise<{ success: boolean; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-sendgrid-provider`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'disconnect' }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'disconnect' } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true };
 }

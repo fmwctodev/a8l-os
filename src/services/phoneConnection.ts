@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 
 export interface TwilioConnection {
   id: string;
@@ -16,85 +16,31 @@ export interface ConnectTwilioParams {
   friendlyName?: string;
 }
 
+const SLUG = 'phone-twilio-connection';
+
 export async function getConnection(): Promise<TwilioConnection | null> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/phone-twilio-connection`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'get' }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'get' } });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error);
   return result.connection;
 }
 
 export async function connectTwilio(params: ConnectTwilioParams): Promise<TwilioConnection> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/phone-twilio-connection`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'connect', ...params }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'connect', ...params } });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error);
   return result.connection;
 }
 
 export async function testConnection(): Promise<{ success: boolean; status: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/phone-twilio-connection`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'test' }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'test' } });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error);
   return result;
 }
 
 export async function disconnectTwilio(): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/phone-twilio-connection`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'disconnect' }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'disconnect' } });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error);
 }

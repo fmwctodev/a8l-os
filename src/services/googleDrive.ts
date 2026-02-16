@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 import type { DriveConnection, DriveConnectionStatus } from '../types';
 
 const SCOPES = [
@@ -36,18 +37,8 @@ export interface SharedDriveInfo {
 }
 
 async function callDriveApi(action: string, body?: Record<string, unknown>) {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('No active session');
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/drive-api`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-    },
-    body: JSON.stringify({ action, ...body }),
+  const response = await fetchEdge('drive-api', {
+    body: { action, ...body },
   });
 
   if (!response.ok) {
@@ -59,25 +50,9 @@ async function callDriveApi(action: string, body?: Record<string, unknown>) {
 }
 
 export async function initiateDriveOAuth(redirectUri?: string): Promise<string> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const { data: { session } } = await supabase.auth.getSession();
-
-  if (!session) throw new Error('No active session');
-
-  const response = await fetch(
-    `${supabaseUrl}/functions/v1/drive-oauth-start`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-      },
-      body: JSON.stringify({
-        redirect_uri: redirectUri || `${window.location.origin}/media`,
-      }),
-    }
-  );
+  const response = await fetchEdge('drive-oauth-start', {
+    body: { redirect_uri: redirectUri || `${window.location.origin}/media` },
+  });
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
@@ -92,25 +67,9 @@ export async function autoConnectDrive(
   providerToken: string,
   providerRefreshToken: string
 ): Promise<{ connected: boolean; email?: string }> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const { data: { session } } = await supabase.auth.getSession();
-
-  if (!session) throw new Error('No active session');
-
-  const response = await fetch(
-    `${supabaseUrl}/functions/v1/drive-auto-connect`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        provider_token: providerToken,
-        provider_refresh_token: providerRefreshToken,
-      }),
-    }
-  );
+  const response = await fetchEdge('drive-auto-connect', {
+    body: { provider_token: providerToken, provider_refresh_token: providerRefreshToken },
+  });
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
@@ -219,27 +178,13 @@ export async function uploadFileToDrive(
   parentId: string = 'root',
   driveId?: string
 ): Promise<GoogleDriveFileInfo> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('No active session');
-
   const formData = new FormData();
   formData.append('file', file);
 
-  const params = new URLSearchParams({ action: 'upload', parentId });
-  if (driveId) params.set('driveId', driveId);
+  const params: Record<string, string> = { action: 'upload', parentId };
+  if (driveId) params.driveId = driveId;
 
-  const response = await fetch(
-    `${supabaseUrl}/functions/v1/drive-api?${params.toString()}`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-      },
-      body: formData,
-    }
-  );
+  const response = await fetchEdge('drive-api', { body: formData, params });
 
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));

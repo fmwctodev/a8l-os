@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 import type {
   OutgoingWebhook,
   WebhookDelivery,
@@ -8,6 +9,8 @@ import type {
   CreateWebhookInput,
   UpdateWebhookInput,
 } from '../types';
+
+const SLUG = 'integrations-webhooks';
 
 export async function getWebhooks(filters?: WebhookFilters): Promise<OutgoingWebhook[]> {
   let query = supabase
@@ -62,26 +65,11 @@ export async function getWebhook(id: string): Promise<OutgoingWebhook | null> {
 }
 
 export async function createWebhook(input: CreateWebhookInput): Promise<OutgoingWebhook> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/integrations-webhooks`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'create',
-        ...input,
-      }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'create', ...input } });
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to create webhook');
+    const err = await response.json();
+    throw new Error(err.message || 'Failed to create webhook');
   }
-
   return response.json();
 }
 
@@ -126,26 +114,11 @@ export async function toggleWebhook(id: string, enabled: boolean): Promise<Outgo
 }
 
 export async function testWebhook(id: string): Promise<{ success: boolean; response_code?: number; error?: string }> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/integrations-webhooks`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'test',
-        webhook_id: id,
-      }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'test', webhook_id: id } });
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Test delivery failed');
+    const err = await response.json();
+    throw new Error(err.message || 'Test delivery failed');
   }
-
   return response.json();
 }
 

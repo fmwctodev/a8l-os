@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 import type {
   Integration,
   IntegrationConnection,
@@ -10,6 +11,8 @@ import type {
   InitiateOAuthResponse,
   ConnectApiKeyInput,
 } from '../types';
+
+const SLUG = 'integrations-connect';
 
 export async function getIntegrations(filters?: IntegrationFilters): Promise<Integration[]> {
   let query = supabase
@@ -130,51 +133,24 @@ export async function getUserIntegrations(userId?: string): Promise<IntegrationC
 }
 
 export async function initiateOAuthConnection(integrationKey: string): Promise<InitiateOAuthResponse> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/integrations-connect`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'initiate_oauth',
-        integration_key: integrationKey,
-      }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, {
+    body: { action: 'initiate_oauth', integration_key: integrationKey },
+  });
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to initiate OAuth');
+    const err = await response.json();
+    throw new Error(err.message || 'Failed to initiate OAuth');
   }
-
   return response.json();
 }
 
 export async function connectWithApiKey(input: ConnectApiKeyInput): Promise<IntegrationConnection> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/integrations-connect`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'connect_api_key',
-        integration_key: input.integration_key,
-        credentials: input.credentials,
-      }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, {
+    body: { action: 'connect_api_key', integration_key: input.integration_key, credentials: input.credentials },
+  });
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to connect');
+    const err = await response.json();
+    throw new Error(err.message || 'Failed to connect');
   }
-
   return response.json();
 }
 
@@ -182,27 +158,13 @@ export async function disconnectIntegration(
   integrationKey: string,
   force?: boolean
 ): Promise<{ success: boolean; affected_modules?: string[] }> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/integrations-connect`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'disconnect',
-        integration_key: integrationKey,
-        force,
-      }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, {
+    body: { action: 'disconnect', integration_key: integrationKey, force },
+  });
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Failed to disconnect');
+    const err = await response.json();
+    throw new Error(err.message || 'Failed to disconnect');
   }
-
   return response.json();
 }
 
@@ -227,26 +189,13 @@ export async function toggleIntegration(integrationKey: string, enabled: boolean
 }
 
 export async function testIntegrationConnection(integrationKey: string): Promise<{ success: boolean; message: string }> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/integrations-connect`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'test',
-        integration_key: integrationKey,
-      }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, {
+    body: { action: 'test', integration_key: integrationKey },
+  });
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || 'Connection test failed');
+    const err = await response.json();
+    throw new Error(err.message || 'Connection test failed');
   }
-
   return response.json();
 }
 

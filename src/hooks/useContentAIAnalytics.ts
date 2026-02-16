@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 import type { TimeRange } from '../components/analytics/TimeRangeSelector';
 import { exportContentAIToPDF } from '../services/pdfExport';
 import type { ContentAIAnalytics } from '../services/contentAIAnalytics';
@@ -74,22 +74,8 @@ export function useContentAIAnalytics(): UseContentAIAnalyticsResult {
       if (endDate) params.set('endDate', endDate);
       if (platformFilter) params.set('platform', platformFilter);
 
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
-      if (!token) {
-        throw new Error('Not authenticated');
-      }
-
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analytics-content-ai?${params}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const queryParams: Record<string, string> = Object.fromEntries(params);
+      const response = await fetchEdge('analytics-content-ai', { method: 'GET', params: queryParams });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

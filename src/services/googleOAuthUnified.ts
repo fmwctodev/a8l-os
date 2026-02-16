@@ -1,35 +1,6 @@
-import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 
-const UNIFIED_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-oauth-unified`;
-
-async function getHeaders(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-    if (!refreshed) throw new Error('Session expired. Please log in again.');
-    return {
-      'Authorization': `Bearer ${refreshed.access_token}`,
-      'Content-Type': 'application/json',
-      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-    };
-  }
-
-  if (session.expires_at && session.expires_at * 1000 < Date.now() + 300_000) {
-    const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-    if (!refreshed) throw new Error('Session expired. Please log in again.');
-    return {
-      'Authorization': `Bearer ${refreshed.access_token}`,
-      'Content-Type': 'application/json',
-      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-    };
-  }
-
-  return {
-    'Authorization': `Bearer ${session.access_token}`,
-    'Content-Type': 'application/json',
-    'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-  };
-}
+const SLUG = 'google-oauth-unified';
 
 export interface UnifiedGoogleConnection {
   connected: boolean;
@@ -44,23 +15,17 @@ export interface UnifiedGoogleConnection {
 }
 
 export async function getUnifiedGoogleConnection(): Promise<UnifiedGoogleConnection> {
-  const response = await fetch(`${UNIFIED_URL}/connection`, {
-    headers: await getHeaders(),
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to get Google connection status');
-  }
-
+  const response = await fetchEdge(SLUG, { method: 'GET', path: '/connection' });
+  if (!response.ok) throw new Error('Failed to get Google connection status');
   return response.json();
 }
 
 export async function initiateUnifiedGoogleOAuth(): Promise<string> {
   const appOrigin = window.location.origin;
-
-  const response = await fetch(`${UNIFIED_URL}/start?app_origin=${encodeURIComponent(appOrigin)}`, {
+  const response = await fetchEdge(SLUG, {
     method: 'POST',
-    headers: await getHeaders(),
+    path: '/start',
+    params: { app_origin: appOrigin },
   });
 
   if (!response.ok) {
@@ -73,11 +38,7 @@ export async function initiateUnifiedGoogleOAuth(): Promise<string> {
 }
 
 export async function disconnectUnifiedGoogle(): Promise<void> {
-  const response = await fetch(`${UNIFIED_URL}/disconnect`, {
-    method: 'POST',
-    headers: await getHeaders(),
-  });
-
+  const response = await fetchEdge(SLUG, { method: 'POST', path: '/disconnect' });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.error || 'Failed to disconnect Google');

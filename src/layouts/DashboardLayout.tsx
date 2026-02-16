@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from '../components/Sidebar';
 import { Header } from '../components/Header';
 import { CommandPalette } from '../components/CommandPalette';
+import { ReAuthModal } from '../components/ReAuthModal';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { useSidebar } from '../contexts/SidebarContext';
 import { useCommandPalette } from '../hooks/useCommandPalette';
@@ -24,6 +25,7 @@ export function DashboardLayout() {
         </main>
       </div>
       <CommandPalette isOpen={isCommandPaletteOpen} onClose={closeCommandPalette} />
+      <ReAuthModal />
     </div>
   );
 }

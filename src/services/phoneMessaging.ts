@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 import type { TwilioNumber } from './phoneNumbers';
 
 export interface MessagingService {
@@ -23,22 +23,10 @@ export interface MessagingServiceSender {
   created_at: string;
 }
 
+const SLUG = 'phone-twilio-messaging';
+
 async function callEdgeFunction(action: string, payload: Record<string, unknown> = {}) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/phone-twilio-messaging`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action, ...payload }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action, ...payload } });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error);
   return result;

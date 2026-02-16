@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 import type {
   EmailCampaignDomain,
   EmailWarmupConfig,
@@ -10,6 +11,8 @@ import type {
   UpdateEmailWarmupConfigInput,
   CampaignDomainStatusSummary,
 } from '../types';
+
+const SLUG = 'email-campaign-domains';
 
 export async function getCampaignDomains(orgId: string): Promise<EmailCampaignDomain[]> {
   const { data, error } = await supabase
@@ -55,25 +58,9 @@ export async function getCampaignDomainWithConfig(id: string): Promise<EmailCamp
 export async function createCampaignDomain(
   input: CreateEmailCampaignDomainInput
 ): Promise<{ success: boolean; domain?: EmailCampaignDomain; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-campaign-domains`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'create', ...input }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'create', ...input } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true, domain: result.domain };
 }
 
@@ -96,75 +83,27 @@ export async function updateCampaignDomain(
 export async function deleteCampaignDomain(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-campaign-domains`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'delete', domainId: id }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'delete', domainId: id } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true };
 }
 
 export async function verifyCampaignDomainDNS(
   id: string
 ): Promise<{ success: boolean; verified?: boolean; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-campaign-domains`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'verify', domainId: id }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'verify', domainId: id } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true, verified: result.verified };
 }
 
 export async function startWarmup(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-campaign-domains`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'start_warmup', domainId: id }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'start_warmup', domainId: id } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true };
 }
 
@@ -172,75 +111,27 @@ export async function pauseWarmup(
   id: string,
   reason?: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-campaign-domains`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'pause_warmup', domainId: id, reason }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'pause_warmup', domainId: id, reason } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true };
 }
 
 export async function resumeWarmup(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-campaign-domains`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'resume_warmup', domainId: id }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'resume_warmup', domainId: id } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true };
 }
 
 export async function syncWarmupStats(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-campaign-domains`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'sync_stats', domainId: id }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'sync_stats', domainId: id } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true };
 }
 
@@ -371,25 +262,9 @@ export async function acknowledgeRecommendation(
 export async function applyRecommendation(
   recommendationId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-campaign-domains`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'apply_recommendation', recommendationId }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'apply_recommendation', recommendationId } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true };
 }
 

@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 import type {
   LLMModelCatalogEntry,
   LLMProviderType,
@@ -7,34 +8,17 @@ import type {
   ProviderModelInfo,
 } from '../types';
 
+const SLUG = 'fetch-provider-models';
+
 export async function fetchProviderModels(
   orgId: string,
   provider: LLMProviderType
 ): Promise<FetchProviderModelsResponse> {
-  const session = await supabase.auth.getSession();
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fetch-provider-models`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.data.session?.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'fetch-models',
-        org_id: orgId,
-        provider,
-      }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, {
+    body: { action: 'fetch-models', org_id: orgId, provider },
+  });
   const result = await response.json();
-
-  if (!result.success) {
-    throw new Error(result.error || 'Failed to fetch models');
-  }
-
+  if (!result.success) throw new Error(result.error || 'Failed to fetch models');
   return result.data;
 }
 
@@ -42,30 +26,11 @@ export async function syncModelCatalog(
   orgId: string,
   provider: LLMProviderType
 ): Promise<SyncCatalogResponse> {
-  const session = await supabase.auth.getSession();
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fetch-provider-models`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.data.session?.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'sync-catalog',
-        org_id: orgId,
-        provider,
-      }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, {
+    body: { action: 'sync-catalog', org_id: orgId, provider },
+  });
   const result = await response.json();
-
-  if (!result.success) {
-    throw new Error(result.error || 'Failed to sync catalog');
-  }
-
+  if (!result.success) throw new Error(result.error || 'Failed to sync catalog');
   return result.data;
 }
 

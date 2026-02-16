@@ -1,5 +1,8 @@
 import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 import type { EmailFromAddress } from '../types';
+
+const SLUG = 'email-sendgrid-senders';
 
 export async function getFromAddresses(orgId: string): Promise<EmailFromAddress[]> {
   const { data, error } = await supabase
@@ -21,31 +24,11 @@ export async function createFromAddress(
   domainId: string,
   replyTo?: string
 ): Promise<{ success: boolean; address?: EmailFromAddress; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-sendgrid-senders`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'create',
-        displayName,
-        email,
-        domainId,
-        replyTo,
-      }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, {
+    body: { action: 'create', displayName, email, domainId, replyTo },
+  });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true, address: result.address };
 }
 
@@ -57,84 +40,32 @@ export async function updateFromAddress(
     active?: boolean;
   }
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-sendgrid-senders`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'update',
-        addressId,
-        ...updates,
-      }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, {
+    body: { action: 'update', addressId, ...updates },
+  });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true };
 }
 
 export async function setDefaultFromAddress(
   addressId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-sendgrid-senders`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'set-default',
-        addressId,
-      }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, {
+    body: { action: 'set-default', addressId },
+  });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true };
 }
 
 export async function deleteFromAddress(
   addressId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-sendgrid-senders`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'delete',
-        addressId,
-      }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, {
+    body: { action: 'delete', addressId },
+  });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true };
 }

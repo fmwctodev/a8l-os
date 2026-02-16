@@ -1,5 +1,8 @@
 import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 import type { EmailDomain } from '../types';
+
+const SLUG = 'email-sendgrid-domains';
 
 export async function getDomains(orgId: string): Promise<EmailDomain[]> {
   const { data, error } = await supabase
@@ -15,97 +18,33 @@ export async function getDomains(orgId: string): Promise<EmailDomain[]> {
 export async function addDomain(
   domain: string
 ): Promise<{ success: boolean; domain?: EmailDomain; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-sendgrid-domains`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'create', domain }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'create', domain } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true, domain: result.domain };
 }
 
 export async function verifyDomain(
   domainId: string
 ): Promise<{ success: boolean; valid?: boolean; dns_records?: EmailDomain['dns_records']; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-sendgrid-domains`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'verify', domainId }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'verify', domainId } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true, valid: result.valid, dns_records: result.dns_records };
 }
 
 export async function deleteDomain(
   domainId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-sendgrid-domains`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'delete', domainId }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'delete', domainId } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true };
 }
 
 export async function syncDomains(): Promise<{ success: boolean; synced?: number; error?: string }> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Not authenticated');
-
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/email-sendgrid-domains`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action: 'sync' }),
-    }
-  );
-
+  const response = await fetchEdge(SLUG, { body: { action: 'sync' } });
   const result = await response.json();
-  if (!response.ok) {
-    return { success: false, error: result.error };
-  }
+  if (!response.ok) return { success: false, error: result.error };
   return { success: true, synced: result.synced };
 }
