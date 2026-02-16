@@ -40,7 +40,7 @@ export function MeetingFollowUpSettingsPage() {
   const [internalDomains, setInternalDomains] = useState('');
   const [aiInstructions, setAiInstructions] = useState('');
 
-  const orgId = user?.org_id;
+  const orgId = user?.organization_id;
 
   useEffect(() => {
     if (!orgId) return;
