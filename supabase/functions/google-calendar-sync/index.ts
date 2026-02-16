@@ -99,11 +99,7 @@ async function extractUserContext(
   } = await anonClient.auth.getUser(token);
 
   if (authError) {
-    console.error(
-      "[Auth] JWT validation failed:",
-      authError.message,
-      authError
-    );
+    console.error("[Auth] JWT validation failed:", authError.message);
     return null;
   }
 
@@ -114,89 +110,47 @@ async function extractUserContext(
 
   const { data: userData, error: userError } = await supabase
     .from("users")
-    .select("id, email, organization_id, role_id, department_id")
+    .select("id, email, organization_id, role_id, department_id, role:roles(name)")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (userError) {
-    console.error("[Auth] Failed to fetch user data:", userError.message);
+  if (userError || !userData) {
+    console.error("[Auth] Failed to fetch user:", userError?.message || "not found");
     return null;
   }
 
-  if (!userData) {
-    console.error("[Auth] User not found in database:", user.id);
-    return null;
-  }
-
-  let roleName = "Unknown";
-  if (userData.role_id) {
-    const { data: roleData } = await supabase
-      .from("roles")
-      .select("id, name")
-      .eq("id", userData.role_id)
-      .maybeSingle();
-    if (roleData) {
-      roleName = roleData.name;
-    }
-  }
-
+  const roleName = (userData.role as { name: string } | null)?.name || "Unknown";
   const rolePermissions = new Set<string>();
 
-  if (userData.role_id) {
-    const { data: rpRows } = await supabase
-      .from("role_permissions")
-      .select("permission_id")
-      .eq("role_id", userData.role_id);
+  const [rpResult, overridesResult] = await Promise.all([
+    userData.role_id
+      ? supabase
+          .from("role_permissions")
+          .select("permission:permissions(key)")
+          .eq("role_id", userData.role_id)
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("user_permission_overrides")
+      .select("granted, permission:permissions(key)")
+      .eq("user_id", userData.id),
+  ]);
 
-    if (rpRows && rpRows.length > 0) {
-      const permIds = rpRows.map(
-        (r: { permission_id: string }) => r.permission_id
-      );
-      const { data: perms } = await supabase
-        .from("permissions")
-        .select("key")
-        .in("id", permIds);
-
-      if (perms) {
-        for (const p of perms) {
-          rolePermissions.add(p.key);
-        }
-      }
+  if (rpResult.data) {
+    for (const rp of rpResult.data) {
+      const key = (rp.permission as { key: string } | null)?.key;
+      if (key) rolePermissions.add(key);
     }
   }
 
-  const { data: overrides } = await supabase
-    .from("user_permission_overrides")
-    .select("permission_id, granted")
-    .eq("user_id", userData.id);
-
-  if (overrides && overrides.length > 0) {
-    const overridePermIds = overrides.map(
-      (o: { permission_id: string }) => o.permission_id
-    );
-    const { data: overridePerms } = await supabase
-      .from("permissions")
-      .select("id, key")
-      .in("id", overridePermIds);
-
-    if (overridePerms) {
-      const permKeyMap = new Map(
-        overridePerms.map((p: { id: string; key: string }) => [p.id, p.key])
-      );
-      for (const override of overrides) {
-        const key = permKeyMap.get(override.permission_id);
-        if (key) {
-          if (override.granted) {
-            rolePermissions.add(key);
-          } else {
-            rolePermissions.delete(key);
-          }
-        }
+  if (overridesResult.data) {
+    for (const o of overridesResult.data) {
+      const key = (o.permission as { key: string } | null)?.key;
+      if (key) {
+        if (o.granted) rolePermissions.add(key);
+        else rolePermissions.delete(key);
       }
     }
   }
-
-  const isSuperAdmin = roleName === "SuperAdmin";
 
   return {
     id: userData.id,
@@ -205,7 +159,7 @@ async function extractUserContext(
     roleId: userData.role_id,
     roleName,
     departmentId: userData.department_id,
-    isSuperAdmin,
+    isSuperAdmin: roleName === "SuperAdmin",
     permissions: Array.from(rolePermissions),
   };
 }
@@ -837,6 +791,206 @@ async function processIncrementalEvent(
   }
 }
 
+async function processBatchEvents(
+  supabase: Supabase,
+  connection: Connection,
+  calendarId: string,
+  calendarListId: string,
+  events: GoogleEvent[],
+  orgId: string,
+  userId: string
+): Promise<{ created: number; updated: number; deleted: number; skipped: number }> {
+  const stats = { created: 0, updated: 0, deleted: 0, skipped: 0 };
+  if (events.length === 0) return stats;
+
+  const connectionId = connection.id;
+  const now = new Date().toISOString();
+
+  const eventIds = events.map((e) => e.id).filter(Boolean);
+  const { data: existingMaps } = await supabase
+    .from("calendar_event_map")
+    .select("*")
+    .eq("connection_id", connectionId)
+    .in("google_event_id", eventIds);
+
+  const mapByEventId = new Map<string, Record<string, unknown>>();
+  (existingMaps || []).forEach((m: Record<string, unknown>) =>
+    mapByEventId.set(m.google_event_id as string, m)
+  );
+
+  const { data: defaultCalendar } = await supabase
+    .from("calendars")
+    .select("id")
+    .eq("org_id", orgId)
+    .limit(1)
+    .maybeSingle();
+
+  let defaultTypeId: string | null = null;
+  if (defaultCalendar) {
+    const { data: dt } = await supabase
+      .from("appointment_types")
+      .select("id")
+      .eq("calendar_id", defaultCalendar.id)
+      .limit(1)
+      .maybeSingle();
+    defaultTypeId = dt?.id || null;
+  }
+
+  const upsertRows = events
+    .filter((evt) => evt.status !== "cancelled")
+    .map((evt) =>
+      mapGoogleEventToRow(evt, orgId, connectionId, userId, calendarListId, calendarId)
+    );
+
+  if (upsertRows.length > 0) {
+    const CHUNK = 100;
+    for (let i = 0; i < upsertRows.length; i += CHUNK) {
+      await supabase
+        .from("google_calendar_events")
+        .upsert(upsertRows.slice(i, i + CHUNK), {
+          onConflict: "connection_id,google_calendar_id,google_event_id",
+        });
+    }
+  }
+
+  const cancelledEvents = events.filter((e) => e.status === "cancelled");
+  const cancelledIds = cancelledEvents.map((e) => e.id).filter(Boolean);
+  if (cancelledIds.length > 0) {
+    await supabase
+      .from("google_calendar_events")
+      .update({ status: "cancelled", updated_at: now })
+      .eq("connection_id", connectionId)
+      .in("google_event_id", cancelledIds);
+  }
+
+  for (const evt of cancelledEvents) {
+    const existing = mapByEventId.get(evt.id);
+    if (existing?.appointment_id) {
+      await supabase
+        .from("appointments")
+        .update({ status: "canceled", canceled_at: now, updated_at: now })
+        .eq("id", existing.appointment_id);
+    }
+    if (existing) {
+      await supabase
+        .from("calendar_event_map")
+        .update({ is_deleted: true, sync_status: "synced", updated_at: now })
+        .eq("id", existing.id as string);
+    }
+    stats.deleted++;
+  }
+
+  for (const evt of events.filter((e) => e.status !== "cancelled")) {
+    const existing = mapByEventId.get(evt.id);
+    const crmAptId = getCrmAppointmentIdFromEvent(evt);
+
+    if (existing) {
+      const googleUpdated = evt.updated
+        ? new Date(evt.updated).getTime()
+        : Date.now();
+      const crmUpdated = existing.last_crm_updated_at
+        ? new Date(existing.last_crm_updated_at as string).getTime()
+        : 0;
+      const googleWins =
+        !existing.last_crm_updated_at ||
+        googleUpdated > crmUpdated ||
+        Math.abs(googleUpdated - crmUpdated) < CONFLICT_WINDOW_MS;
+
+      if (googleWins && existing.appointment_id) {
+        const start = parseEventTime(evt.start);
+        const end = parseEventTime(evt.end);
+        await supabase
+          .from("appointments")
+          .update({
+            start_at_utc: start.time,
+            end_at_utc: end.time,
+            notes: evt.summary || null,
+            location: evt.location || null,
+            visitor_timezone: start.timezone,
+            updated_at: now,
+          })
+          .eq("id", existing.appointment_id);
+      }
+
+      await supabase
+        .from("calendar_event_map")
+        .update({
+          etag: evt.etag || null,
+          last_google_updated_at: evt.updated
+            ? new Date(evt.updated).toISOString()
+            : now,
+          sync_status: "synced",
+          is_deleted: false,
+          updated_at: now,
+        })
+        .eq("id", existing.id as string);
+
+      stats.updated++;
+    } else {
+      let appointmentId = crmAptId;
+      if (crmAptId) {
+        const { data: apt } = await supabase
+          .from("appointments")
+          .select("id")
+          .eq("id", crmAptId)
+          .maybeSingle();
+        if (!apt) appointmentId = null;
+      }
+
+      if (!appointmentId && defaultCalendar && defaultTypeId) {
+        const start = parseEventTime(evt.start);
+        const end = parseEventTime(evt.end);
+        const { data: apt } = await supabase
+          .from("appointments")
+          .insert({
+            org_id: orgId,
+            calendar_id: defaultCalendar.id,
+            appointment_type_id: defaultTypeId,
+            assigned_user_id: userId,
+            status: "scheduled",
+            start_at_utc: start.time,
+            end_at_utc: end.time,
+            visitor_timezone: start.timezone,
+            answers: {},
+            source: "manual",
+            google_event_id: evt.id,
+            google_meet_link: evt.hangoutLink || null,
+            notes: evt.summary || null,
+            location: evt.location || null,
+            reschedule_token: crypto.randomUUID(),
+            cancel_token: crypto.randomUUID(),
+            history: [
+              {
+                action: "created_from_google",
+                timestamp: now,
+                google_event_id: evt.id,
+                summary: evt.summary,
+              },
+            ],
+          })
+          .select("id")
+          .maybeSingle();
+        appointmentId = apt?.id || null;
+      }
+
+      await upsertEventMapEntry(
+        supabase,
+        orgId,
+        connectionId,
+        userId,
+        calendarId,
+        evt,
+        appointmentId,
+        appointmentId ? "bidirectional" : "from_google"
+      );
+
+      stats.created++;
+    }
+  }
+
+  return stats;
+}
+
 async function handleSync(req: Request): Promise<Response> {
   const supabase = getSupabaseClient();
   const userCtx = requireAuth(await extractUserContext(req, supabase));
@@ -897,28 +1051,10 @@ async function handleSync(req: Request): Promise<Response> {
         nextSyncToken = fullResult.nextSyncToken;
       }
 
-      const stats = { created: 0, updated: 0, deleted: 0, skipped: 0 };
-
-      const batchSize = 50;
-      for (let i = 0; i < events.length; i += batchSize) {
-        const batch = events.slice(i, i + batchSize);
-
-        const upsertRows = batch
-          .filter((evt) => evt.status !== "cancelled")
-          .map((evt) => mapGoogleEventToRow(evt, userCtx.orgId, connection.id, userCtx.id, calendarListId, calendarId));
-
-        if (upsertRows.length > 0) {
-          await supabase
-            .from("google_calendar_events")
-            .upsert(upsertRows, { onConflict: "connection_id,google_calendar_id,google_event_id" });
-        }
-
-        for (const evt of batch) {
-          await processIncrementalEvent(supabase, connection, calendarId, calendarListId, evt, stats);
-        }
-
-        totalSynced += batch.length;
-      }
+      const stats = await processBatchEvents(
+        supabase, connection, calendarId, calendarListId, events, userCtx.orgId, userCtx.id
+      );
+      totalSynced += events.length;
 
       if (nextSyncToken) {
         await supabase
@@ -977,33 +1113,54 @@ async function handleSyncIncremental(req: Request): Promise<Response> {
 
   for (const calendarId of selectedCalendarIds) {
     const syncToken = syncTokenMap.get(calendarId);
-    if (!syncToken) {
-      errors.push(`No sync token for ${calendarId}, run full sync first`);
-      continue;
+
+    let calendarListId = calListMap.get(calendarId);
+    if (!calendarListId) {
+      calendarListId = await ensureCalendarListEntry(
+        supabase, connection, calendarId, calListMap, userCtx.orgId, userCtx.id
+      ) || undefined;
+      if (!calendarListId) continue;
     }
 
-    const calendarListId = calListMap.get(calendarId);
-    if (!calendarListId) continue;
-
     try {
+      if (!syncToken) {
+        await syncLog(supabase, userCtx.orgId, connection.id, calendarId, "info",
+          "No sync token, performing limited initial sync");
+
+        const timeMin = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+        const timeMax = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        const fullResult = await fetchGoogleEventsFull(accessToken, calendarId, timeMin, timeMax);
+
+        const stats = await processBatchEvents(
+          supabase, connection, calendarId, calendarListId, fullResult.events, userCtx.orgId, userCtx.id
+        );
+
+        if (fullResult.nextSyncToken) {
+          await supabase.from("google_calendar_list")
+            .update({ sync_token: fullResult.nextSyncToken, last_synced_at: new Date().toISOString() })
+            .eq("id", calendarListId);
+        }
+
+        totalProcessed += fullResult.events.length;
+        await syncLog(supabase, userCtx.orgId, connection.id, calendarId, "info",
+          `Initial sync: ${stats.created} created, ${stats.updated} updated, ${stats.deleted} deleted`,
+          { stats, eventCount: fullResult.events.length });
+        continue;
+      }
+
       const result = await fetchGoogleEventsWithSyncToken(accessToken, calendarId, syncToken);
 
       if (result.fullSyncRequired) {
         await syncLog(supabase, userCtx.orgId, connection.id, calendarId, "warn",
-          "Sync token invalidated (410), falling back to full sync");
+          "Sync token invalidated (410), falling back to limited sync");
 
-        const lookbackDays = connection.sync_lookback_days || 60;
-        const timeMin = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
-        const timeMax = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+        const timeMin = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+        const timeMax = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
         const fullResult = await fetchGoogleEventsFull(accessToken, calendarId, timeMin, timeMax);
 
-        const stats = { created: 0, updated: 0, deleted: 0, skipped: 0 };
-        for (const evt of fullResult.events) {
-          const row = mapGoogleEventToRow(evt, userCtx.orgId, connection.id, userCtx.id, calendarListId, calendarId);
-          await supabase.from("google_calendar_events")
-            .upsert(row, { onConflict: "connection_id,google_calendar_id,google_event_id" });
-          await processIncrementalEvent(supabase, connection, calendarId, calendarListId, evt, stats);
-        }
+        const stats = await processBatchEvents(
+          supabase, connection, calendarId, calendarListId, fullResult.events, userCtx.orgId, userCtx.id
+        );
 
         if (fullResult.nextSyncToken) {
           await supabase.from("google_calendar_list")
@@ -1015,15 +1172,9 @@ async function handleSyncIncremental(req: Request): Promise<Response> {
         continue;
       }
 
-      const stats = { created: 0, updated: 0, deleted: 0, skipped: 0 };
-      for (const evt of result.events) {
-        const row = mapGoogleEventToRow(evt, userCtx.orgId, connection.id, userCtx.id, calendarListId, calendarId);
-        if (evt.status !== "cancelled") {
-          await supabase.from("google_calendar_events")
-            .upsert(row, { onConflict: "connection_id,google_calendar_id,google_event_id" });
-        }
-        await processIncrementalEvent(supabase, connection, calendarId, calendarListId, evt, stats);
-      }
+      const stats = await processBatchEvents(
+        supabase, connection, calendarId, calendarListId, result.events, userCtx.orgId, userCtx.id
+      );
 
       if (result.nextSyncToken) {
         await supabase.from("google_calendar_list")

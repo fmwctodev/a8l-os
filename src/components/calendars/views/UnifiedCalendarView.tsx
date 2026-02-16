@@ -13,7 +13,7 @@ import {
   getGoogleCalendarEvents,
   getAllOrgGoogleCalendarEvents,
   getTeamGoogleCalendarEvents,
-  syncGoogleCalendar,
+  triggerIncrementalSync,
   hasGoogleCalendarConnection,
 } from '../../../services/googleCalendarEvents';
 import { mergeDisplayItems } from '../../../utils/calendarDisplayItems';
@@ -94,12 +94,21 @@ export function UnifiedCalendarView() {
   const handleSyncGoogle = useCallback(async () => {
     if (isSyncing || !hasGoogleConnection) return;
     setIsSyncing(true);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000);
     try {
-      const result = await syncGoogleCalendar();
+      const result = await triggerIncrementalSync();
       console.log('Google Calendar sync result:', result);
     } catch (err) {
-      console.error('Google sync failed:', err);
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        console.warn('Google sync timed out, data may still be loading');
+      } else if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        console.warn('Google sync request failed (network or timeout)');
+      } else {
+        console.error('Google sync failed:', err);
+      }
     } finally {
+      clearTimeout(timeout);
       setIsSyncing(false);
     }
   }, [isSyncing, hasGoogleConnection]);
@@ -197,8 +206,11 @@ export function UnifiedCalendarView() {
 
   useEffect(() => {
     if (!isLoading && hasGoogleConnection) {
-      handleSyncGoogle().then(() => loadCalendarData());
+      handleSyncGoogle().then(() => {
+        loadCalendarData();
+      });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasGoogleConnection, isLoading]);
 
   useEffect(() => {
