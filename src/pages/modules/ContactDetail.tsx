@@ -9,7 +9,8 @@ import { getTags, addTagToContact, removeTagFromContact } from '../../services/t
 import { getCustomFields, getContactCustomFieldValues } from '../../services/customFields';
 import { getDepartments } from '../../services/departments';
 import { getUsers } from '../../services/users';
-import type { Contact, ContactNote, ContactTask, Tag, CustomField, ContactCustomFieldValue, Department, User } from '../../types';
+import { getMeetingTranscriptionsByContact } from '../../services/meetingTranscriptions';
+import type { Contact, ContactNote, ContactTask, Tag, CustomField, ContactCustomFieldValue, Department, User, MeetingTranscription } from '../../types';
 import {
   ArrowLeft,
   Loader2,
@@ -35,6 +36,7 @@ import { ContactNotesTab } from '../../components/contacts/ContactNotesTab';
 import { ContactTasksTab } from '../../components/contacts/ContactTasksTab';
 import { ContactPaymentsTab } from '../../components/contacts/ContactPaymentsTab';
 import ContactFilesTab from '../../components/contacts/ContactFilesTab';
+import { ContactMeetingsTab } from '../../components/contacts/ContactMeetingsTab';
 import { ScoreWidget } from '../../components/scoring/ScoreWidget';
 import { ContactQuickActions } from '../../components/contacts/ContactQuickActions';
 import { VirtualizedTimeline } from '../../components/contacts/VirtualizedTimeline';
@@ -42,7 +44,7 @@ import { LeadScoreBadge } from '../../components/contacts/LeadScoreBadge';
 import { isFeatureEnabled } from '../../services/featureFlags';
 import { getAttachmentCount } from '../../services/fileAttachments';
 
-type TabType = 'overview' | 'notes' | 'tasks' | 'timeline' | 'payments' | 'files';
+type TabType = 'overview' | 'notes' | 'tasks' | 'timeline' | 'meetings' | 'payments' | 'files';
 
 export function ContactDetail() {
   const { id } = useParams<{ id: string }>();
@@ -53,6 +55,7 @@ export function ContactDetail() {
   const [notes, setNotes] = useState<ContactNote[]>([]);
   const [tasks, setTasks] = useState<ContactTask[]>([]);
   const [aggregatedTimeline, setAggregatedTimeline] = useState<AggregatedTimelineEvent[]>([]);
+  const [meetings, setMeetings] = useState<MeetingTranscription[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [customFieldValues, setCustomFieldValues] = useState<ContactCustomFieldValue[]>([]);
@@ -139,17 +142,19 @@ export function ContactDetail() {
       setDepartments(departmentsData);
       setUsers(usersData);
 
-      const [notesData, tasksData, fieldValues, attachmentCount] = await Promise.all([
+      const [notesData, tasksData, fieldValues, attachmentCount, meetingsData] = await Promise.all([
         getContactNotes(id),
         getContactTasks(id),
         getContactCustomFieldValues(id),
         mediaFlag ? getAttachmentCount('contacts', id) : 0,
+        getMeetingTranscriptionsByContact(id),
       ]);
 
       setNotes(notesData);
       setTasks(tasksData);
       setCustomFieldValues(fieldValues);
       setFilesCount(attachmentCount);
+      setMeetings(meetingsData);
 
       setIsTimelineLoading(true);
       const timelineData = await getAggregatedTimeline(id);
@@ -247,6 +252,12 @@ export function ContactDetail() {
     setAggregatedTimeline(timelineData);
   };
 
+  const refreshMeetings = async () => {
+    if (!id) return;
+    const meetingsData = await getMeetingTranscriptionsByContact(id);
+    setMeetings(meetingsData);
+  };
+
   const formatRelativeTime = (date: string | null): string => {
     if (!date) return 'Never';
     const now = new Date();
@@ -291,6 +302,7 @@ export function ContactDetail() {
     { id: 'notes', label: 'Notes', count: notes.length },
     { id: 'tasks', label: 'Tasks', count: tasks.filter((t) => t.status !== 'completed').length },
     { id: 'timeline', label: 'Timeline', count: aggregatedTimeline.length },
+    { id: 'meetings', label: 'Meetings', count: meetings.filter((m) => m.recording_url).length },
     ...(paymentsEnabled && canViewPayments ? [{ id: 'payments' as const, label: 'Payments' }] : []),
     ...(mediaEnabled && canViewMedia ? [{ id: 'files' as const, label: 'Files', count: filesCount }] : []),
   ];
@@ -581,6 +593,13 @@ export function ContactDetail() {
                 <VirtualizedTimeline
                   events={aggregatedTimeline}
                   isLoading={isTimelineLoading}
+                />
+              )}
+              {activeTab === 'meetings' && (
+                <ContactMeetingsTab
+                  contact={contact}
+                  meetings={meetings}
+                  onRefresh={refreshMeetings}
                 />
               )}
               {activeTab === 'payments' && (
