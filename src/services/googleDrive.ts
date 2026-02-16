@@ -182,6 +182,12 @@ export async function listSharedDrives(): Promise<SharedDriveInfo[]> {
   return data.drives || [];
 }
 
+export async function listSharedWithMeViaApi(
+  pageToken?: string
+): Promise<{ files: GoogleDriveFileInfo[]; nextPageToken?: string }> {
+  return callDriveApi('list-shared-with-me', { pageToken });
+}
+
 export async function searchDriveFilesViaApi(
   query: string,
   mimeTypes?: string[],

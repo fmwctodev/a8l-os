@@ -102,6 +102,12 @@ Deno.serve(async (req: Request) => {
       case "list-shared-drives":
         return await handleListSharedDrives(accessToken);
 
+      case "list-shared-with-me":
+        return await handleListSharedWithMe(
+          accessToken,
+          body?.pageToken as string | undefined
+        );
+
       case "search":
         return await handleSearch(
           accessToken,
@@ -264,6 +270,39 @@ async function handleListSharedDrives(accessToken: string) {
 
   const data = await response.json();
   return jsonResponse({ drives: data.drives || [] });
+}
+
+async function handleListSharedWithMe(
+  accessToken: string,
+  pageToken?: string
+) {
+  const params = new URLSearchParams({
+    q: "sharedWithMe = true and trashed = false",
+    fields: "nextPageToken,files(id,name,mimeType,size,owners,parents,thumbnailLink,webViewLink,iconLink,trashed,createdTime,modifiedTime,shared,driveId)",
+    pageSize: "100",
+    orderBy: "modifiedTime desc",
+    supportsAllDrives: "true",
+    includeItemsFromAllDrives: "true",
+  });
+
+  if (pageToken) {
+    params.set("pageToken", pageToken);
+  }
+
+  const response = await fetch(`${GOOGLE_DRIVE_API}/files?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to list shared files: ${error}`);
+  }
+
+  const data = await response.json();
+  return jsonResponse({
+    files: data.files || [],
+    nextPageToken: data.nextPageToken,
+  });
 }
 
 async function handleSearch(
