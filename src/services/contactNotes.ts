@@ -1,14 +1,16 @@
 import { supabase } from '../lib/supabase';
-import type { ContactNote, User } from '../types';
+import type { ContactNote, ContactNoteMetadata, User } from '../types';
 import { addTimelineEvent } from './contactTimeline';
+
+const NOTE_SELECT = `
+  *,
+  user:users(id, name, avatar_url)
+`;
 
 export async function getContactNotes(contactId: string): Promise<ContactNote[]> {
   const { data, error } = await supabase
     .from('contact_notes')
-    .select(`
-      *,
-      user:users(id, name, avatar_url)
-    `)
+    .select(NOTE_SELECT)
     .eq('contact_id', contactId)
     .order('is_pinned', { ascending: false })
     .order('created_at', { ascending: false });
@@ -17,13 +19,26 @@ export async function getContactNotes(contactId: string): Promise<ContactNote[]>
   return data || [];
 }
 
+export async function getMeetNoteBySourceId(
+  contactId: string,
+  googleEventId: string
+): Promise<ContactNote | null> {
+  const { data, error } = await supabase
+    .from('contact_notes')
+    .select(NOTE_SELECT)
+    .eq('contact_id', contactId)
+    .eq('source_type', 'google_meet')
+    .eq('source_id', googleEventId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function getNoteById(id: string): Promise<ContactNote | null> {
   const { data, error } = await supabase
     .from('contact_notes')
-    .select(`
-      *,
-      user:users(id, name, avatar_url)
-    `)
+    .select(NOTE_SELECT)
     .eq('id', id)
     .maybeSingle();
 
@@ -31,10 +46,18 @@ export async function getNoteById(id: string): Promise<ContactNote | null> {
   return data;
 }
 
+export interface CreateNoteOptions {
+  title?: string;
+  source_type?: string;
+  source_id?: string;
+  metadata?: ContactNoteMetadata;
+}
+
 export async function createNote(
   contactId: string,
   content: string,
-  currentUser: User
+  currentUser: User,
+  options?: CreateNoteOptions
 ): Promise<ContactNote> {
   const { data, error } = await supabase
     .from('contact_notes')
@@ -42,18 +65,19 @@ export async function createNote(
       contact_id: contactId,
       user_id: currentUser.id,
       content,
+      title: options?.title || null,
+      source_type: options?.source_type || null,
+      source_id: options?.source_id || null,
+      metadata: options?.metadata || null,
     })
-    .select(`
-      *,
-      user:users(id, name, avatar_url)
-    `)
+    .select(NOTE_SELECT)
     .single();
 
   if (error) throw error;
 
   await addTimelineEvent(contactId, currentUser.id, 'note_added', {
     note_id: data.id,
-    preview: content.substring(0, 100),
+    preview: options?.title || content.substring(0, 100),
   });
 
   return data;
@@ -77,10 +101,7 @@ export async function updateNote(
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
-    .select(`
-      *,
-      user:users(id, name, avatar_url)
-    `)
+    .select(NOTE_SELECT)
     .single();
 
   if (error) throw error;
@@ -117,10 +138,7 @@ export async function toggleNotePin(id: string, isPinned: boolean): Promise<Cont
     .from('contact_notes')
     .update({ is_pinned: isPinned })
     .eq('id', id)
-    .select(`
-      *,
-      user:users(id, name, avatar_url)
-    `)
+    .select(NOTE_SELECT)
     .single();
 
   if (error) throw error;

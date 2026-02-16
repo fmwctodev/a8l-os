@@ -328,9 +328,34 @@ export interface ContactNote {
   user_id: string;
   content: string;
   is_pinned: boolean;
+  title: string | null;
+  source_type: string | null;
+  source_id: string | null;
+  metadata: ContactNoteMetadata | null;
   created_at: string;
   updated_at: string;
   user?: User;
+}
+
+export interface ContactNoteMetadata {
+  google_event_id?: string;
+  meet_conference_id?: string;
+  drive_file_ids?: {
+    recording?: string | null;
+    transcript?: string | null;
+    gemini_notes?: string | null;
+  };
+  drive_urls?: {
+    recording?: string | null;
+    transcript?: string | null;
+    gemini_notes?: string | null;
+  };
+  meeting_transcription_id?: string;
+  calendar_html_link?: string;
+  meet_link?: string;
+  organizer_email?: string;
+  attendees?: { email?: string; displayName?: string }[];
+  duration_minutes?: number;
 }
 
 export interface ContactTask {
@@ -5034,6 +5059,41 @@ export interface GoogleMeetRecording {
   recordingDuration?: string;
   recordingSizeBytes?: number;
   driveFileUrl?: string;
+}
+
+export type GoogleMeetSessionStatus = 'detected' | 'queued' | 'processing' | 'completed' | 'failed' | 'no_artifacts';
+
+export interface GoogleMeetSession {
+  id: string;
+  org_id: string;
+  user_id: string;
+  connection_id: string;
+  google_event_id: string;
+  meet_conference_id: string | null;
+  calendar_event_summary: string | null;
+  event_start_time: string | null;
+  event_end_time: string | null;
+  organizer_email: string | null;
+  attendees: { email?: string; displayName?: string; responseStatus?: string }[];
+  meet_link: string | null;
+  html_link: string | null;
+  recording_file_id: string | null;
+  recording_url: string | null;
+  transcript_file_id: string | null;
+  transcript_url: string | null;
+  transcript_content: string | null;
+  gemini_notes_file_id: string | null;
+  gemini_notes_url: string | null;
+  gemini_notes_content: string | null;
+  meeting_transcription_id: string | null;
+  status: GoogleMeetSessionStatus;
+  processed: boolean;
+  processing_error: string | null;
+  retry_count: number;
+  first_check_after: string | null;
+  last_processed_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export const DEFAULT_AI_PROMPT_TEMPLATE = `You are an AI assistant representing {{company_name}}.

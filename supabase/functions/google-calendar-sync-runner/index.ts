@@ -672,6 +672,95 @@ async function processJob(supabase: Supabase, job: SyncJob): Promise<void> {
   } else {
     throw new Error(`Unknown job type: ${job.job_type}`);
   }
+
+  try {
+    await detectMeetSessions(supabase, job.connection_id, job.org_id, connection.user_id);
+  } catch (meetErr) {
+    console.warn("[Runner] Meet detection failed (non-fatal):", (meetErr as Error).message);
+    await syncLog(supabase, job.org_id, job.connection_id, null, "warn",
+      `Meet session detection failed: ${(meetErr as Error).message}`);
+  }
+}
+
+async function detectMeetSessions(
+  supabase: Supabase,
+  connectionId: string,
+  orgId: string,
+  userId: string
+): Promise<void> {
+  const BATCH_LIMIT = 50;
+  const DELAY_MINUTES = 15;
+
+  const { data: events } = await supabase
+    .from("google_calendar_events")
+    .select("google_event_id, summary, start_time, end_time, organizer_email, attendees, hangout_link, conference_data, html_link, status")
+    .eq("connection_id", connectionId)
+    .eq("status", "confirmed")
+    .lt("end_time", new Date().toISOString())
+    .not("hangout_link", "is", null)
+    .order("end_time", { ascending: false })
+    .limit(BATCH_LIMIT);
+
+  if (!events || events.length === 0) return;
+
+  const eventIds = events.map((e: { google_event_id: string }) => e.google_event_id);
+  const { data: existingSessions } = await supabase
+    .from("google_meet_sessions")
+    .select("google_event_id")
+    .eq("connection_id", connectionId)
+    .in("google_event_id", eventIds);
+
+  const existingSet = new Set(
+    (existingSessions || []).map((s: { google_event_id: string }) => s.google_event_id)
+  );
+
+  let detected = 0;
+
+  for (const evt of events) {
+    if (existingSet.has(evt.google_event_id)) continue;
+
+    let conferenceId: string | null = null;
+    if (evt.conference_data) {
+      const confData = typeof evt.conference_data === "string"
+        ? JSON.parse(evt.conference_data)
+        : evt.conference_data;
+      conferenceId = confData?.conferenceId || null;
+    }
+
+    const endTime = new Date(evt.end_time);
+    const firstCheckAfter = new Date(endTime.getTime() + DELAY_MINUTES * 60 * 1000);
+
+    const { error: insertError } = await supabase
+      .from("google_meet_sessions")
+      .insert({
+        org_id: orgId,
+        user_id: userId,
+        connection_id: connectionId,
+        google_event_id: evt.google_event_id,
+        meet_conference_id: conferenceId,
+        calendar_event_summary: evt.summary || null,
+        event_start_time: evt.start_time,
+        event_end_time: evt.end_time,
+        organizer_email: evt.organizer_email || null,
+        attendees: evt.attendees || [],
+        meet_link: evt.hangout_link || null,
+        html_link: evt.html_link || null,
+        status: "detected",
+        first_check_after: firstCheckAfter.toISOString(),
+      });
+
+    if (insertError) {
+      if (insertError.code === "23505") continue;
+      console.error("[Runner:MeetDetect] Insert error:", insertError);
+      continue;
+    }
+    detected++;
+  }
+
+  if (detected > 0) {
+    await syncLog(supabase, orgId, connectionId, null, "info",
+      `Detected ${detected} new Meet sessions`, { detected });
+  }
 }
 
 function getBackoffDelay(attempt: number): number {

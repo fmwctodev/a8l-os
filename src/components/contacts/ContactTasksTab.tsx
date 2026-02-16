@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { createTask, updateTask, deleteTask, completeTask, getPriorityColor, getStatusColor } from '../../services/contactTasks';
 import type { ContactTask, User } from '../../types';
-import { Plus, Check, Trash2, Loader2, Calendar, CheckSquare, Clock } from 'lucide-react';
+import { Plus, Check, Trash2, Loader2, Calendar, CheckSquare, Clock, Video } from 'lucide-react';
 
 interface ContactTasksTabProps {
   contactId: string;
@@ -242,8 +242,21 @@ interface TaskItemProps {
   onDelete: () => void;
 }
 
+function isMeetSourcedTask(task: ContactTask): boolean {
+  return !!(task.description && task.description.includes('[meet:'));
+}
+
+function getCleanDescription(task: ContactTask): string | null {
+  if (!task.description) return null;
+  return task.description
+    .replace(/\n\n\[Source: Google Meet -- [^\]]*\]\n\[meet:[^\]]*\]/, '')
+    .trim() || null;
+}
+
 function TaskItem({ task, isOverdue, canModify, onComplete, onDelete }: TaskItemProps) {
   const isCompleted = task.status === 'completed';
+  const isMeetTask = isMeetSourcedTask(task);
+  const cleanDescription = getCleanDescription(task);
 
   return (
     <div className={`bg-slate-800/50 rounded-lg p-3 ${isCompleted ? 'opacity-60' : ''}`}>
@@ -259,11 +272,19 @@ function TaskItem({ task, isOverdue, canModify, onComplete, onDelete }: TaskItem
           {isCompleted && <Check className="w-3 h-3" />}
         </button>
         <div className="flex-1 min-w-0">
-          <p className={`text-sm font-medium ${isCompleted ? 'text-slate-400 line-through' : 'text-white'}`}>
-            {task.title}
-          </p>
-          {task.description && (
-            <p className="text-xs text-slate-500 mt-0.5">{task.description}</p>
+          <div className="flex items-center gap-2">
+            <p className={`text-sm font-medium ${isCompleted ? 'text-slate-400 line-through' : 'text-white'}`}>
+              {task.title}
+            </p>
+            {isMeetTask && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400 text-[10px] font-medium flex-shrink-0">
+                <Video className="w-2.5 h-2.5" />
+                Meet
+              </span>
+            )}
+          </div>
+          {cleanDescription && (
+            <p className="text-xs text-slate-500 mt-0.5">{cleanDescription}</p>
           )}
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${getPriorityColor(task.priority)}`}>
