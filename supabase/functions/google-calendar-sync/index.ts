@@ -632,6 +632,19 @@ async function createCrmAppointmentFromGoogleEvent(
   calendarId: string,
   evt: GoogleEvent
 ): Promise<string | null> {
+  // Check if appointment already exists with this google_event_id
+  const { data: existingApt } = await supabase
+    .from("appointments")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("google_event_id", evt.id)
+    .maybeSingle();
+
+  if (existingApt) {
+    console.log("[Sync] Appointment already exists for Google event:", evt.id);
+    return existingApt.id;
+  }
+
   const start = parseEventTime(evt.start);
   const end = parseEventTime(evt.end);
 
@@ -953,6 +966,21 @@ async function processBatchEvents(
           .eq("id", crmAptId)
           .maybeSingle();
         if (!apt) appointmentId = null;
+      }
+
+      // Check if appointment already exists with this google_event_id
+      if (!appointmentId) {
+        const { data: existingByGoogleId } = await supabase
+          .from("appointments")
+          .select("id")
+          .eq("org_id", orgId)
+          .eq("google_event_id", evt.id)
+          .maybeSingle();
+
+        if (existingByGoogleId) {
+          console.log("[Sync] Appointment already exists for Google event:", evt.id);
+          appointmentId = existingByGoogleId.id;
+        }
       }
 
       if (!appointmentId && defaultCalendar && defaultTypeId) {

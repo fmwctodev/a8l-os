@@ -25,36 +25,58 @@ function errorResponse(message: string, status = 400) {
   return jsonResponse({ error: message }, status);
 }
 
+function getAnonClient() {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  return createClient(supabaseUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+function getServiceRoleClient() {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
 
-    if (!supabaseUrl || !serviceRoleKey) {
+    if (!supabaseUrl || !serviceRoleKey || !anonKey) {
       return errorResponse("Missing server configuration", 500);
     }
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
+      console.error("[GmailAPI] No Authorization header");
       return errorResponse("Unauthorized", 401);
     }
 
     const token = authHeader.replace("Bearer ", "");
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
 
+    // Use anon client for JWT validation
+    const anonClient = getAnonClient();
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser(token);
+    } = await anonClient.auth.getUser(token);
+
     if (authError || !user) {
+      console.error("[GmailAPI] JWT validation failed:", authError?.message);
       return errorResponse("Unauthorized", 401);
     }
+
+    // Use service role client for database operations
+    const supabase = getServiceRoleClient();
 
     const { data: userData } = await supabase
       .from("users")
