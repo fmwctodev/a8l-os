@@ -37,25 +37,25 @@ export async function getAggregatedTimeline(contactId: string): Promise<Aggregat
       .order('created_at', { ascending: false }),
     supabase
       .from('messages')
-      .select('id, conversation_id, direction, channel, content, status, created_at')
-      .eq('conversation_id', contactId)
+      .select('id, contact_id, direction, channel, body, status, created_at')
+      .eq('contact_id', contactId)
       .order('created_at', { ascending: false })
       .limit(100),
     supabase
       .from('appointments')
-      .select('id, title, status, start_time, end_time, created_at')
+      .select('id, notes, status, start_at_utc, end_at_utc, created_at')
       .eq('contact_id', contactId)
       .order('created_at', { ascending: false })
       .limit(50),
     supabase
       .from('opportunities')
-      .select('id, title, status, stage_id, amount, created_at, updated_at')
+      .select('id, status, stage_id, value_amount, created_at, updated_at, stage:pipeline_stages!opportunities_stage_id_fkey(name)')
       .eq('contact_id', contactId)
       .order('created_at', { ascending: false })
       .limit(50),
     supabase
       .from('invoices')
-      .select('id, invoice_number, status, total_amount, paid_at, created_at')
+      .select('id, doc_number, status, total, paid_at, created_at')
       .eq('contact_id', contactId)
       .order('created_at', { ascending: false })
       .limit(50),
@@ -88,7 +88,7 @@ export async function getAggregatedTimeline(contactId: string): Promise<Aggregat
         event_data: {
           channel: msg.channel,
           direction: msg.direction,
-          content_preview: (msg.content as string)?.substring(0, 100),
+          content_preview: (msg.body as string)?.substring(0, 100),
           status: msg.status,
         },
         created_at: msg.created_at,
@@ -105,10 +105,10 @@ export async function getAggregatedTimeline(contactId: string): Promise<Aggregat
         event_type: `appointment_${appt.status}`,
         event_category: 'appointment',
         event_data: {
-          title: appt.title,
+          title: appt.notes || 'Appointment',
           status: appt.status,
-          start_time: appt.start_time,
-          end_time: appt.end_time,
+          start_time: appt.start_at_utc,
+          end_time: appt.end_at_utc,
         },
         created_at: appt.created_at,
       });
@@ -124,9 +124,9 @@ export async function getAggregatedTimeline(contactId: string): Promise<Aggregat
         event_type: `opportunity_${opp.status}`,
         event_category: 'opportunity',
         event_data: {
-          title: opp.title,
+          title: opp.stage?.name || opp.status,
           status: opp.status,
-          amount: opp.amount,
+          amount: opp.value_amount,
         },
         created_at: opp.created_at,
       });
@@ -143,9 +143,9 @@ export async function getAggregatedTimeline(contactId: string): Promise<Aggregat
         event_type: eventType,
         event_category: 'payment',
         event_data: {
-          invoice_number: inv.invoice_number,
+          doc_number: inv.doc_number,
           status: inv.status,
-          amount: inv.total_amount,
+          amount: inv.total,
           paid_at: inv.paid_at,
         },
         created_at: inv.paid_at || inv.created_at,
@@ -208,9 +208,11 @@ export function getTimelineEventLabel(event: ContactTimelineEvent | AggregatedTi
   switch (event.event_type) {
     case 'created':
       return 'Contact created';
-    case 'updated':
+    case 'updated': {
       const fields = (event.event_data.changed_fields as string[]) || [];
-      return `Updated ${fields.length} field${fields.length === 1 ? '' : 's'}`;
+      const count = fields?.length || 0;
+      return `Updated ${count} field${count === 1 ? '' : 's'}`;
+    }
     case 'merged':
       return `Merged with ${event.event_data.merged_contact_name || 'another contact'}`;
     case 'note_added':
@@ -231,18 +233,21 @@ export function getTimelineEventLabel(event: ContactTimelineEvent | AggregatedTi
       return `Tag removed: ${event.event_data.tag_name || ''}`;
     case 'owner_changed':
       return 'Owner changed';
-    case 'review_request_sent':
+    case 'review_request_sent': {
       const channel = event.event_data.channel as string;
       return `Review request sent via ${channel}`;
+    }
     case 'review_link_clicked':
       return 'Clicked review link';
-    case 'review_submitted':
+    case 'review_submitted': {
       const rating = event.event_data.rating as number;
       const provider = event.event_data.provider as string;
       return `Submitted ${rating}-star review on ${provider}`;
-    case 'negative_feedback_received':
+    }
+    case 'negative_feedback_received': {
       const negRating = event.event_data.rating as number;
       return `Left ${negRating}-star feedback (internal)`;
+    }
     case 'message_sent':
       return `Message sent via ${event.event_data.channel || 'unknown'}`;
     case 'message_received':
@@ -268,11 +273,11 @@ export function getTimelineEventLabel(event: ContactTimelineEvent | AggregatedTi
     case 'payment_received':
       return `Payment received: $${event.event_data.amount || 0}`;
     case 'invoice_sent':
-      return `Invoice sent: #${event.event_data.invoice_number || ''}`;
+      return `Invoice sent: #${event.event_data.doc_number || event.event_data.invoice_number || ''}`;
     case 'invoice_draft':
-      return `Invoice created: #${event.event_data.invoice_number || ''}`;
+      return `Invoice created: #${event.event_data.doc_number || event.event_data.invoice_number || ''}`;
     case 'invoice_paid':
-      return `Invoice paid: #${event.event_data.invoice_number || ''}`;
+      return `Invoice paid: #${event.event_data.doc_number || event.event_data.invoice_number || ''}`;
     case 'workflow_enrolled':
       return `Enrolled in workflow: ${event.event_data.workflow_name || ''}`;
     case 'workflow_completed':

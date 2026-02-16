@@ -26,7 +26,7 @@ export function ScoreWidget({ entityType, entityId, canAdjust = false }: ScoreWi
     try {
       setLoading(true);
       const data = await getEntityScores(entityType, entityId);
-      setScores(data);
+      setScores(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to load scores:', error);
     } finally {
@@ -67,7 +67,7 @@ export function ScoreWidget({ entityType, entityId, canAdjust = false }: ScoreWi
     );
   }
 
-  if (scores.length === 0) {
+  if (!scores || scores.length === 0) {
     return null;
   }
 

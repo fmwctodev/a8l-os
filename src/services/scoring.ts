@@ -127,9 +127,9 @@ async function callScoringApi<T>(action: string, params: Record<string, unknown>
 
   const result = await response.json();
   if (!response.ok) {
-    throw new Error(result.error || 'API request failed');
+    throw new Error(result.error?.message || result.error || 'API request failed');
   }
-  return result;
+  return result.data ?? result;
 }
 
 export async function getModels(): Promise<ScoringModel[]> {
