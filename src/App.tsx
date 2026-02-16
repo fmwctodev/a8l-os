@@ -486,7 +486,7 @@ function App() {
                 <Route
                   path="conversations"
                   element={
-                    <ProtectedRoute permission="snippets.view" featureFlag="snippets">
+                    <ProtectedRoute featureFlag="snippets">
                       <ConversationsSettingsPage />
                     </ProtectedRoute>
                   }
@@ -494,7 +494,7 @@ function App() {
                 <Route
                   path="calendars"
                   element={
-                    <ProtectedRoute permission="calendars.view" featureFlag="calendars">
+                    <ProtectedRoute featureFlag="calendars">
                       <CalendarsSettingsPage />
                     </ProtectedRoute>
                   }
@@ -518,7 +518,7 @@ function App() {
                 <Route
                   path="email-services"
                   element={
-                    <ProtectedRoute permission="email.settings.view" featureFlag="email_services">
+                    <ProtectedRoute featureFlag="email_services">
                       <EmailServicesSettingsPage />
                     </ProtectedRoute>
                   }
@@ -534,7 +534,7 @@ function App() {
                 <Route
                   path="custom-fields"
                   element={
-                    <ProtectedRoute permission="custom_fields.view">
+                    <ProtectedRoute>
                       <CustomFieldsSettingsPage />
                     </ProtectedRoute>
                   }
@@ -542,7 +542,7 @@ function App() {
                 <Route
                   path="custom-values"
                   element={
-                    <ProtectedRoute permission="custom_values.view" featureFlag="custom_values">
+                    <ProtectedRoute featureFlag="custom_values">
                       <CustomValuesSettingsPage />
                     </ProtectedRoute>
                   }
@@ -550,7 +550,7 @@ function App() {
                 <Route
                   path="scoring"
                   element={
-                    <ProtectedRoute permission="scoring.view" featureFlag="scoring_management">
+                    <ProtectedRoute featureFlag="scoring_management">
                       <ScoringSettingsPage />
                     </ProtectedRoute>
                   }
@@ -574,7 +574,7 @@ function App() {
                 <Route
                   path="integrations"
                   element={
-                    <ProtectedRoute permission="integrations.view" featureFlag="integrations">
+                    <ProtectedRoute featureFlag="integrations">
                       <IntegrationsSettingsPage />
                     </ProtectedRoute>
                   }
