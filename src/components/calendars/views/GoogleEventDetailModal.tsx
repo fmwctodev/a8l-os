@@ -5,7 +5,7 @@ import {
   Check, XCircle, HelpCircle, ArrowLeftRight, ArrowRight, ArrowLeft,
 } from 'lucide-react';
 import type { GoogleCalendarEvent } from '../../../types';
-import { formatTimeRange } from '../../../utils/calendarViewUtils';
+import { formatTimeRange, toLocalDatetimeString } from '../../../utils/calendarViewUtils';
 import { useAuth } from '../../../contexts/AuthContext';
 import { updateGoogleCalendarEvent, deleteGoogleCalendarEvent, rsvpGoogleCalendarEvent } from '../../../services/googleCalendarEvents';
 
@@ -65,10 +65,10 @@ export function GoogleEventDetailModal({
   const [editDescription, setEditDescription] = useState(event.description || '');
   const [editLocation, setEditLocation] = useState(event.location || '');
   const [editStartDate, setEditStartDate] = useState(
-    new Date(event.start_time).toISOString().slice(0, 16)
+    toLocalDatetimeString(new Date(event.start_time))
   );
   const [editEndDate, setEditEndDate] = useState(
-    new Date(event.end_time).toISOString().slice(0, 16)
+    toLocalDatetimeString(new Date(event.end_time))
   );
 
   const timeDisplay = useMemo(

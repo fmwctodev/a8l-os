@@ -193,6 +193,15 @@ export function getAppointmentPosition(
   return { top: Math.max(0, top), height: Math.max(16, height) };
 }
 
+export function toLocalDatetimeString(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const h = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${d}T${h}:${min}`;
+}
+
 export function formatTimeRange(startTime: string, endTime: string): string {
   const start = new Date(startTime);
   const end = new Date(endTime);

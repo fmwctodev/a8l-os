@@ -6,7 +6,7 @@ import {
 import type { CalendarEvent } from '../../../types';
 import { updateCalendarEvent, deleteCalendarEvent } from '../../../services/calendarEvents';
 import { useAuth } from '../../../contexts/AuthContext';
-import { formatTimeRange } from '../../../utils/calendarViewUtils';
+import { formatTimeRange, toLocalDatetimeString } from '../../../utils/calendarViewUtils';
 
 interface EventDetailModalProps {
   event: CalendarEvent;
@@ -26,10 +26,10 @@ export function EventDetailModal({ event, onClose, onUpdated }: EventDetailModal
   const [editDescription, setEditDescription] = useState(event.description || '');
   const [editLocation, setEditLocation] = useState(event.location || '');
   const [editStartDate, setEditStartDate] = useState(
-    new Date(event.start_at_utc).toISOString().slice(0, 16)
+    toLocalDatetimeString(new Date(event.start_at_utc))
   );
   const [editEndDate, setEditEndDate] = useState(
-    new Date(event.end_at_utc).toISOString().slice(0, 16)
+    toLocalDatetimeString(new Date(event.end_at_utc))
   );
 
   const timeDisplay = formatTimeRange(event.start_at_utc, event.end_at_utc);
