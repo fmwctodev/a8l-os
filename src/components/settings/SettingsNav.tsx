@@ -14,6 +14,7 @@ import {
   Braces,
   Target,
   MessageSquare,
+  Video,
   HeartPulse,
   LucideIcon,
 } from 'lucide-react';
@@ -95,6 +96,12 @@ const settingsNavSections: SettingsNavSection[] = [
         path: '/settings/ai-agents',
         icon: Bot,
         requiresPermission: 'ai.settings.view',
+      },
+      {
+        name: 'Meeting Follow-Ups',
+        path: '/settings/meeting-follow-ups',
+        icon: Video,
+        requiresPermission: 'calendars.view',
       },
     ],
   },

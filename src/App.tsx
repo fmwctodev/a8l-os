@@ -74,6 +74,7 @@ import { IntegrationsSettingsPage } from './pages/settings/IntegrationsSettingsP
 import { BrandboardSettingsPage } from './pages/settings/BrandboardSettingsPage';
 import { BrandKitDetailPage } from './pages/settings/BrandKitDetailPage';
 import { CRUDHealthCheckPage } from './pages/settings/CRUDHealthCheckPage';
+import { MeetingFollowUpSettingsPage } from './pages/settings/MeetingFollowUpSettingsPage';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
 import { BookingPage } from './pages/public/BookingPage';
 import { PublicFormPage } from './pages/public/PublicFormPage';
@@ -503,6 +504,14 @@ function App() {
                   element={
                     <ProtectedRoute permission="ai.settings.view" featureFlag="ai_agents">
                       <AIAgentsSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="meeting-follow-ups"
+                  element={
+                    <ProtectedRoute permission="calendars.view" featureFlag="calendars">
+                      <MeetingFollowUpSettingsPage />
                     </ProtectedRoute>
                   }
                 />

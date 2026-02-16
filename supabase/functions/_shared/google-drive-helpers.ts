@@ -151,16 +151,141 @@ export async function getFileWebViewLink(
   return data.webViewLink || null;
 }
 
+export interface EnrichedActionItem {
+  description: string;
+  assignee?: string;
+  due_date?: string;
+  priority: "low" | "medium" | "high";
+  raw_text: string;
+}
+
+function inferPriority(text: string): "low" | "medium" | "high" {
+  const lower = text.toLowerCase();
+  const highKeywords = [
+    "urgent", "asap", "critical", "immediately", "high priority",
+    "top priority", "blocker", "blocking", "must", "required",
+  ];
+  const lowKeywords = [
+    "low priority", "nice to have", "optional", "when possible",
+    "if time permits", "eventually",
+  ];
+  for (const kw of highKeywords) {
+    if (lower.includes(kw)) return "high";
+  }
+  for (const kw of lowKeywords) {
+    if (lower.includes(kw)) return "low";
+  }
+  return "medium";
+}
+
+function parseNaturalDate(text: string, referenceDate: Date): string | undefined {
+  const lower = text.toLowerCase();
+
+  const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+  const eodMatch = lower.match(/\b(by\s+)?eod\b|\bend\s+of\s+day\b/);
+  if (eodMatch) {
+    const d = new Date(referenceDate);
+    d.setHours(17, 0, 0, 0);
+    return d.toISOString();
+  }
+
+  const eowMatch = lower.match(/\bend\s+of\s+week\b|\beow\b/);
+  if (eowMatch) {
+    const d = new Date(referenceDate);
+    const daysUntilFriday = (5 - d.getDay() + 7) % 7 || 7;
+    d.setDate(d.getDate() + daysUntilFriday);
+    d.setHours(17, 0, 0, 0);
+    return d.toISOString();
+  }
+
+  const eomMatch = lower.match(/\bend\s+of\s+month\b|\beom\b/);
+  if (eomMatch) {
+    const d = new Date(referenceDate);
+    d.setMonth(d.getMonth() + 1, 0);
+    d.setHours(17, 0, 0, 0);
+    return d.toISOString();
+  }
+
+  const tomorrowMatch = lower.match(/\btomorrow\b/);
+  if (tomorrowMatch) {
+    const d = new Date(referenceDate);
+    d.setDate(d.getDate() + 1);
+    d.setHours(17, 0, 0, 0);
+    return d.toISOString();
+  }
+
+  const nextWeekMatch = lower.match(/\bnext\s+week\b/);
+  if (nextWeekMatch) {
+    const d = new Date(referenceDate);
+    const daysUntilMonday = (1 - d.getDay() + 7) % 7 || 7;
+    d.setDate(d.getDate() + daysUntilMonday);
+    d.setHours(9, 0, 0, 0);
+    return d.toISOString();
+  }
+
+  for (let i = 0; i < dayNames.length; i++) {
+    const pattern = new RegExp(`\\b(by\\s+|next\\s+)?${dayNames[i]}\\b`);
+    if (pattern.test(lower)) {
+      const d = new Date(referenceDate);
+      const daysUntil = (i - d.getDay() + 7) % 7 || 7;
+      d.setDate(d.getDate() + daysUntil);
+      d.setHours(17, 0, 0, 0);
+      return d.toISOString();
+    }
+  }
+
+  const inDaysMatch = lower.match(/\bin\s+(\d+)\s+days?\b/);
+  if (inDaysMatch) {
+    const d = new Date(referenceDate);
+    d.setDate(d.getDate() + parseInt(inDaysMatch[1], 10));
+    d.setHours(17, 0, 0, 0);
+    return d.toISOString();
+  }
+
+  return undefined;
+}
+
+function extractAssignee(text: string): { cleanText: string; assignee?: string } {
+  const patterns = [
+    /\(([^)]+)\)\s*$/,
+    /\b(?:assigned\s+to|owner|responsible)\s*:\s*(.+?)(?:\s*[-–]|$)/i,
+    /\b@(\w+(?:\s+\w+)?)/,
+    /^(.+?)\s+will\s+/i,
+    /\baction\s+for\s+(.+?):/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match && match[1]) {
+      const name = match[1].trim();
+      if (name.length > 1 && name.length < 50) {
+        if (pattern === patterns[3]) {
+          return { cleanText: text, assignee: name };
+        }
+        return {
+          cleanText: text.replace(match[0], "").trim(),
+          assignee: name,
+        };
+      }
+    }
+  }
+
+  return { cleanText: text };
+}
+
 export function parseGeminiNotesForActionItems(
-  content: string
-): { description: string; assignee?: string; due_date?: string }[] {
-  const items: { description: string; assignee?: string; due_date?: string }[] = [];
+  content: string,
+  meetingDate?: string
+): EnrichedActionItem[] {
+  const items: EnrichedActionItem[] = [];
   const lines = content.split("\n");
+  const refDate = meetingDate ? new Date(meetingDate) : new Date();
 
   let inActionSection = false;
 
-  for (const line of lines) {
-    const trimmed = line.trim();
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
     const lower = trimmed.toLowerCase();
 
     if (
@@ -176,9 +301,8 @@ export function parseGeminiNotesForActionItems(
     }
 
     if (inActionSection && trimmed === "") {
-      const nextLineIdx = lines.indexOf(line) + 1;
-      if (nextLineIdx < lines.length) {
-        const nextTrimmed = lines[nextLineIdx].trim();
+      if (i + 1 < lines.length) {
+        const nextTrimmed = lines[i + 1].trim();
         if (nextTrimmed && !nextTrimmed.startsWith("-") && !nextTrimmed.startsWith("*") && !nextTrimmed.match(/^\d+\./)) {
           inActionSection = false;
         }
@@ -189,12 +313,18 @@ export function parseGeminiNotesForActionItems(
     if (inActionSection) {
       const bulletMatch = trimmed.match(/^[-*]\s+(.+)/) || trimmed.match(/^\d+\.\s+(.+)/);
       if (bulletMatch) {
-        const text = bulletMatch[1].trim();
-        if (text.length > 3) {
-          const assigneeMatch = text.match(/\(([^)]+)\)$/);
+        const rawText = bulletMatch[1].trim();
+        if (rawText.length > 3) {
+          const { cleanText, assignee } = extractAssignee(rawText);
+          const priority = inferPriority(rawText);
+          const due_date = parseNaturalDate(rawText, refDate);
+
           items.push({
-            description: assigneeMatch ? text.replace(assigneeMatch[0], "").trim() : text,
-            assignee: assigneeMatch ? assigneeMatch[1] : undefined,
+            description: cleanText,
+            assignee,
+            due_date,
+            priority,
+            raw_text: rawText,
           });
         }
       }

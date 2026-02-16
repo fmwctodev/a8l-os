@@ -76,7 +76,9 @@ export type WorkflowActionType =
   | 'remove_dnd'
   | 'notify_user'
   | 'log_custom_event'
-  | 'webhook';
+  | 'webhook'
+  // Meeting Actions
+  | 'generate_meeting_follow_up';
 
 export type ActionCategory =
   | 'communication'
@@ -625,6 +627,13 @@ export interface WebhookConfig {
   timeoutSeconds?: number;
 }
 
+export interface GenerateMeetingFollowUpConfig {
+  channel: 'sms' | 'email' | 'both';
+  delayMinutes: number;
+  autoSend: boolean;
+  customInstructions?: string;
+}
+
 export type ActionConfig =
   | SendSmsConfig
   | SendEmailConfig
@@ -683,7 +692,8 @@ export type ActionConfig =
   | DNDConfig
   | NotifyUserConfig
   | LogEventConfig
-  | WebhookConfig;
+  | WebhookConfig
+  | GenerateMeetingFollowUpConfig;
 
 export interface WorkflowActionDefinition {
   type: WorkflowActionType;
@@ -783,6 +793,9 @@ export const WORKFLOW_ACTION_DEFINITIONS: WorkflowActionDefinition[] = [
   { type: 'notify_user', label: 'Notify User', description: 'Send notification to a team member', category: 'system', icon: 'Bell' },
   { type: 'log_custom_event', label: 'Log Event', description: 'Log a custom event to timeline', category: 'system', icon: 'FileCode' },
   { type: 'webhook', label: 'Webhook', description: 'Send data to external URL', category: 'system', icon: 'Webhook' },
+
+  // Meeting Actions
+  { type: 'generate_meeting_follow_up', label: 'Generate Meeting Follow-Up', description: 'Generate and send AI follow-up messages after a meeting', category: 'ai', icon: 'Video' },
 ];
 
 export const ACTION_CATEGORY_LABELS: Record<ActionCategory, string> = {

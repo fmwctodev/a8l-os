@@ -13,12 +13,17 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { MeetingRecordingLink } from './MeetingRecordingLink';
+import { MeetingActionItemsPanel } from './MeetingActionItemsPanel';
+import { MeetingFollowUpsPanel } from './MeetingFollowUpsPanel';
 
 interface MeetingTranscriptionCardProps {
   meeting: MeetingTranscription;
   onSelect?: () => void;
   isSelected?: boolean;
   showTranscript?: boolean;
+  currentUserId?: string;
+  orgId?: string;
+  onTaskCreated?: () => void;
 }
 
 export function MeetingTranscriptionCard({
@@ -26,6 +31,9 @@ export function MeetingTranscriptionCard({
   onSelect,
   isSelected,
   showTranscript = false,
+  currentUserId,
+  orgId,
+  onTaskCreated,
 }: MeetingTranscriptionCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -158,7 +166,23 @@ export function MeetingTranscriptionCard({
                 </div>
               )}
 
-              {meeting.action_items && meeting.action_items.length > 0 && (
+              {currentUserId && (
+                <MeetingActionItemsPanel
+                  meetingTranscriptionId={meeting.id}
+                  currentUserId={currentUserId}
+                  onTaskCreated={onTaskCreated}
+                />
+              )}
+
+              {currentUserId && orgId && (
+                <MeetingFollowUpsPanel
+                  meetingTranscriptionId={meeting.id}
+                  orgId={orgId}
+                  currentUserId={currentUserId}
+                />
+              )}
+
+              {(!currentUserId) && meeting.action_items && meeting.action_items.length > 0 && (
                 <div>
                   <h4 className="text-sm font-medium text-slate-300 mb-2 flex items-center gap-2">
                     <ListChecks className="w-4 h-4 text-amber-400" />

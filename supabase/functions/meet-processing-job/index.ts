@@ -8,6 +8,7 @@ import {
   exportGoogleDoc,
   parseGeminiNotesForActionItems,
   parseGeminiNotesForKeyPoints,
+  type EnrichedActionItem,
 } from "../_shared/google-drive-helpers.ts";
 
 const corsHeaders = {
@@ -185,13 +186,12 @@ async function processSession(supabase: Supabase, session: MeetSession): Promise
 
   let summary: string | null = null;
   let keyPoints: string[] = [];
-  let actionItems: { description: string; assignee?: string; due_date?: string; completed?: boolean }[] = [];
+  let actionItems: EnrichedActionItem[] = [];
 
   if (geminiNotesContent) {
     summary = geminiNotesContent.substring(0, 2000);
     keyPoints = parseGeminiNotesForKeyPoints(geminiNotesContent);
-    const rawActions = parseGeminiNotesForActionItems(geminiNotesContent);
-    actionItems = rawActions.map((a) => ({ ...a, completed: false }));
+    actionItems = parseGeminiNotesForActionItems(geminiNotesContent, meetingDate);
   }
 
   const durationMinutes = session.event_start_time && session.event_end_time
@@ -317,8 +317,17 @@ async function processSession(supabase: Supabase, session: MeetSession): Promise
     });
   }
 
-  if (matchedContacts.length > 0 && actionItems.length > 0) {
-    await createContactTasks(supabase, session, matchedContacts, actionItems);
+  if (matchedContacts.length > 0 && actionItems.length > 0 && meetingTranscriptionId) {
+    await createContactTasks(supabase, session, matchedContacts, actionItems, meetingTranscriptionId);
+  }
+
+  if (meetingTranscriptionId) {
+    await publishMeetingProcessedEvent(supabase, session, meetingTranscriptionId, matchedContacts, actionItems, {
+      hasRecording: !!recording,
+      hasTranscript: !!transcript,
+      hasGeminiNotes: !!geminiNotes,
+      durationMinutes,
+    });
   }
 
   await supabase
@@ -471,9 +480,9 @@ async function createContactTasks(
   supabase: Supabase,
   session: MeetSession,
   contacts: { id: string; email: string }[],
-  actionItems: { description: string; assignee?: string; due_date?: string; completed?: boolean }[]
+  actionItems: EnrichedActionItem[],
+  meetingTranscriptionId: string
 ): Promise<void> {
-  const eventMarker = `[meet:${session.google_event_id}]`;
   const eventTitle = session.calendar_event_summary || "Meeting";
 
   const { data: orgUsers } = await supabase
@@ -488,46 +497,61 @@ async function createContactTasks(
   }
 
   for (const contact of contacts) {
-    const { data: existingTasks } = await supabase
-      .from("contact_tasks")
-      .select("description")
-      .eq("contact_id", contact.id)
-      .like("description", `%${eventMarker}%`);
-
-    const existingDescriptions = new Set(
-      (existingTasks || []).map((t: { description: string }) => t.description)
-    );
-
     for (const item of actionItems) {
-      const description = `${item.description}\n\n[Source: Google Meet -- ${eventTitle}]\n${eventMarker}`;
+      const { data: existingActionItem } = await supabase
+        .from("meeting_action_items")
+        .select("id, status, contact_task_id")
+        .eq("meeting_transcription_id", meetingTranscriptionId)
+        .eq("contact_id", contact.id)
+        .eq("description", item.description)
+        .maybeSingle();
 
-      if (existingDescriptions.has(description)) continue;
+      if (existingActionItem) continue;
 
-      let assignedTo: string | null = null;
+      let assignedUserId: string | null = null;
       if (item.assignee) {
-        assignedTo =
-          userMap.get(item.assignee.toLowerCase()) || null;
+        assignedUserId = userMap.get(item.assignee.toLowerCase()) || null;
       }
-      if (!assignedTo) assignedTo = session.user_id;
+      if (!assignedUserId) assignedUserId = session.user_id;
 
       const title = item.description.length > 100
         ? item.description.substring(0, 97) + "..."
         : item.description;
+
+      const description = `${item.description}\n\n[Source: Google Meet -- ${eventTitle}]`;
 
       const { data: newTask } = await supabase
         .from("contact_tasks")
         .insert({
           contact_id: contact.id,
           created_by_user_id: session.user_id,
-          assigned_to_user_id: assignedTo,
+          assigned_to_user_id: assignedUserId,
           title,
           description,
           due_date: item.due_date || null,
-          priority: "medium",
+          priority: item.priority,
           status: "pending",
+          source_meeting_id: meetingTranscriptionId,
         })
         .select("id")
         .maybeSingle();
+
+      const taskId = newTask?.id || null;
+
+      await supabase.from("meeting_action_items").insert({
+        org_id: session.org_id,
+        meeting_transcription_id: meetingTranscriptionId,
+        contact_id: contact.id,
+        contact_task_id: taskId,
+        description: item.description,
+        assignee_name: item.assignee || null,
+        assignee_user_id: assignedUserId,
+        due_date: item.due_date || null,
+        priority: item.priority,
+        status: taskId ? "task_created" : "pending",
+        source: "gemini_notes",
+        raw_text: item.raw_text,
+      });
 
       if (newTask) {
         await supabase.from("contact_timeline").insert({
@@ -538,10 +562,47 @@ async function createContactTasks(
             task_id: newTask.id,
             task_title: title,
             source: "google_meet",
+            meeting_transcription_id: meetingTranscriptionId,
           },
         });
       }
     }
+  }
+}
+
+async function publishMeetingProcessedEvent(
+  supabase: Supabase,
+  session: MeetSession,
+  meetingTranscriptionId: string,
+  contacts: { id: string; email: string }[],
+  actionItems: EnrichedActionItem[],
+  artifacts: {
+    hasRecording: boolean;
+    hasTranscript: boolean;
+    hasGeminiNotes: boolean;
+    durationMinutes: number | null;
+  }
+): Promise<void> {
+  try {
+    await supabase.from("event_outbox").insert({
+      organization_id: session.org_id,
+      event_type: "meeting_processed",
+      payload: {
+        meeting_transcription_id: meetingTranscriptionId,
+        google_meet_session_id: session.id,
+        google_event_id: session.google_event_id,
+        contact_ids: contacts.map((c) => c.id),
+        action_item_count: actionItems.length,
+        has_recording: artifacts.hasRecording,
+        has_transcript: artifacts.hasTranscript,
+        has_gemini_notes: artifacts.hasGeminiNotes,
+        meeting_title: session.calendar_event_summary || "Meeting",
+        meeting_date: session.event_start_time || new Date().toISOString(),
+        duration_minutes: artifacts.durationMinutes,
+      },
+    });
+  } catch (err) {
+    console.warn("[MeetProcessor] Failed to publish meeting_processed event:", (err as Error).message);
   }
 }
 

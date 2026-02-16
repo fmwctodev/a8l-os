@@ -1057,6 +1057,7 @@ export type WorkflowTriggerType =
   | 'invoice_overdue'
   | 'payment_received'
   | 'recurring_invoice_created'
+  | 'meeting_processed'
   | 'scheduled'
   | 'webhook_received';
 
@@ -1128,7 +1129,8 @@ export type WorkflowActionType =
   | 'ai_follow_up_message'
   | 'ai_lead_qualification'
   | 'ai_booking_assist'
-  | 'ai_decision_step';
+  | 'ai_decision_step'
+  | 'generate_meeting_follow_up';
 
 export type WorkflowNodeType = 'trigger' | 'condition' | 'delay' | 'action' | 'end';
 
