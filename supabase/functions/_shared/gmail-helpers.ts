@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { encryptToken, decryptToken, isEncryptedToken } from "./crypto.ts";
+import { resolveRefreshToken, refreshAccessToken, writeMasterToken } from "./google-oauth-helpers.ts";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_API_URL = "https://gmail.googleapis.com/gmail/v1";
@@ -302,6 +303,24 @@ export async function getAccessToken(
   });
 
   if (!refreshResponse.ok) {
+    console.warn("Primary Gmail token refresh failed, trying fallback sources...");
+
+    const fallback = await resolveRefreshToken(supabase, tokenData.user_id, tokenData.organization_id);
+    if (fallback) {
+      console.log(`Trying fallback refresh token from source: ${fallback.source}`);
+      const fallbackResult = await refreshAccessToken(fallback.refreshToken);
+      if (fallbackResult) {
+        const newExpiry = new Date(Date.now() + fallbackResult.expires_in * 1000).toISOString();
+        await updateGmailTokens(supabase, tokenData.id, fallbackResult.access_token, newExpiry, fallback.refreshToken, fallbackResult.refresh_token);
+
+        try {
+          await writeMasterToken(supabase, tokenData.organization_id, tokenData.user_id, tokenData.email, fallbackResult.access_token, fallbackResult.refresh_token || fallback.refreshToken, newExpiry, []);
+        } catch {}
+
+        return fallbackResult.access_token;
+      }
+    }
+
     throw new Error("Failed to refresh Gmail token. Please reconnect.");
   }
 
@@ -311,11 +330,27 @@ export async function getAccessToken(
     Date.now() + refreshData.expires_in * 1000
   ).toISOString();
 
+  await updateGmailTokens(supabase, tokenData.id, newAccessToken, newExpiry, refreshToken, refreshData.refresh_token);
+
+  try {
+    await writeMasterToken(supabase, tokenData.organization_id, tokenData.user_id, tokenData.email, newAccessToken, refreshData.refresh_token || refreshToken, newExpiry, []);
+  } catch {}
+
+  return newAccessToken;
+}
+
+async function updateGmailTokens(
+  supabase: SupabaseClient,
+  tokenId: string,
+  newAccessToken: string,
+  newExpiry: string,
+  currentRefreshToken: string,
+  newRefreshToken?: string
+): Promise<void> {
   let storedAccess: string;
   try {
     storedAccess = await encryptToken(newAccessToken);
   } catch {
-    console.warn("Token encryption unavailable, storing plaintext");
     storedAccess = newAccessToken;
   }
 
@@ -325,20 +360,24 @@ export async function getAccessToken(
     updated_at: new Date().toISOString(),
   };
 
-  if (refreshData.refresh_token) {
+  if (newRefreshToken) {
     try {
-      updatePayload.refresh_token = await encryptToken(refreshData.refresh_token);
+      updatePayload.refresh_token = await encryptToken(newRefreshToken);
     } catch {
-      updatePayload.refresh_token = refreshData.refresh_token;
+      updatePayload.refresh_token = newRefreshToken;
+    }
+  } else {
+    try {
+      updatePayload.refresh_token = await encryptToken(currentRefreshToken);
+    } catch {
+      updatePayload.refresh_token = currentRefreshToken;
     }
   }
 
   await supabase
     .from("gmail_oauth_tokens")
     .update(updatePayload)
-    .eq("id", tokenData.id);
-
-  return newAccessToken;
+    .eq("id", tokenId);
 }
 
 export async function processGmailMessage(

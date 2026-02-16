@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { writeMasterToken, crossPopulateServiceTables, CALENDAR_SCOPES } from "../_shared/google-oauth-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -104,6 +105,7 @@ async function handleGetAuthUrl(req: Request): Promise<Response> {
   authUrl.searchParams.set("scope", SCOPES);
   authUrl.searchParams.set("access_type", "offline");
   authUrl.searchParams.set("prompt", "consent");
+  authUrl.searchParams.set("include_granted_scopes", "true");
   authUrl.searchParams.set("state", state);
 
   return new Response(JSON.stringify({ authUrl: authUrl.toString() }), {
@@ -224,6 +226,17 @@ async function handleCallback(req: Request): Promise<Response> {
     });
   }
 
+  const grantedScopes = tokenData.scope
+    ? tokenData.scope.split(" ").filter(Boolean)
+    : CALENDAR_SCOPES.concat(["https://www.googleapis.com/auth/userinfo.email"]);
+
+  try {
+    await writeMasterToken(supabase, state.orgId, state.userId, userInfo.email || "", tokenData.access_token, tokenData.refresh_token, tokenExpiry, grantedScopes);
+    await crossPopulateServiceTables(supabase, state.orgId, state.userId, userInfo.email || "", tokenData.access_token, tokenData.refresh_token, tokenExpiry, grantedScopes);
+  } catch (crossErr) {
+    console.error("Cross-populate failed (non-fatal):", crossErr);
+  }
+
   if (state.appOrigin) {
     const successRedirect = new URL(`${state.appOrigin}/oauth/google-calendar/callback`);
     successRedirect.searchParams.set("status", "success");
@@ -315,7 +328,7 @@ async function handleGetCalendars(req: Request): Promise<Response> {
 
   let accessToken = connection.access_token;
   if (new Date(connection.token_expiry) <= new Date()) {
-    const refreshResult = await refreshToken(connection.refresh_token);
+    const refreshResult = await refreshToken(connection.refresh_token, user.id);
     if (!refreshResult.success) {
       return new Response(JSON.stringify({ error: "Token refresh failed" }), {
         status: 401,
@@ -443,7 +456,7 @@ async function handleTestSync(req: Request): Promise<Response> {
 
   let accessToken = connection.access_token;
   if (new Date(connection.token_expiry) <= new Date()) {
-    const refreshResult = await refreshToken(connection.refresh_token);
+    const refreshResult = await refreshToken(connection.refresh_token, user.id);
     if (!refreshResult.success) {
       return new Response(JSON.stringify({ error: "Token refresh failed", tokenExpired: true }), {
         status: 401,
@@ -585,7 +598,7 @@ async function handleGetTeamConnections(req: Request): Promise<Response> {
   });
 }
 
-async function refreshToken(refreshTokenValue: string) {
+async function refreshToken(refreshTokenValue: string, userId?: string) {
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -598,6 +611,22 @@ async function refreshToken(refreshTokenValue: string) {
   });
 
   if (!response.ok) {
+    if (userId) {
+      console.warn("Calendar token refresh failed, trying fallback sources...");
+      const { resolveRefreshToken, refreshAccessToken } = await import("../_shared/google-oauth-helpers.ts");
+      const supabase = getServiceClient();
+      const fallback = await resolveRefreshToken(supabase, userId, "");
+      if (fallback) {
+        const result = await refreshAccessToken(fallback.refreshToken);
+        if (result) {
+          return {
+            success: true as const,
+            accessToken: result.access_token,
+            tokenExpiry: new Date(Date.now() + result.expires_in * 1000).toISOString(),
+          };
+        }
+      }
+    }
     return { success: false as const };
   }
 

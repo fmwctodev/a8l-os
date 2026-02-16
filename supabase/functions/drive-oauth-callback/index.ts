@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { writeMasterToken, crossPopulateServiceTables, DRIVE_SCOPES } from "../_shared/google-oauth-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -153,6 +154,17 @@ Deno.serve(async (req: Request) => {
       entity_type: "drive_connection",
       after_state: { email, organization_id: userData.organization_id },
     });
+
+    const grantedScopes = tokens.scope
+      ? tokens.scope.split(" ").filter(Boolean)
+      : DRIVE_SCOPES.concat(["https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"]);
+
+    try {
+      await writeMasterToken(supabase, userData.organization_id, userId, email, access_token, refresh_token, tokenExpiry, grantedScopes);
+      await crossPopulateServiceTables(supabase, userData.organization_id, userId, email, access_token, refresh_token, tokenExpiry, grantedScopes);
+    } catch (crossErr) {
+      console.error("Cross-populate failed (non-fatal):", crossErr);
+    }
 
     const successUrl = new URL(appRedirectUri);
     successUrl.searchParams.set("drive_connected", "true");

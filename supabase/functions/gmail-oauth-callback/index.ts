@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { encryptToken } from "../_shared/crypto.ts";
+import { writeMasterToken, crossPopulateServiceTables, GMAIL_SCOPES } from "../_shared/google-oauth-helpers.ts";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_API_URL = "https://gmail.googleapis.com/gmail/v1";
@@ -161,6 +162,17 @@ Deno.serve(async (req: Request) => {
         updated_at: new Date().toISOString(),
       })
       .eq("id", userId);
+
+    const grantedScopes = tokens.scope
+      ? tokens.scope.split(" ").filter(Boolean)
+      : GMAIL_SCOPES.concat(["https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"]);
+
+    try {
+      await writeMasterToken(supabase, finalOrgId, userId, email, access_token, refresh_token, tokenExpiry, grantedScopes);
+      await crossPopulateServiceTables(supabase, finalOrgId, userId, email, access_token, refresh_token, tokenExpiry, grantedScopes);
+    } catch (crossErr) {
+      console.error("Cross-populate failed (non-fatal):", crossErr);
+    }
 
     let watchHistoryId: string | null = null;
     let watchExpiration: string | null = null;

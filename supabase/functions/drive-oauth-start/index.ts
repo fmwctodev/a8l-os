@@ -102,6 +102,7 @@ Deno.serve(async (req: Request) => {
     authUrl.searchParams.set("scope", SCOPES);
     authUrl.searchParams.set("access_type", "offline");
     authUrl.searchParams.set("prompt", "consent");
+    authUrl.searchParams.set("include_granted_scopes", "true");
     authUrl.searchParams.set("state", state);
 
     return new Response(JSON.stringify({ authUrl: authUrl.toString() }), {

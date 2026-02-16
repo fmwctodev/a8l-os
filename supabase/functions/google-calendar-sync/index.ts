@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { resolveRefreshToken, refreshAccessToken } from "../_shared/google-oauth-helpers.ts";
 
 interface UserContext {
   id: string;
@@ -317,7 +318,24 @@ async function getValidToken(connection: Connection, supabase: Supabase): Promis
     return connection.access_token;
   }
 
-  const result = await refreshToken(connection.refresh_token);
+  let result: { access_token: string; expires_in: number; refresh_token?: string };
+  try {
+    result = await refreshToken(connection.refresh_token);
+  } catch {
+    console.warn("Calendar token refresh failed, trying fallback sources...");
+    const fallback = await resolveRefreshToken(supabase, connection.user_id, connection.org_id);
+    if (fallback) {
+      const fallbackResult = await refreshAccessToken(fallback.refreshToken);
+      if (fallbackResult) {
+        result = fallbackResult;
+      } else {
+        throw new Error("All token refresh sources exhausted");
+      }
+    } else {
+      throw new Error("No fallback refresh token available");
+    }
+  }
+
   const newExpiry = new Date(Date.now() + result.expires_in * 1000).toISOString();
 
   const updateData: Record<string, unknown> = {

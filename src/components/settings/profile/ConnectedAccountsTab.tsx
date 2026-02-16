@@ -1,20 +1,20 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, AlertCircle, Loader2, Mail, Calendar, Video, HardDrive, RefreshCw, AlertTriangle, Check } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, Mail, Calendar, Video, HardDrive, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
-import { getConnectedAccounts, type ConnectedAccount } from '../../../services/profile';
-import { getGmailConnectionStatus, disconnectGmail } from '../../../services/gmailApi';
 import {
-  getGoogleConnection,
-  initiateGoogleOAuth,
-  disconnectGoogle,
+  getUnifiedGoogleConnection,
+  initiateUnifiedGoogleOAuth,
+  openUnifiedGoogleOAuthPopup,
+  disconnectUnifiedGoogle,
+  type UnifiedGoogleConnection,
+} from '../../../services/googleOAuthUnified';
+import {
   getGoogleCalendarList,
   updateSelectedCalendars,
   testGoogleSync,
-  openGoogleOAuthPopup,
-  type GoogleConnection,
   type GoogleCalendarItem,
 } from '../../../services/googleCalendarConnections';
-import { ConnectGmailModal } from './ConnectGmailModal';
+import { getGmailConnectionStatus } from '../../../services/gmailApi';
 import { useToast } from '../../../contexts/ToastContext';
 
 function GoogleIcon({ className }: { className?: string }) {
@@ -33,65 +33,65 @@ interface GoogleService {
   name: string;
   icon: typeof Mail;
   description: string;
-  connectedKey?: string;
+  scopeKey: 'gmail' | 'calendar' | 'drive';
 }
 
 const googleServices: GoogleService[] = [
-  { id: 'gmail', name: 'Gmail', icon: Mail, description: 'Send and receive emails', connectedKey: 'gmail' },
-  { id: 'calendar', name: 'Calendar', icon: Calendar, description: 'Sync appointments and events' },
-  { id: 'meet', name: 'Meet', icon: Video, description: 'Video conferencing integration' },
-  { id: 'drive', name: 'Drive', icon: HardDrive, description: 'Access and store files', connectedKey: 'drive' },
+  { id: 'gmail', name: 'Gmail', icon: Mail, description: 'Send and receive emails', scopeKey: 'gmail' },
+  { id: 'calendar', name: 'Calendar', icon: Calendar, description: 'Sync appointments and events', scopeKey: 'calendar' },
+  { id: 'meet', name: 'Meet', icon: Video, description: 'Video conferencing integration', scopeKey: 'calendar' },
+  { id: 'drive', name: 'Drive', icon: HardDrive, description: 'Access and store files', scopeKey: 'drive' },
 ];
 
 export function ConnectedAccountsTab() {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
-  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [showConfirmDisconnect, setShowConfirmDisconnect] = useState(false);
-  const [showConnectGmailModal, setShowConnectGmailModal] = useState(false);
-  const [googleAccount, setGoogleAccount] = useState<ConnectedAccount | null>(null);
-  const [gmailStatus, setGmailStatus] = useState<{
-    connected: boolean;
-    email: string | null;
+
+  const [connection, setConnection] = useState<UnifiedGoogleConnection>({
+    connected: false, email: null, gmail: false, calendar: false, drive: false, scopes: [],
+  });
+
+  const [gmailSyncStatus, setGmailSyncStatus] = useState<{
     lastSyncAt: string | null;
     syncStatus: string | null;
-  }>({ connected: false, email: null, lastSyncAt: null, syncStatus: null });
+  }>({ lastSyncAt: null, syncStatus: null });
 
-  const [calendarConn, setCalendarConn] = useState<GoogleConnection>({ connected: false });
   const [calendars, setCalendars] = useState<GoogleCalendarItem[]>([]);
   const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([]);
-  const [connectingCalendar, setConnectingCalendar] = useState(false);
-  const [disconnectingCalendar, setDisconnectingCalendar] = useState(false);
   const [savingCalendars, setSavingCalendars] = useState(false);
   const [testingSync, setTestingSync] = useState(false);
   const [syncTestResult, setSyncTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [showCalendarDisconnect, setShowCalendarDisconnect] = useState(false);
 
   useEffect(() => {
     async function loadAccounts() {
       if (!user) return;
 
       try {
-        const [accounts, gmailConn, calConn] = await Promise.all([
-          getConnectedAccounts(user.id),
-          getGmailConnectionStatus(user.id),
-          getGoogleConnection().catch(() => ({ connected: false }) as GoogleConnection),
+        const [conn, gmailConn] = await Promise.all([
+          getUnifiedGoogleConnection().catch(() => ({
+            connected: false, email: null, gmail: false, calendar: false, drive: false, scopes: [],
+          } as UnifiedGoogleConnection)),
+          getGmailConnectionStatus(user.id).catch(() => ({
+            connected: false, email: null, lastSyncAt: null, syncStatus: null,
+          })),
         ]);
 
-        const google = accounts.find(a => a.provider === 'google' || a.provider === 'google_gmail') || null;
-        setGoogleAccount(google);
-        setGmailStatus(gmailConn);
-        setCalendarConn(calConn);
+        setConnection(conn);
+        setGmailSyncStatus({
+          lastSyncAt: gmailConn.lastSyncAt,
+          syncStatus: gmailConn.syncStatus,
+        });
 
-        if (calConn.connected) {
+        if (conn.calendar) {
           try {
             const { calendars: calList, selectedCalendarIds: selected } = await getGoogleCalendarList();
             setCalendars(calList);
             setSelectedCalendarIds(selected);
-          } catch {
-            // Calendar list may fail if token expired
-          }
+          } catch {}
         }
       } catch (error) {
         console.error('Failed to load connected accounts:', error);
@@ -103,87 +103,57 @@ export function ConnectedAccountsTab() {
     loadAccounts();
   }, [user]);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('gmail_connected') === 'true') {
-      const email = params.get('email');
-      showToast('success', `Gmail connected successfully${email ? ` as ${email}` : ''}`);
-      setGmailStatus(prev => ({
-        ...prev,
-        connected: true,
-        email: email || prev.email,
-      }));
-
-      const url = new URL(window.location.href);
-      url.searchParams.delete('gmail_connected');
-      url.searchParams.delete('email');
-      window.history.replaceState({}, '', url.toString());
-
-      if (user) {
-        getGmailConnectionStatus(user.id).then(setGmailStatus).catch(() => {});
-        getConnectedAccounts(user.id).then(accounts => {
-          const google = accounts.find(a => a.provider === 'google' || a.provider === 'google_gmail') || null;
-          setGoogleAccount(google);
-        }).catch(() => {});
-      }
-    }
-  }, [user, showToast]);
-
-  const handleDisconnectGmail = async () => {
-    if (!user) return;
-
-    setIsDisconnecting(true);
+  const handleConnect = async () => {
+    setConnecting(true);
     try {
-      await disconnectGmail(user.id);
-      setGmailStatus({ connected: false, email: null, lastSyncAt: null, syncStatus: null });
-      setGoogleAccount(null);
-      setShowConfirmDisconnect(false);
-      showToast('success', 'Gmail disconnected');
-    } catch (error) {
-      console.error('Failed to disconnect Gmail:', error);
-      showToast('warning', 'Failed to disconnect Gmail');
-    } finally {
-      setIsDisconnecting(false);
-    }
-  };
-
-  const handleConnectCalendar = async () => {
-    setConnectingCalendar(true);
-    try {
-      const authUrl = await initiateGoogleOAuth();
-      const result = await openGoogleOAuthPopup(authUrl);
+      const authUrl = await initiateUnifiedGoogleOAuth();
+      const result = await openUnifiedGoogleOAuthPopup(authUrl);
       if (result.success) {
-        const conn = await getGoogleConnection();
-        setCalendarConn(conn);
-        if (conn.connected) {
-          const { calendars: calList, selectedCalendarIds: selected } = await getGoogleCalendarList();
-          setCalendars(calList);
-          setSelectedCalendarIds(selected);
+        const conn = await getUnifiedGoogleConnection();
+        setConnection(conn);
+        if (conn.calendar) {
+          try {
+            const { calendars: calList, selectedCalendarIds: selected } = await getGoogleCalendarList();
+            setCalendars(calList);
+            setSelectedCalendarIds(selected);
+          } catch {}
         }
-        showToast('success', 'Google Calendar connected');
+        if (conn.gmail && user) {
+          const gmailConn = await getGmailConnectionStatus(user.id).catch(() => null);
+          if (gmailConn) {
+            setGmailSyncStatus({
+              lastSyncAt: gmailConn.lastSyncAt,
+              syncStatus: gmailConn.syncStatus,
+            });
+          }
+        }
+        showToast('success', `Google Workspace connected${result.email ? ` as ${result.email}` : ''}`);
+      } else if (result.error && result.error !== 'Popup closed') {
+        showToast('warning', result.error);
       }
     } catch (error) {
-      console.error('Failed to connect calendar:', error);
-      showToast('warning', 'Failed to connect Google Calendar');
+      console.error('Failed to connect Google:', error);
+      showToast('warning', 'Failed to connect Google Workspace');
     } finally {
-      setConnectingCalendar(false);
+      setConnecting(false);
     }
   };
 
-  const handleDisconnectCalendar = async () => {
-    setDisconnectingCalendar(true);
+  const handleDisconnect = async () => {
+    setDisconnecting(true);
     try {
-      await disconnectGoogle();
-      setCalendarConn({ connected: false });
+      await disconnectUnifiedGoogle();
+      setConnection({ connected: false, email: null, gmail: false, calendar: false, drive: false, scopes: [] });
       setCalendars([]);
       setSelectedCalendarIds([]);
-      setShowCalendarDisconnect(false);
-      showToast('success', 'Google Calendar disconnected');
+      setGmailSyncStatus({ lastSyncAt: null, syncStatus: null });
+      setShowConfirmDisconnect(false);
+      showToast('success', 'Google Workspace disconnected');
     } catch (error) {
-      console.error('Failed to disconnect calendar:', error);
-      showToast('warning', 'Failed to disconnect Google Calendar');
+      console.error('Failed to disconnect Google:', error);
+      showToast('warning', 'Failed to disconnect Google Workspace');
     } finally {
-      setDisconnectingCalendar(false);
+      setDisconnecting(false);
     }
   };
 
@@ -224,13 +194,6 @@ export function ConnectedAccountsTab() {
     );
   };
 
-  const isServiceConnected = (serviceId: string): boolean => {
-    if (serviceId === 'gmail') return gmailStatus.connected;
-    if (serviceId === 'calendar') return calendarConn.connected;
-    if (serviceId === 'drive') return user?.google_drive_connected || false;
-    return false;
-  };
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -250,7 +213,7 @@ export function ConnectedAccountsTab() {
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
               <h3 className="text-lg font-semibold text-white">Google Workspace</h3>
-              {(gmailStatus.connected || calendarConn.connected) && (
+              {connection.connected && (
                 <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-500/20 text-emerald-400">
                   <CheckCircle className="w-3 h-3" />
                   Connected
@@ -258,14 +221,20 @@ export function ConnectedAccountsTab() {
               )}
             </div>
 
-            <p className="text-sm text-slate-400 mb-4">
-              Connect your Google account to sync email, calendar, video meetings, and files
-            </p>
+            {connection.connected && connection.email && (
+              <p className="text-sm text-slate-400 mb-3">{connection.email}</p>
+            )}
+
+            {!connection.connected && (
+              <p className="text-sm text-slate-400 mb-4">
+                Connect your Google account to sync email, calendar, video meetings, and files
+              </p>
+            )}
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
               {googleServices.map((service) => {
                 const Icon = service.icon;
-                const connected = isServiceConnected(service.id);
+                const connected = connection[service.scopeKey] || false;
                 return (
                   <div
                     key={service.id}
@@ -292,118 +261,80 @@ export function ConnectedAccountsTab() {
               })}
             </div>
 
-            {gmailStatus.connected ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-6 text-sm">
-                  <div className="flex items-center gap-2">
+            {connection.connected ? (
+              <div className="space-y-4">
+                {connection.tokenExpired && (
+                  <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                    <p className="text-amber-400 text-sm flex-1">
+                      Connection expired. Please reconnect to restore all services.
+                    </p>
+                    <button
+                      onClick={handleConnect}
+                      disabled={connecting}
+                      className="px-3 py-1 bg-amber-500/20 text-amber-400 rounded text-xs hover:bg-amber-500/30 transition-colors"
+                    >
+                      Reconnect
+                    </button>
+                  </div>
+                )}
+
+                {connection.gmail && gmailSyncStatus.syncStatus === 'syncing' && (
+                  <div className="flex items-center gap-2 text-sm">
                     <Mail className="w-4 h-4 text-cyan-400" />
                     <span className="text-slate-400">Gmail:</span>
-                    <span className="text-white font-medium">{gmailStatus.email}</span>
-                  </div>
-                  {gmailStatus.syncStatus === 'syncing' && (
                     <span className="flex items-center gap-1.5 text-xs text-cyan-400">
                       <RefreshCw size={12} className="animate-spin" />
                       Syncing...
                     </span>
-                  )}
-                </div>
+                  </div>
+                )}
 
-                {gmailStatus.lastSyncAt && (
+                {connection.gmail && gmailSyncStatus.lastSyncAt && (
                   <p className="text-xs text-slate-500">
-                    Last synced: {new Date(gmailStatus.lastSyncAt).toLocaleString()}
+                    Gmail last synced: {new Date(gmailSyncStatus.lastSyncAt).toLocaleString()}
                   </p>
                 )}
 
-                <div className="flex gap-3 pt-1">
-                  <button
-                    onClick={() => setShowConfirmDisconnect(true)}
-                    className="px-4 py-2 rounded-lg bg-slate-800 text-red-400 hover:bg-slate-700 transition-colors text-sm font-medium"
-                  >
-                    Disconnect Gmail
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => setShowConnectGmailModal(true)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-white text-slate-900 hover:bg-slate-100 transition-colors text-sm font-semibold shadow-lg shadow-white/5"
-              >
-                <Mail className="w-4 h-4" />
-                Connect Gmail
-              </button>
-            )}
-
-            <div className="mt-5 pt-5 border-t border-slate-800">
-              {calendarConn.connected ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Calendar className="w-4 h-4 text-cyan-400" />
-                      <span className="text-slate-400">Calendar:</span>
-                      <span className="text-white font-medium">{calendarConn.email}</span>
-                    </div>
-                    <button
-                      onClick={() => setShowCalendarDisconnect(true)}
-                      className="text-red-400 hover:text-red-300 text-xs transition-colors"
-                    >
-                      Disconnect
-                    </button>
-                  </div>
-
-                  {calendarConn.tokenExpired && (
-                    <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                      <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                      <p className="text-amber-400 text-sm flex-1">
-                        Connection expired. Please reconnect.
+                {connection.calendar && calendars.length > 0 && (
+                  <div className="pt-3 border-t border-slate-800">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">
+                        Calendars checked for conflicts
                       </p>
                       <button
-                        onClick={handleConnectCalendar}
-                        disabled={connectingCalendar}
-                        className="px-3 py-1 bg-amber-500/20 text-amber-400 rounded text-xs hover:bg-amber-500/30 transition-colors"
+                        onClick={handleSaveCalendars}
+                        disabled={savingCalendars}
+                        className="text-cyan-400 hover:text-cyan-300 text-xs transition-colors"
                       >
-                        Reconnect
+                        {savingCalendars ? 'Saving...' : 'Save Selection'}
                       </button>
                     </div>
-                  )}
-
-                  {calendars.length > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">
-                          Calendars checked for conflicts
-                        </p>
-                        <button
-                          onClick={handleSaveCalendars}
-                          disabled={savingCalendars}
-                          className="text-cyan-400 hover:text-cyan-300 text-xs transition-colors"
+                    <div className="space-y-1">
+                      {calendars.map(cal => (
+                        <label
+                          key={cal.id}
+                          className="flex items-center gap-2.5 px-3 py-2 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors"
                         >
-                          {savingCalendars ? 'Saving...' : 'Save Selection'}
-                        </button>
-                      </div>
-                      <div className="space-y-1">
-                        {calendars.map(cal => (
-                          <label
-                            key={cal.id}
-                            className="flex items-center gap-2.5 px-3 py-2 bg-slate-800/50 rounded-lg cursor-pointer hover:bg-slate-800 transition-colors"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedCalendarIds.includes(cal.id)}
-                              onChange={() => handleCalendarToggle(cal.id)}
-                              className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500"
-                            />
-                            <span className="text-sm text-white">{cal.name}</span>
-                            {cal.primary && (
-                              <span className="text-[10px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded font-medium">
-                                Primary
-                              </span>
-                            )}
-                          </label>
-                        ))}
-                      </div>
+                          <input
+                            type="checkbox"
+                            checked={selectedCalendarIds.includes(cal.id)}
+                            onChange={() => handleCalendarToggle(cal.id)}
+                            className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          <span className="text-sm text-white">{cal.name}</span>
+                          {cal.primary && (
+                            <span className="text-[10px] px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded font-medium">
+                              Primary
+                            </span>
+                          )}
+                        </label>
+                      ))}
                     </div>
-                  )}
+                  </div>
+                )}
 
+                {connection.calendar && (
                   <div className="flex items-center gap-3">
                     <button
                       onClick={handleTestSync}
@@ -411,7 +342,7 @@ export function ConnectedAccountsTab() {
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-colors text-xs font-medium"
                     >
                       <RefreshCw className={`w-3 h-3 ${testingSync ? 'animate-spin' : ''}`} />
-                      {testingSync ? 'Testing...' : 'Test Sync'}
+                      {testingSync ? 'Testing...' : 'Test Calendar Sync'}
                     </button>
                     {syncTestResult && (
                       <span className={`text-xs ${syncTestResult.success ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -419,35 +350,31 @@ export function ConnectedAccountsTab() {
                       </span>
                     )}
                   </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-white font-medium">Google Calendar</p>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Sync busy times to prevent double-bookings
-                    </p>
-                  </div>
+                )}
+
+                <div className="pt-3 border-t border-slate-800">
                   <button
-                    onClick={handleConnectCalendar}
-                    disabled={connectingCalendar}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition-colors text-sm font-medium disabled:opacity-50"
+                    onClick={() => setShowConfirmDisconnect(true)}
+                    className="px-4 py-2 rounded-lg bg-slate-800 text-red-400 hover:bg-slate-700 transition-colors text-sm font-medium"
                   >
-                    {connectingCalendar ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Connecting...
-                      </>
-                    ) : (
-                      <>
-                        <Calendar className="w-3.5 h-3.5" />
-                        Connect Calendar
-                      </>
-                    )}
+                    Disconnect Google
                   </button>
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <button
+                onClick={handleConnect}
+                disabled={connecting}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-white text-slate-900 hover:bg-slate-100 transition-colors text-sm font-semibold shadow-lg shadow-white/5 disabled:opacity-50"
+              >
+                {connecting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <GoogleIcon className="w-4 h-4" />
+                )}
+                {connecting ? 'Connecting...' : 'Connect Google Workspace'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -458,32 +385,28 @@ export function ConnectedAccountsTab() {
           <div>
             <h4 className="text-sm font-semibold text-white mb-1">About Connected Accounts</h4>
             <p className="text-sm text-slate-400 leading-relaxed">
-              When you connect Gmail, your emails sync in real-time with the CRM. Outbound emails
-              you send from conversations will go through your Gmail account. When you connect
-              Google Calendar, busy times are synced to prevent double-bookings when scheduling
-              appointments. You can disconnect at any time, which immediately revokes access but
+              Connecting Google Workspace grants access to Gmail, Calendar, Meet, and Drive in a single
+              sign-in. All services share one secure connection so they never interfere with each other.
+              Outbound emails go through your Gmail account. Busy times from Calendar sync to prevent
+              double-bookings. You can disconnect at any time, which immediately revokes access but
               won't delete previously synced data.
             </p>
           </div>
         </div>
       </div>
 
-      {showConnectGmailModal && (
-        <ConnectGmailModal onClose={() => setShowConnectGmailModal(false)} />
-      )}
-
       {showConfirmDisconnect && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-slate-900 rounded-xl border border-slate-800 p-6 max-w-md w-full">
-            <h3 className="text-lg font-semibold text-white mb-2">Disconnect Gmail?</h3>
+            <h3 className="text-lg font-semibold text-white mb-2">Disconnect Google Workspace?</h3>
             <p className="text-sm text-slate-400 mb-2">
-              This will disconnect your Gmail account ({gmailStatus.email}) from the CRM.
+              This will disconnect your Google account ({connection.email}) from the CRM.
             </p>
             <ul className="text-sm text-slate-400 mb-6 space-y-1">
-              <li>- Real-time email sync will stop</li>
-              <li>- Outbound emails will fall back to the default provider</li>
-              <li>- Previously synced messages will remain in the CRM</li>
-              <li>- Gmail drafts auto-save will be disabled</li>
+              <li>- Gmail sync will stop, outbound emails fall back to the default provider</li>
+              <li>- Calendar busy-time sync and double-booking prevention will be disabled</li>
+              <li>- Google Drive file access will be revoked</li>
+              <li>- Previously synced messages, events, and files remain in the CRM</li>
             </ul>
             <div className="flex justify-end gap-3">
               <button
@@ -493,44 +416,12 @@ export function ConnectedAccountsTab() {
                 Cancel
               </button>
               <button
-                onClick={handleDisconnectGmail}
-                disabled={isDisconnecting}
+                onClick={handleDisconnect}
+                disabled={disconnecting}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors text-sm font-medium disabled:opacity-50"
               >
-                {isDisconnecting && <Loader2 className="w-4 h-4 animate-spin" />}
-                {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showCalendarDisconnect && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-slate-900 rounded-xl border border-slate-800 p-6 max-w-md w-full">
-            <h3 className="text-lg font-semibold text-white mb-2">Disconnect Google Calendar?</h3>
-            <p className="text-sm text-slate-400 mb-2">
-              This will disconnect your Google Calendar ({calendarConn.email}) from the CRM.
-            </p>
-            <ul className="text-sm text-slate-400 mb-6 space-y-1">
-              <li>- Busy time sync will stop</li>
-              <li>- Double-booking prevention will be disabled</li>
-              <li>- Your existing appointments in the CRM are unaffected</li>
-            </ul>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowCalendarDisconnect(false)}
-                className="px-4 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition-colors text-sm font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDisconnectCalendar}
-                disabled={disconnectingCalendar}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors text-sm font-medium disabled:opacity-50"
-              >
-                {disconnectingCalendar && <Loader2 className="w-4 h-4 animate-spin" />}
-                {disconnectingCalendar ? 'Disconnecting...' : 'Disconnect'}
+                {disconnecting && <Loader2 className="w-4 h-4 animate-spin" />}
+                {disconnecting ? 'Disconnecting...' : 'Disconnect'}
               </button>
             </div>
           </div>
