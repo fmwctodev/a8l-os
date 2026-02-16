@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E2B93B"/>
+      <stop offset="50%" stop-color="#5BBE8A"/>
+      <stop offset="100%" stop-color="#2CB5C8"/>
+    </linearGradient>
+    <linearGradient id="border" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E2B93B" stop-opacity="0.6"/>
+      <stop offset="50%" stop-color="#5BBE8A" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#2CB5C8" stop-opacity="0.6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect x="2" y="2" width="1196" height="626" rx="0" fill="none" stroke="url(#border)" stroke-width="4"/>
+  <line x1="0" y1="0" x2="300" y2="630" stroke="#E2B93B" stroke-opacity="0.05" stroke-width="1"/>
+  <line x1="200" y1="0" x2="500" y2="630" stroke="#5BBE8A" stroke-opacity="0.05" stroke-width="1"/>
+  <line x1="400" y1="0" x2="700" y2="630" stroke="#2CB5C8" stroke-opacity="0.05" stroke-width="1"/>
+  <line x1="600" y1="0" x2="900" y2="630" stroke="#E2B93B" stroke-opacity="0.05" stroke-width="1"/>
+  <line x1="800" y1="0" x2="1100" y2="630" stroke="#5BBE8A" stroke-opacity="0.05" stroke-width="1"/>
+  <line x1="1000" y1="0" x2="1200" y2="400" stroke="#2CB5C8" stroke-opacity="0.05" stroke-width="1"/>
+  <g transform="translate(520, 180)">
+    <path d="M80 10c5.5 0 10.8 1.5 15.3 4.5l31.2 19.5c9.3 5.8 15 16 15 27v38c0 11-5.7 21.2-15 27l-31.2 19.5c-9.3 5.8-21.3 5.8-30.6 0l-31.2-19.5c-9.3-5.8-15-16-15-27V61c0-11 5.7-21.2 15-27L64.7 14.5C68.2 11.5 74.5 10 80 10z" stroke="url(#accent)" stroke-width="5" fill="none"/>
+    <circle cx="60" cy="55" r="9" fill="url(#accent)"/>
+    <circle cx="100" cy="55" r="7" fill="url(#accent)"/>
+    <circle cx="80" cy="85" r="8" fill="url(#accent)"/>
+    <line x1="68" y1="59" x2="94" y2="53" stroke="url(#accent)" stroke-width="4" stroke-linecap="round"/>
+    <line x1="95" y1="60" x2="85" y2="79" stroke="url(#accent)" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <text x="600" y="380" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="64" font-weight="700" fill="white" letter-spacing="-1">Autom8ion Lab OS</text>
+  <text x="600" y="430" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="26" fill="#94A3B8" letter-spacing="0.5">All-in-One Business Operating System</text>
+  <rect x="440" y="470" width="320" height="3" rx="1.5" fill="url(#accent)" opacity="0.5"/>
+  <text x="600" y="520" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="20" fill="#64748B">CRM &bull; Automation &bull; AI Agents &bull; Marketing</text>
+</svg>
