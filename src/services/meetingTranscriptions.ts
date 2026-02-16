@@ -77,26 +77,26 @@ export async function getMeetingTranscriptionById(id: string): Promise<MeetingTr
 }
 
 export async function getMeetingTranscriptionsByContact(contactId: string): Promise<MeetingTranscription[]> {
-  const { data: directMeetings, error: directError } = await supabase
-    .from('meeting_transcriptions')
-    .select(TRANSCRIPTION_SELECT)
-    .eq('contact_id', contactId)
-    .order('meeting_date', { ascending: false });
+  const [directResult, linkedResult] = await Promise.all([
+    supabase
+      .from('meeting_transcriptions')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('meeting_date', { ascending: false }),
+    supabase
+      .from('meeting_transcription_contacts')
+      .select('meeting_transcription:meeting_transcriptions(*)')
+      .eq('contact_id', contactId),
+  ]);
 
-  if (directError) throw directError;
+  if (directResult.error) throw directResult.error;
+  if (linkedResult.error) throw linkedResult.error;
 
-  const { data: linkedMeetings, error: linkedError } = await supabase
-    .from('meeting_transcription_contacts')
-    .select('meeting_transcription:meeting_transcriptions(*)')
-    .eq('contact_id', contactId);
-
-  if (linkedError) throw linkedError;
-
-  const linkedTranscriptions = (linkedMeetings || [])
+  const linkedTranscriptions = (linkedResult.data || [])
     .map(m => m.meeting_transcription)
     .filter(Boolean);
 
-  const allMeetings = [...(directMeetings || []), ...linkedTranscriptions];
+  const allMeetings = [...(directResult.data || []), ...linkedTranscriptions];
 
   const uniqueMeetings = Array.from(
     new Map(allMeetings.map(m => [m.id, m])).values()

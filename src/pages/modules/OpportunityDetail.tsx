@@ -44,7 +44,6 @@ import * as contactTasksService from '../../services/contactTasks';
 import * as pipelinesService from '../../services/pipelines';
 import { getUsers } from '../../services/users';
 import { getOpportunityInvoices } from '../../services/invoices';
-import { isFeatureEnabled } from '../../services/featureFlags';
 import { getAttachmentCount } from '../../services/fileAttachments';
 import { OpportunityModal } from '../../components/opportunities/OpportunityModal';
 import { CreateInvoiceModal } from '../../components/payments/CreateInvoiceModal';
@@ -77,13 +76,17 @@ const INVOICE_STATUS_STYLES: Record<InvoiceStatus, { bg: string; text: string; l
 export function OpportunityDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isFeatureEnabled } = useAuth();
   const canEdit = usePermission('opportunities.edit');
   const canClose = usePermission('opportunities.close');
   const canViewPayments = usePermission('payments.view');
   const canCreateInvoice = usePermission('invoices.create');
   const canViewMedia = usePermission('media.view');
   const canAdjustScore = usePermission('scoring.adjust');
+
+  const paymentsEnabled = isFeatureEnabled('payments');
+  const mediaEnabled = isFeatureEnabled('media');
+  const scoringEnabled = isFeatureEnabled('scoring_management');
 
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -94,9 +97,6 @@ export function OpportunityDetail() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('details');
-  const [paymentsEnabled, setPaymentsEnabled] = useState(false);
-  const [mediaEnabled, setMediaEnabled] = useState(false);
-  const [scoringEnabled, setScoringEnabled] = useState(false);
   const [filesCount, setFilesCount] = useState(0);
 
   const [showEditModal, setShowEditModal] = useState(false);
@@ -124,15 +124,7 @@ export function OpportunityDetail() {
 
   async function loadOpportunity() {
     try {
-      const [data, paymentsFlag, mediaFlag, scoringFlag] = await Promise.all([
-        opportunitiesService.getOpportunityById(id!),
-        isFeatureEnabled('payments'),
-        isFeatureEnabled('media'),
-        isFeatureEnabled('scoring_management'),
-      ]);
-      setPaymentsEnabled(paymentsFlag);
-      setMediaEnabled(mediaFlag);
-      setScoringEnabled(scoringFlag);
+      const data = await opportunitiesService.getOpportunityById(id!);
 
       if (!data) {
         navigate('/opportunities');
@@ -143,7 +135,7 @@ export function OpportunityDetail() {
       const [stagesData, usersData, attachmentCount] = await Promise.all([
         pipelinesService.getStagesByPipeline(data.pipeline_id),
         getUsers(),
-        mediaFlag ? getAttachmentCount('opportunities', data.id) : 0,
+        mediaEnabled ? getAttachmentCount('opportunities', data.id) : 0,
       ]);
       setStages(stagesData);
       setUsers(usersData);

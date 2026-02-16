@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getContactById, deleteContact, archiveContact, restoreContact } from '../../services/contacts';
@@ -41,7 +41,6 @@ import { ScoreWidget } from '../../components/scoring/ScoreWidget';
 import { ContactQuickActions } from '../../components/contacts/ContactQuickActions';
 import { VirtualizedTimeline } from '../../components/contacts/VirtualizedTimeline';
 import { LeadScoreBadge } from '../../components/contacts/LeadScoreBadge';
-import { isFeatureEnabled } from '../../services/featureFlags';
 import { getAttachmentCount } from '../../services/fileAttachments';
 
 type TabType = 'overview' | 'notes' | 'tasks' | 'timeline' | 'meetings' | 'payments' | 'files';
@@ -49,7 +48,7 @@ type TabType = 'overview' | 'notes' | 'tasks' | 'timeline' | 'meetings' | 'payme
 export function ContactDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user: currentUser, hasPermission, isSuperAdmin } = useAuth();
+  const { user: currentUser, hasPermission, isSuperAdmin, isFeatureEnabled } = useAuth();
 
   const [contact, setContact] = useState<Contact | null>(null);
   const [notes, setNotes] = useState<ContactNote[]>([]);
@@ -68,14 +67,16 @@ export function ContactDetail() {
   const [error, setError] = useState<string | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [showActions, setShowActions] = useState(false);
-  const [paymentsEnabled, setPaymentsEnabled] = useState(false);
-  const [mediaEnabled, setMediaEnabled] = useState(false);
-  const [scoringEnabled, setScoringEnabled] = useState(false);
-  const [reputationEnabled, setReputationEnabled] = useState(false);
-  const [conversationsEnabled, setConversationsEnabled] = useState(false);
-  const [calendarsEnabled, setCalendarsEnabled] = useState(false);
-  const [opportunitiesEnabled, setOpportunitiesEnabled] = useState(false);
   const [filesCount, setFilesCount] = useState(0);
+  const timelineAbortRef = useRef(false);
+
+  const paymentsEnabled = isFeatureEnabled('payments');
+  const mediaEnabled = isFeatureEnabled('media');
+  const scoringEnabled = isFeatureEnabled('scoring_management');
+  const reputationEnabled = isFeatureEnabled('reputation');
+  const conversationsEnabled = isFeatureEnabled('conversations');
+  const calendarsEnabled = isFeatureEnabled('calendars');
+  const opportunitiesEnabled = isFeatureEnabled('opportunities');
 
   const canEdit = hasPermission('contacts.edit');
   const canViewPayments = hasPermission('payments.view');
@@ -90,11 +91,15 @@ export function ContactDetail() {
   const isAdmin = isSuperAdmin || currentUser?.role?.hierarchy_level === 2;
 
   const loadContact = useCallback(async () => {
-    if (!id || !currentUser?.organization_id) return;
+    if (!id || !currentUser?.organization_id) {
+      setIsLoading(false);
+      return;
+    }
 
     try {
       setIsLoading(true);
       setError(null);
+      timelineAbortRef.current = false;
 
       const [
         contactData,
@@ -102,34 +107,23 @@ export function ContactDetail() {
         customFieldsData,
         departmentsData,
         usersData,
-        paymentsFlag,
-        mediaFlag,
-        scoringFlag,
-        reputationFlag,
-        conversationsFlag,
-        calendarsFlag,
-        opportunitiesFlag,
+        notesData,
+        tasksData,
+        fieldValues,
+        attachmentCount,
+        meetingsResult,
       ] = await Promise.all([
         getContactById(id),
         getTags(currentUser.organization_id),
         getCustomFields(currentUser.organization_id),
         getDepartments(currentUser.organization_id),
         getUsers(),
-        isFeatureEnabled('payments'),
-        isFeatureEnabled('media'),
-        isFeatureEnabled('scoring_management'),
-        isFeatureEnabled('reputation'),
-        isFeatureEnabled('conversations'),
-        isFeatureEnabled('calendars'),
-        isFeatureEnabled('opportunities'),
+        getContactNotes(id),
+        getContactTasks(id),
+        getContactCustomFieldValues(id),
+        mediaEnabled ? getAttachmentCount('contacts', id) : Promise.resolve(0),
+        getMeetingTranscriptionsByContact(id).catch(() => [] as MeetingTranscription[]),
       ]);
-      setPaymentsEnabled(paymentsFlag);
-      setMediaEnabled(mediaFlag);
-      setScoringEnabled(scoringFlag);
-      setReputationEnabled(reputationFlag);
-      setConversationsEnabled(conversationsFlag);
-      setCalendarsEnabled(calendarsFlag);
-      setOpportunitiesEnabled(opportunitiesFlag);
 
       if (!contactData) {
         setError('Contact not found');
@@ -141,35 +135,38 @@ export function ContactDetail() {
       setCustomFields(customFieldsData);
       setDepartments(departmentsData);
       setUsers(usersData);
-
-      const [notesData, tasksData, fieldValues, attachmentCount, meetingsData] = await Promise.all([
-        getContactNotes(id),
-        getContactTasks(id),
-        getContactCustomFieldValues(id),
-        mediaFlag ? getAttachmentCount('contacts', id) : 0,
-        getMeetingTranscriptionsByContact(id),
-      ]);
-
       setNotes(notesData);
       setTasks(tasksData);
       setCustomFieldValues(fieldValues);
       setFilesCount(attachmentCount);
-      setMeetings(meetingsData);
-
-      setIsTimelineLoading(true);
-      const timelineData = await getAggregatedTimeline(id);
-      setAggregatedTimeline(timelineData);
-      setIsTimelineLoading(false);
+      setMeetings(meetingsResult);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : (err as { message?: string })?.message;
       setError(message || 'Failed to load contact');
     } finally {
       setIsLoading(false);
     }
-  }, [id, currentUser?.organization_id]);
+
+    setIsTimelineLoading(true);
+    getAggregatedTimeline(id)
+      .then((timelineData) => {
+        if (!timelineAbortRef.current) {
+          setAggregatedTimeline(timelineData);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!timelineAbortRef.current) {
+          setIsTimelineLoading(false);
+        }
+      });
+  }, [id, currentUser?.organization_id, mediaEnabled]);
 
   useEffect(() => {
     loadContact();
+    return () => {
+      timelineAbortRef.current = true;
+    };
   }, [loadContact]);
 
   const handleDelete = async () => {
