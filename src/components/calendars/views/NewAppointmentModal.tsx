@@ -172,7 +172,9 @@ export function NewAppointmentModal({
 
       let assignedUserId = selectedUserId;
       if (!assignedUserId && selectedSlot.eligible_user_ids.length > 0) {
-        assignedUserId = selectedSlot.eligible_user_ids[0];
+        assignedUserId = selectedSlot.eligible_user_ids.includes(currentUser.id)
+          ? currentUser.id
+          : selectedSlot.eligible_user_ids[0];
       }
 
       const contactData = selectedContact

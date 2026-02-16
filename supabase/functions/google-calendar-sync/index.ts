@@ -1300,7 +1300,7 @@ async function handleSyncAppointment(req: Request, body: Record<string, unknown>
 
   if (!appointment) throw new ValidationError("Appointment not found");
 
-  const targetUserId = appointment.assigned_user_id || userCtx.id;
+  let targetUserId = appointment.assigned_user_id || userCtx.id;
   const { data: targetUser } = await supabase
     .from("users")
     .select("organization_id")
@@ -1308,7 +1308,15 @@ async function handleSyncAppointment(req: Request, body: Record<string, unknown>
     .maybeSingle();
 
   const targetOrgId = targetUser?.organization_id || userCtx.orgId;
-  const connection = await getUserConnection(supabase, targetUserId, targetOrgId);
+  let connection = await getUserConnection(supabase, targetUserId, targetOrgId);
+
+  if (!connection && targetUserId !== userCtx.id) {
+    connection = await getUserConnection(supabase, userCtx.id, userCtx.orgId);
+    if (connection) {
+      targetUserId = userCtx.id;
+    }
+  }
+
   if (!connection) {
     return successResponse({ synced: false, reason: "no_connection" });
   }
