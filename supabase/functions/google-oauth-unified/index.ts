@@ -45,11 +45,22 @@ function getServiceClient() {
 
 async function getUserFromRequest(req: Request) {
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader) return null;
+  if (!authHeader) {
+    console.error("[UnifiedOAuth] No Authorization header");
+    return null;
+  }
   const token = authHeader.replace("Bearer ", "");
   const anonClient = getAnonClient();
   const { data: { user }, error } = await anonClient.auth.getUser(token);
-  if (error || !user) return null;
+  if (error) {
+    console.error("[UnifiedOAuth] JWT validation failed:", error.message);
+    return null;
+  }
+  if (!user) {
+    console.error("[UnifiedOAuth] No user found in JWT");
+    return null;
+  }
+  console.log("[UnifiedOAuth] Authenticated user:", user.id);
   return user;
 }
 
