@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, AlertCircle, AlertTriangle, ExternalLink, RefreshCw, Power, Settings, Globe, User, Loader2 } from 'lucide-react';
-import { getConnectedIntegrations, testIntegrationConnection, toggleIntegration } from '../../../services/integrations';
+import { getIntegrations, getGoogleConnectionStatuses, testIntegrationConnection, toggleIntegration } from '../../../services/integrations';
+import type { GoogleConnectionStatuses } from '../../../services/integrations';
 import type { Integration } from '../../../types';
 import { IntegrationDetailPanel } from './IntegrationDetailPanel';
 
@@ -24,8 +25,32 @@ export function ConnectedIntegrationsTab({ onSuccess }: ConnectedIntegrationsTab
   const loadIntegrations = async () => {
     try {
       setLoading(true);
-      const data = await getConnectedIntegrations();
-      setIntegrations(data);
+      const [allData, googleStatuses] = await Promise.all([
+        getIntegrations(),
+        getGoogleConnectionStatuses(),
+      ]);
+
+      const GOOGLE_KEYS: Array<keyof GoogleConnectionStatuses> = ['google_workspace', 'gmail', 'google_calendar'];
+      const merged = allData.map((int) => {
+        if (GOOGLE_KEYS.includes(int.key as keyof GoogleConnectionStatuses)) {
+          const status = googleStatuses[int.key as keyof GoogleConnectionStatuses];
+          if (status?.connected) {
+            return {
+              ...int,
+              connection: {
+                ...(int.connection || {}),
+                id: int.connection?.id || 'google-bridge',
+                status: 'connected' as const,
+                account_info: { email: status.email },
+                connected_at: int.connection?.connected_at || new Date().toISOString(),
+              },
+            };
+          }
+        }
+        return int;
+      });
+
+      setIntegrations(merged.filter((int) => int.connection?.status === 'connected'));
     } catch (error) {
       console.error('Failed to load integrations:', error);
     } finally {

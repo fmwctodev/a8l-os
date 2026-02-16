@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, ExternalLink, CheckCircle, XCircle, AlertCircle, Settings, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getIntegrations } from '../../../services/integrations';
+import { getIntegrations, getGoogleConnectionStatuses } from '../../../services/integrations';
+import type { GoogleConnectionStatuses } from '../../../services/integrations';
 import type { Integration, IntegrationCategory } from '../../../types';
 import { INTEGRATION_CATEGORY_LABELS } from '../../../types';
 import { IntegrationDetailPanel } from './IntegrationDetailPanel';
@@ -60,10 +61,32 @@ export function AllIntegrationsTab({ onSuccess }: AllIntegrationsTabProps) {
   const loadIntegrations = async () => {
     try {
       setLoading(true);
-      const data = await getIntegrations({
-        category: category || undefined,
+      const [data, googleStatuses] = await Promise.all([
+        getIntegrations({ category: category || undefined }),
+        getGoogleConnectionStatuses(),
+      ]);
+
+      const GOOGLE_KEYS: Array<keyof GoogleConnectionStatuses> = ['google_workspace', 'gmail', 'google_calendar'];
+      const merged = data.map((int) => {
+        if (GOOGLE_KEYS.includes(int.key as keyof GoogleConnectionStatuses)) {
+          const status = googleStatuses[int.key as keyof GoogleConnectionStatuses];
+          if (status?.connected) {
+            return {
+              ...int,
+              connection: {
+                ...(int.connection || {}),
+                id: int.connection?.id || 'google-bridge',
+                status: 'connected' as const,
+                account_info: { email: status.email },
+                connected_at: int.connection?.connected_at || new Date().toISOString(),
+              },
+            };
+          }
+        }
+        return int;
       });
-      setIntegrations(data);
+
+      setIntegrations(merged);
     } catch (error) {
       console.error('Failed to load integrations:', error);
     } finally {

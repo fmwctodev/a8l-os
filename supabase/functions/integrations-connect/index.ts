@@ -7,6 +7,31 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+const GOOGLE_CLIENT_ID_MAP: Record<string, string> = {
+  gmail: "GOOGLE_CLIENT_ID",
+  google_workspace: "GOOGLE_CLIENT_ID",
+  google_calendar: "GOOGLE_CLIENT_ID",
+  google_ads: "GOOGLE_CLIENT_ID",
+  google_chat: "GOOGLE_CLIENT_ID",
+};
+
+function getOAuthClientIdEnvVar(integrationKey: string): string {
+  const envVarName = GOOGLE_CLIENT_ID_MAP[integrationKey] || `${integrationKey.toUpperCase()}_CLIENT_ID`;
+  return Deno.env.get(envVarName) || "";
+}
+
+function getOAuthClientSecretEnvVar(integrationKey: string): string {
+  const secretMap: Record<string, string> = {
+    gmail: "GOOGLE_CLIENT_SECRET",
+    google_workspace: "GOOGLE_CLIENT_SECRET",
+    google_calendar: "GOOGLE_CLIENT_SECRET",
+    google_ads: "GOOGLE_CLIENT_SECRET",
+    google_chat: "GOOGLE_CLIENT_SECRET",
+  };
+  const envVarName = secretMap[integrationKey] || `${integrationKey.toUpperCase()}_CLIENT_SECRET`;
+  return Deno.env.get(envVarName) || "";
+}
+
 interface RequestPayload {
   action: "initiate_oauth" | "connect_api_key" | "disconnect" | "test";
   integration_key: string;
@@ -100,7 +125,7 @@ Deno.serve(async (req: Request) => {
 
         const oauthConfig = integration.oauth_config;
         const authUrl = new URL(oauthConfig.auth_url);
-        authUrl.searchParams.set("client_id", Deno.env.get(`${integration_key.toUpperCase()}_CLIENT_ID`) || "");
+        authUrl.searchParams.set("client_id", getOAuthClientIdEnvVar(integration_key));
         authUrl.searchParams.set("redirect_uri", redirectUri);
         authUrl.searchParams.set("response_type", "code");
         authUrl.searchParams.set("state", stateToken);

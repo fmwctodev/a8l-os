@@ -66,6 +66,51 @@ export async function getIntegrations(filters?: IntegrationFilters): Promise<Int
   return integrations;
 }
 
+export interface GoogleConnectionStatuses {
+  google_workspace: { connected: boolean; email?: string };
+  gmail: { connected: boolean; email?: string };
+  google_calendar: { connected: boolean; email?: string };
+}
+
+export async function getGoogleConnectionStatuses(): Promise<GoogleConnectionStatuses> {
+  const result: GoogleConnectionStatuses = {
+    google_workspace: { connected: false },
+    gmail: { connected: false },
+    google_calendar: { connected: false },
+  };
+
+  const [driveRes, gmailRes, calendarRes] = await Promise.all([
+    supabase
+      .from('drive_connections')
+      .select('email, is_active')
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('gmail_oauth_tokens')
+      .select('email')
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('google_calendar_connections')
+      .select('email')
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (driveRes.data?.is_active) {
+    result.google_workspace = { connected: true, email: driveRes.data.email || undefined };
+  }
+  if (gmailRes.data) {
+    result.gmail = { connected: true, email: gmailRes.data.email || undefined };
+  }
+  if (calendarRes.data) {
+    result.google_calendar = { connected: true, email: calendarRes.data.email || undefined };
+  }
+
+  return result;
+}
+
 export async function getIntegrationByKey(key: string): Promise<Integration | null> {
   const { data, error } = await supabase
     .from('integrations')
