@@ -277,7 +277,7 @@ Deno.serve(async (req: Request) => {
 
         const { data: logs, error } = await supabase
           .from("phone_test_logs")
-          .select("*, tested_by_user:users!phone_test_logs_tested_by_fkey(id, full_name, email)")
+          .select("*, tested_by_user:users!phone_test_logs_tested_by_fkey(id, name, email)")
           .eq("org_id", orgId)
           .order("created_at", { ascending: false })
           .limit(limit);

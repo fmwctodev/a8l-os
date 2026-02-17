@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { RefreshCw, Send, Phone, CheckCircle2, XCircle, Clock, Activity, AlertTriangle } from 'lucide-react';
 import { sendTestSms, sendTestCall, getTestLogs, getWebhookHealth } from '../../../services/phoneTest';
+import type { WebhookHealthStatus, PhoneTestLog } from '../../../services/phoneTest';
 import { getNumbers } from '../../../services/phoneNumbers';
+import type { TwilioNumber } from '../../../services/phoneNumbers';
 import { usePermission } from '../../../hooks/usePermission';
-import type { TwilioNumber, PhoneTestLog, WebhookHealth } from '../../../types';
 
 export default function TestToolsTab() {
   const [numbers, setNumbers] = useState<TwilioNumber[]>([]);
   const [testLogs, setTestLogs] = useState<PhoneTestLog[]>([]);
-  const [webhookHealth, setWebhookHealth] = useState<WebhookHealth[]>([]);
+  const [webhookHealth, setWebhookHealth] = useState<Record<string, WebhookHealthStatus>>({});
   const [loading, setLoading] = useState(true);
   const [sendingSms, setSendingSms] = useState(false);
   const [sendingCall, setSendingCall] = useState(false);
@@ -18,7 +19,7 @@ export default function TestToolsTab() {
   const [smsForm, setSmsForm] = useState({
     toNumber: '',
     fromNumberId: '',
-    message: 'This is a test message from your phone system.',
+    messageBody: 'This is a test message from your phone system.',
   });
 
   const [callForm, setCallForm] = useState({
@@ -36,27 +37,27 @@ export default function TestToolsTab() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [numbersData, logsData, healthData] = await Promise.all([
-        getNumbers(),
+      setError(null);
+
+      const numbersData = await getNumbers();
+      const activeNumbers = numbersData.filter(n => n.status === 'active');
+      setNumbers(activeNumbers);
+
+      if (activeNumbers.length > 0) {
+        const defaultSms = activeNumbers.find(n => n.is_default_sms);
+        const defaultVoice = activeNumbers.find(n => n.is_default_voice);
+        const firstActive = activeNumbers[0];
+
+        setSmsForm(prev => ({ ...prev, fromNumberId: (defaultSms || firstActive).id }));
+        setCallForm(prev => ({ ...prev, fromNumberId: (defaultVoice || firstActive).id }));
+      }
+
+      const [logsData, healthData] = await Promise.all([
         getTestLogs(),
         getWebhookHealth(),
       ]);
-      setNumbers(numbersData.filter(n => n.status === 'active'));
       setTestLogs(logsData);
       setWebhookHealth(healthData);
-
-      if (numbersData.length > 0) {
-        const defaultSms = numbersData.find(n => n.is_default_sms && n.status === 'active');
-        const defaultVoice = numbersData.find(n => n.is_default_voice && n.status === 'active');
-        const firstActive = numbersData.find(n => n.status === 'active');
-
-        if (defaultSms || firstActive) {
-          setSmsForm(prev => ({ ...prev, fromNumberId: (defaultSms || firstActive)!.id }));
-        }
-        if (defaultVoice || firstActive) {
-          setCallForm(prev => ({ ...prev, fromNumberId: (defaultVoice || firstActive)!.id }));
-        }
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
@@ -65,7 +66,7 @@ export default function TestToolsTab() {
   };
 
   const handleSendTestSms = async () => {
-    if (!smsForm.toNumber || !smsForm.fromNumberId || !smsForm.message) {
+    if (!smsForm.toNumber || !smsForm.fromNumberId || !smsForm.messageBody) {
       setError('Please fill in all SMS fields');
       return;
     }
@@ -74,7 +75,11 @@ export default function TestToolsTab() {
       setSendingSms(true);
       setError(null);
       setSuccess(null);
-      await sendTestSms(smsForm.toNumber, smsForm.fromNumberId, smsForm.message);
+      await sendTestSms({
+        toNumber: smsForm.toNumber,
+        fromNumberId: smsForm.fromNumberId,
+        messageBody: smsForm.messageBody,
+      });
       setSuccess('Test SMS sent successfully');
       const logs = await getTestLogs();
       setTestLogs(logs);
@@ -95,7 +100,11 @@ export default function TestToolsTab() {
       setSendingCall(true);
       setError(null);
       setSuccess(null);
-      await sendTestCall(callForm.toNumber, callForm.fromNumberId, callForm.ttsMessage);
+      await sendTestCall({
+        toNumber: callForm.toNumber,
+        fromNumberId: callForm.fromNumberId,
+        ttsMessage: callForm.ttsMessage,
+      });
       setSuccess('Test call initiated successfully');
       const logs = await getTestLogs();
       setTestLogs(logs);
@@ -124,26 +133,22 @@ export default function TestToolsTab() {
       case 'pending':
       case 'queued':
       case 'sent':
+      case 'initiated':
         return <span className="px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">Pending</span>;
       default:
         return <span className="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">{status}</span>;
     }
   };
 
-  const getWebhookStatus = (health: WebhookHealth) => {
-    const lastReceived = health.last_received_at ? new Date(health.last_received_at) : null;
-    const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
-
-    if (!lastReceived) {
-      return { status: 'unknown', label: 'No data', color: 'gray' };
+  const getWebhookStatusDisplay = (health: WebhookHealthStatus) => {
+    switch (health.status) {
+      case 'healthy':
+        return { label: 'Healthy', color: 'emerald' };
+      case 'degraded':
+        return { label: 'Degraded', color: 'amber' };
+      default:
+        return { label: 'No data', color: 'gray' };
     }
-    if (health.failure_count > health.success_count * 0.1) {
-      return { status: 'degraded', label: 'Degraded', color: 'amber' };
-    }
-    if (lastReceived > hourAgo) {
-      return { status: 'healthy', label: 'Healthy', color: 'emerald' };
-    }
-    return { status: 'stale', label: 'Stale', color: 'amber' };
   };
 
   if (loading) {
@@ -164,18 +169,20 @@ export default function TestToolsTab() {
     );
   }
 
+  const webhookEntries = Object.entries(webhookHealth);
+
   return (
     <div className="space-y-6">
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-          <XCircle className="w-5 h-5 text-red-500 mt-0.5" />
+          <XCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
           <p className="text-red-700">{error}</p>
         </div>
       )}
 
       {success && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-start gap-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-500 mt-0.5" />
+          <CheckCircle2 className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
           <p className="text-emerald-700">{success}</p>
         </div>
       )}
@@ -224,8 +231,8 @@ export default function TestToolsTab() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
               <textarea
-                value={smsForm.message}
-                onChange={e => setSmsForm(prev => ({ ...prev, message: e.target.value }))}
+                value={smsForm.messageBody}
+                onChange={e => setSmsForm(prev => ({ ...prev, messageBody: e.target.value }))}
                 rows={3}
                 disabled={!canTest}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500"
@@ -343,30 +350,30 @@ export default function TestToolsTab() {
           </button>
         </div>
 
-        {webhookHealth.length === 0 ? (
+        {webhookEntries.length === 0 ? (
           <p className="text-gray-500 text-center py-4">No webhook data available yet</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {webhookHealth.map(health => {
-              const status = getWebhookStatus(health);
+            {webhookEntries.map(([type, health]) => {
+              const { label, color } = getWebhookStatusDisplay(health);
               return (
-                <div key={health.webhook_type} className="p-4 bg-gray-50 rounded-lg">
+                <div key={type} className="p-4 bg-gray-50 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-gray-900 capitalize">{health.webhook_type}</span>
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full bg-${status.color}-100 text-${status.color}-700`}>
-                      {status.label}
+                    <span className="font-medium text-gray-900 capitalize">{type}</span>
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full bg-${color}-100 text-${color}-700`}>
+                      {label}
                     </span>
                   </div>
                   <div className="text-sm text-gray-500 space-y-1">
-                    <p>Success: {health.success_count}</p>
-                    <p>Failures: {health.failure_count}</p>
-                    {health.last_received_at && (
-                      <p>Last: {new Date(health.last_received_at).toLocaleString()}</p>
+                    <p>Success: {health.successCount}</p>
+                    <p>Failures: {health.failureCount}</p>
+                    {health.lastReceived && (
+                      <p>Last: {new Date(health.lastReceived).toLocaleString()}</p>
                     )}
                   </div>
-                  {health.last_error && (
-                    <p className="text-xs text-red-600 mt-2 truncate" title={health.last_error}>
-                      {health.last_error}
+                  {health.lastError && (
+                    <p className="text-xs text-red-600 mt-2 truncate" title={health.lastError}>
+                      {health.lastError}
                     </p>
                   )}
                 </div>
@@ -428,7 +435,7 @@ export default function TestToolsTab() {
 
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
         <div className="flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5" />
+          <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
           <div>
             <h4 className="font-medium text-amber-800">Testing Notes</h4>
             <ul className="text-sm text-amber-700 mt-2 list-disc list-inside space-y-1">
