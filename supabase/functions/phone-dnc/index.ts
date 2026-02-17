@@ -58,7 +58,7 @@ Deno.serve(async (req: Request) => {
 
         let query = supabase
           .from("dnc_numbers")
-          .select("*, added_by_user:users!dnc_numbers_added_by_fkey(id, full_name, email)", { count: "exact" })
+          .select("*, added_by_user:users!dnc_numbers_added_by_fkey(id, name, email)", { count: "exact" })
           .eq("org_id", orgId)
           .order("created_at", { ascending: false })
           .range(offset, offset + limit - 1);
@@ -97,7 +97,7 @@ Deno.serve(async (req: Request) => {
             phoneNumber: d.phone_number,
             reason: d.reason,
             source: "manual" as const,
-            addedBy: d.added_by_user?.full_name || d.added_by_user?.email,
+            addedBy: d.added_by_user?.name || d.added_by_user?.email,
             createdAt: d.created_at,
           })),
           ...(dncContacts || []).map((c: any) => ({
