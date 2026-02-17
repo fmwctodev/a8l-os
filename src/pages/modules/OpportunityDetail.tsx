@@ -23,6 +23,8 @@ import {
   Copy,
   MoreVertical,
   Link as LinkIcon,
+  FolderKanban,
+  Lock,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermission } from '../../hooks/usePermission';
@@ -36,6 +38,7 @@ import type {
   Invoice,
   InvoiceStatus,
   Tag as TagType,
+  Project,
 } from '../../types';
 import * as opportunitiesService from '../../services/opportunities';
 import * as opportunityNotesService from '../../services/opportunityNotes';
@@ -50,6 +53,8 @@ import { CreateInvoiceModal } from '../../components/payments/CreateInvoiceModal
 import { CloseLostModal } from '../../components/opportunities/CloseLostModal';
 import OpportunityFilesTab from '../../components/opportunities/OpportunityFilesTab';
 import { ScoreWidget } from '../../components/scoring/ScoreWidget';
+import { ConvertToProjectModal } from '../../components/projects/ConvertToProjectModal';
+import { getProjectByOpportunityId } from '../../services/projects';
 
 function normalizeTagsArray(rawTags: unknown): TagType[] {
   if (!rawTags || !Array.isArray(rawTags)) return [];
@@ -83,8 +88,10 @@ export function OpportunityDetail() {
   const canCreateInvoice = usePermission('invoices.create');
   const canViewMedia = usePermission('media.view');
   const canAdjustScore = usePermission('scoring.adjust');
+  const canCreateProject = usePermission('projects.create');
 
   const paymentsEnabled = isFeatureEnabled('payments');
+  const projectsEnabled = isFeatureEnabled('projects');
   const mediaEnabled = isFeatureEnabled('media');
   const scoringEnabled = isFeatureEnabled('scoring_management');
 
@@ -99,10 +106,12 @@ export function OpportunityDetail() {
   const [activeTab, setActiveTab] = useState<TabType>('details');
   const [filesCount, setFilesCount] = useState(0);
 
+  const [linkedProject, setLinkedProject] = useState<Project | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showWonModal, setShowWonModal] = useState(false);
   const [showLostModal, setShowLostModal] = useState(false);
   const [showCreateInvoice, setShowCreateInvoice] = useState(false);
+  const [showConvertToProject, setShowConvertToProject] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [newNote, setNewNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
@@ -132,14 +141,16 @@ export function OpportunityDetail() {
       }
       setOpportunity(data);
 
-      const [stagesData, usersData, attachmentCount] = await Promise.all([
+      const [stagesData, usersData, attachmentCount, projectData] = await Promise.all([
         pipelinesService.getStagesByPipeline(data.pipeline_id),
         getUsers(),
         mediaEnabled ? getAttachmentCount('opportunities', data.id) : 0,
+        projectsEnabled ? getProjectByOpportunityId(data.id).catch(() => null) : null,
       ]);
       setStages(stagesData);
       setUsers(usersData);
       setFilesCount(attachmentCount);
+      setLinkedProject(projectData);
     } catch (error) {
       console.error('Failed to load opportunity:', error);
       navigate('/opportunities');
@@ -190,6 +201,9 @@ export function OpportunityDetail() {
       );
       setOpportunity(updated);
       setShowWonModal(false);
+      if (projectsEnabled && canCreateProject) {
+        setShowConvertToProject(true);
+      }
     } catch (error) {
       console.error('Failed to mark as won:', error);
     }
@@ -414,6 +428,15 @@ export function OpportunityDetail() {
                 </button>
               </>
             )}
+            {opportunity.status === 'won' && projectsEnabled && canCreateProject && !linkedProject && (
+              <button
+                onClick={() => setShowConvertToProject(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700"
+              >
+                <FolderKanban className="w-4 h-4" />
+                Convert to Project
+              </button>
+            )}
             {opportunity.status !== 'open' && canClose && (
               <button
                 onClick={handleReopen}
@@ -498,6 +521,9 @@ export function OpportunityDetail() {
                       <div className="flex items-center gap-2 text-2xl font-semibold text-emerald-400">
                         <DollarSign className="w-6 h-6" />
                         {formatCurrency(Number(opportunity.value_amount), opportunity.currency)}
+                        {(opportunity as Opportunity & { financial_locked?: boolean }).financial_locked && (
+                          <Lock className="w-4 h-4 text-amber-400" title="Financials locked - linked to project" />
+                        )}
                       </div>
                     </div>
 
@@ -875,6 +901,25 @@ export function OpportunityDetail() {
               </div>
             )}
 
+            {linkedProject && (
+              <div className="mt-6 pt-4 border-t border-slate-700">
+                <h3 className="text-sm font-medium text-slate-300 mb-3">Linked Project</h3>
+                <Link
+                  to={`/projects/${linkedProject.id}`}
+                  className="block p-3 bg-slate-700/50 rounded-lg hover:bg-slate-700 transition-colors"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <FolderKanban className="w-4 h-4 text-cyan-400" />
+                    <span className="text-white font-medium text-sm truncate">{linkedProject.name}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-slate-400">
+                    <span className="capitalize">{linkedProject.status.replace('_', ' ')}</span>
+                    <span>{linkedProject.progress_percent}% complete</span>
+                  </div>
+                </Link>
+              </div>
+            )}
+
             {scoringEnabled && (
               <div className="mt-6 pt-4 border-t border-slate-700">
                 <h3 className="text-sm font-medium text-slate-300 mb-4">Opportunity Score</h3>
@@ -958,6 +1003,17 @@ export function OpportunityDetail() {
           onCreated={() => {
             setShowCreateInvoice(false);
             loadRelatedData();
+          }}
+        />
+      )}
+
+      {showConvertToProject && opportunity && (
+        <ConvertToProjectModal
+          opportunity={opportunity}
+          onClose={() => setShowConvertToProject(false)}
+          onConverted={() => {
+            setShowConvertToProject(false);
+            loadOpportunity();
           }}
         />
       )}

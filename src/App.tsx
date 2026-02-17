@@ -21,6 +21,11 @@ import { OpportunitiesListPage } from './pages/modules/OpportunitiesListPage';
 import { OpportunityDetail } from './pages/modules/OpportunityDetail';
 import { PipelinesPage } from './pages/modules/PipelinesPage';
 import { OpportunitiesLayout } from './layouts/OpportunitiesLayout';
+import { ProjectsLayout } from './layouts/ProjectsLayout';
+import { Projects } from './pages/modules/Projects';
+import { ProjectsListPage } from './pages/modules/ProjectsListPage';
+import { ProjectPipelinesPage } from './pages/modules/ProjectPipelinesPage';
+import { ProjectDetail } from './pages/modules/ProjectDetail';
 import { Payments } from './pages/modules/Payments';
 import { InvoiceDetail } from './pages/modules/InvoiceDetail';
 import { Proposals } from './pages/modules/Proposals';
@@ -172,6 +177,26 @@ function App() {
                 element={
                   <ProtectedRoute permission="opportunities.view" featureFlag="opportunities">
                     <OpportunityDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/projects"
+                element={
+                  <ProtectedRoute permission="projects.view" featureFlag="projects">
+                    <ProjectsLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Projects />} />
+                <Route path="list" element={<ProjectsListPage />} />
+                <Route path="pipelines" element={<ProjectPipelinesPage />} />
+              </Route>
+              <Route
+                path="/projects/:id"
+                element={
+                  <ProtectedRoute permission="projects.view" featureFlag="projects">
+                    <ProjectDetail />
                   </ProtectedRoute>
                 }
               />

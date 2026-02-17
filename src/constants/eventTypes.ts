@@ -49,6 +49,12 @@ export const WorkflowTriggerType = {
   SCORE_THRESHOLD_REACHED: 'score_threshold_reached',
   SCORE_DECAY_APPLIED: 'score_decay_applied',
 
+  PROJECT_CREATED: 'project_created',
+  PROJECT_STAGE_CHANGED: 'project_stage_changed',
+  PROJECT_TASK_COMPLETED: 'project_task_completed',
+  PROJECT_OVERDUE: 'project_overdue',
+  PROJECT_COMPLETED: 'project_completed',
+
   MANUAL_TRIGGER: 'manual_trigger',
   SCHEDULED_TRIGGER: 'scheduled_trigger',
   WEBHOOK_RECEIVED: 'webhook_received',
@@ -190,6 +196,11 @@ export const WebhookEventType = {
   REVIEW_NEGATIVE: 'review.negative',
   REVIEW_REPLIED: 'review.replied',
   REVIEW_SPAM_FLAGGED: 'review.spam_flagged',
+
+  PROJECT_CREATED: 'project.created',
+  PROJECT_UPDATED: 'project.updated',
+  PROJECT_COMPLETED: 'project.completed',
+  PROJECT_OVERDUE: 'project.overdue',
 } as const;
 
 export type WebhookEventType = typeof WebhookEventType[keyof typeof WebhookEventType];

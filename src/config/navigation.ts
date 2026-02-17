@@ -8,6 +8,7 @@ import {
   Megaphone,
   Workflow,
   FolderOpen,
+  FolderKanban,
   Star,
   BarChart3,
   Settings,
@@ -42,6 +43,7 @@ export const navigationConfig: NavSection[] = [
       { name: 'Contacts', path: '/contacts', icon: Users, permission: 'contacts.view', featureFlag: 'contacts' },
       { name: 'Payments', path: '/payments', icon: CreditCard, permission: 'payments.view', featureFlag: 'payments' },
       { name: 'Proposals', path: '/proposals', icon: FileText, permission: 'proposals.view', featureFlag: 'proposals' },
+      { name: 'Projects', path: '/projects', icon: FolderKanban, permission: 'projects.view', featureFlag: 'projects' },
     ],
   },
   {

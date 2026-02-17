@@ -41,6 +41,10 @@ export const EntityType = {
   KNOWLEDGE_COLLECTION: 'knowledge_collection',
   FILE: 'file',
   FOLDER: 'folder',
+  PROJECT: 'project',
+  PROJECT_TASK: 'project_task',
+  PROJECT_PIPELINE: 'project_pipeline',
+  PROJECT_STAGE: 'project_stage',
 } as const;
 
 export type EntityType = typeof EntityType[keyof typeof EntityType];
@@ -96,6 +100,25 @@ export const OpportunityStatus = {
 } as const;
 
 export type OpportunityStatus = typeof OpportunityStatus[keyof typeof OpportunityStatus];
+
+export const ProjectStatus = {
+  ACTIVE: 'active',
+  ON_HOLD: 'on_hold',
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled',
+} as const;
+
+export type ProjectStatus = typeof ProjectStatus[keyof typeof ProjectStatus];
+
+export const ProjectTaskStatus = {
+  TODO: 'todo',
+  IN_PROGRESS: 'in_progress',
+  IN_REVIEW: 'in_review',
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled',
+} as const;
+
+export type ProjectTaskStatus = typeof ProjectTaskStatus[keyof typeof ProjectTaskStatus];
 
 export const AppointmentStatus = {
   SCHEDULED: 'scheduled',

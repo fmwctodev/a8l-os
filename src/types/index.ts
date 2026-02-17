@@ -156,7 +156,10 @@ export type PermissionKey =
   | 'conversation_rules.view' | 'conversation_rules.manage'
   | 'proposals.view' | 'proposals.create' | 'proposals.edit' | 'proposals.send'
   | 'proposals.delete' | 'proposals.ai_generate' | 'proposal_templates.manage'
-  | 'meetings.view' | 'meetings.import' | 'meetings.edit' | 'meetings.delete';
+  | 'meetings.view' | 'meetings.import' | 'meetings.edit' | 'meetings.delete'
+  | 'projects.view' | 'projects.create' | 'projects.edit' | 'projects.move_stage'
+  | 'projects.close' | 'projects.delete' | 'projects.tasks.manage'
+  | 'project_pipelines.manage';
 
 export interface InviteStaffInput {
   first_name: string;
@@ -5526,3 +5529,200 @@ export const AI_REPURPOSE_ACTION_LABELS: Record<AIRepurposeAction, string> = {
   carousel_captions: 'Create Carousel Captions',
   proposal_highlights: 'Extract Proposal Highlights'
 };
+
+// ── Project Manager Types ──
+
+export type ProjectStatus = 'active' | 'on_hold' | 'completed' | 'cancelled';
+export type ProjectPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type ProjectRiskLevel = 'low' | 'medium' | 'high' | 'critical';
+export type ProjectTaskStatus = 'todo' | 'in_progress' | 'in_review' | 'completed' | 'cancelled';
+
+export interface ProjectPipeline {
+  id: string;
+  org_id: string;
+  name: string;
+  department_id: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  department?: Department | null;
+  stages?: ProjectStage[];
+}
+
+export interface ProjectStage {
+  id: string;
+  org_id: string;
+  pipeline_id: string;
+  name: string;
+  sort_order: number;
+  sla_days: number;
+  color: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Project {
+  id: string;
+  org_id: string;
+  contact_id: string;
+  opportunity_id: string | null;
+  proposal_id: string | null;
+  invoice_id: string | null;
+  pipeline_id: string;
+  stage_id: string;
+  assigned_user_id: string | null;
+  department_id: string | null;
+  name: string;
+  description: string | null;
+  status: ProjectStatus;
+  priority: ProjectPriority;
+  start_date: string | null;
+  target_end_date: string | null;
+  actual_end_date: string | null;
+  budget_amount: number;
+  actual_cost: number;
+  currency: string;
+  risk_level: ProjectRiskLevel;
+  progress_percent: number;
+  financial_locked: boolean;
+  google_drive_folder_id: string | null;
+  created_by: string;
+  stage_changed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  contact?: Contact;
+  pipeline?: ProjectPipeline;
+  stage?: ProjectStage;
+  assigned_user?: User | null;
+  department?: Department | null;
+  opportunity?: Opportunity | null;
+  proposal?: Proposal | null;
+  invoice?: Invoice | null;
+}
+
+export interface ProjectTask {
+  id: string;
+  org_id: string;
+  project_id: string;
+  parent_task_id: string | null;
+  assigned_user_id: string | null;
+  title: string;
+  description: string | null;
+  status: ProjectTaskStatus;
+  priority: ProjectPriority;
+  due_date: string | null;
+  completed_at: string | null;
+  sort_order: number;
+  depends_on_task_id: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  assigned_user?: User | null;
+  created_by_user?: User | null;
+  subtasks?: ProjectTask[];
+  dependency?: ProjectTask | null;
+}
+
+export type ProjectActivityEventType =
+  | 'project_created'
+  | 'stage_changed'
+  | 'status_changed'
+  | 'task_created'
+  | 'task_completed'
+  | 'task_assigned'
+  | 'file_uploaded'
+  | 'file_removed'
+  | 'note_added'
+  | 'owner_changed'
+  | 'financial_updated'
+  | 'cost_added'
+  | 'automation_triggered'
+  | 'project_overdue';
+
+export interface ProjectActivityEvent {
+  id: string;
+  org_id: string;
+  project_id: string;
+  event_type: ProjectActivityEventType;
+  summary: string;
+  payload: Record<string, unknown>;
+  actor_user_id: string | null;
+  created_at: string;
+  actor?: User | null;
+}
+
+export interface ProjectFile {
+  id: string;
+  org_id: string;
+  project_id: string;
+  drive_file_id: string | null;
+  google_drive_file_id: string | null;
+  file_name: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  uploaded_by: string;
+  note: string | null;
+  created_at: string;
+  uploader?: User | null;
+}
+
+export interface ProjectNote {
+  id: string;
+  org_id: string;
+  project_id: string;
+  body: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  created_by_user?: User | null;
+}
+
+export interface ProjectCost {
+  id: string;
+  org_id: string;
+  project_id: string;
+  description: string;
+  amount: number;
+  currency: string;
+  category: string | null;
+  date: string;
+  created_by: string;
+  created_at: string;
+  created_by_user?: User | null;
+}
+
+export interface ProjectFilters {
+  pipelineId?: string;
+  stageId?: string;
+  status?: ProjectStatus[];
+  assignedUserId?: string | null;
+  departmentId?: string;
+  search?: string;
+  riskLevel?: ProjectRiskLevel[];
+  priority?: ProjectPriority[];
+  createdAfter?: string;
+  createdBefore?: string;
+  targetEndBefore?: string;
+  targetEndAfter?: string;
+  minBudget?: number;
+  maxBudget?: number;
+}
+
+export interface ProjectStats {
+  totalProjects: number;
+  activeProjects: number;
+  completedProjects: number;
+  onHoldProjects: number;
+  cancelledProjects: number;
+  overdueProjects: number;
+  totalBudget: number;
+  totalActualCost: number;
+}
+
+export interface ProjectBoardData {
+  pipeline: ProjectPipeline;
+  stages: (ProjectStage & {
+    projects: Project[];
+  })[];
+}
