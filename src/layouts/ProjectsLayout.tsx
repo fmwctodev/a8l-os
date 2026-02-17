@@ -1,10 +1,11 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { FolderKanban, List, GitBranch } from 'lucide-react';
+import { FolderKanban, List, GitBranch, TrendingUp } from 'lucide-react';
 
 const tabs = [
   { path: '/projects', label: 'Board', icon: FolderKanban, exact: true },
   { path: '/projects/list', label: 'List', icon: List },
   { path: '/projects/pipelines', label: 'Pipelines', icon: GitBranch },
+  { path: '/projects/profitability', label: 'Profitability', icon: TrendingUp },
 ];
 
 export function ProjectsLayout() {

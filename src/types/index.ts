@@ -159,6 +159,7 @@ export type PermissionKey =
   | 'meetings.view' | 'meetings.import' | 'meetings.edit' | 'meetings.delete'
   | 'projects.view' | 'projects.create' | 'projects.edit' | 'projects.move_stage'
   | 'projects.close' | 'projects.delete' | 'projects.tasks.manage'
+  | 'projects.view_financials'
   | 'project_pipelines.manage';
 
 export interface InviteStaffInput {
@@ -5725,4 +5726,63 @@ export interface ProjectBoardData {
   stages: (ProjectStage & {
     projects: Project[];
   })[];
+}
+
+export interface ProjectProfitabilityRow {
+  project_id: string;
+  project_name: string;
+  project_status: string;
+  contact_name: string;
+  owner_name: string;
+  owner_id: string | null;
+  pipeline_name: string;
+  stage_name: string;
+  stage_id: string | null;
+  pipeline_id: string | null;
+  department_id: string | null;
+  total_invoiced: number;
+  total_collected: number;
+  total_costs: number;
+  gross_profit: number;
+  margin_percent: number;
+  project_created_at: string;
+}
+
+export interface OwnerProfitabilityRow {
+  user_id: string;
+  user_name: string;
+  project_count: number;
+  total_revenue: number;
+  total_costs: number;
+  total_profit: number;
+  avg_margin: number;
+}
+
+export interface StageProfitabilityRow {
+  stage_id: string;
+  stage_name: string;
+  pipeline_name: string;
+  pipeline_id: string;
+  project_count: number;
+  avg_revenue: number;
+  avg_cost: number;
+  avg_margin: number;
+}
+
+export interface ProfitabilityFilters {
+  dateFrom?: string;
+  dateTo?: string;
+  statuses?: string[];
+  pipelineId?: string;
+  ownerId?: string;
+}
+
+export interface ProfitabilitySummary {
+  totalRevenue: number;
+  totalCollected: number;
+  totalCosts: number;
+  grossProfit: number;
+  overallMargin: number;
+  outstanding: number;
+  projectCount: number;
 }
