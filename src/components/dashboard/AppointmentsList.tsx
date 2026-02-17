@@ -65,16 +65,8 @@ export function AppointmentsList({ appointments, isLoading }: AppointmentsListPr
                   to={`/calendars/${appointment.calendar_id}`}
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-700/50 transition-colors"
                 >
-                  <div
-                    className="p-2 rounded-lg"
-                    style={{
-                      backgroundColor: `${appointment.appointment_type.color}20`,
-                    }}
-                  >
-                    <Calendar
-                      className="h-4 w-4"
-                      style={{ color: appointment.appointment_type.color }}
-                    />
+                  <div className="p-2 rounded-lg bg-cyan-500/10">
+                    <Calendar className="h-4 w-4 text-cyan-400" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">

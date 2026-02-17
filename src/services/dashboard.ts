@@ -58,7 +58,6 @@ export interface UpcomingAppointment {
   appointment_type: {
     id: string;
     name: string;
-    color: string;
   };
 }
 
@@ -205,7 +204,7 @@ export async function getNextAppointments(
       appointment_type_id,
       contact:contacts!appointments_contact_id_fkey(id, first_name, last_name),
       calendar:calendars!appointments_calendar_id_fkey(id, name),
-      appointment_type:appointment_types!appointments_appointment_type_id_fkey(id, name, color)
+      appointment_type:appointment_types!appointments_appointment_type_id_fkey(id, name)
     `)
     .eq('org_id', organizationId)
     .eq('assigned_user_id', userId)

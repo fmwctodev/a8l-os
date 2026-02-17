@@ -135,7 +135,7 @@ export function ActivityFeed({
                   <p className="text-sm text-white truncate">{event.summary}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     {event.user && (
-                      <span className="text-xs text-slate-500">{event.user.full_name}</span>
+                      <span className="text-xs text-slate-500">{event.user.name}</span>
                     )}
                     {event.user && <span className="text-slate-600">·</span>}
                     <span className="text-xs text-slate-500">{formatTimeAgo(event.created_at)}</span>

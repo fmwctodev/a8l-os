@@ -51,7 +51,7 @@ export interface ActivityLogEntry {
   created_at: string;
   user?: {
     id: string;
-    full_name: string;
+    name: string;
     avatar_url: string | null;
   };
   contact?: {
@@ -104,7 +104,7 @@ export async function getRecentActivity(
     .from('activity_log')
     .select(`
       *,
-      user:users!activity_log_user_id_fkey(id, full_name, avatar_url),
+      user:users!activity_log_user_id_fkey(id, name, avatar_url),
       contact:contacts!activity_log_contact_id_fkey(id, first_name, last_name)
     `)
     .eq('organization_id', organizationId)
@@ -134,7 +134,7 @@ export async function getActivityByEntity(
     .from('activity_log')
     .select(`
       *,
-      user:users!activity_log_user_id_fkey(id, full_name, avatar_url)
+      user:users!activity_log_user_id_fkey(id, name, avatar_url)
     `)
     .eq('entity_type', entityType)
     .eq('entity_id', entityId)
@@ -155,7 +155,7 @@ export async function getActivityByContact(
     .from('activity_log')
     .select(`
       *,
-      user:users!activity_log_user_id_fkey(id, full_name, avatar_url)
+      user:users!activity_log_user_id_fkey(id, name, avatar_url)
     `)
     .eq('contact_id', contactId)
     .order('created_at', { ascending: false })

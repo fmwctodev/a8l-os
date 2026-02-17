@@ -146,7 +146,7 @@ Deno.serve(async (req: Request) => {
       .eq("organization_id", user.orgId)
       .eq("status", "open");
 
-    if (ownerFilter) activeConvQuery = activeConvQuery.eq("assigned_to", ownerFilter);
+    if (ownerFilter) activeConvQuery = activeConvQuery.eq("assigned_user_id", ownerFilter);
 
     const { count: activeConversations } = await activeConvQuery;
 
@@ -177,10 +177,10 @@ Deno.serve(async (req: Request) => {
     let openOppsQuery = supabase
       .from("opportunities")
       .select("id, value_amount")
-      .eq("organization_id", user.orgId)
+      .eq("org_id", user.orgId)
       .eq("status", "open");
 
-    if (ownerFilter) openOppsQuery = openOppsQuery.eq("owner_id", ownerFilter);
+    if (ownerFilter) openOppsQuery = openOppsQuery.eq("assigned_user_id", ownerFilter);
 
     const { data: openOpps } = await openOppsQuery;
 
@@ -189,24 +189,24 @@ Deno.serve(async (req: Request) => {
     let wonCurrentQuery = supabase
       .from("opportunities")
       .select("id", { count: "exact", head: true })
-      .eq("organization_id", user.orgId)
+      .eq("org_id", user.orgId)
       .eq("status", "won")
       .gte("updated_at", start.toISOString())
       .lte("updated_at", end.toISOString());
 
-    if (ownerFilter) wonCurrentQuery = wonCurrentQuery.eq("owner_id", ownerFilter);
+    if (ownerFilter) wonCurrentQuery = wonCurrentQuery.eq("assigned_user_id", ownerFilter);
 
     const { count: wonCurrent } = await wonCurrentQuery;
 
     let lostCurrentQuery = supabase
       .from("opportunities")
       .select("id", { count: "exact", head: true })
-      .eq("organization_id", user.orgId)
+      .eq("org_id", user.orgId)
       .eq("status", "lost")
       .gte("updated_at", start.toISOString())
       .lte("updated_at", end.toISOString());
 
-    if (ownerFilter) lostCurrentQuery = lostCurrentQuery.eq("owner_id", ownerFilter);
+    if (ownerFilter) lostCurrentQuery = lostCurrentQuery.eq("assigned_user_id", ownerFilter);
 
     const { count: lostCurrent } = await lostCurrentQuery;
 
@@ -216,24 +216,24 @@ Deno.serve(async (req: Request) => {
     let wonPrevQuery = supabase
       .from("opportunities")
       .select("id", { count: "exact", head: true })
-      .eq("organization_id", user.orgId)
+      .eq("org_id", user.orgId)
       .eq("status", "won")
       .gte("updated_at", prevStart.toISOString())
       .lte("updated_at", prevEnd.toISOString());
 
-    if (ownerFilter) wonPrevQuery = wonPrevQuery.eq("owner_id", ownerFilter);
+    if (ownerFilter) wonPrevQuery = wonPrevQuery.eq("assigned_user_id", ownerFilter);
 
     const { count: wonPrev } = await wonPrevQuery;
 
     let lostPrevQuery = supabase
       .from("opportunities")
       .select("id", { count: "exact", head: true })
-      .eq("organization_id", user.orgId)
+      .eq("org_id", user.orgId)
       .eq("status", "lost")
       .gte("updated_at", prevStart.toISOString())
       .lte("updated_at", prevEnd.toISOString());
 
-    if (ownerFilter) lostPrevQuery = lostPrevQuery.eq("owner_id", ownerFilter);
+    if (ownerFilter) lostPrevQuery = lostPrevQuery.eq("assigned_user_id", ownerFilter);
 
     const { count: lostPrev } = await lostPrevQuery;
 
@@ -244,35 +244,35 @@ Deno.serve(async (req: Request) => {
     let upcomingApptQuery = supabase
       .from("appointments")
       .select("id", { count: "exact", head: true })
-      .eq("organization_id", user.orgId)
+      .eq("org_id", user.orgId)
       .eq("status", "scheduled")
-      .gte("start_time", now.toISOString());
+      .gte("start_at_utc", now.toISOString());
 
-    if (ownerFilter) upcomingApptQuery = upcomingApptQuery.eq("user_id", ownerFilter);
+    if (ownerFilter) upcomingApptQuery = upcomingApptQuery.eq("assigned_user_id", ownerFilter);
 
     const { count: upcomingAppointments } = await upcomingApptQuery;
 
     let completedApptCurrentQuery = supabase
       .from("appointments")
       .select("id", { count: "exact", head: true })
-      .eq("organization_id", user.orgId)
+      .eq("org_id", user.orgId)
       .eq("status", "completed")
-      .gte("end_time", start.toISOString())
-      .lte("end_time", end.toISOString());
+      .gte("end_at_utc", start.toISOString())
+      .lte("end_at_utc", end.toISOString());
 
-    if (ownerFilter) completedApptCurrentQuery = completedApptCurrentQuery.eq("user_id", ownerFilter);
+    if (ownerFilter) completedApptCurrentQuery = completedApptCurrentQuery.eq("assigned_user_id", ownerFilter);
 
     const { count: completedApptCurrent } = await completedApptCurrentQuery;
 
     let completedApptPrevQuery = supabase
       .from("appointments")
       .select("id", { count: "exact", head: true })
-      .eq("organization_id", user.orgId)
+      .eq("org_id", user.orgId)
       .eq("status", "completed")
-      .gte("end_time", prevStart.toISOString())
-      .lte("end_time", prevEnd.toISOString());
+      .gte("end_at_utc", prevStart.toISOString())
+      .lte("end_at_utc", prevEnd.toISOString());
 
-    if (ownerFilter) completedApptPrevQuery = completedApptPrevQuery.eq("user_id", ownerFilter);
+    if (ownerFilter) completedApptPrevQuery = completedApptPrevQuery.eq("assigned_user_id", ownerFilter);
 
     const { count: completedApptPrev } = await completedApptPrevQuery;
 
