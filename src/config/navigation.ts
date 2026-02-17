@@ -38,10 +38,8 @@ export const navigationConfig: NavSection[] = [
     title: 'Core Operations',
     collapsible: true,
     items: [
-      { name: 'Conversations', path: '/conversations', icon: MessageSquare, permission: 'conversations.view', featureFlag: 'conversations' },
       { name: 'Calendars', path: '/calendars', icon: Calendar, permission: 'calendars.view', featureFlag: 'calendars' },
       { name: 'Contacts', path: '/contacts', icon: Users, permission: 'contacts.view', featureFlag: 'contacts' },
-      { name: 'Opportunities', path: '/opportunities', icon: Target, permission: 'opportunities.view', featureFlag: 'opportunities' },
       { name: 'Payments', path: '/payments', icon: CreditCard, permission: 'payments.view', featureFlag: 'payments' },
       { name: 'Proposals', path: '/proposals', icon: FileText, permission: 'proposals.view', featureFlag: 'proposals' },
     ],
@@ -51,6 +49,8 @@ export const navigationConfig: NavSection[] = [
     title: 'Growth & Marketing',
     collapsible: true,
     items: [
+      { name: 'Conversations', path: '/conversations', icon: MessageSquare, permission: 'conversations.view', featureFlag: 'conversations' },
+      { name: 'Opportunities', path: '/opportunities', icon: Target, permission: 'opportunities.view', featureFlag: 'opportunities' },
       { name: 'Marketing', path: '/marketing', icon: Megaphone, permission: 'marketing.view', featureFlag: 'marketing' },
       { name: 'Reputation', path: '/reputation', icon: Star, permission: 'reputation.view', featureFlag: 'reputation' },
     ],
