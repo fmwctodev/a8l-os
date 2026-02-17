@@ -55,9 +55,10 @@ export function AppointmentsList({ appointments, isLoading }: AppointmentsListPr
         ) : (
           <div className="space-y-1">
             {appointments.map((appointment) => {
-              const { date, time } = formatAppointmentTime(appointment.start_time);
-              const contactName =
-                `${appointment.contact.first_name} ${appointment.contact.last_name}`.trim();
+              const { date, time } = formatAppointmentTime(appointment.start_at_utc);
+              const contactName = appointment.contact
+                ? `${appointment.contact.first_name} ${appointment.contact.last_name}`.trim()
+                : 'Unknown';
 
               return (
                 <Link
@@ -84,10 +85,10 @@ export function AppointmentsList({ appointments, isLoading }: AppointmentsListPr
                     </div>
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className="text-xs text-slate-400">
-                        {appointment.appointment_type.name}
+                        {appointment.appointment_type?.name ?? ''}
                       </span>
                       <span className="text-slate-600">·</span>
-                      <span className="text-xs text-slate-500">{appointment.calendar.name}</span>
+                      <span className="text-xs text-slate-500">{appointment.calendar?.name ?? ''}</span>
                     </div>
                   </div>
                   <div className="text-right">

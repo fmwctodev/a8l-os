@@ -77,16 +77,14 @@ async function authenticatedFetch(
 
   if (response.status === 401) {
     const refreshed = await dedupedRefresh();
-    if (refreshed) {
-      const retryHeaders = buildHeaders(refreshed.access_token, !isFormData);
-      const retryInit: RequestInit = { method, headers: retryHeaders };
-      if (body) retryInit.body = body;
-      response = await fetch(url, retryInit);
-    }
-    if (response.status === 401) {
+    if (!refreshed) {
       emitExpired();
       throw new Error('Session expired. Please log out and log back in.');
     }
+    const retryHeaders = buildHeaders(refreshed.access_token, !isFormData);
+    const retryInit: RequestInit = { method, headers: retryHeaders };
+    if (body) retryInit.body = body;
+    response = await fetch(url, retryInit);
   }
 
   return response;
