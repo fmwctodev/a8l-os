@@ -7,29 +7,31 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const GOOGLE_CLIENT_ID_MAP: Record<string, string> = {
+const CLIENT_ID_MAP: Record<string, string> = {
   gmail: "GOOGLE_CLIENT_ID",
   google_workspace: "GOOGLE_CLIENT_ID",
   google_calendar: "GOOGLE_CLIENT_ID",
   google_ads: "GOOGLE_CLIENT_ID",
   google_chat: "GOOGLE_CLIENT_ID",
+  quickbooks_online: "QBO_CLIENT_ID",
 };
 
-const GOOGLE_CLIENT_SECRET_MAP: Record<string, string> = {
+const CLIENT_SECRET_MAP: Record<string, string> = {
   gmail: "GOOGLE_CLIENT_SECRET",
   google_workspace: "GOOGLE_CLIENT_SECRET",
   google_calendar: "GOOGLE_CLIENT_SECRET",
   google_ads: "GOOGLE_CLIENT_SECRET",
   google_chat: "GOOGLE_CLIENT_SECRET",
+  quickbooks_online: "QBO_CLIENT_SECRET",
 };
 
 function getOAuthClientId(integrationKey: string): string {
-  const envVarName = GOOGLE_CLIENT_ID_MAP[integrationKey] || `${integrationKey.toUpperCase()}_CLIENT_ID`;
+  const envVarName = CLIENT_ID_MAP[integrationKey] || `${integrationKey.toUpperCase()}_CLIENT_ID`;
   return Deno.env.get(envVarName) || "";
 }
 
 function getOAuthClientSecret(integrationKey: string): string {
-  const envVarName = GOOGLE_CLIENT_SECRET_MAP[integrationKey] || `${integrationKey.toUpperCase()}_CLIENT_SECRET`;
+  const envVarName = CLIENT_SECRET_MAP[integrationKey] || `${integrationKey.toUpperCase()}_CLIENT_SECRET`;
   return Deno.env.get(envVarName) || "";
 }
 

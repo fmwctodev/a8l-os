@@ -179,7 +179,7 @@ export async function getUserIntegrations(userId?: string): Promise<IntegrationC
 
 export async function initiateOAuthConnection(integrationKey: string): Promise<InitiateOAuthResponse> {
   const response = await fetchEdge(SLUG, {
-    body: { action: 'initiate_oauth', integration_key: integrationKey },
+    body: { action: 'initiate_oauth', integration_key: integrationKey, app_url: window.location.origin },
   });
   if (!response.ok) {
     const err = await response.json();
