@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getInvoices, getInvoiceStats, sendInvoice, voidInvoice } from '../../services/invoices';
@@ -65,6 +65,7 @@ export function Payments() {
   const [syncResult, setSyncResult] = useState<{ synced: number; updated: number; total: number } | null>(null);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(new Set());
+  const hasSyncedRef = useRef(false);
 
   const canView = hasPermission('payments.view');
   const canManage = hasPermission('payments.manage');
@@ -101,7 +102,8 @@ export function Payments() {
     try {
       const status = await getQBOConnectionStatus();
       setQboConnected(status.connected);
-      if (status.connected) {
+      if (status.connected && !hasSyncedRef.current) {
+        hasSyncedRef.current = true;
         setIsSyncing(true);
         try {
           const result = await syncQBOInvoices();
