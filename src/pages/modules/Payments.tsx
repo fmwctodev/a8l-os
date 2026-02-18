@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getInvoices, getInvoiceStats, sendInvoice, voidInvoice } from '../../services/invoices';
@@ -27,6 +27,7 @@ import {
   ExternalLink,
   ToggleLeft,
   ToggleRight,
+  CalendarDays,
 } from 'lucide-react';
 import { CreateInvoiceModal } from '../../components/payments/CreateInvoiceModal';
 import { CreateProductModal } from '../../components/payments/CreateProductModal';
@@ -56,6 +57,7 @@ export function Payments() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'all'>('all');
+  const [monthFilter, setMonthFilter] = useState<string>('all');
   const [billingTypeFilter, setBillingTypeFilter] = useState<BillingType | 'all'>('all');
   const [showActiveOnly, setShowActiveOnly] = useState(true);
   const [showCreateInvoice, setShowCreateInvoice] = useState(false);
@@ -202,8 +204,33 @@ export function Payments() {
     return invoice.contact.company || `${invoice.contact.first_name} ${invoice.contact.last_name}`;
   };
 
+  const availableMonths = useMemo(() => {
+    const monthSet = new Set<string>();
+    for (const inv of invoices) {
+      const dateStr = inv.due_date || inv.created_at;
+      if (!dateStr) continue;
+      const d = new Date(dateStr);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthSet.add(key);
+    }
+    return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+  }, [invoices]);
+
+  const formatMonthLabel = (key: string) => {
+    const [year, month] = key.split('-');
+    const d = new Date(Number(year), Number(month) - 1);
+    return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+
   const filteredInvoices = invoices.filter((inv) => {
     if (statusFilter !== 'all' && inv.status !== statusFilter) return false;
+    if (monthFilter !== 'all') {
+      const dateStr = inv.due_date || inv.created_at;
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      const invMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (invMonth !== monthFilter) return false;
+    }
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       const contactName = getContactName(inv).toLowerCase();
@@ -295,7 +322,7 @@ export function Payments() {
                 <FileText className="w-5 h-5 text-cyan-400" />
               </div>
               <div>
-                <p className="text-2xl font-semibold text-white">{stats.totalInvoices}</p>
+                <p className="text-2xl font-semibold text-white">{filteredInvoices.length}</p>
                 <p className="text-sm text-slate-400">Total Invoices</p>
               </div>
             </div>
@@ -306,7 +333,7 @@ export function Payments() {
                 <CheckCircle2 className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
-                <p className="text-2xl font-semibold text-white">{formatCurrency(stats.totalPaid)}</p>
+                <p className="text-2xl font-semibold text-white">{formatCurrency(filteredInvoices.filter(i => i.status === 'paid').reduce((sum, i) => sum + (i.total || 0), 0))}</p>
                 <p className="text-sm text-slate-400">Total Paid</p>
               </div>
             </div>
@@ -317,7 +344,7 @@ export function Payments() {
                 <Clock className="w-5 h-5 text-amber-400" />
               </div>
               <div>
-                <p className="text-2xl font-semibold text-white">{formatCurrency(stats.totalOutstanding)}</p>
+                <p className="text-2xl font-semibold text-white">{formatCurrency(filteredInvoices.filter(i => i.status === 'sent' || i.status === 'overdue').reduce((sum, i) => sum + (i.total || 0), 0))}</p>
                 <p className="text-sm text-slate-400">Outstanding</p>
               </div>
             </div>
@@ -328,7 +355,7 @@ export function Payments() {
                 <AlertCircle className="w-5 h-5 text-red-400" />
               </div>
               <div>
-                <p className="text-2xl font-semibold text-white">{stats.overdueInvoices}</p>
+                <p className="text-2xl font-semibold text-white">{filteredInvoices.filter(i => i.status === 'overdue').length}</p>
                 <p className="text-sm text-slate-400">Overdue</p>
               </div>
             </div>
@@ -376,18 +403,34 @@ export function Payments() {
                 />
               </div>
               {activeTab === 'invoices' && (
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as InvoiceStatus | 'all')}
-                  className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                >
-                  <option value="all">All Status</option>
-                  <option value="draft">Draft</option>
-                  <option value="sent">Sent</option>
-                  <option value="paid">Paid</option>
-                  <option value="overdue">Overdue</option>
-                  <option value="void">Void</option>
-                </select>
+                <>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as InvoiceStatus | 'all')}
+                    className="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="draft">Draft</option>
+                    <option value="sent">Sent</option>
+                    <option value="paid">Paid</option>
+                    <option value="overdue">Overdue</option>
+                    <option value="void">Void</option>
+                  </select>
+                  <div className="relative">
+                    <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <select
+                      value={monthFilter}
+                      onChange={(e) => setMonthFilter(e.target.value)}
+                      className="pl-9 pr-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 appearance-none cursor-pointer"
+                      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center' }}
+                    >
+                      <option value="all">All Months</option>
+                      {availableMonths.map((key) => (
+                        <option key={key} value={key}>{formatMonthLabel(key)}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
               )}
               {activeTab === 'products' && (
                 <>
