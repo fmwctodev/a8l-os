@@ -39,6 +39,7 @@ interface RequestPayload {
   integration_key: string;
   credentials?: Record<string, string>;
   force?: boolean;
+  app_url?: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -83,7 +84,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const payload: RequestPayload = await req.json();
-    const { action, integration_key, credentials, force } = payload;
+    const { action, integration_key, credentials, force, app_url } = payload;
 
     const { data: integration, error: intError } = await supabase
       .from("integrations")
@@ -123,6 +124,7 @@ Deno.serve(async (req: Request) => {
           state_token: stateToken,
           redirect_uri: redirectUri,
           scope_requested: integration.oauth_config?.scopes?.join(" ") || "",
+          app_url: app_url || null,
         });
 
         const oauthConfig = integration.oauth_config;

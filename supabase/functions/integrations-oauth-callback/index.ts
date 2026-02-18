@@ -42,19 +42,20 @@ Deno.serve(async (req: Request) => {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
+    const realmId = url.searchParams.get("realmId");
     const error = url.searchParams.get("error");
     const errorDescription = url.searchParams.get("error_description");
 
-    const appUrl = Deno.env.get("APP_URL") || "http://localhost:5173";
+    const fallbackUrl = Deno.env.get("APP_URL") || "https://os.autom8ionlab.com";
 
     if (error) {
-      const redirectUrl = new URL(`${appUrl}/settings/integrations`);
+      const redirectUrl = new URL(`${fallbackUrl}/settings/integrations`);
       redirectUrl.searchParams.set("error", errorDescription || error);
       return Response.redirect(redirectUrl.toString(), 302);
     }
 
     if (!code || !state) {
-      const redirectUrl = new URL(`${appUrl}/settings/integrations`);
+      const redirectUrl = new URL(`${fallbackUrl}/settings/integrations`);
       redirectUrl.searchParams.set("error", "Missing authorization code or state");
       return Response.redirect(redirectUrl.toString(), 302);
     }
@@ -72,10 +73,12 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (stateError || !oauthState) {
-      const redirectUrl = new URL(`${appUrl}/settings/integrations`);
+      const redirectUrl = new URL(`${fallbackUrl}/settings/integrations`);
       redirectUrl.searchParams.set("error", "Invalid or expired state token");
       return Response.redirect(redirectUrl.toString(), 302);
     }
+
+    const appUrl = oauthState.app_url || fallbackUrl;
 
     const { data: integration, error: intError } = await serviceClient
       .from("integrations")
@@ -94,18 +97,27 @@ Deno.serve(async (req: Request) => {
     const clientId = getOAuthClientId(oauthState.integration_key);
     const clientSecret = getOAuthClientSecret(oauthState.integration_key);
 
+    const isIntuit = oauthState.integration_key === "quickbooks_online";
+    const tokenHeaders: Record<string, string> = {
+      "Content-Type": "application/x-www-form-urlencoded",
+    };
+    const tokenBody: Record<string, string> = {
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: oauthState.redirect_uri,
+    };
+
+    if (isIntuit) {
+      tokenHeaders["Authorization"] = `Basic ${btoa(`${clientId}:${clientSecret}`)}`;
+    } else {
+      tokenBody.client_id = clientId;
+      tokenBody.client_secret = clientSecret;
+    }
+
     const tokenResponse = await fetch(oauthConfig.token_url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        client_id: clientId,
-        client_secret: clientSecret,
-        redirect_uri: oauthState.redirect_uri,
-      }),
+      headers: tokenHeaders,
+      body: new URLSearchParams(tokenBody),
     });
 
     if (!tokenResponse.ok) {
@@ -130,7 +142,7 @@ Deno.serve(async (req: Request) => {
     const tokens = await tokenResponse.json();
     const { access_token, refresh_token, expires_in } = tokens;
 
-    let accountInfo = {};
+    let accountInfo: Record<string, unknown> = {};
     if (oauthState.integration_key.startsWith("google")) {
       try {
         const userInfoResponse = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
@@ -146,6 +158,20 @@ Deno.serve(async (req: Request) => {
         }
       } catch (e) {
         console.error("Failed to fetch user info:", e);
+      }
+    } else if (isIntuit && realmId) {
+      accountInfo = { realm_id: realmId };
+      try {
+        const companyResponse = await fetch(
+          `https://quickbooks.api.intuit.com/v3/company/${realmId}/companyinfo/${realmId}?minorversion=65`,
+          { headers: { Authorization: `Bearer ${access_token}`, Accept: "application/json" } }
+        );
+        if (companyResponse.ok) {
+          const companyData = await companyResponse.json();
+          accountInfo.company_name = companyData.CompanyInfo?.CompanyName || "QuickBooks Company";
+        }
+      } catch (e) {
+        console.error("Failed to fetch QBO company info:", e);
       }
     }
 
@@ -207,8 +233,8 @@ Deno.serve(async (req: Request) => {
 
   } catch (error) {
     console.error("Error in integrations-oauth-callback:", error);
-    const appUrl = Deno.env.get("APP_URL") || "http://localhost:5173";
-    const redirectUrl = new URL(`${appUrl}/settings/integrations`);
+    const catchUrl = Deno.env.get("APP_URL") || "https://os.autom8ionlab.com";
+    const redirectUrl = new URL(`${catchUrl}/settings/integrations`);
     redirectUrl.searchParams.set("error", "An unexpected error occurred");
     return Response.redirect(redirectUrl.toString(), 302);
   }
