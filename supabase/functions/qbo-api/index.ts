@@ -427,7 +427,7 @@ async function syncInvoicesFromQBO(
       const { data: matchedContact } = await supabase
         .from("contacts")
         .select("id")
-        .eq("org_id", orgId)
+        .eq("organization_id", orgId)
         .or(`company.ilike.%${customerName}%,and(first_name.ilike.%${firstName}%,last_name.ilike.%${lastName}%)`)
         .limit(1)
         .maybeSingle();
@@ -438,7 +438,7 @@ async function syncInvoicesFromQBO(
         const { data: newContact } = await supabase
           .from("contacts")
           .insert({
-            org_id: orgId,
+            organization_id: orgId,
             first_name: firstName || customerName,
             last_name: lastName || "",
             company: customerName,
