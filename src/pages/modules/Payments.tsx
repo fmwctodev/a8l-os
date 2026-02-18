@@ -206,6 +206,8 @@ export function Payments() {
 
   const availableMonths = useMemo(() => {
     const monthSet = new Set<string>();
+    const now = new Date();
+    monthSet.add(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
     for (const inv of invoices) {
       const dateStr = inv.due_date || inv.created_at;
       if (!dateStr) continue;
