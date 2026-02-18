@@ -77,12 +77,19 @@ export function QBOConfig() {
     }
   };
 
-  const handleConnect = () => {
+  const handleConnect = async () => {
     if (!user?.organization_id) return;
 
-    const redirectUri = `${window.location.origin}/admin/settings`;
-    const authUrl = generateQBOAuthUrl(user.organization_id, redirectUri);
-    window.location.href = authUrl;
+    try {
+      setIsConnecting(true);
+      setError(null);
+      const redirectUri = `${window.location.origin}/admin/settings`;
+      const authUrl = await generateQBOAuthUrl(user.organization_id, redirectUri);
+      window.location.href = authUrl;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to initiate QuickBooks connection');
+      setIsConnecting(false);
+    }
   };
 
   const handleDisconnect = async () => {
@@ -237,9 +244,14 @@ export function QBOConfig() {
             {canManage ? (
               <button
                 onClick={handleConnect}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-medium hover:from-emerald-600 hover:to-teal-700 transition-colors"
+                disabled={isConnecting}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-medium hover:from-emerald-600 hover:to-teal-700 transition-colors disabled:opacity-50"
               >
-                <Link2 className="w-4 h-4" />
+                {isConnecting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Link2 className="w-4 h-4" />
+                )}
                 Connect to QuickBooks Online
               </button>
             ) : (

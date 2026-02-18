@@ -1,7 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { QBOConnection } from '../types';
 
-const QBO_AUTH_ENDPOINT = 'https://appcenter.intuit.com/connect/oauth2';
 const QBO_TOKEN_ENDPOINT = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
 const QBO_REVOKE_ENDPOINT = 'https://developer.api.intuit.com/v2/oauth2/tokens/revoke';
 
@@ -24,24 +23,32 @@ export async function isQBOConnected(): Promise<boolean> {
   return connection !== null;
 }
 
-export function generateQBOAuthUrl(orgId: string, redirectUri: string): string {
-  const clientId = import.meta.env.VITE_QBO_CLIENT_ID;
-  if (!clientId) {
-    throw new Error('QBO_CLIENT_ID is not configured');
+export async function generateQBOAuthUrl(orgId: string, redirectUri: string): Promise<string> {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    throw new Error('Not authenticated');
   }
 
-  const state = btoa(JSON.stringify({ orgId, timestamp: Date.now() }));
-  const scope = 'com.intuit.quickbooks.accounting';
-
-  const params = new URLSearchParams({
-    client_id: clientId,
-    response_type: 'code',
-    scope,
-    redirect_uri: redirectUri,
-    state,
+  const response = await fetch(`${supabaseUrl}/functions/v1/qbo-oauth-start`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+      'Apikey': supabaseKey,
+    },
+    body: JSON.stringify({ orgId, redirectUri }),
   });
 
-  return `${QBO_AUTH_ENDPOINT}?${params.toString()}`;
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to generate QBO auth URL');
+  }
+
+  const data = await response.json();
+  return data.authUrl;
 }
 
 export async function exchangeQBOCode(
