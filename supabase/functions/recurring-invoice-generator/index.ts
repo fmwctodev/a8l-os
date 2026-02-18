@@ -85,7 +85,16 @@ async function createQBOInvoiceIfConnected(
     .maybeSingle();
 
   if (!qboConnection) {
-    return {};
+    const { data: intConn } = await supabase
+      .from('integration_connections')
+      .select('id, org_id, account_info')
+      .eq('org_id', orgId)
+      .eq('status', 'connected')
+      .maybeSingle();
+
+    if (!intConn || !intConn.account_info?.realm_id) {
+      return {};
+    }
   }
 
   try {

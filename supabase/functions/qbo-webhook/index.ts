@@ -76,11 +76,25 @@ Deno.serve(async (req: Request) => {
     for (const notification of payload.eventNotifications) {
       const realmId = notification.realmId;
 
-      const { data: connection } = await supabase
+      let connection: { id: string; org_id: string } | null = null;
+
+      const { data: qboConn } = await supabase
         .from("qbo_connections")
         .select("id, org_id")
         .eq("realm_id", realmId)
         .maybeSingle();
+
+      if (qboConn) {
+        connection = qboConn;
+      } else {
+        const { data: intConn } = await supabase
+          .from("integration_connections")
+          .select("id, org_id")
+          .eq("status", "connected")
+          .filter("account_info->>realm_id", "eq", realmId)
+          .maybeSingle();
+        connection = intConn;
+      }
 
       if (!connection) {
         console.log(`No connection found for realm ${realmId}`);

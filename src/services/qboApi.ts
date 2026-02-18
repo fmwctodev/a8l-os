@@ -1,20 +1,8 @@
+import { callEdgeFunction } from '../lib/edgeFunction';
 import type { Contact, Product, CreateInvoiceLineItem } from '../types';
 
-const getApiHeaders = () => {
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  return {
-    'Authorization': `Bearer ${supabaseKey}`,
-    'Content-Type': 'application/json',
-  };
-};
-
 const callQboApi = async (action: string, payload: Record<string, unknown> = {}) => {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const response = await fetch(`${supabaseUrl}/functions/v1/qbo-api`, {
-    method: 'POST',
-    headers: getApiHeaders(),
-    body: JSON.stringify({ action, ...payload }),
-  });
+  const response = await callEdgeFunction('qbo-api', { action, ...payload });
 
   if (!response.ok) {
     const error = await response.json();
@@ -58,4 +46,8 @@ export async function getQBOInvoice(invoiceId: string): Promise<{ Invoice: unkno
 
 export async function voidQBOInvoice(invoiceId: string, syncToken: string): Promise<void> {
   await callQboApi('void_invoice', { invoiceId, syncToken });
+}
+
+export async function syncQBOInvoices(): Promise<{ synced: number; updated: number; total: number }> {
+  return callQboApi('sync_invoices');
 }

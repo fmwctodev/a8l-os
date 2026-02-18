@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getInvoices, getInvoiceStats, sendInvoice, voidInvoice } from '../../services/invoices';
 import { getProducts, toggleProductActive } from '../../services/products';
 import { getQBOConnectionStatus } from '../../services/qboAuth';
+import { syncQBOInvoices } from '../../services/qboApi';
 import type { Invoice, Product, InvoiceStats, InvoiceStatus, BillingType } from '../../types';
 import {
   CreditCard,
@@ -60,6 +61,8 @@ export function Payments() {
   const [showCreateInvoice, setShowCreateInvoice] = useState(false);
   const [showCreateProduct, setShowCreateProduct] = useState(false);
   const [qboConnected, setQboConnected] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ synced: number; updated: number; total: number } | null>(null);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<Set<string>>(new Set());
 
@@ -98,6 +101,21 @@ export function Payments() {
     try {
       const status = await getQBOConnectionStatus();
       setQboConnected(status.connected);
+      if (status.connected) {
+        setIsSyncing(true);
+        try {
+          const result = await syncQBOInvoices();
+          setSyncResult(result);
+          if (result.synced > 0 || result.updated > 0) {
+            await loadData();
+          }
+        } catch (syncErr) {
+          console.error('Failed to sync QBO invoices:', syncErr);
+        } finally {
+          setIsSyncing(false);
+          setTimeout(() => setSyncResult(null), 5000);
+        }
+      }
     } catch (err) {
       console.error('Failed to check QBO connection:', err);
     }
@@ -226,6 +244,24 @@ export function Payments() {
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm">
               <AlertCircle className="w-4 h-4" />
               <span>QuickBooks not connected</span>
+            </div>
+          )}
+          {qboConnected && isSyncing && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Syncing from QuickBooks...</span>
+            </div>
+          )}
+          {qboConnected && !isSyncing && syncResult && syncResult.synced > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Synced {syncResult.synced} invoice{syncResult.synced !== 1 ? 's' : ''} from QuickBooks</span>
+            </div>
+          )}
+          {qboConnected && !isSyncing && !syncResult && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>QuickBooks connected</span>
             </div>
           )}
           {activeTab === 'invoices' && canCreateInvoice && (

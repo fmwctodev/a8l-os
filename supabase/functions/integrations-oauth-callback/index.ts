@@ -214,6 +214,36 @@ Deno.serve(async (req: Request) => {
         .insert(connectionData);
     }
 
+    if (isIntuit && realmId) {
+      const qboConnectionData = {
+        org_id: oauthState.org_id,
+        realm_id: realmId,
+        company_name: (accountInfo.company_name as string) || "QuickBooks Company",
+        access_token_encrypted: access_token,
+        refresh_token_encrypted: refresh_token || "",
+        token_expiry: tokenExpiresAt || new Date(Date.now() + 3600 * 1000).toISOString(),
+        connected_by: oauthState.user_id,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { data: existingQbo } = await serviceClient
+        .from("qbo_connections")
+        .select("id")
+        .eq("org_id", oauthState.org_id)
+        .maybeSingle();
+
+      if (existingQbo) {
+        await serviceClient
+          .from("qbo_connections")
+          .update(qboConnectionData)
+          .eq("id", existingQbo.id);
+      } else {
+        await serviceClient
+          .from("qbo_connections")
+          .insert({ ...qboConnectionData, created_at: new Date().toISOString() });
+      }
+    }
+
     await serviceClient
       .from("oauth_states")
       .delete()

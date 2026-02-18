@@ -12,10 +12,31 @@ export async function getQBOConnection(): Promise<QBOConnection | null> {
 
   if (error) {
     console.error('Error fetching QBO connection:', error);
-    throw error;
   }
 
-  return data;
+  if (data) return data;
+
+  const { data: intConn } = await supabase
+    .from('integration_connections')
+    .select('id, org_id, access_token_encrypted, refresh_token_encrypted, token_expires_at, account_info, connected_by, connected_at')
+    .eq('status', 'connected')
+    .maybeSingle();
+
+  if (!intConn || !intConn.account_info?.realm_id) return null;
+
+  return {
+    id: intConn.id,
+    org_id: intConn.org_id,
+    realm_id: intConn.account_info.realm_id,
+    company_name: intConn.account_info.company_name || 'QuickBooks Company',
+    access_token_encrypted: intConn.access_token_encrypted,
+    refresh_token_encrypted: intConn.refresh_token_encrypted,
+    token_expiry: intConn.token_expires_at,
+    last_sync_at: null,
+    connected_by: intConn.connected_by,
+    created_at: intConn.connected_at,
+    updated_at: intConn.connected_at,
+  } as QBOConnection;
 }
 
 export async function isQBOConnected(): Promise<boolean> {
