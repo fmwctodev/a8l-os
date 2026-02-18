@@ -11,6 +11,8 @@ import { getInboxEvents } from '../../services/inboxEvents';
 import { getContactChannels } from '../../services/contactLinking';
 import { sendGmailEmail, replyToGmailThread } from '../../services/gmailApi';
 import { getNumbers } from '../../services/phoneNumbers';
+import { sendSms } from '../../services/sendSms';
+import { supabase } from '../../lib/supabase';
 import type { Conversation, Message, InboxEvent, MessageChannel, Contact } from '../../types';
 import type { TwilioNumber } from '../../services/phoneNumbers';
 
@@ -220,11 +222,14 @@ export function MessageThread({
           throw gmailError;
         }
       } else {
-        const metadata: Record<string, unknown> = { ...extraMetadata };
+        const mediaUrls = extraMetadata?.media_urls as string[] | undefined;
+        const cleanMetadata: Record<string, unknown> = { ...extraMetadata };
+        delete cleanMetadata.media_urls;
+
         if (selectedChannel === 'sms' && channelConfig) {
-          metadata.to_number = channelConfig.identifier;
+          cleanMetadata.to_number = channelConfig.identifier;
         } else if (selectedChannel === 'email' && channelConfig) {
-          metadata.to_email = channelConfig.identifier;
+          cleanMetadata.to_email = channelConfig.identifier;
         }
 
         const newMessage = await createMessage(
@@ -234,10 +239,38 @@ export function MessageThread({
           selectedChannel,
           'outbound',
           body,
-          metadata,
+          cleanMetadata,
           subject
         );
+
+        if (mediaUrls && mediaUrls.length > 0) {
+          await supabase
+            .from('messages')
+            .update({ media_urls: mediaUrls })
+            .eq('id', newMessage.id);
+          newMessage.media_urls = mediaUrls;
+        }
+
         setMessages((prev) => [...prev, newMessage]);
+
+        if (selectedChannel === 'sms') {
+          sendSms(newMessage.id)
+            .then(({ status }) => {
+              setMessages((prev) =>
+                prev.map((m) => m.id === newMessage.id ? { ...m, status: status as Message['status'] } : m)
+              );
+            })
+            .catch((err) => {
+              const errorMsg = err instanceof Error ? err.message : 'Failed to send';
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === newMessage.id
+                    ? { ...m, status: 'failed', metadata: { ...m.metadata, error_message: errorMsg } }
+                    : m
+                )
+              );
+            });
+        }
       }
 
       onConversationUpdate();
@@ -334,6 +367,11 @@ export function MessageThread({
                 key={(item.data as Message).id}
                 message={item.data as Message}
                 onOpenThread={(threadId, subject) => setEmailThread({ threadId, subject })}
+                onRetry={(msgId, newStatus) => {
+                  setMessages(prev =>
+                    prev.map(m => m.id === msgId ? { ...m, status: newStatus as Message['status'] } : m)
+                  );
+                }}
               />
             );
           })

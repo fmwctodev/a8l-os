@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Phone, Mail, PhoneCall, MessageCircle, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal, Paperclip, Download, FileText, Image, File, ChevronDown, ChevronUp, StickyNote, ExternalLink } from 'lucide-react';
+import { Phone, Mail, PhoneCall, MessageCircle, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal, Paperclip, Download, FileText, Image, File, ChevronDown, ChevronUp, StickyNote, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { trashGmailMessage, archiveGmailMessage, downloadAttachment, listMessageAttachments } from '../../services/gmailApi';
+import { retrySms } from '../../services/sendSms';
 import type { Message, MessageChannel, MessageStatus } from '../../types';
 
 const EMAIL_PREVIEW_LENGTH = 250;
@@ -9,6 +10,7 @@ interface MessageBubbleProps {
   message: Message;
   onMessageAction?: (messageId: string, action: 'archived' | 'trashed') => void;
   onOpenThread?: (threadId: string, subject: string) => void;
+  onRetry?: (messageId: string, newStatus: string) => void;
 }
 
 function cleanEmailBody(body: string): string {
@@ -22,11 +24,12 @@ function cleanEmailBody(body: string): string {
   return cleaned;
 }
 
-export function MessageBubble({ message, onMessageAction, onOpenThread }: MessageBubbleProps) {
+export function MessageBubble({ message, onMessageAction, onOpenThread, onRetry }: MessageBubbleProps) {
   const [showActions, setShowActions] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [downloadingAttId, setDownloadingAttId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const isOutbound = message.direction === 'outbound';
   const isSystem = message.direction === 'system';
   const metadata = message.metadata as Record<string, unknown> | undefined;
@@ -36,6 +39,19 @@ export function MessageBubble({ message, onMessageAction, onOpenThread }: Messag
   const hasAttachments = metadata?.has_attachments === true;
   const fromEmail = metadata?.from_email as string | undefined;
   const fromName = metadata?.from_name as string | undefined;
+
+  const handleRetrySms = async () => {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      const { status } = await retrySms(message.id);
+      onRetry?.(message.id, status);
+    } catch (err) {
+      console.error('Retry failed:', err);
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   const handleArchive = async () => {
     if (!gmailMessageId) return;
@@ -121,34 +137,124 @@ export function MessageBubble({ message, onMessageAction, onOpenThread }: Messag
     />;
   }
 
+  const mediaUrls: string[] = message.media_urls?.length
+    ? message.media_urls
+    : (metadata?.media_urls as string[] | undefined) || [];
+
   return (
     <div
       className={`group flex ${isOutbound ? 'justify-end' : 'justify-start'}`}
       onMouseLeave={() => setShowActions(false)}
     >
       <div
-        className={`max-w-[70%] rounded-2xl px-4 py-2.5 ${
+        className={`max-w-[70%] rounded-2xl overflow-hidden ${
           isOutbound
             ? 'bg-cyan-600 text-white rounded-br-md'
             : 'bg-slate-700 text-white rounded-bl-md'
         }`}
       >
-        <div className="whitespace-pre-wrap break-words">{message.body}</div>
+        {mediaUrls.length > 0 && (
+          <MmsMediaGallery urls={mediaUrls} isOutbound={isOutbound} />
+        )}
 
-        <div className={`flex items-center justify-end gap-2 mt-1.5 ${isOutbound ? 'text-cyan-200' : 'text-slate-400'}`}>
+        {message.body && (
+          <div className="px-4 py-2.5 whitespace-pre-wrap break-words">
+            {message.body}
+          </div>
+        )}
+
+        <div className={`flex items-center justify-end gap-2 px-4 pb-2.5 ${!message.body ? 'pt-1.5' : ''} ${isOutbound ? 'text-cyan-200' : 'text-slate-400'}`}>
           <ChannelIndicator channel={message.channel} isOutbound={isOutbound} />
           <span className="text-xs">{formatTime(message.sent_at)}</span>
           {isOutbound && <StatusIndicator status={message.status} />}
         </div>
 
-        {message.status === 'failed' && message.metadata?.error_message && (
-          <div className="mt-2 p-2 bg-red-900/50 rounded text-xs text-red-300 flex items-center gap-1">
-            <AlertCircle size={12} />
-            {String(message.metadata.error_message)}
+        {message.status === 'failed' && (
+          <div className="mx-3 mb-3 p-2 bg-red-900/60 rounded text-xs text-red-300">
+            <div className="flex items-center gap-1 mb-1">
+              <AlertCircle size={12} />
+              {message.metadata?.error_message
+                ? String(message.metadata.error_message)
+                : 'Failed to send'}
+            </div>
+            {message.channel === 'sms' && (
+              <button
+                onClick={handleRetrySms}
+                disabled={retrying}
+                className="flex items-center gap-1 text-red-200 hover:text-white transition-colors disabled:opacity-50"
+              >
+                <RefreshCw size={11} className={retrying ? 'animate-spin' : ''} />
+                {retrying ? 'Retrying...' : 'Retry'}
+              </button>
+            )}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function MmsMediaGallery({ urls, isOutbound }: { urls: string[]; isOutbound: boolean }) {
+  const [lightbox, setLightbox] = useState<string | null>(null);
+
+  const isImage = (url: string) =>
+    /\.(jpe?g|png|gif|webp|bmp)(\?|$)/i.test(url) ||
+    url.includes('image/');
+
+  return (
+    <>
+      <div className={`grid gap-0.5 ${urls.length === 1 ? 'grid-cols-1' : 'grid-cols-2'} max-w-[260px]`}>
+        {urls.map((url, i) =>
+          isImage(url) ? (
+            <button
+              key={i}
+              onClick={() => setLightbox(url)}
+              className="block overflow-hidden"
+            >
+              <img
+                src={url}
+                alt={`attachment ${i + 1}`}
+                className="w-full object-cover max-h-[180px] hover:opacity-90 transition-opacity"
+              />
+            </button>
+          ) : (
+            <a
+              key={i}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center gap-2 px-3 py-2 text-xs ${
+                isOutbound ? 'bg-cyan-700/50 hover:bg-cyan-700 text-cyan-100' : 'bg-slate-600/50 hover:bg-slate-600 text-slate-200'
+              } transition-colors`}
+            >
+              <File size={14} />
+              <span className="truncate">Attachment {i + 1}</span>
+              <ExternalLink size={12} className="shrink-0 opacity-70" />
+            </a>
+          )
+        )}
+      </div>
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/80 hover:text-white"
+            onClick={() => setLightbox(null)}
+          >
+            <X size={24} />
+          </button>
+          <img
+            src={lightbox}
+            alt="media"
+            className="max-w-full max-h-full object-contain rounded-lg"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
+    </>
   );
 }
 

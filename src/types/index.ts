@@ -429,6 +429,7 @@ export interface Message {
   created_at: string;
   hidden_at: string | null;
   hidden_by_user_id: string | null;
+  media_urls?: string[] | null;
   contact?: Contact;
 }
 
