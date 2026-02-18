@@ -8,7 +8,8 @@ import type {
   AIAgentRunFilters,
   AIAgentToolName,
   AIAgentChannel,
-  AIAgentRunStatus
+  AIAgentRunStatus,
+  AIAgentType,
 } from '../types';
 
 export async function getAgents(
@@ -26,6 +27,10 @@ export async function getAgents(
 
   if (filters.enabled !== undefined) {
     query = query.eq('enabled', filters.enabled);
+  }
+
+  if (filters.agentType) {
+    query = query.eq('agent_type', filters.agentType);
   }
 
   if (filters.search) {
@@ -138,6 +143,15 @@ export async function createAgent(
     temperature?: number;
     max_tokens?: number;
     enabled?: boolean;
+    agent_type?: AIAgentType;
+    voice_provider?: string | null;
+    voice_id?: string | null;
+    speaking_speed?: number | null;
+    voice_tone?: string | null;
+    requires_approval?: boolean;
+    auto_reply_enabled?: boolean;
+    cooldown_minutes?: number | null;
+    max_messages_per_day?: number | null;
   },
   userId: string
 ): Promise<AIAgent> {
@@ -153,7 +167,16 @@ export async function createAgent(
       temperature: data.temperature ?? 0.7,
       max_tokens: data.max_tokens ?? 1024,
       enabled: data.enabled ?? true,
-      created_by_user_id: userId
+      created_by_user_id: userId,
+      agent_type: data.agent_type ?? 'conversation',
+      voice_provider: data.voice_provider ?? null,
+      voice_id: data.voice_id ?? null,
+      speaking_speed: data.speaking_speed ?? null,
+      voice_tone: data.voice_tone ?? null,
+      requires_approval: data.requires_approval ?? false,
+      auto_reply_enabled: data.auto_reply_enabled ?? false,
+      cooldown_minutes: data.cooldown_minutes ?? null,
+      max_messages_per_day: data.max_messages_per_day ?? null,
     })
     .select()
     .single();
@@ -173,6 +196,15 @@ export async function updateAgent(
     temperature?: number;
     max_tokens?: number;
     enabled?: boolean;
+    agent_type?: AIAgentType;
+    voice_provider?: string | null;
+    voice_id?: string | null;
+    speaking_speed?: number | null;
+    voice_tone?: string | null;
+    requires_approval?: boolean;
+    auto_reply_enabled?: boolean;
+    cooldown_minutes?: number | null;
+    max_messages_per_day?: number | null;
   }
 ): Promise<AIAgent> {
   const { data, error } = await supabase

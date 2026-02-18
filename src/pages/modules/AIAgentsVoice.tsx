@@ -1,23 +1,35 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useSearchParams } from 'react-router-dom';
-import { Mic, Plus, Search, Filter, Loader2, Play, Pause, Settings, Phone } from 'lucide-react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Mic, Plus, Search, Filter, Loader2, Play, Pause, Phone, MoreVertical, Settings, Trash2, Eye } from 'lucide-react';
 import type { AIAgent } from '../../types';
-import { getAgents } from '../../services/aiAgents';
+import { getAgents, deleteAgent, toggleAgentEnabled } from '../../services/aiAgents';
+import { AgentConfigModal } from '../../components/ai-agents/AgentConfigModal';
 
 export function AIAgentsVoice() {
   const { user, hasPermission } = useAuth();
-  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [agents, setAgents] = useState<AIAgent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [editingAgent, setEditingAgent] = useState<AIAgent | null>(null);
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const canManage = hasPermission('ai_agents.manage');
-  const shouldShowCreate = searchParams.get('create') === 'true';
 
   useEffect(() => {
     loadAgents();
   }, [user?.organization_id]);
+
+  useEffect(() => {
+    if (searchParams.get('create') === 'true' && canManage) {
+      setEditingAgent(null);
+      setIsConfigModalOpen(true);
+      setSearchParams({});
+    }
+  }, [searchParams]);
 
   const loadAgents = async () => {
     if (!user?.organization_id) return;
@@ -33,6 +45,41 @@ export function AIAgentsVoice() {
       console.error('Failed to load voice agents:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleConfigure = (agent: AIAgent) => {
+    setEditingAgent(agent);
+    setIsConfigModalOpen(true);
+  };
+
+  const handleCreate = () => {
+    setEditingAgent(null);
+    setIsConfigModalOpen(true);
+  };
+
+  const handleModalSuccess = () => {
+    setIsConfigModalOpen(false);
+    setEditingAgent(null);
+    loadAgents();
+  };
+
+  const handleToggleEnabled = async (agent: AIAgent) => {
+    try {
+      await toggleAgentEnabled(agent.id, !agent.enabled);
+      loadAgents();
+    } catch (error) {
+      console.error('Failed to toggle agent:', error);
+    }
+  };
+
+  const handleDelete = async (agent: AIAgent) => {
+    if (!confirm(`Are you sure you want to delete "${agent.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteAgent(agent.id);
+      loadAgents();
+    } catch (error) {
+      console.error('Failed to delete agent:', error);
     }
   };
 
@@ -53,6 +100,15 @@ export function AIAgentsVoice() {
             AI agents that handle phone calls using natural voice interactions
           </p>
         </div>
+        {canManage && agents.length > 0 && (
+          <button
+            onClick={handleCreate}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium transition-colors text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            New Voice Agent
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
@@ -63,6 +119,7 @@ export function AIAgentsVoice() {
             placeholder="Search voice agents..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && loadAgents()}
             className="w-full pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
           />
         </div>
@@ -83,7 +140,10 @@ export function AIAgentsVoice() {
               Create your first voice agent to handle inbound and outbound phone calls automatically.
             </p>
             {canManage && (
-              <button className="inline-flex items-center gap-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium transition-colors">
+              <button
+                onClick={handleCreate}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium transition-colors"
+              >
                 <Plus className="w-4 h-4" />
                 Create Voice Agent
               </button>
@@ -95,21 +155,24 @@ export function AIAgentsVoice() {
           {agents.map((agent) => (
             <div
               key={agent.id}
-              className="bg-slate-800 border border-slate-700 rounded-lg p-6 hover:border-slate-600 transition-colors"
+              className="bg-slate-800 border border-slate-700 rounded-lg p-6 hover:border-slate-600 transition-colors group"
             >
               <div className="flex items-start justify-between mb-4">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-cyan-500/10 rounded-lg">
+                <button
+                  onClick={() => navigate(`/ai-agents/${agent.id}`)}
+                  className="flex items-start gap-3 text-left flex-1 min-w-0"
+                >
+                  <div className="p-2 bg-cyan-500/10 rounded-lg flex-shrink-0">
                     <Mic className="w-5 h-5 text-cyan-400" />
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-white">{agent.name}</h3>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-white hover:text-cyan-400 transition-colors">{agent.name}</h3>
                     {agent.description && (
-                      <p className="text-sm text-slate-400 mt-1">{agent.description}</p>
+                      <p className="text-sm text-slate-400 mt-1 line-clamp-2">{agent.description}</p>
                     )}
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
+                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
                   {agent.enabled ? (
                     <span className="flex items-center gap-1 text-xs font-medium text-emerald-400">
                       <Play className="w-3 h-3" />
@@ -121,6 +184,51 @@ export function AIAgentsVoice() {
                       Paused
                     </span>
                   )}
+                  {canManage && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setOpenMenuId(openMenuId === agent.id ? null : agent.id)}
+                        className="p-1 rounded hover:bg-slate-700 transition-colors"
+                      >
+                        <MoreVertical className="w-4 h-4 text-slate-400" />
+                      </button>
+                      {openMenuId === agent.id && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                          <div className="absolute right-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-20 py-1">
+                            <button
+                              onClick={() => { navigate(`/ai-agents/${agent.id}`); setOpenMenuId(null); }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700"
+                            >
+                              <Eye className="w-4 h-4" />
+                              View Details
+                            </button>
+                            <button
+                              onClick={() => { handleConfigure(agent); setOpenMenuId(null); }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700"
+                            >
+                              <Settings className="w-4 h-4" />
+                              Edit Configuration
+                            </button>
+                            <button
+                              onClick={() => { handleToggleEnabled(agent); setOpenMenuId(null); }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700"
+                            >
+                              {agent.enabled ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                              {agent.enabled ? 'Disable' : 'Enable'}
+                            </button>
+                            <button
+                              onClick={() => { handleDelete(agent); setOpenMenuId(null); }}
+                              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-slate-700"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -128,16 +236,33 @@ export function AIAgentsVoice() {
                 <div className="flex items-center gap-4 text-sm text-slate-400">
                   <div className="flex items-center gap-1">
                     <Phone className="w-4 h-4" />
-                    <span>0 numbers</span>
+                    <span>{agent.voice_provider || 'No voice set'}</span>
                   </div>
+                  {agent.speaking_speed && (
+                    <span>{agent.speaking_speed.toFixed(1)}x speed</span>
+                  )}
                 </div>
-                <button className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors">
-                  Configure
-                </button>
+                {canManage && (
+                  <button
+                    onClick={() => handleConfigure(agent)}
+                    className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors font-medium"
+                  >
+                    Configure
+                  </button>
+                )}
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {isConfigModalOpen && (
+        <AgentConfigModal
+          agent={editingAgent}
+          defaultAgentType="voice"
+          onClose={() => { setIsConfigModalOpen(false); setEditingAgent(null); }}
+          onSuccess={handleModalSuccess}
+        />
       )}
     </div>
   );
