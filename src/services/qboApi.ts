@@ -24,6 +24,12 @@ export async function createQBOItem(
   return callQboApi('create_item', { product });
 }
 
+export async function findOrCreateQBOItem(
+  product: Pick<Product, 'name' | 'description' | 'price_amount' | 'billing_type'>
+): Promise<{ Id: string; SyncToken: string }> {
+  return callQboApi('find_or_create_item', { product });
+}
+
 export async function createQBOInvoice(
   customerId: string,
   lineItems: Array<CreateInvoiceLineItem & { qbo_item_id?: string }>,

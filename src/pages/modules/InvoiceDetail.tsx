@@ -37,6 +37,7 @@ export function InvoiceDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const canSend = hasPermission('invoices.send');
   const canVoid = hasPermission('invoices.void');
@@ -64,9 +65,12 @@ export function InvoiceDetail() {
     if (!invoice || !user) return;
     try {
       setIsProcessing(true);
+      setErrorMessage(null);
       await sendInvoice(invoice.id, user);
       await loadInvoice();
     } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to send invoice';
+      setErrorMessage(msg);
       console.error('Failed to send invoice:', err);
     } finally {
       setIsProcessing(false);
@@ -77,9 +81,12 @@ export function InvoiceDetail() {
     if (!invoice || !user || !confirm('Are you sure you want to void this invoice?')) return;
     try {
       setIsProcessing(true);
+      setErrorMessage(null);
       await voidInvoice(invoice.id, user);
       await loadInvoice();
     } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to void invoice';
+      setErrorMessage(msg);
       console.error('Failed to void invoice:', err);
     } finally {
       setIsProcessing(false);
@@ -208,6 +215,19 @@ export function InvoiceDetail() {
           )}
         </div>
       </div>
+
+      {errorMessage && (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+          <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+          <p className="text-red-300 text-sm">{errorMessage}</p>
+          <button
+            onClick={() => setErrorMessage(null)}
+            className="ml-auto text-red-400 hover:text-red-300"
+          >
+            <XCircle className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">

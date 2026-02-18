@@ -220,6 +220,25 @@ async function createQBOItem(
   return response.Item;
 }
 
+async function findOrCreateItem(
+  accessToken: string,
+  realmId: string,
+  product: { name: string; description?: string; price_amount: number; billing_type: string }
+): Promise<{ Id: string; SyncToken: string }> {
+  const escapedName = product.name.replace(/'/g, "\\'");
+  const queryResponse = await qboRequest(
+    accessToken,
+    realmId,
+    `/query?query=${encodeURIComponent(`SELECT * FROM Item WHERE Name = '${escapedName}' MAXRESULTS 1`)}`
+  ) as { QueryResponse: { Item?: Array<{ Id: string; SyncToken: string }> } };
+
+  if (queryResponse.QueryResponse.Item?.length) {
+    return queryResponse.QueryResponse.Item[0];
+  }
+
+  return createQBOItem(accessToken, realmId, product);
+}
+
 async function createQBOInvoice(
   accessToken: string,
   realmId: string,
@@ -587,6 +606,12 @@ Deno.serve(async (req: Request) => {
       case "create_item": {
         const { product } = body;
         result = await createQBOItem(accessToken, connection.realm_id, product);
+        break;
+      }
+
+      case "find_or_create_item": {
+        const { product: itemProduct } = body;
+        result = await findOrCreateItem(accessToken, connection.realm_id, itemProduct);
         break;
       }
 

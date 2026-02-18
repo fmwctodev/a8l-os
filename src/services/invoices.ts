@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { findOrCreateQBOCustomer, createQBOInvoice, sendQBOInvoice, voidQBOInvoice } from './qboApi';
+import { findOrCreateQBOCustomer, createQBOInvoice, sendQBOInvoice, voidQBOInvoice, findOrCreateQBOItem } from './qboApi';
 import { getQBOConnectionStatus } from './qboAuth';
 import { publishEvent } from './eventOutbox';
 import type {
@@ -161,19 +161,50 @@ export async function createInvoice(
     try {
       const qboCustomer = await findOrCreateQBOCustomer(contact as Contact);
 
-      const { data: products } = await supabase
-        .from('products')
-        .select('id, qbo_item_id')
-        .in('id', input.line_items.filter(i => i.product_id).map(i => i.product_id!));
+      const productIds = input.line_items.filter(i => i.product_id).map(i => i.product_id!);
+      const { data: products } = productIds.length
+        ? await supabase
+            .from('products')
+            .select('id, name, description, price_amount, billing_type, qbo_item_id')
+            .in('id', productIds)
+        : { data: [] };
 
-      const productMap = new Map(products?.map(p => [p.id, p.qbo_item_id]) || []);
+      const productMap = new Map((products || []).map(p => [p.id, p]));
 
-      const qboLineItems = input.line_items.map(item => ({
-        description: item.description,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        qbo_item_id: item.product_id ? productMap.get(item.product_id) || undefined : undefined,
-      }));
+      const qboLineItems: Array<{ description: string; quantity: number; unit_price: number; qbo_item_id?: string }> = [];
+      for (const item of input.line_items) {
+        let qboItemId: string | undefined;
+        if (item.product_id) {
+          const prod = productMap.get(item.product_id);
+          if (prod) {
+            if (prod.qbo_item_id) {
+              qboItemId = prod.qbo_item_id;
+            } else {
+              try {
+                const qboItem = await findOrCreateQBOItem({
+                  name: prod.name,
+                  description: prod.description || undefined,
+                  price_amount: prod.price_amount,
+                  billing_type: prod.billing_type,
+                });
+                qboItemId = qboItem.Id;
+                await supabase
+                  .from('products')
+                  .update({ qbo_item_id: qboItem.Id })
+                  .eq('id', prod.id);
+              } catch (itemErr) {
+                console.error('Failed to sync product to QBO:', itemErr);
+              }
+            }
+          }
+        }
+        qboLineItems.push({
+          description: item.description,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          qbo_item_id: qboItemId,
+        });
+      }
 
       const qboInvoice = await createQBOInvoice(
         qboCustomer.Id,
@@ -249,9 +280,9 @@ export async function createInvoice(
   await publishEvent(
     userData.organization_id,
     'invoice_created',
-    input.contact_id,
     'invoice',
     invoice.id,
+    input.contact_id,
     {
       invoice_id: invoice.id,
       contact_id: input.contact_id,
@@ -274,9 +305,9 @@ export async function createInvoice(
       await publishEvent(
         userData.organization_id,
         'invoice_sent',
-        input.contact_id,
         'invoice',
         invoice.id,
+        input.contact_id,
         {
           invoice_id: invoice.id,
           contact_id: input.contact_id,
@@ -307,11 +338,79 @@ export async function sendInvoice(id: string, user: User): Promise<Invoice> {
     throw new Error('Contact email is required to send invoice');
   }
 
+  let qboInvoiceId = invoice.qbo_invoice_id;
   let paymentLinkUrl = invoice.payment_link_url;
+  let docNumber = invoice.doc_number;
 
-  if (invoice.qbo_invoice_id) {
+  const qboStatus = await getQBOConnectionStatus();
+
+  if (!qboInvoiceId && qboStatus.connected) {
+    const qboCustomer = await findOrCreateQBOCustomer(contact as Contact);
+
+    const lineItems = invoice.line_items || [];
+    const qboLineItems: Array<{ description: string; quantity: number; unit_price: number; qbo_item_id?: string }> = [];
+
+    for (const item of lineItems) {
+      let qboItemId: string | undefined;
+
+      if (item.product_id && item.product) {
+        const { data: prod } = await supabase
+          .from('products')
+          .select('id, name, description, price_amount, billing_type, qbo_item_id')
+          .eq('id', item.product_id)
+          .maybeSingle();
+
+        if (prod) {
+          if (prod.qbo_item_id) {
+            qboItemId = prod.qbo_item_id;
+          } else {
+            const qboItem = await findOrCreateQBOItem({
+              name: prod.name,
+              description: prod.description || undefined,
+              price_amount: prod.price_amount,
+              billing_type: prod.billing_type,
+            });
+            qboItemId = qboItem.Id;
+            await supabase
+              .from('products')
+              .update({ qbo_item_id: qboItem.Id })
+              .eq('id', prod.id);
+          }
+        }
+      }
+
+      qboLineItems.push({
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        qbo_item_id: qboItemId,
+      });
+    }
+
+    const qboInvoice = await createQBOInvoice(
+      qboCustomer.Id,
+      qboLineItems,
+      invoice.due_date || undefined,
+      invoice.memo || undefined
+    );
+
+    qboInvoiceId = qboInvoice.Id;
+    docNumber = qboInvoice.DocNumber || docNumber;
+    paymentLinkUrl = qboInvoice.InvoiceLink || paymentLinkUrl;
+
+    await supabase
+      .from('invoices')
+      .update({
+        qbo_invoice_id: qboInvoiceId,
+        doc_number: docNumber,
+        payment_link_url: paymentLinkUrl,
+      })
+      .eq('id', id);
+  }
+
+  if (qboInvoiceId) {
     try {
-      const sendResult = await sendQBOInvoice(invoice.qbo_invoice_id, contact.email);
+      const sendResult = await sendQBOInvoice(qboInvoiceId, contact.email);
       if (sendResult.Invoice?.InvoiceLink) {
         paymentLinkUrl = sendResult.Invoice.InvoiceLink;
       }
@@ -346,9 +445,9 @@ export async function sendInvoice(id: string, user: User): Promise<Invoice> {
     await publishEvent(
       userData.organization_id,
       'invoice_sent',
-      invoice.contact_id,
       'invoice',
       id,
+      invoice.contact_id,
       {
         invoice_id: id,
         contact_id: invoice.contact_id,

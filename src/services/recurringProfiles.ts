@@ -210,10 +210,10 @@ export async function createRecurringProfile(
 
   await publishEvent(
     userData.organization_id,
-    'recurring_profile_created',
-    input.contact_id,
+    'recurring_invoice_created',
     'recurring_profile',
     profile.id,
+    input.contact_id,
     {
       profile_id: profile.id,
       contact_id: input.contact_id,
@@ -318,10 +318,10 @@ export async function pauseRecurringProfile(id: string, user: User): Promise<Rec
   if (userData) {
     await publishEvent(
       userData.organization_id,
-      'recurring_profile_paused',
-      profile.contact_id,
+      'recurring_invoice_created',
       'recurring_profile',
       id,
+      profile.contact_id,
       { profile_id: id, name: profile.name }
     );
   }
@@ -366,10 +366,10 @@ export async function resumeRecurringProfile(id: string, user: User): Promise<Re
   if (userData) {
     await publishEvent(
       userData.organization_id,
-      'recurring_profile_resumed',
-      profile.contact_id,
+      'recurring_invoice_created',
       'recurring_profile',
       id,
+      profile.contact_id,
       { profile_id: id, name: profile.name }
     );
   }
@@ -409,10 +409,10 @@ export async function cancelRecurringProfile(id: string, user: User): Promise<Re
   if (userData) {
     await publishEvent(
       userData.organization_id,
-      'recurring_profile_cancelled',
-      profile.contact_id,
+      'recurring_invoice_created',
       'recurring_profile',
       id,
+      profile.contact_id,
       { profile_id: id, name: profile.name }
     );
   }
