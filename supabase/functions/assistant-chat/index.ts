@@ -1212,39 +1212,40 @@ async function resolveLLMConfig(
     .from("llm_providers")
     .select("*")
     .eq("org_id", orgId)
-    .eq("is_active", true)
-    .order("is_default", { ascending: false })
-    .limit(5);
+    .eq("enabled", true)
+    .limit(10);
 
   if (providers && providers.length > 0) {
     for (const p of providers) {
-      if (p.provider_type === "anthropic" && p.api_key) {
+      if (p.provider === "openai" && p.api_key_encrypted) {
         return {
-          provider: "anthropic",
-          model: p.default_model || "claude-sonnet-4-20250514",
-          apiKey: p.api_key,
+          provider: "openai",
+          model: "gpt-4o-mini",
+          apiKey: p.api_key_encrypted,
           baseUrl: p.base_url || undefined,
         };
       }
-      if (p.provider_type === "openai" && p.api_key) {
+    }
+    for (const p of providers) {
+      if (p.provider === "anthropic" && p.api_key_encrypted) {
         return {
-          provider: "openai",
-          model: p.default_model || "gpt-4o-mini",
-          apiKey: p.api_key,
+          provider: "anthropic",
+          model: "claude-sonnet-4-20250514",
+          apiKey: p.api_key_encrypted,
           baseUrl: p.base_url || undefined,
         };
       }
     }
   }
 
-  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (anthropicKey) {
-    return { provider: "anthropic", model: "claude-sonnet-4-20250514", apiKey: anthropicKey };
-  }
-
   const openaiKey = Deno.env.get("OPENAI_API_KEY");
   if (openaiKey) {
     return { provider: "openai", model: "gpt-4o-mini", apiKey: openaiKey };
+  }
+
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (anthropicKey) {
+    return { provider: "anthropic", model: "claude-sonnet-4-20250514", apiKey: anthropicKey };
   }
 
   throw new Error("No LLM provider configured");
