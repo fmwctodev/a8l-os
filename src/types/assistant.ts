@@ -1,7 +1,7 @@
 import type { ITSRequest, ITSExecutionResult, ITSAction, ITSActionResult } from './its';
 
 export type AssistantMessageRole = 'user' | 'assistant' | 'system';
-export type AssistantMessageType = 'text' | 'tool_result' | 'action_confirmation' | 'draft_preview' | 'voice_transcript' | 'execution_plan' | 'execution_result';
+export type AssistantMessageType = 'text' | 'tool_result' | 'action_confirmation' | 'draft_preview' | 'meeting_summary' | 'error' | 'voice_transcript' | 'execution_plan' | 'execution_result';
 export type MemoryCategory = 'scheduling' | 'communication' | 'preferences' | 'contacts' | 'rules' | 'general';
 export type ActionExecutionStatus = 'success' | 'failed' | 'running' | 'queued' | 'canceled';
 export type AssistantPanelTab = 'chat' | 'voice' | 'activity' | 'settings';
