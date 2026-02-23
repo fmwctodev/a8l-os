@@ -38,7 +38,18 @@ interface ITSActionResult {
   status: "success" | "failed" | "skipped" | "awaiting_confirmation";
   resource_id: string | null;
   error: string | null;
+  query_data?: unknown;
 }
+
+const READ_ACTION_TYPES = new Set([
+  "query_schedule",
+  "query_contacts",
+  "query_opportunities",
+  "query_tasks",
+  "query_projects",
+  "query_proposals",
+  "query_analytics",
+]);
 
 interface LLMConfig {
   provider: "anthropic" | "openai";
@@ -328,8 +339,18 @@ Deno.serve(async (req: Request) => {
         ? "failed"
         : "partial";
 
+    const queryResults = allResults.filter((r) => r.query_data !== undefined && r.status === "success");
+    let finalResponse = itsRequest.response_to_user;
+
+    if (queryResults.length > 0) {
+      const summarized = await summarizeQueryResults(
+        llmConfig, queryResults, itsRequest, content || "", userData.name || userData.email
+      );
+      if (summarized) finalResponse = summarized;
+    }
+
     return jsonResponse({
-      response: itsRequest.response_to_user,
+      response: finalResponse,
       its_request: itsRequest,
       execution_result: {
         execution_id: execRequestId,
@@ -906,40 +927,199 @@ async function executeITSAction(
       return ok(action, data.id);
     }
 
-    case "create_invoice_draft": {
-      const items = p.items as { description: string; quantity: number; unit_price: number }[] || [];
-      const subtotal = items.reduce((s, i) => s + (i.quantity || 1) * (i.unit_price || 0), 0);
+    case "query_schedule": {
+      const dateFrom = p.date_from as string;
+      const dateTo = p.date_to as string;
+      const startUtc = `${dateFrom}T00:00:00Z`;
+      const endUtc = `${dateTo}T23:59:59Z`;
+
+      const [crmEvents, tasks, appointments, googleEvents] = await Promise.all([
+        supabase
+          .from("calendar_events")
+          .select("id, title, description, location, start_at_utc, end_at_utc, all_day, status")
+          .eq("org_id", user.orgId)
+          .gte("start_at_utc", startUtc)
+          .lte("start_at_utc", endUtc)
+          .neq("status", "cancelled")
+          .order("start_at_utc", { ascending: true })
+          .limit(50),
+        supabase
+          .from("calendar_tasks")
+          .select("id, title, description, due_at_utc, priority, status")
+          .eq("org_id", user.orgId)
+          .eq("user_id", user.id)
+          .gte("due_at_utc", startUtc)
+          .lte("due_at_utc", endUtc)
+          .order("due_at_utc", { ascending: true })
+          .limit(50),
+        supabase
+          .from("appointments")
+          .select("id, status, start_at_utc, end_at_utc, notes, location, google_meet_link")
+          .eq("org_id", user.orgId)
+          .eq("assigned_user_id", user.id)
+          .gte("start_at_utc", startUtc)
+          .lte("start_at_utc", endUtc)
+          .neq("status", "cancelled")
+          .order("start_at_utc", { ascending: true })
+          .limit(50),
+        supabase
+          .from("google_calendar_events")
+          .select("id, summary, description, location, start_time, end_time, all_day, status, attendees, hangout_link")
+          .eq("user_id", user.id)
+          .gte("start_time", startUtc)
+          .lte("start_time", endUtc)
+          .neq("status", "cancelled")
+          .order("start_time", { ascending: true })
+          .limit(50),
+      ]);
+
+      return {
+        action_id: action.action_id,
+        status: "success",
+        resource_id: null,
+        error: null,
+        query_data: {
+          date_from: dateFrom,
+          date_to: dateTo,
+          calendar_events: crmEvents.data || [],
+          tasks: tasks.data || [],
+          appointments: appointments.data || [],
+          google_calendar_events: googleEvents.data || [],
+        },
+      };
+    }
+
+    case "query_contacts": {
+      const search = (p.search as string).trim();
+      const limit = (p.limit as number) || 10;
 
       const { data, error } = await supabase
-        .from("invoices")
-        .insert({
-          org_id: user.orgId,
-          contact_id: p.contact_id,
-          status: "draft",
-          subtotal,
-          total: subtotal,
-          due_date: p.due_date || null,
-          created_by: user.id,
-        })
-        .select("id")
-        .single();
+        .from("contacts")
+        .select("id, first_name, last_name, email, phone, company, status, owner_id, created_at")
+        .eq("organization_id", user.orgId)
+        .or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,company.ilike.%${search}%`)
+        .order("updated_at", { ascending: false })
+        .limit(limit);
+
+      if (error) return fail(action, error.message);
+      return {
+        action_id: action.action_id,
+        status: "success",
+        resource_id: null,
+        error: null,
+        query_data: { contacts: data || [], search, total: (data || []).length },
+      };
+    }
+
+    case "query_opportunities": {
+      const status = (p.status as string) || "open";
+      const limit = (p.limit as number) || 20;
+
+      let query = supabase
+        .from("opportunities")
+        .select("id, contact_id, pipeline_id, stage_id, value_amount, close_date, status, source, created_at, stage_changed_at")
+        .eq("org_id", user.orgId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (status !== "all") query = query.eq("status", status);
+      if (p.pipeline_id) query = query.eq("pipeline_id", p.pipeline_id as string);
+      if (p.date_from) query = query.gte("created_at", `${p.date_from}T00:00:00Z`);
+      if (p.date_to) query = query.lte("created_at", `${p.date_to}T23:59:59Z`);
+
+      const { data, error } = await query;
       if (error) return fail(action, error.message);
 
-      if (items.length > 0) {
-        await supabase.from("invoice_line_items").insert(
-          items.map((item, i) => ({
-            org_id: user.orgId,
-            invoice_id: data.id,
-            description: item.description,
-            quantity: item.quantity || 1,
-            unit_price: item.unit_price || 0,
-            total_price: (item.quantity || 1) * (item.unit_price || 0),
-            sort_order: i,
-          }))
-        );
+      const totalValue = (data || []).reduce((s, o) => s + (o.value_amount || 0), 0);
+      return {
+        action_id: action.action_id,
+        status: "success",
+        resource_id: null,
+        error: null,
+        query_data: { opportunities: data || [], total: (data || []).length, total_value: totalValue },
+      };
+    }
+
+    case "query_tasks": {
+      const status = (p.status as string) || "pending";
+      const limit = (p.limit as number) || 20;
+
+      let query = supabase
+        .from("calendar_tasks")
+        .select("id, title, description, due_at_utc, priority, status, completed, completed_at")
+        .eq("org_id", user.orgId)
+        .eq("user_id", user.id)
+        .order("due_at_utc", { ascending: true })
+        .limit(limit);
+
+      if (status !== "all") query = query.eq("status", status);
+      if (p.priority) query = query.eq("priority", p.priority as string);
+      if (p.date_from) query = query.gte("due_at_utc", `${p.date_from}T00:00:00Z`);
+      if (p.date_to) query = query.lte("due_at_utc", `${p.date_to}T23:59:59Z`);
+
+      const { data, error } = await query;
+      if (error) return fail(action, error.message);
+      return {
+        action_id: action.action_id,
+        status: "success",
+        resource_id: null,
+        error: null,
+        query_data: { tasks: data || [], total: (data || []).length },
+      };
+    }
+
+    case "query_projects": {
+      const status = (p.status as string) || "active";
+      const limit = (p.limit as number) || 20;
+
+      let query = supabase
+        .from("projects")
+        .select("id, name, description, status, budget_amount, start_date, target_end_date, actual_end_date, created_at")
+        .eq("org_id", user.orgId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (status !== "all") query = query.eq("status", status);
+      if (p.search) {
+        query = query.ilike("name", `%${p.search}%`);
       }
 
-      return ok(action, data.id);
+      const { data, error } = await query;
+      if (error) return fail(action, error.message);
+      return {
+        action_id: action.action_id,
+        status: "success",
+        resource_id: null,
+        error: null,
+        query_data: { projects: data || [], total: (data || []).length },
+      };
+    }
+
+    case "query_proposals": {
+      const status = (p.status as string) || "all";
+      const limit = (p.limit as number) || 20;
+
+      let query = supabase
+        .from("proposals")
+        .select("id, title, status, total_value, contact_id, opportunity_id, created_at, sent_at, viewed_at, accepted_at")
+        .eq("org_id", user.orgId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (status !== "all") query = query.eq("status", status);
+      if (p.search) {
+        query = query.ilike("title", `%${p.search}%`);
+      }
+
+      const { data, error } = await query;
+      if (error) return fail(action, error.message);
+      return {
+        action_id: action.action_id,
+        status: "success",
+        resource_id: null,
+        error: null,
+        query_data: { proposals: data || [], total: (data || []).length },
+      };
     }
 
     case "query_analytics": {
@@ -948,34 +1128,34 @@ async function executeITSAction(
       const fromDate = dateRange?.from || new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
       const toDate = dateRange?.to || new Date().toISOString().split("T")[0];
 
-      if (metric.includes("pipeline") || metric.includes("opportunity")) {
+      let analyticsData: unknown = {};
+
+      if (metric.includes("pipeline") || metric.includes("opportunity") || metric.includes("deal")) {
         const { data } = await supabase
           .from("opportunities")
           .select("status, value_amount")
           .eq("org_id", user.orgId)
-          .gte("created_at", fromDate)
-          .lte("created_at", toDate);
+          .gte("created_at", `${fromDate}T00:00:00Z`)
+          .lte("created_at", `${toDate}T23:59:59Z`);
         const opps = data || [];
-        return {
-          action_id: action.action_id,
-          status: "success",
-          resource_id: null,
-          error: null,
-        };
+        const byStatus: Record<string, { count: number; value: number }> = {};
+        for (const o of opps) {
+          const s = o.status || "unknown";
+          if (!byStatus[s]) byStatus[s] = { count: 0, value: 0 };
+          byStatus[s].count++;
+          byStatus[s].value += o.value_amount || 0;
+        }
+        analyticsData = { metric, date_range: { from: fromDate, to: toDate }, total_count: opps.length, by_status: byStatus };
       } else if (metric.includes("contact")) {
-        await supabase
+        const { count } = await supabase
           .from("contacts")
           .select("id", { count: "exact", head: true })
           .eq("organization_id", user.orgId)
-          .gte("created_at", fromDate)
-          .lte("created_at", toDate);
-      } else if (metric.includes("invoice") || metric.includes("payment") || metric.includes("revenue")) {
-        await supabase
-          .from("invoices")
-          .select("status, total")
-          .eq("org_id", user.orgId)
-          .gte("created_at", fromDate)
-          .lte("created_at", toDate);
+          .gte("created_at", `${fromDate}T00:00:00Z`)
+          .lte("created_at", `${toDate}T23:59:59Z`);
+        analyticsData = { metric, date_range: { from: fromDate, to: toDate }, total_count: count || 0 };
+      } else {
+        analyticsData = { metric, date_range: { from: fromDate, to: toDate }, message: "Metric type not recognized. Available: pipeline, opportunity, deal, contact." };
       }
 
       return {
@@ -983,6 +1163,7 @@ async function executeITSAction(
         status: "success",
         resource_id: null,
         error: null,
+        query_data: analyticsData,
       };
     }
 
@@ -1083,10 +1264,20 @@ function describeAction(action: ITSAction): string {
       return `Cancel event ${p.event_id}`;
     case "create_proposal_draft":
       return `Create proposal: ${p.title}`;
-    case "create_invoice_draft":
-      return `Create invoice for contact ${p.contact_id}`;
+    case "query_schedule":
+      return `Query schedule: ${p.date_from} to ${p.date_to}`;
+    case "query_contacts":
+      return `Search contacts: "${p.search}"`;
+    case "query_opportunities":
+      return `Query opportunities (${p.status || "open"})`;
+    case "query_tasks":
+      return `Query tasks (${p.status || "pending"})`;
+    case "query_projects":
+      return `Query projects (${p.status || "active"})`;
+    case "query_proposals":
+      return `Query proposals (${p.status || "all"})`;
     case "query_analytics":
-      return `Query: ${p.metric}`;
+      return `Query analytics: ${p.metric}`;
     case "remember":
       return `Remember: ${p.key} = ${p.value}`;
     default:
@@ -1105,6 +1296,43 @@ function extractDrafts(actions: ITSAction[]): { id: string; type: string; to: st
       body: a.payload.body as string,
       confirmation_id: a.action_id,
     }));
+}
+
+async function summarizeQueryResults(
+  config: LLMConfig,
+  queryResults: ITSActionResult[],
+  itsRequest: ITSRequest,
+  userMessage: string,
+  userName: string
+): Promise<string | null> {
+  const dataBlocks = queryResults.map((r) => {
+    const action = itsRequest.actions.find((a) => a.action_id === r.action_id);
+    return `[${action?.type || "query"}] ${JSON.stringify(r.query_data)}`;
+  });
+
+  const summaryPrompt = `You are Clara, a personal AI assistant for ${userName}. The user asked: "${userMessage}"
+
+You executed query actions and received the following data:
+
+${dataBlocks.join("\n\n")}
+
+Summarize this data in a natural, conversational response. Be concise and helpful. Format times in a readable way (e.g., "2:00 PM" not ISO timestamps). If there are no results, say so clearly. Group related items logically. Use bullet points or numbered lists for multiple items. Do NOT output JSON. Just respond naturally as Clara.`;
+
+  const result = await callLLM(config, summaryPrompt, [
+    { role: "user", content: "Please summarize the query results." },
+  ]);
+
+  if (result.error || !result.text) return null;
+
+  let text = result.text.trim();
+  if (text.startsWith("{") && text.includes("response_to_user")) {
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.response_to_user) return parsed.response_to_user;
+    } catch { /* not JSON, use as-is */ }
+  }
+
+  return text;
 }
 
 async function resolveGmailAccessToken(

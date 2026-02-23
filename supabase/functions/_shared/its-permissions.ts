@@ -27,8 +27,13 @@ const ACTION_PERMISSION_MAP: Record<string, string[]> = {
   update_event: ['meetings.edit'],
   cancel_event: ['meetings.edit'],
   create_proposal_draft: ['proposals.create'],
-  create_invoice_draft: ['invoices.create'],
   query_analytics: ['reporting.view'],
+  query_schedule: ['personal_assistant.run'],
+  query_contacts: ['personal_assistant.run'],
+  query_opportunities: ['personal_assistant.run'],
+  query_tasks: ['personal_assistant.run'],
+  query_projects: ['personal_assistant.run'],
+  query_proposals: ['personal_assistant.run'],
   remember: ['personal_assistant.run'],
 };
 

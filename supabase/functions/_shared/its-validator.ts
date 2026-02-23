@@ -17,8 +17,13 @@ export const ALLOWED_ACTION_TYPES = new Set([
   'update_event',
   'cancel_event',
   'create_proposal_draft',
-  'create_invoice_draft',
   'query_analytics',
+  'query_schedule',
+  'query_contacts',
+  'query_opportunities',
+  'query_tasks',
+  'query_projects',
+  'query_proposals',
   'remember',
 ]);
 
@@ -36,8 +41,13 @@ const MODULE_MAP: Record<string, string> = {
   update_event: 'calendar',
   cancel_event: 'calendar',
   create_proposal_draft: 'proposals',
-  create_invoice_draft: 'payments',
   query_analytics: 'reporting',
+  query_schedule: 'calendar',
+  query_contacts: 'contacts',
+  query_opportunities: 'opportunities',
+  query_tasks: 'tasks',
+  query_projects: 'projects',
+  query_proposals: 'proposals',
   remember: 'memory',
 };
 
@@ -130,10 +140,38 @@ const PAYLOAD_SCHEMAS: Record<string, Record<string, PayloadFieldDef>> = {
     pricing_items: { required: false, type: 'array' },
     total_estimate: { required: false, type: 'number' },
   },
-  create_invoice_draft: {
-    contact_id: { required: true, type: 'uuid' },
-    items: { required: true, type: 'array' },
-    due_date: { required: false, type: 'iso_date' },
+  query_schedule: {
+    date_from: { required: true, type: 'iso_date' },
+    date_to: { required: true, type: 'iso_date' },
+  },
+  query_contacts: {
+    search: { required: true, type: 'string' },
+    limit: { required: false, type: 'number' },
+  },
+  query_opportunities: {
+    status: { required: false, type: 'string' },
+    pipeline_id: { required: false, type: 'uuid' },
+    search: { required: false, type: 'string' },
+    date_from: { required: false, type: 'iso_date' },
+    date_to: { required: false, type: 'iso_date' },
+    limit: { required: false, type: 'number' },
+  },
+  query_tasks: {
+    status: { required: false, type: 'string' },
+    date_from: { required: false, type: 'iso_date' },
+    date_to: { required: false, type: 'iso_date' },
+    priority: { required: false, type: 'string' },
+    limit: { required: false, type: 'number' },
+  },
+  query_projects: {
+    status: { required: false, type: 'string' },
+    search: { required: false, type: 'string' },
+    limit: { required: false, type: 'number' },
+  },
+  query_proposals: {
+    status: { required: false, type: 'string' },
+    search: { required: false, type: 'string' },
+    limit: { required: false, type: 'number' },
   },
   query_analytics: {
     metric: { required: true, type: 'string' },
