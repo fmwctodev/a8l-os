@@ -63,7 +63,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: userData } = await supabase
       .from("users")
-      .select("id, email, organization_id, full_name")
+      .select("id, email, organization_id, name")
       .eq("id", user.id)
       .maybeSingle();
     if (!userData) return errorResponse("NOT_FOUND", "User not found", 404);
@@ -104,7 +104,7 @@ Deno.serve(async (req: Request) => {
     const llmConfig = await resolveLLMConfig(supabase, userData.organization_id);
 
     const systemPrompt = buildITSSystemPrompt(
-      { fullName: userData.full_name || userData.email, email: userData.email },
+      { fullName: userData.name || userData.email, email: userData.email },
       profile,
       memories || [],
       context || null
@@ -364,7 +364,7 @@ Deno.serve(async (req: Request) => {
 async function handleConfirmation(
   supabase: SupabaseClient,
   user: UserContext,
-  userData: { id: string; organization_id: string; email: string; full_name: string },
+  userData: { id: string; organization_id: string; email: string; name: string },
   threadId: string,
   executionRequestId: string,
   approved: boolean,
@@ -453,7 +453,7 @@ async function handleConfirmation(
 async function executeActionPlan(
   supabase: SupabaseClient,
   user: UserContext,
-  userData: { id: string; organization_id: string; email: string; full_name: string },
+  userData: { id: string; organization_id: string; email: string; name: string },
   threadId: string,
   execRequestId: string,
   itsRequest: ITSRequest,
@@ -562,7 +562,7 @@ async function executeActionPlan(
 async function executeITSAction(
   supabase: SupabaseClient,
   user: UserContext,
-  userData: { id: string; organization_id: string; email: string; full_name: string },
+  userData: { id: string; organization_id: string; email: string; name: string },
   action: ITSAction
 ): Promise<ITSActionResult> {
   const p = action.payload;
