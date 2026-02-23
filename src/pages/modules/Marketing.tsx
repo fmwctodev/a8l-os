@@ -83,8 +83,8 @@ export function Marketing() {
     },
     {
       id: 'social',
-      name: 'Social Planner',
-      description: 'Schedule and publish across platforms',
+      name: 'AI Social Manager',
+      description: 'AI-powered social media strategy and scheduling',
       icon: Share2,
       color: 'bg-rose-500',
       href: '/marketing/social',
@@ -234,16 +234,16 @@ export function Marketing() {
               </div>
             </button>
             <Link
-              to="/marketing/social/new"
+              to="/marketing/social/posts/new"
               className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-rose-300 hover:bg-rose-50 transition-colors"
             >
               <div className="p-2 bg-rose-100 rounded-lg">
                 <Plus className="w-4 h-4 text-rose-600" />
               </div>
               <div>
-                <div className="font-medium text-gray-900">Schedule Post</div>
+                <div className="font-medium text-gray-900">New Social Post</div>
                 <div className="text-sm text-gray-500">
-                  Create a social media post
+                  Create an AI-powered social post
                 </div>
               </div>
             </Link>

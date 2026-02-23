@@ -241,7 +241,7 @@ export function PostComposer() {
         }
       }
 
-      navigate('/marketing/social');
+      navigate('/marketing/social/posts');
     } catch (error) {
       console.error('Failed to save post:', error);
       alert('Failed to save post');
@@ -273,7 +273,7 @@ export function PostComposer() {
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Link
-              to="/marketing/social"
+              to="/marketing/social/posts"
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <ArrowLeft className="w-5 h-5 text-gray-500" />

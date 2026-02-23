@@ -19,6 +19,7 @@ import {
   Users,
   Home,
   Command,
+  BrainCircuit,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -49,6 +50,9 @@ const navigationItems: SearchResult[] = [
   { id: 'nav-reputation', type: 'navigation', title: 'Reputation', icon: <Star className="w-4 h-4" />, path: '/reputation' },
   { id: 'nav-automation', type: 'navigation', title: 'Automation', icon: <Workflow className="w-4 h-4" />, path: '/automation' },
   { id: 'nav-ai-agents', type: 'navigation', title: 'AI Agents', icon: <Bot className="w-4 h-4" />, path: '/ai-agents' },
+  { id: 'nav-social-manager', type: 'navigation', title: 'AI Social Manager', icon: <BrainCircuit className="w-4 h-4" />, path: '/marketing/social' },
+  { id: 'nav-social-posts', type: 'navigation', title: 'Social Posts', icon: <FileText className="w-4 h-4" />, path: '/marketing/social/posts' },
+  { id: 'nav-social-campaigns', type: 'navigation', title: 'Social Campaigns', icon: <Megaphone className="w-4 h-4" />, path: '/marketing/social/campaigns' },
   { id: 'nav-file-manager', type: 'navigation', title: 'File Manager', icon: <FolderOpen className="w-4 h-4" />, path: '/media' },
   { id: 'nav-reporting', type: 'navigation', title: 'Reporting', icon: <BarChart3 className="w-4 h-4" />, path: '/reporting' },
   { id: 'nav-settings', type: 'navigation', title: 'Settings', icon: <Settings className="w-4 h-4" />, path: '/settings' },
@@ -108,6 +112,17 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
       path: '/reporting/new',
       action: () => {
         navigate('/reporting/new');
+      },
+    },
+    {
+      id: 'action-new-social-post',
+      type: 'action',
+      title: 'New Social Post',
+      subtitle: 'Create a social media post',
+      icon: <BrainCircuit className="w-4 h-4" />,
+      path: '/marketing/social/posts/new',
+      action: () => {
+        navigate('/marketing/social/posts/new');
       },
     },
   ];

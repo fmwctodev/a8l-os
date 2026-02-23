@@ -47,9 +47,16 @@ import { MarketingForms } from './pages/modules/MarketingForms';
 import { FormBuilder } from './pages/modules/FormBuilder';
 import { MarketingSurveys } from './pages/modules/MarketingSurveys';
 import { SurveyBuilder } from './pages/modules/SurveyBuilder';
-import { SocialPlanner } from './pages/modules/SocialPlanner';
+import { AISocialManagerLayout } from './layouts/AISocialManagerLayout';
 import { PostComposer } from './pages/modules/PostComposer';
 import { SocialCalendar } from './pages/modules/SocialCalendar';
+import { SocialChat } from './pages/modules/social/SocialChat';
+import { SocialPosts } from './pages/modules/social/SocialPosts';
+import { SocialCampaigns } from './pages/modules/social/SocialCampaigns';
+import { SocialCampaignDetail } from './pages/modules/social/SocialCampaignDetail';
+import { SocialGuidelines } from './pages/modules/social/SocialGuidelines';
+import { SocialAccounts } from './pages/modules/social/SocialAccounts';
+import { SocialAnalytics } from './pages/modules/social/SocialAnalytics';
 import { Automation } from './pages/modules/Automation';
 import { WorkflowBuilder } from './pages/modules/WorkflowBuilder';
 import { WorkflowEnrollments } from './pages/modules/WorkflowEnrollments';
@@ -343,12 +350,22 @@ function App() {
                 path="/marketing/social"
                 element={
                   <ProtectedRoute permission="marketing.social.view" featureFlag="marketing">
-                    <SocialPlanner />
+                    <AISocialManagerLayout />
                   </ProtectedRoute>
                 }
-              />
+              >
+                <Route index element={<SocialChat />} />
+                <Route path="chat" element={<SocialChat />} />
+                <Route path="posts" element={<SocialPosts />} />
+                <Route path="posts/calendar" element={<SocialCalendar />} />
+                <Route path="campaigns" element={<SocialCampaigns />} />
+                <Route path="campaigns/:id" element={<SocialCampaignDetail />} />
+                <Route path="guidelines" element={<SocialGuidelines />} />
+                <Route path="accounts" element={<SocialAccounts />} />
+                <Route path="analytics" element={<SocialAnalytics />} />
+              </Route>
               <Route
-                path="/marketing/social/new"
+                path="/marketing/social/posts/new"
                 element={
                   <ProtectedRoute permission="marketing.social.manage" featureFlag="marketing">
                     <PostComposer />
@@ -356,18 +373,10 @@ function App() {
                 }
               />
               <Route
-                path="/marketing/social/:id/edit"
+                path="/marketing/social/posts/:id/edit"
                 element={
                   <ProtectedRoute permission="marketing.social.manage" featureFlag="marketing">
                     <PostComposer />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/marketing/social/calendar"
-                element={
-                  <ProtectedRoute permission="marketing.social.view" featureFlag="marketing">
-                    <SocialCalendar />
                   </ProtectedRoute>
                 }
               />

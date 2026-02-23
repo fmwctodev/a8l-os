@@ -289,7 +289,7 @@ export function SocialCalendar() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link
-            to="/marketing/social"
+            to="/marketing/social/posts"
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-gray-500" />
@@ -305,14 +305,14 @@ export function SocialCalendar() {
         </div>
         <div className="flex items-center gap-2">
           <Link
-            to="/marketing/social"
+            to="/marketing/social/posts"
             className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <List className="w-4 h-4" />
             List View
           </Link>
           <button
-            onClick={() => navigate('/marketing/social/new')}
+            onClick={() => navigate('/marketing/social/posts/new')}
             className="flex items-center gap-2 px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -424,7 +424,7 @@ export function SocialCalendar() {
                           <button
                             onClick={() => {
                               const dateStr = date.toISOString().split('T')[0];
-                              navigate(`/marketing/social/new?date=${dateStr}`);
+                              navigate(`/marketing/social/posts/new?date=${dateStr}`);
                             }}
                             className="p-1 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors opacity-0 group-hover:opacity-100"
                           >
@@ -471,7 +471,7 @@ export function SocialCalendar() {
           post={previewPost}
           accounts={getAccountsForTargets(previewPost.targets)}
           onClose={() => setPreviewPost(null)}
-          onEdit={() => navigate(`/marketing/social/${previewPost.id}/edit`)}
+          onEdit={() => navigate(`/marketing/social/posts/${previewPost.id}/edit`)}
           onReschedule={() => openRescheduleModal(previewPost)}
         />
       )}

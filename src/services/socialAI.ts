@@ -326,6 +326,27 @@ export async function getAIUsageStats(
   };
 }
 
+export async function scrapeURL(url: string): Promise<{
+  title: string;
+  description: string;
+  content: string;
+  url: string;
+}> {
+  const result = await callAISocialContentFunction('scrape_url', { url });
+  return result as { title: string; description: string; content: string; url: string };
+}
+
+export async function extractYouTubeContent(url: string): Promise<{
+  title: string;
+  description: string;
+  transcript: string;
+  channel: string;
+  duration: string;
+}> {
+  const result = await callAISocialContentFunction('extract_youtube', { url });
+  return result as { title: string; description: string; transcript: string; channel: string; duration: string };
+}
+
 export async function getOrganization(orgId: string): Promise<Organization | null> {
   const { data, error } = await supabase
     .from('organizations')

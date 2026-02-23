@@ -11,6 +11,7 @@ import type {
 
 export * from './aiWorkflowActions';
 export * from './workflowActions';
+export * from './socialManager';
 
 export interface Organization {
   id: string;
@@ -1918,6 +1919,14 @@ export interface SocialPost {
   approval_email_sent_at?: string | null;
   customized_per_channel?: boolean;
   content_by_platform?: Record<SocialProvider, SocialPostChannelContent>;
+  campaign_id?: string | null;
+  thread_id?: string | null;
+  engagement_prediction?: number | null;
+  hook_text?: string | null;
+  cta_text?: string | null;
+  hashtags?: string[] | null;
+  visual_style_suggestion?: string | null;
+  ab_variant_group?: string | null;
 }
 
 export type ContentAIType =
