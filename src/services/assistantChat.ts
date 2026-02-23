@@ -85,8 +85,16 @@ export async function sendMessage(
   });
 
   if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error || 'Failed to get assistant response');
+    let errMsg = 'Failed to get assistant response';
+    try {
+      const err = await response.json();
+      const errObj = err.error;
+      if (typeof errObj === 'string') errMsg = errObj;
+      else if (errObj?.message) errMsg = errObj.message;
+      else if (err.message) errMsg = err.message;
+      else if (err.msg) errMsg = err.msg;
+    } catch { /* response wasn't JSON */ }
+    throw new Error(errMsg);
   }
 
   const chatResponse: ClaraChatResponse = await response.json();
@@ -146,8 +154,14 @@ export async function confirmAction(
   });
 
   if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error || 'Failed to process confirmation');
+    let errMsg = 'Failed to process confirmation';
+    try {
+      const err = await response.json();
+      const errObj = err.error;
+      if (typeof errObj === 'string') errMsg = errObj;
+      else if (errObj?.message) errMsg = errObj.message;
+    } catch { /* response wasn't JSON */ }
+    throw new Error(errMsg);
   }
 
   return response.json();
@@ -168,8 +182,14 @@ export async function confirmExecutionRequest(
   });
 
   if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error || 'Failed to process execution confirmation');
+    let errMsg = 'Failed to process execution confirmation';
+    try {
+      const err = await response.json();
+      const errObj = err.error;
+      if (typeof errObj === 'string') errMsg = errObj;
+      else if (errObj?.message) errMsg = errObj.message;
+    } catch { /* response wasn't JSON */ }
+    throw new Error(errMsg);
   }
 
   return response.json();

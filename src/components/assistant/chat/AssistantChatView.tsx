@@ -103,14 +103,16 @@ export function AssistantChatView() {
         );
         return [...prev, ...newMsgs];
       });
-    } catch {
+    } catch (err) {
+      console.error('[Clara] Send failed:', err);
+      const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
       setMessages((prev) => [
         ...prev,
         {
           id: `error-${Date.now()}`,
           thread_id: activeThreadId || '',
           role: 'assistant',
-          content: 'Something went wrong. Please try again.',
+          content: msg,
           message_type: 'text',
           tool_calls: null,
           metadata: null,
