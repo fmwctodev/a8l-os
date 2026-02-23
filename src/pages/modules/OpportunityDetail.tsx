@@ -54,6 +54,7 @@ import { CloseLostModal } from '../../components/opportunities/CloseLostModal';
 import OpportunityFilesTab from '../../components/opportunities/OpportunityFilesTab';
 import { ScoreWidget } from '../../components/scoring/ScoreWidget';
 import { ConvertToProjectModal } from '../../components/projects/ConvertToProjectModal';
+import { AskClaraButton } from '../../components/assistant/AskClaraButton';
 import { getProjectByOpportunityId } from '../../services/projects';
 
 function normalizeTagsArray(rawTags: unknown): TagType[] {
@@ -930,6 +931,16 @@ export function OpportunityDetail() {
                 />
               </div>
             )}
+
+            <div className="mt-6 pt-4 border-t border-slate-700">
+              <AskClaraButton
+                module="opportunities"
+                recordId={opportunity.id}
+                prompt={`Tell me about opportunity ${opportunity.name}`}
+                label="Ask Clara about this deal"
+                size="md"
+              />
+            </div>
           </div>
         </div>
       </div>

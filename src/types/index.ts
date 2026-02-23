@@ -12,6 +12,7 @@ import type {
 export * from './aiWorkflowActions';
 export * from './workflowActions';
 export * from './socialManager';
+export * from './assistant';
 
 export interface Organization {
   id: string;

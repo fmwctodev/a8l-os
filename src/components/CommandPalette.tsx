@@ -20,8 +20,10 @@ import {
   Home,
   Command,
   BrainCircuit,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useAssistant } from '../contexts/AssistantContext';
 import { supabase } from '../lib/supabase';
 
 interface SearchResult {
@@ -61,6 +63,7 @@ const navigationItems: SearchResult[] = [
 export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const navigate = useNavigate();
   const { user, hasPermission } = useAuth();
+  const assistant = (() => { try { return useAssistant(); } catch { return null; } })();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -125,6 +128,16 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         navigate('/marketing/social/posts/new');
       },
     },
+    ...(assistant ? [{
+      id: 'action-ask-clara',
+      type: 'action' as const,
+      title: 'Ask Clara',
+      subtitle: 'Open AI assistant',
+      icon: <Sparkles className="w-4 h-4" />,
+      action: () => {
+        assistant.openPanel();
+      },
+    }] : []),
   ];
 
   const searchDatabase = useCallback(async (searchQuery: string) => {

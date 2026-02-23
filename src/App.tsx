@@ -88,6 +88,7 @@ import { BrandboardSettingsPage } from './pages/settings/BrandboardSettingsPage'
 import { BrandKitDetailPage } from './pages/settings/BrandKitDetailPage';
 import { CRUDHealthCheckPage } from './pages/settings/CRUDHealthCheckPage';
 import { MeetingFollowUpSettingsPage } from './pages/settings/MeetingFollowUpSettingsPage';
+import AssistantSettingsPage from './pages/settings/AssistantSettingsPage';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
 import { BookingPage } from './pages/public/BookingPage';
 import { PublicFormPage } from './pages/public/PublicFormPage';
@@ -548,6 +549,14 @@ function App() {
                   element={
                     <ProtectedRoute permission="calendars.view" featureFlag="calendars">
                       <MeetingFollowUpSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="assistant"
+                  element={
+                    <ProtectedRoute permission="personal_assistant.view" featureFlag="personal_assistant">
+                      <AssistantSettingsPage />
                     </ProtectedRoute>
                   }
                 />

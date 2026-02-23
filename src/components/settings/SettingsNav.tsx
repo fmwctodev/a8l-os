@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Video,
   HeartPulse,
+  Sparkles,
   LucideIcon,
 } from 'lucide-react';
 
@@ -99,6 +100,12 @@ const settingsNavSections: SettingsNavSection[] = [
         path: '/settings/meeting-follow-ups',
         icon: Video,
         requiresPermission: 'calendars.view',
+      },
+      {
+        name: 'Clara Assistant',
+        path: '/settings/assistant',
+        icon: Sparkles,
+        requiresPermission: 'personal_assistant.view',
       },
     ],
   },

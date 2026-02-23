@@ -262,6 +262,13 @@ export const Permissions = {
     INVITE: 'users.invite',
     MANAGE: 'users.manage',
   },
+
+  PERSONAL_ASSISTANT: {
+    VIEW: 'personal_assistant.view',
+    MANAGE: 'personal_assistant.manage',
+    RUN: 'personal_assistant.run',
+    CONFIGURE: 'personal_assistant.configure',
+  },
 } as const;
 
 export type PermissionKey =
@@ -302,7 +309,8 @@ export type PermissionKey =
   | typeof Permissions.SETTINGS[keyof typeof Permissions.SETTINGS]
   | typeof Permissions.SNIPPETS[keyof typeof Permissions.SNIPPETS]
   | typeof Permissions.STAFF[keyof typeof Permissions.STAFF]
-  | typeof Permissions.USERS[keyof typeof Permissions.USERS];
+  | typeof Permissions.USERS[keyof typeof Permissions.USERS]
+  | typeof Permissions.PERSONAL_ASSISTANT[keyof typeof Permissions.PERSONAL_ASSISTANT];
 
 export const ALL_PERMISSIONS: PermissionKey[] = Object.values(Permissions).flatMap(
   module => Object.values(module)

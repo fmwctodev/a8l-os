@@ -41,6 +41,7 @@ import { ScoreWidget } from '../../components/scoring/ScoreWidget';
 import { ContactQuickActions } from '../../components/contacts/ContactQuickActions';
 import { VirtualizedTimeline } from '../../components/contacts/VirtualizedTimeline';
 import { LeadScoreBadge } from '../../components/contacts/LeadScoreBadge';
+import { AskClaraButton } from '../../components/assistant/AskClaraButton';
 import { getAttachmentCount } from '../../services/fileAttachments';
 
 type TabType = 'overview' | 'notes' | 'tasks' | 'timeline' | 'meetings' | 'payments' | 'files';
@@ -489,6 +490,14 @@ export function ContactDetail() {
               canAdjust={canAdjustScore}
             />
           )}
+
+          <AskClaraButton
+            module="contacts"
+            recordId={contact.id}
+            prompt={`Tell me about contact ${contact.first_name} ${contact.last_name}`}
+            label="Ask Clara about this contact"
+            size="md"
+          />
 
           <div className="bg-slate-900 rounded-xl border border-slate-800 p-4">
             <h3 className="text-sm font-medium text-slate-300 mb-3">Tags</h3>
