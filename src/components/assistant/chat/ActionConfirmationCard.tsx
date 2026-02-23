@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { ShieldAlert, Check, X, Loader2 } from 'lucide-react';
 import type { ClaraActionConfirmation } from '../../../types/assistant';
+import { confirmAction } from '../../../services/assistantChat';
 
 interface ActionConfirmationCardProps {
   confirmation: ClaraActionConfirmation;
-  onApprove: (id: string) => Promise<void>;
-  onReject: (id: string) => Promise<void>;
+  threadId: string;
 }
 
-export function ActionConfirmationCard({ confirmation, onApprove, onReject }: ActionConfirmationCardProps) {
+export function ActionConfirmationCard({ confirmation, threadId }: ActionConfirmationCardProps) {
   const [state, setState] = useState<'pending' | 'approving' | 'rejecting' | 'approved' | 'rejected'>(
     confirmation.status === 'approved' ? 'approved' : confirmation.status === 'rejected' ? 'rejected' : 'pending'
   );
@@ -16,7 +16,7 @@ export function ActionConfirmationCard({ confirmation, onApprove, onReject }: Ac
   const handleApprove = async () => {
     setState('approving');
     try {
-      await onApprove(confirmation.id);
+      await confirmAction(threadId, confirmation.id, true);
       setState('approved');
     } catch {
       setState('pending');
@@ -26,7 +26,7 @@ export function ActionConfirmationCard({ confirmation, onApprove, onReject }: Ac
   const handleReject = async () => {
     setState('rejecting');
     try {
-      await onReject(confirmation.id);
+      await confirmAction(threadId, confirmation.id, false);
       setState('rejected');
     } catch {
       setState('pending');

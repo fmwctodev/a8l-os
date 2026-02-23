@@ -92,8 +92,15 @@ export async function sendMessage(
   const chatResponse: ClaraChatResponse = await response.json();
 
   let messageType: AssistantMessage['message_type'] = 'text';
-  if (chatResponse.confirmations_pending?.length > 0) messageType = 'action_confirmation';
-  else if (chatResponse.drafts?.length > 0) messageType = 'draft_preview';
+  if (chatResponse.its_request?.requires_confirmation && chatResponse.its_request.actions.length > 0) {
+    messageType = 'execution_plan';
+  } else if (chatResponse.execution_result) {
+    messageType = 'execution_result';
+  } else if (chatResponse.confirmations_pending?.length > 0) {
+    messageType = 'action_confirmation';
+  } else if (chatResponse.drafts?.length > 0) {
+    messageType = 'draft_preview';
+  }
 
   const { data: assistantMsg, error: assistantError } = await supabase
     .from('assistant_messages')
@@ -107,6 +114,11 @@ export async function sendMessage(
         confirmations: chatResponse.confirmations_pending || [],
         drafts: chatResponse.drafts || [],
         model_used: chatResponse.model_used,
+        its_request: chatResponse.its_request || null,
+        execution_result: chatResponse.execution_result || null,
+        execution_request_id: chatResponse.execution_request_id || null,
+        permission_denied: chatResponse.permission_denied || [],
+        integration_errors: chatResponse.integration_errors || [],
       },
     })
     .select('*')
@@ -136,6 +148,28 @@ export async function confirmAction(
   if (!response.ok) {
     const err = await response.json();
     throw new Error(err.error || 'Failed to process confirmation');
+  }
+
+  return response.json();
+}
+
+export async function confirmExecutionRequest(
+  threadId: string,
+  executionRequestId: string,
+  approved: boolean,
+  actionIds?: string[]
+): Promise<ClaraChatResponse> {
+  const response = await callEdgeFunction('assistant-chat', {
+    thread_id: threadId,
+    action: 'confirm',
+    execution_request_id: executionRequestId,
+    approved,
+    action_ids: actionIds,
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error || 'Failed to process execution confirmation');
   }
 
   return response.json();

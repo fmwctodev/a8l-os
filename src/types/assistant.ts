@@ -1,5 +1,7 @@
+import type { ITSRequest, ITSExecutionResult, ITSAction, ITSActionResult } from './its';
+
 export type AssistantMessageRole = 'user' | 'assistant' | 'system';
-export type AssistantMessageType = 'text' | 'tool_result' | 'action_confirmation' | 'draft_preview' | 'voice_transcript';
+export type AssistantMessageType = 'text' | 'tool_result' | 'action_confirmation' | 'draft_preview' | 'voice_transcript' | 'execution_plan' | 'execution_result';
 export type MemoryCategory = 'scheduling' | 'communication' | 'preferences' | 'contacts' | 'rules' | 'general';
 export type ActionExecutionStatus = 'success' | 'failed' | 'running' | 'queued' | 'canceled';
 export type AssistantPanelTab = 'chat' | 'voice' | 'activity' | 'settings';
@@ -69,6 +71,9 @@ export interface AssistantActionLog {
   error_message: string | null;
   tool_calls: ClaraToolCall[];
   confirmed_by_user: boolean | null;
+  execution_request_id: string | null;
+  action_id: string | null;
+  depends_on: string | null;
   created_at: string;
 }
 
@@ -114,6 +119,11 @@ export interface ClaraChatResponse {
   confirmations_pending: ClaraActionConfirmation[];
   drafts: ClaraDraft[];
   model_used: string;
+  its_request?: ITSRequest;
+  execution_result?: ITSExecutionResult;
+  execution_request_id?: string;
+  permission_denied?: { action_id: string; action_type: string; reason: string }[];
+  integration_errors?: { action_id: string; action_type: string; reason: string }[];
 }
 
 export interface ClaraDraft {
@@ -132,3 +142,5 @@ export interface ClaraVoiceResponse {
   confirmations_pending: ClaraActionConfirmation[];
   drafts: ClaraDraft[];
 }
+
+export type { ITSRequest, ITSExecutionResult, ITSAction, ITSActionResult };

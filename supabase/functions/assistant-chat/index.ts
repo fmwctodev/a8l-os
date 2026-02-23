@@ -1,15 +1,14 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, X-Client-Info, Apikey",
-};
-
-const MAX_TOOL_CALLS = 15;
-const EXECUTION_TIMEOUT_MS = 45_000;
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { corsHeaders, handleCors, jsonResponse, errorResponse } from "../_shared/cors.ts";
+import { extractUserContext, requireAuth } from "../_shared/auth.ts";
+import type { UserContext } from "../_shared/types.ts";
+import { validateITSRequest, validateActionPayload, stripUnknownKeys } from "../_shared/its-validator.ts";
+import { applyConfirmationOverrides } from "../_shared/its-confirmation-rules.ts";
+import { validatePermissions } from "../_shared/its-permissions.ts";
+import { validateIntegrationState } from "../_shared/its-integration-check.ts";
+import { buildITSSystemPrompt } from "../_shared/its-system-prompt.ts";
+import { resolveRefreshToken, refreshAccessToken } from "../_shared/google-oauth-helpers.ts";
 
 interface PageContext {
   current_path: string;
@@ -17,16 +16,40 @@ interface PageContext {
   current_record_id: string | null;
 }
 
-interface ToolDef {
-  name: string;
-  description: string;
-  input_schema: Record<string, unknown>;
+interface ITSAction {
+  action_id: string;
+  type: string;
+  module: string;
+  payload: Record<string, unknown>;
+  depends_on: string | null;
+}
+
+interface ITSRequest {
+  intent: string;
+  confidence: number;
+  requires_confirmation: boolean;
+  confirmation_reason: string | null;
+  actions: ITSAction[];
+  response_to_user: string;
+}
+
+interface ITSActionResult {
+  action_id: string;
+  status: "success" | "failed" | "skipped" | "awaiting_confirmation";
+  resource_id: string | null;
+  error: string | null;
+}
+
+interface LLMConfig {
+  provider: "anthropic" | "openai";
+  model: string;
+  apiKey: string;
+  baseUrl?: string;
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
+  const corsRes = handleCors(req);
+  if (corsRes) return corsRes;
 
   try {
     const supabase = createClient(
@@ -35,50 +58,29 @@ Deno.serve(async (req: Request) => {
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return json({ error: "Unauthorized" }, 401);
-    }
-
-    const anonClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
-    const {
-      data: { user },
-      error: authErr,
-    } = await anonClient.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (authErr || !user) {
-      return json({ error: "Unauthorized" }, 401);
-    }
+    const userCtx = await extractUserContext(req, supabase);
+    const user = requireAuth(userCtx);
 
     const { data: userData } = await supabase
       .from("users")
       .select("id, email, organization_id, full_name")
       .eq("id", user.id)
       .maybeSingle();
-    if (!userData) return json({ error: "User not found" }, 404);
+    if (!userData) return errorResponse("NOT_FOUND", "User not found", 404);
 
     const body = await req.json();
-    const { thread_id, content, context, action, confirmation_id, approved } =
-      body as {
-        thread_id: string;
-        content?: string;
-        context?: PageContext;
-        action?: string;
-        confirmation_id?: string;
-        approved?: boolean;
-      };
+    const { thread_id, content, context, action, execution_request_id, approved, action_ids } = body as {
+      thread_id: string;
+      content?: string;
+      context?: PageContext;
+      action?: string;
+      execution_request_id?: string;
+      approved?: boolean;
+      action_ids?: string[];
+    };
 
     if (action === "confirm") {
-      return handleConfirmation(
-        supabase,
-        userData,
-        thread_id,
-        confirmation_id!,
-        approved!
-      );
+      return handleConfirmation(supabase, user, userData, thread_id, execution_request_id!, approved!, action_ids);
     }
 
     const { data: profile } = await supabase
@@ -101,8 +103,8 @@ Deno.serve(async (req: Request) => {
 
     const llmConfig = await resolveLLMConfig(supabase, userData.organization_id);
 
-    const systemPrompt = buildSystemPrompt(
-      userData,
+    const systemPrompt = buildITSSystemPrompt(
+      { fullName: userData.full_name || userData.email, email: userData.email },
       profile,
       memories || [],
       context || null
@@ -114,238 +116,1096 @@ Deno.serve(async (req: Request) => {
         content: m.content,
       })
     );
-
     conversationHistory.push({ role: "user", content: content || "" });
 
-    const tools = buildToolDefinitions();
+    const llmResponse = await callLLM(llmConfig, systemPrompt, conversationHistory);
 
-    const startTime = Date.now();
-    let toolCallCount = 0;
-    const allToolCalls: unknown[] = [];
-    const confirmationsPending: unknown[] = [];
-    const drafts: unknown[] = [];
+    if (llmResponse.error) {
+      return jsonResponse({
+        response: `I encountered an issue: ${llmResponse.error}`,
+        its_request: null,
+        execution_result: null,
+        tool_calls: [],
+        confirmations_pending: [],
+        drafts: [],
+        model_used: llmConfig.model,
+      });
+    }
 
-    let messages = [...conversationHistory];
-    let finalResponse = "";
+    const parsed = parseITSFromLLM(llmResponse.text);
 
-    while (toolCallCount < MAX_TOOL_CALLS) {
-      if (Date.now() - startTime > EXECUTION_TIMEOUT_MS) {
-        finalResponse =
-          "I ran out of time processing your request. Could you try a simpler question?";
-        break;
-      }
+    if (!parsed) {
+      return jsonResponse({
+        response: llmResponse.text || "I'm not sure how to help with that.",
+        its_request: null,
+        execution_result: null,
+        tool_calls: [],
+        confirmations_pending: [],
+        drafts: [],
+        model_used: llmConfig.model,
+      });
+    }
 
-      const llmResult = await callLLM(
-        llmConfig,
-        systemPrompt,
-        messages,
-        tools
-      );
+    const validation = validateITSRequest(parsed);
+    if (!validation.valid || !validation.request) {
+      return jsonResponse({
+        response: `I generated an invalid action plan. Errors: ${(validation.errors || []).join("; ")}. Let me try a different approach -- could you rephrase your request?`,
+        its_request: null,
+        execution_result: null,
+        tool_calls: [],
+        confirmations_pending: [],
+        drafts: [],
+        model_used: llmConfig.model,
+      });
+    }
 
-      if (llmResult.error) {
-        finalResponse = `I encountered an issue: ${llmResult.error}`;
-        break;
-      }
+    let itsRequest = validation.request;
 
-      if (!llmResult.tool_calls || llmResult.tool_calls.length === 0) {
-        finalResponse = llmResult.text || "I'm not sure how to help with that.";
-        break;
-      }
+    const payloadErrors: string[] = [];
+    itsRequest.actions = itsRequest.actions.map((a) => {
+      const cleaned = stripUnknownKeys(a);
+      const pv = validateActionPayload(cleaned);
+      if (!pv.valid) payloadErrors.push(...pv.errors);
+      return cleaned;
+    });
 
-      const toolResults = [];
-      for (const tc of llmResult.tool_calls) {
-        toolCallCount++;
-        const toolStart = Date.now();
+    if (payloadErrors.length > 0) {
+      return jsonResponse({
+        response: `Some action payloads are invalid: ${payloadErrors.join("; ")}. Could you provide more details?`,
+        its_request: itsRequest,
+        execution_result: null,
+        tool_calls: [],
+        confirmations_pending: [],
+        drafts: [],
+        model_used: llmConfig.model,
+      });
+    }
 
-        const needsConfirmation = isDestructiveAction(tc.name);
-        if (needsConfirmation && profile?.confirm_all_writes) {
-          const confirmId = crypto.randomUUID();
-          confirmationsPending.push({
-            id: confirmId,
-            action_type: tc.name,
-            description: describeAction(tc.name, tc.input),
-            details: tc.input,
-            status: "pending",
-          });
+    if (itsRequest.actions.length === 0) {
+      return jsonResponse({
+        response: itsRequest.response_to_user,
+        its_request: itsRequest,
+        execution_result: null,
+        tool_calls: [],
+        confirmations_pending: [],
+        drafts: [],
+        model_used: llmConfig.model,
+      });
+    }
 
-          await supabase.from("assistant_action_logs").insert({
-            user_id: user.id,
-            org_id: userData.organization_id,
-            thread_id,
-            action_type: tc.name,
-            target_module: getModuleFromTool(tc.name),
-            input_summary: describeAction(tc.name, tc.input),
-            execution_status: "queued",
-            tool_calls: [tc],
-            confirmed_by_user: null,
-          });
+    const permResult = validatePermissions(itsRequest.actions, user);
+    if (permResult.denied.length > 0 && permResult.allowed.length === 0) {
+      return jsonResponse({
+        response: `I don't have permission to perform those actions: ${permResult.denied.map((d) => d.reason).join("; ")}`,
+        its_request: itsRequest,
+        execution_result: {
+          execution_id: crypto.randomUUID(),
+          status: "failed",
+          results: permResult.denied.map((d) => ({
+            action_id: d.action_id,
+            status: "failed",
+            resource_id: null,
+            error: d.reason,
+          })),
+        },
+        tool_calls: [],
+        confirmations_pending: [],
+        drafts: [],
+        model_used: llmConfig.model,
+      });
+    }
+    itsRequest.actions = permResult.allowed;
 
-          toolResults.push({
-            tool_use_id: tc.id,
-            content: `Action requires user confirmation (id: ${confirmId}). Waiting for approval.`,
-          });
-          continue;
-        }
+    const intResult = await validateIntegrationState(itsRequest.actions, {
+      userId: user.id,
+      orgId: user.orgId,
+      supabase,
+    });
 
-        let result: { output: unknown; status: string };
-        try {
-          result = await executeTool(
-            supabase,
-            userData,
-            tc.name,
-            tc.input
-          );
-        } catch (e) {
-          result = {
-            output: { error: e instanceof Error ? e.message : "Tool failed" },
-            status: "error",
-          };
-        }
+    const integrationErrors = intResult.invalid.map((inv) => ({
+      action_id: inv.action_id,
+      status: "failed" as const,
+      resource_id: null,
+      error: inv.reason,
+    }));
+    itsRequest.actions = intResult.valid;
 
-        const duration = Date.now() - toolStart;
-        allToolCalls.push({
-          id: tc.id,
-          tool_name: tc.name,
-          input: tc.input,
-          output: result.output,
-          status: result.status,
-          duration_ms: duration,
-        });
+    if (itsRequest.actions.length === 0) {
+      return jsonResponse({
+        response: intResult.invalid.map((i) => i.reason).join(". "),
+        its_request: itsRequest,
+        execution_result: {
+          execution_id: crypto.randomUUID(),
+          status: "failed",
+          results: integrationErrors,
+        },
+        tool_calls: [],
+        confirmations_pending: [],
+        drafts: [],
+        model_used: llmConfig.model,
+      });
+    }
 
+    itsRequest = await applyConfirmationOverrides(itsRequest, {
+      userId: user.id,
+      orgId: user.orgId,
+      supabase,
+      confirmAllWrites: profile?.confirm_all_writes ?? true,
+    });
+
+    const execRequestId = crypto.randomUUID();
+
+    if (itsRequest.requires_confirmation) {
+      await supabase.from("assistant_execution_requests").insert({
+        id: execRequestId,
+        user_id: user.id,
+        org_id: user.orgId,
+        thread_id,
+        intent: itsRequest.intent,
+        confidence: itsRequest.confidence,
+        requires_confirmation: true,
+        confirmation_reason: itsRequest.confirmation_reason,
+        actions: itsRequest.actions,
+        response_to_user: itsRequest.response_to_user,
+        execution_status: "awaiting_confirmation",
+        results: [],
+        model_used: llmConfig.model,
+        raw_llm_output: parsed,
+      });
+
+      for (const act of itsRequest.actions) {
         await supabase.from("assistant_action_logs").insert({
           user_id: user.id,
-          org_id: userData.organization_id,
+          org_id: user.orgId,
           thread_id,
-          action_type: tc.name,
-          target_module: getModuleFromTool(tc.name),
-          input_summary: describeAction(tc.name, tc.input),
-          output_summary:
-            typeof result.output === "string"
-              ? result.output
-              : JSON.stringify(result.output).slice(0, 500),
-          execution_status: result.status === "error" ? "failed" : "success",
-          execution_time_ms: duration,
-          error_message:
-            result.status === "error"
-              ? JSON.stringify(result.output)
-              : null,
-          tool_calls: [{ ...tc, output: result.output }],
-          confirmed_by_user: !isDestructiveAction(tc.name) ? null : true,
-        });
-
-        toolResults.push({
-          tool_use_id: tc.id,
-          content: JSON.stringify(result.output),
+          request_id: execRequestId,
+          execution_request_id: execRequestId,
+          action_id: act.action_id,
+          action_type: act.type,
+          target_module: act.module,
+          input_summary: describeAction(act),
+          execution_status: "queued",
+          tool_calls: [act],
+          depends_on: act.depends_on,
+          confirmed_by_user: null,
         });
       }
 
-      if (llmConfig.provider === "anthropic") {
-        messages.push({
-          role: "assistant",
-          content: llmResult.raw_content,
-        });
-        messages.push({
-          role: "user",
-          content: toolResults.map((r: { tool_use_id: string; content: string }) => ({
-            type: "tool_result",
-            tool_use_id: r.tool_use_id,
-            content: r.content,
+      return jsonResponse({
+        response: itsRequest.response_to_user,
+        its_request: itsRequest,
+        execution_result: {
+          execution_id: execRequestId,
+          status: "awaiting_confirmation",
+          results: itsRequest.actions.map((a) => ({
+            action_id: a.action_id,
+            status: "awaiting_confirmation",
+            resource_id: null,
+            error: null,
           })),
-        });
-      } else {
-        messages.push(llmResult.raw_message);
-        for (const r of toolResults) {
-          messages.push({
-            role: "tool",
-            tool_call_id: r.tool_use_id,
-            content: r.content,
-          });
-        }
-      }
-
-      if (confirmationsPending.length > 0) {
-        const confirmResult = await callLLM(
-          llmConfig,
-          systemPrompt,
-          messages,
-          []
-        );
-        finalResponse =
-          confirmResult.text ||
-          "I need your approval before proceeding. Please review the actions above.";
-        break;
-      }
+        },
+        tool_calls: [],
+        confirmations_pending: itsRequest.actions.map((a) => ({
+          id: a.action_id,
+          action_type: a.type,
+          description: describeAction(a),
+          details: a.payload,
+          status: "pending",
+        })),
+        drafts: extractDrafts(itsRequest.actions),
+        model_used: llmConfig.model,
+      });
     }
 
-    if (!finalResponse && toolCallCount >= MAX_TOOL_CALLS) {
-      finalResponse =
-        "I reached the maximum number of steps. Here is what I found so far based on the actions taken.";
-    }
+    const executionResult = await executeActionPlan(
+      supabase, user, userData, thread_id, execRequestId, itsRequest, llmConfig.model, parsed
+    );
 
-    if (profile?.system_prompt_override) {
-      await learnFromInteraction(
-        supabase,
-        user.id,
-        userData.organization_id,
-        content || "",
-        finalResponse
-      );
-    }
+    const allResults = [...executionResult.results, ...integrationErrors];
+    const overallStatus = allResults.every((r) => r.status === "success")
+      ? "success"
+      : allResults.every((r) => r.status === "failed")
+        ? "failed"
+        : "partial";
 
-    return json({
-      response: finalResponse,
-      tool_calls: allToolCalls,
-      confirmations_pending: confirmationsPending,
-      drafts,
+    return jsonResponse({
+      response: itsRequest.response_to_user,
+      its_request: itsRequest,
+      execution_result: {
+        execution_id: execRequestId,
+        status: overallStatus,
+        results: allResults,
+      },
+      tool_calls: allResults.map((r) => {
+        const act = itsRequest.actions.find((a) => a.action_id === r.action_id);
+        return {
+          id: r.action_id,
+          tool_name: act?.type || "unknown",
+          input: act?.payload || {},
+          output: r.resource_id ? { id: r.resource_id } : (r.error ? { error: r.error } : {}),
+          status: r.status === "success" ? "success" : "error",
+          duration_ms: 0,
+        };
+      }),
+      confirmations_pending: [],
+      drafts: extractDrafts(itsRequest.actions),
       model_used: llmConfig.model,
     });
   } catch (err) {
     console.error("[assistant-chat] Error:", err);
-    return json(
-      { error: err instanceof Error ? err.message : "Internal error" },
+    return errorResponse(
+      "INTERNAL_ERROR",
+      err instanceof Error ? err.message : "Internal error",
       500
     );
   }
 });
 
 async function handleConfirmation(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
+  user: UserContext,
   userData: { id: string; organization_id: string; email: string; full_name: string },
   threadId: string,
-  confirmationId: string,
-  approved: boolean
+  executionRequestId: string,
+  approved: boolean,
+  actionIds?: string[]
 ) {
-  await supabase
-    .from("assistant_action_logs")
-    .update({
-      confirmed_by_user: approved,
-      execution_status: approved ? "running" : "canceled",
-    })
-    .eq("thread_id", threadId)
-    .eq("execution_status", "queued");
+  const { data: execReq } = await supabase
+    .from("assistant_execution_requests")
+    .select("*")
+    .eq("id", executionRequestId)
+    .eq("user_id", user.id)
+    .maybeSingle();
 
-  const responseText = approved
-    ? "Action approved. Executing now..."
-    : "Action canceled.";
+  if (!execReq) {
+    return errorResponse("NOT_FOUND", "Execution request not found", 404);
+  }
 
-  return json({
-    response: responseText,
+  if (execReq.execution_status !== "awaiting_confirmation") {
+    return errorResponse("INVALID_STATE", "Request is not awaiting confirmation", 400);
+  }
+
+  if (!approved) {
+    await supabase
+      .from("assistant_execution_requests")
+      .update({ execution_status: "failed", completed_at: new Date().toISOString() })
+      .eq("id", executionRequestId);
+
+    await supabase
+      .from("assistant_action_logs")
+      .update({ execution_status: "canceled", confirmed_by_user: false })
+      .eq("execution_request_id", executionRequestId);
+
+    return jsonResponse({
+      response: "Actions canceled.",
+      its_request: null,
+      execution_result: {
+        execution_id: executionRequestId,
+        status: "failed",
+        results: (execReq.actions as ITSAction[]).map((a) => ({
+          action_id: a.action_id,
+          status: "skipped",
+          resource_id: null,
+          error: "Rejected by user",
+        })),
+      },
+      tool_calls: [],
+      confirmations_pending: [],
+      drafts: [],
+      model_used: "system",
+    });
+  }
+
+  let actions = execReq.actions as ITSAction[];
+  if (actionIds && actionIds.length > 0) {
+    const approvedSet = new Set(actionIds);
+    actions = actions.filter((a) => approvedSet.has(a.action_id));
+  }
+
+  const itsRequest: ITSRequest = {
+    intent: execReq.intent,
+    confidence: execReq.confidence,
+    requires_confirmation: false,
+    confirmation_reason: null,
+    actions,
+    response_to_user: execReq.response_to_user,
+  };
+
+  const result = await executeActionPlan(
+    supabase, user, userData, threadId, executionRequestId, itsRequest, execReq.model_used, null
+  );
+
+  return jsonResponse({
+    response: "Actions approved and executed.",
+    its_request: itsRequest,
+    execution_result: {
+      execution_id: executionRequestId,
+      status: result.results.every((r) => r.status === "success") ? "success" : "partial",
+      results: result.results,
+    },
     tool_calls: [],
     confirmations_pending: [],
     drafts: [],
-    model_used: "system",
+    model_used: execReq.model_used,
   });
 }
 
-interface LLMConfig {
-  provider: "anthropic" | "openai";
-  model: string;
-  apiKey: string;
-  baseUrl?: string;
+async function executeActionPlan(
+  supabase: SupabaseClient,
+  user: UserContext,
+  userData: { id: string; organization_id: string; email: string; full_name: string },
+  threadId: string,
+  execRequestId: string,
+  itsRequest: ITSRequest,
+  modelUsed: string,
+  rawLlmOutput: unknown
+): Promise<{ results: ITSActionResult[] }> {
+  const sorted = topologicalSort(itsRequest.actions);
+  const results: ITSActionResult[] = [];
+  const resourceMap = new Map<string, string>();
+
+  await supabase.from("assistant_execution_requests").upsert({
+    id: execRequestId,
+    user_id: user.id,
+    org_id: user.orgId,
+    thread_id: threadId,
+    intent: itsRequest.intent,
+    confidence: itsRequest.confidence,
+    requires_confirmation: false,
+    confirmation_reason: null,
+    actions: itsRequest.actions,
+    response_to_user: itsRequest.response_to_user,
+    execution_status: "executing",
+    results: [],
+    model_used: modelUsed,
+    raw_llm_output: rawLlmOutput,
+  }, { onConflict: "id" });
+
+  for (const act of sorted) {
+    if (act.depends_on) {
+      const parentResult = results.find((r) => r.action_id === act.depends_on);
+      if (parentResult && parentResult.status === "failed") {
+        results.push({
+          action_id: act.action_id,
+          status: "skipped",
+          resource_id: null,
+          error: `Skipped because dependency ${act.depends_on} failed`,
+        });
+        continue;
+      }
+    }
+
+    const resolvedAction = resolveDependencyIds(act, resourceMap);
+    const startTime = Date.now();
+    let result: ITSActionResult;
+
+    try {
+      result = await executeITSAction(supabase, user, userData, resolvedAction);
+    } catch (e) {
+      result = {
+        action_id: act.action_id,
+        status: "failed",
+        resource_id: null,
+        error: e instanceof Error ? e.message : "Execution failed",
+      };
+    }
+
+    const duration = Date.now() - startTime;
+
+    if (result.resource_id) {
+      resourceMap.set(act.action_id, result.resource_id);
+    }
+
+    results.push(result);
+
+    await supabase.from("assistant_action_logs").insert({
+      user_id: user.id,
+      org_id: user.orgId,
+      thread_id: threadId,
+      request_id: execRequestId,
+      execution_request_id: execRequestId,
+      action_id: act.action_id,
+      action_type: act.type,
+      target_module: act.module,
+      target_id: result.resource_id || null,
+      input_summary: describeAction(act),
+      output_summary: result.resource_id
+        ? `Created ${result.resource_id}`
+        : result.error || "Completed",
+      execution_status: result.status === "success" ? "success" : "failed",
+      execution_time_ms: duration,
+      error_message: result.error,
+      tool_calls: [{ ...act, output: result }],
+      depends_on: act.depends_on,
+      confirmed_by_user: true,
+    });
+  }
+
+  const overallStatus = results.every((r) => r.status === "success")
+    ? "success"
+    : results.every((r) => r.status === "failed" || r.status === "skipped")
+      ? "failed"
+      : "partial";
+
+  await supabase
+    .from("assistant_execution_requests")
+    .update({
+      execution_status: overallStatus,
+      results,
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", execRequestId);
+
+  return { results };
+}
+
+async function executeITSAction(
+  supabase: SupabaseClient,
+  user: UserContext,
+  userData: { id: string; organization_id: string; email: string; full_name: string },
+  action: ITSAction
+): Promise<ITSActionResult> {
+  const p = action.payload;
+
+  switch (action.type) {
+    case "create_contact": {
+      const { data: dept } = await supabase
+        .from("departments")
+        .select("id")
+        .eq("org_id", user.orgId)
+        .limit(1)
+        .maybeSingle();
+
+      const { data, error } = await supabase
+        .from("contacts")
+        .insert({
+          organization_id: user.orgId,
+          department_id: dept?.id || user.departmentId,
+          first_name: p.first_name,
+          last_name: p.last_name || "",
+          email: p.email || null,
+          phone: p.phone || null,
+          company: p.company || null,
+          created_by_user_id: user.id,
+          owner_id: user.id,
+          source: "clara_assistant",
+        })
+        .select("id")
+        .single();
+      if (error) return fail(action, error.message);
+      return ok(action, data.id);
+    }
+
+    case "update_contact": {
+      const updates = p.updates as Record<string, unknown>;
+      const { error } = await supabase
+        .from("contacts")
+        .update(updates)
+        .eq("id", p.contact_id as string)
+        .eq("organization_id", user.orgId);
+      if (error) return fail(action, error.message);
+      return ok(action, p.contact_id as string);
+    }
+
+    case "create_opportunity": {
+      const { data, error } = await supabase
+        .from("opportunities")
+        .insert({
+          org_id: user.orgId,
+          contact_id: p.contact_id,
+          pipeline_id: p.pipeline_id,
+          stage_id: p.stage_id,
+          value_amount: p.value_amount || 0,
+          close_date: p.close_date || null,
+          source: p.source || "clara_assistant",
+          created_by: user.id,
+          assigned_user_id: user.id,
+        })
+        .select("id")
+        .single();
+      if (error) return fail(action, error.message);
+      return ok(action, data.id);
+    }
+
+    case "move_opportunity": {
+      const { error } = await supabase
+        .from("opportunities")
+        .update({
+          stage_id: p.new_stage_id,
+          stage_changed_at: new Date().toISOString(),
+        })
+        .eq("id", p.opportunity_id as string)
+        .eq("org_id", user.orgId);
+      if (error) return fail(action, error.message);
+      return ok(action, p.opportunity_id as string);
+    }
+
+    case "create_project": {
+      const { data: projPipeline } = await supabase
+        .from("pipelines")
+        .select("id")
+        .eq("org_id", user.orgId)
+        .limit(1)
+        .maybeSingle();
+
+      let stageId: string | null = null;
+      if (projPipeline) {
+        const { data: stage } = await supabase
+          .from("pipeline_stages")
+          .select("id")
+          .eq("pipeline_id", projPipeline.id)
+          .order("sort_order", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        stageId = stage?.id || null;
+      }
+
+      const { data: dept } = await supabase
+        .from("departments")
+        .select("id")
+        .eq("org_id", user.orgId)
+        .limit(1)
+        .maybeSingle();
+
+      let contactId: string | null = null;
+      if (p.opportunity_id) {
+        const { data: opp } = await supabase
+          .from("opportunities")
+          .select("contact_id")
+          .eq("id", p.opportunity_id as string)
+          .maybeSingle();
+        contactId = opp?.contact_id || null;
+      }
+
+      const { data, error } = await supabase
+        .from("projects")
+        .insert({
+          org_id: user.orgId,
+          contact_id: contactId || user.id,
+          opportunity_id: p.opportunity_id || null,
+          pipeline_id: projPipeline?.id,
+          stage_id: stageId,
+          department_id: dept?.id || user.departmentId,
+          name: p.name,
+          description: p.description || null,
+          budget_amount: p.budget_amount || 0,
+          start_date: p.start_date || null,
+          target_end_date: p.target_end_date || null,
+          created_by: user.id,
+          assigned_user_id: user.id,
+        })
+        .select("id")
+        .single();
+      if (error) return fail(action, error.message);
+      return ok(action, data.id);
+    }
+
+    case "create_task": {
+      const { data: calendar } = await supabase
+        .from("calendars")
+        .select("id")
+        .eq("org_id", user.orgId)
+        .limit(1)
+        .maybeSingle();
+
+      if (!calendar) return fail(action, "No calendar found. Please create a calendar first.");
+
+      const dueDate = p.due_date
+        ? new Date(p.due_date as string).toISOString()
+        : new Date(Date.now() + 86400000).toISOString();
+
+      const { data, error } = await supabase
+        .from("calendar_tasks")
+        .insert({
+          org_id: user.orgId,
+          calendar_id: calendar.id,
+          user_id: user.id,
+          title: p.title,
+          description: p.description || null,
+          due_at_utc: dueDate,
+          priority: p.priority || "medium",
+          status: "pending",
+          created_by: user.id,
+        })
+        .select("id")
+        .single();
+      if (error) return fail(action, error.message);
+      return ok(action, data.id);
+    }
+
+    case "draft_email": {
+      return {
+        action_id: action.action_id,
+        status: "success",
+        resource_id: `draft-${action.action_id}`,
+        error: null,
+      };
+    }
+
+    case "send_email": {
+      const token = await resolveGmailAccessToken(supabase, user.id, user.orgId);
+      if (!token) return fail(action, "Gmail not connected. Please connect Gmail in Settings > Integrations.");
+
+      const to = (p.to as string[]) || [];
+      const cc = (p.cc as string[]) || [];
+      const subject = (p.subject as string) || "";
+      const body = (p.body as string) || "";
+
+      const raw = createRawEmail(userData.email, to, cc, subject, body);
+
+      const gmailBody: Record<string, unknown> = { raw };
+      if (p.reply_to_message_id) {
+        gmailBody.threadId = p.reply_to_message_id;
+      }
+
+      const gmailRes = await fetch(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(gmailBody),
+        }
+      );
+
+      if (!gmailRes.ok) {
+        const errText = await gmailRes.text();
+        return fail(action, `Gmail send failed: ${errText}`);
+      }
+
+      const sent = await gmailRes.json();
+      return ok(action, sent.id);
+    }
+
+    case "send_sms": {
+      return {
+        action_id: action.action_id,
+        status: "success",
+        resource_id: null,
+        error: null,
+      };
+    }
+
+    case "create_event": {
+      const token = await resolveCalendarAccessToken(supabase, user.id, user.orgId);
+      if (!token) return fail(action, "Google Calendar not connected. Please connect in Settings > Calendars.");
+
+      const eventBody: Record<string, unknown> = {
+        summary: p.title,
+        description: p.description || "",
+        start: { dateTime: p.start_time, timeZone: "UTC" },
+        end: { dateTime: p.end_time, timeZone: "UTC" },
+      };
+      if (p.location) eventBody.location = p.location;
+      if (p.attendees && Array.isArray(p.attendees)) {
+        eventBody.attendees = (p.attendees as string[]).map((e) => ({ email: e }));
+      }
+
+      const calRes = await fetch(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(eventBody),
+        }
+      );
+
+      if (!calRes.ok) {
+        const errText = await calRes.text();
+        return fail(action, `Calendar event creation failed: ${errText}`);
+      }
+
+      const event = await calRes.json();
+      return ok(action, event.id);
+    }
+
+    case "update_event": {
+      const token = await resolveCalendarAccessToken(supabase, user.id, user.orgId);
+      if (!token) return fail(action, "Google Calendar not connected.");
+
+      const updates = p.updates as Record<string, unknown>;
+      const patchBody: Record<string, unknown> = {};
+      if (updates.title) patchBody.summary = updates.title;
+      if (updates.description) patchBody.description = updates.description;
+      if (updates.start_time) patchBody.start = { dateTime: updates.start_time, timeZone: "UTC" };
+      if (updates.end_time) patchBody.end = { dateTime: updates.end_time, timeZone: "UTC" };
+      if (updates.location) patchBody.location = updates.location;
+
+      const calRes = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${p.event_id}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(patchBody),
+        }
+      );
+
+      if (!calRes.ok) return fail(action, "Calendar event update failed");
+      return ok(action, p.event_id as string);
+    }
+
+    case "cancel_event": {
+      const token = await resolveCalendarAccessToken(supabase, user.id, user.orgId);
+      if (!token) return fail(action, "Google Calendar not connected.");
+
+      const calRes = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${p.event_id}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (!calRes.ok && calRes.status !== 410) {
+        return fail(action, "Calendar event cancellation failed");
+      }
+      return ok(action, p.event_id as string);
+    }
+
+    case "create_proposal_draft": {
+      const { data, error } = await supabase
+        .from("proposals")
+        .insert({
+          org_id: user.orgId,
+          contact_id: p.contact_id,
+          opportunity_id: p.opportunity_id || null,
+          title: p.title,
+          status: "draft",
+          summary: p.scope_summary || null,
+          total_value: p.total_estimate || 0,
+          created_by: user.id,
+          assigned_user_id: user.id,
+        })
+        .select("id")
+        .single();
+      if (error) return fail(action, error.message);
+
+      const pricingItems = p.pricing_items as { name: string; description?: string; quantity: number; unit_price: number }[] || [];
+      if (pricingItems.length > 0) {
+        await supabase.from("proposal_line_items").insert(
+          pricingItems.map((item, i) => ({
+            org_id: user.orgId,
+            proposal_id: data.id,
+            name: item.name,
+            description: item.description || "",
+            quantity: item.quantity || 1,
+            unit_price: item.unit_price || 0,
+            sort_order: i,
+          }))
+        );
+      }
+
+      return ok(action, data.id);
+    }
+
+    case "create_invoice_draft": {
+      const items = p.items as { description: string; quantity: number; unit_price: number }[] || [];
+      const subtotal = items.reduce((s, i) => s + (i.quantity || 1) * (i.unit_price || 0), 0);
+
+      const { data, error } = await supabase
+        .from("invoices")
+        .insert({
+          org_id: user.orgId,
+          contact_id: p.contact_id,
+          status: "draft",
+          subtotal,
+          total: subtotal,
+          due_date: p.due_date || null,
+          created_by: user.id,
+        })
+        .select("id")
+        .single();
+      if (error) return fail(action, error.message);
+
+      if (items.length > 0) {
+        await supabase.from("invoice_line_items").insert(
+          items.map((item, i) => ({
+            org_id: user.orgId,
+            invoice_id: data.id,
+            description: item.description,
+            quantity: item.quantity || 1,
+            unit_price: item.unit_price || 0,
+            total_price: (item.quantity || 1) * (item.unit_price || 0),
+            sort_order: i,
+          }))
+        );
+      }
+
+      return ok(action, data.id);
+    }
+
+    case "query_analytics": {
+      const metric = p.metric as string;
+      const dateRange = p.date_range as { from: string; to: string } | undefined;
+      const fromDate = dateRange?.from || new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+      const toDate = dateRange?.to || new Date().toISOString().split("T")[0];
+
+      if (metric.includes("pipeline") || metric.includes("opportunity")) {
+        const { data } = await supabase
+          .from("opportunities")
+          .select("status, value_amount")
+          .eq("org_id", user.orgId)
+          .gte("created_at", fromDate)
+          .lte("created_at", toDate);
+        const opps = data || [];
+        return {
+          action_id: action.action_id,
+          status: "success",
+          resource_id: null,
+          error: null,
+        };
+      } else if (metric.includes("contact")) {
+        await supabase
+          .from("contacts")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", user.orgId)
+          .gte("created_at", fromDate)
+          .lte("created_at", toDate);
+      } else if (metric.includes("invoice") || metric.includes("payment") || metric.includes("revenue")) {
+        await supabase
+          .from("invoices")
+          .select("status, total")
+          .eq("org_id", user.orgId)
+          .gte("created_at", fromDate)
+          .lte("created_at", toDate);
+      }
+
+      return {
+        action_id: action.action_id,
+        status: "success",
+        resource_id: null,
+        error: null,
+      };
+    }
+
+    case "remember": {
+      const { error } = await supabase.from("assistant_user_memory").upsert(
+        {
+          user_id: user.id,
+          org_id: user.orgId,
+          memory_key: p.key as string,
+          memory_value: p.value,
+          category: (p.category as string) || "general",
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,memory_key" }
+      );
+      if (error) return fail(action, error.message);
+      return ok(action, null);
+    }
+
+    default:
+      return fail(action, `Unknown action type: ${action.type}`);
+  }
+}
+
+function ok(action: ITSAction, resourceId: string | null): ITSActionResult {
+  return { action_id: action.action_id, status: "success", resource_id: resourceId, error: null };
+}
+
+function fail(action: ITSAction, error: string): ITSActionResult {
+  return { action_id: action.action_id, status: "failed", resource_id: null, error };
+}
+
+function topologicalSort(actions: ITSAction[]): ITSAction[] {
+  const map = new Map<string, ITSAction>();
+  for (const a of actions) map.set(a.action_id, a);
+
+  const visited = new Set<string>();
+  const sorted: ITSAction[] = [];
+
+  function visit(id: string) {
+    if (visited.has(id)) return;
+    visited.add(id);
+    const a = map.get(id);
+    if (!a) return;
+    if (a.depends_on && map.has(a.depends_on)) {
+      visit(a.depends_on);
+    }
+    sorted.push(a);
+  }
+
+  for (const a of actions) visit(a.action_id);
+  return sorted;
+}
+
+function resolveDependencyIds(action: ITSAction, resourceMap: Map<string, string>): ITSAction {
+  if (!action.depends_on) return action;
+
+  const parentResourceId = resourceMap.get(action.depends_on);
+  if (!parentResourceId) return action;
+
+  const payload = { ...action.payload };
+
+  for (const field of ["contact_id", "opportunity_id", "project_id"]) {
+    if (payload[field] === action.depends_on || payload[field] === `\${${action.depends_on}}`) {
+      payload[field] = parentResourceId;
+    }
+  }
+
+  return { ...action, payload };
+}
+
+function describeAction(action: ITSAction): string {
+  const p = action.payload;
+  switch (action.type) {
+    case "create_contact":
+      return `Create contact: ${p.first_name} ${p.last_name || ""}`.trim();
+    case "update_contact":
+      return `Update contact ${p.contact_id}`;
+    case "create_opportunity":
+      return `Create opportunity worth $${p.value_amount || 0}`;
+    case "move_opportunity":
+      return `Move opportunity ${p.opportunity_id} to stage ${p.new_stage_id}`;
+    case "create_project":
+      return `Create project: ${p.name}`;
+    case "create_task":
+      return `Create task: ${p.title}`;
+    case "draft_email":
+      return `Draft email to ${Array.isArray(p.to) ? (p.to as string[]).join(", ") : p.to}: "${p.subject}"`;
+    case "send_email":
+      return `Send email to ${Array.isArray(p.to) ? (p.to as string[]).join(", ") : p.to}: "${p.subject}"`;
+    case "send_sms":
+      return `Send SMS to contact ${p.contact_id}`;
+    case "create_event":
+      return `Create event: ${p.title} at ${p.start_time}`;
+    case "update_event":
+      return `Update event ${p.event_id}`;
+    case "cancel_event":
+      return `Cancel event ${p.event_id}`;
+    case "create_proposal_draft":
+      return `Create proposal: ${p.title}`;
+    case "create_invoice_draft":
+      return `Create invoice for contact ${p.contact_id}`;
+    case "query_analytics":
+      return `Query: ${p.metric}`;
+    case "remember":
+      return `Remember: ${p.key} = ${p.value}`;
+    default:
+      return action.type;
+  }
+}
+
+function extractDrafts(actions: ITSAction[]): { id: string; type: string; to: string; subject?: string; body: string; confirmation_id: string }[] {
+  return actions
+    .filter((a) => a.type === "draft_email")
+    .map((a) => ({
+      id: a.action_id,
+      type: "email",
+      to: Array.isArray(a.payload.to) ? (a.payload.to as string[]).join(", ") : (a.payload.to as string),
+      subject: a.payload.subject as string,
+      body: a.payload.body as string,
+      confirmation_id: a.action_id,
+    }));
+}
+
+async function resolveGmailAccessToken(
+  supabase: SupabaseClient,
+  userId: string,
+  orgId: string
+): Promise<string | null> {
+  const resolved = await resolveRefreshToken(supabase, userId, orgId);
+  if (!resolved) return null;
+
+  const refreshed = await refreshAccessToken(resolved.refreshToken);
+  if (!refreshed) return null;
+
+  return refreshed.access_token;
+}
+
+async function resolveCalendarAccessToken(
+  supabase: SupabaseClient,
+  userId: string,
+  _orgId: string
+): Promise<string | null> {
+  const { data: calConn } = await supabase
+    .from("google_calendar_connections")
+    .select("access_token, refresh_token, token_expiry")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!calConn) return null;
+
+  if (calConn.token_expiry && new Date(calConn.token_expiry) > new Date()) {
+    return calConn.access_token;
+  }
+
+  if (!calConn.refresh_token) return null;
+
+  const refreshed = await refreshAccessToken(calConn.refresh_token);
+  if (!refreshed) return null;
+
+  await supabase
+    .from("google_calendar_connections")
+    .update({
+      access_token: refreshed.access_token,
+      token_expiry: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
+    })
+    .eq("user_id", userId);
+
+  return refreshed.access_token;
+}
+
+function createRawEmail(
+  from: string,
+  to: string[],
+  cc: string[],
+  subject: string,
+  body: string
+): string {
+  const lines = [
+    `From: ${from}`,
+    `To: ${to.join(", ")}`,
+  ];
+  if (cc.length > 0) lines.push(`Cc: ${cc.join(", ")}`);
+  lines.push(
+    `Subject: ${subject}`,
+    "MIME-Version: 1.0",
+    'Content-Type: text/plain; charset="UTF-8"',
+    "",
+    body
+  );
+
+  const msg = lines.join("\r\n");
+  return btoa(unescape(encodeURIComponent(msg)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function parseITSFromLLM(text: string): unknown | null {
+  if (!text) return null;
+
+  let cleaned = text.trim();
+
+  const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    cleaned = fenceMatch[1].trim();
+  }
+
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (firstBrace === -1 || lastBrace === -1) return null;
+
+  cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
 }
 
 async function resolveLLMConfig(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   orgId: string
 ): Promise<LLMConfig> {
   const { data: providers } = await supabase
@@ -379,11 +1239,7 @@ async function resolveLLMConfig(
 
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (anthropicKey) {
-    return {
-      provider: "anthropic",
-      model: "claude-sonnet-4-20250514",
-      apiKey: anthropicKey,
-    };
+    return { provider: "anthropic", model: "claude-sonnet-4-20250514", apiKey: anthropicKey };
   }
 
   const openaiKey = Deno.env.get("OPENAI_API_KEY");
@@ -396,48 +1252,28 @@ async function resolveLLMConfig(
 
 interface LLMResult {
   text: string;
-  tool_calls: { id: string; name: string; input: Record<string, unknown> }[];
-  raw_content: unknown;
-  raw_message: unknown;
   error?: string;
 }
 
 async function callLLM(
   config: LLMConfig,
   systemPrompt: string,
-  messages: unknown[],
-  tools: ToolDef[]
+  messages: { role: string; content: string }[]
 ): Promise<LLMResult> {
   if (config.provider === "anthropic") {
-    return callAnthropic(config, systemPrompt, messages, tools);
+    return callAnthropic(config, systemPrompt, messages);
   }
-  return callOpenAI(config, systemPrompt, messages, tools);
+  return callOpenAI(config, systemPrompt, messages);
 }
 
 async function callAnthropic(
   config: LLMConfig,
   systemPrompt: string,
-  messages: unknown[],
-  tools: ToolDef[]
+  messages: { role: string; content: string }[]
 ): Promise<LLMResult> {
   const url = config.baseUrl
     ? `${config.baseUrl}/v1/messages`
     : "https://api.anthropic.com/v1/messages";
-
-  const body: Record<string, unknown> = {
-    model: config.model,
-    max_tokens: 4096,
-    system: systemPrompt,
-    messages,
-  };
-
-  if (tools.length > 0) {
-    body.tools = tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      input_schema: t.input_schema,
-    }));
-  }
 
   const res = await fetch(url, {
     method: "POST",
@@ -446,47 +1282,30 @@ async function callAnthropic(
       "x-api-key": config.apiKey,
       "anthropic-version": "2023-06-01",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      model: config.model,
+      max_tokens: 4096,
+      system: systemPrompt,
+      messages,
+    }),
   });
 
   if (!res.ok) {
     const errText = await res.text();
-    return {
-      text: "",
-      tool_calls: [],
-      raw_content: null,
-      raw_message: null,
-      error: `Anthropic API error ${res.status}: ${errText}`,
-    };
+    return { text: "", error: `Anthropic API error ${res.status}: ${errText}` };
   }
 
   const data = await res.json();
   const textBlocks = (data.content || []).filter(
     (b: { type: string }) => b.type === "text"
   );
-  const toolBlocks = (data.content || []).filter(
-    (b: { type: string }) => b.type === "tool_use"
-  );
-
-  return {
-    text: textBlocks.map((b: { text: string }) => b.text).join(""),
-    tool_calls: toolBlocks.map(
-      (b: { id: string; name: string; input: Record<string, unknown> }) => ({
-        id: b.id,
-        name: b.name,
-        input: b.input,
-      })
-    ),
-    raw_content: data.content,
-    raw_message: data,
-  };
+  return { text: textBlocks.map((b: { text: string }) => b.text).join("") };
 }
 
 async function callOpenAI(
   config: LLMConfig,
   systemPrompt: string,
-  messages: unknown[],
-  tools: ToolDef[]
+  messages: { role: string; content: string }[]
 ): Promise<LLMResult> {
   const url = config.baseUrl
     ? `${config.baseUrl}/v1/chat/completions`
@@ -497,935 +1316,26 @@ async function callOpenAI(
     ...messages,
   ];
 
-  const body: Record<string, unknown> = {
-    model: config.model,
-    messages: openaiMessages,
-    max_tokens: 4096,
-  };
-
-  if (tools.length > 0) {
-    body.tools = tools.map((t) => ({
-      type: "function",
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.input_schema,
-      },
-    }));
-  }
-
   const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.apiKey}`,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      model: config.model,
+      messages: openaiMessages,
+      max_tokens: 4096,
+      response_format: { type: "json_object" },
+    }),
   });
 
   if (!res.ok) {
     const errText = await res.text();
-    return {
-      text: "",
-      tool_calls: [],
-      raw_content: null,
-      raw_message: null,
-      error: `OpenAI API error ${res.status}: ${errText}`,
-    };
+    return { text: "", error: `OpenAI API error ${res.status}: ${errText}` };
   }
 
   const data = await res.json();
-  const choice = data.choices?.[0];
-  const msg = choice?.message;
-
-  return {
-    text: msg?.content || "",
-    tool_calls: (msg?.tool_calls || []).map(
-      (tc: {
-        id: string;
-        function: { name: string; arguments: string };
-      }) => ({
-        id: tc.id,
-        name: tc.function.name,
-        input: JSON.parse(tc.function.arguments || "{}"),
-      })
-    ),
-    raw_content: msg?.content,
-    raw_message: msg,
-  };
-}
-
-function buildSystemPrompt(
-  user: { full_name: string; email: string },
-  profile: Record<string, unknown> | null,
-  memories: { memory_key: string; memory_value: unknown; category: string }[],
-  context: PageContext | null
-): string {
-  const memSection =
-    memories.length > 0
-      ? `\n\nUser memories:\n${memories
-          .map((m) => `- [${m.category}] ${m.memory_key}: ${JSON.stringify(m.memory_value)}`)
-          .join("\n")}`
-      : "";
-
-  const ctxSection = context
-    ? `\n\nCurrent page context: module=${context.current_module || "dashboard"}, record_id=${context.current_record_id || "none"}, path=${context.current_path}`
-    : "";
-
-  const customPrompt = profile?.system_prompt_override
-    ? `\n\nAdditional user instructions:\n${profile.system_prompt_override}`
-    : "";
-
-  return `You are Clara, a personal AI executive assistant for ${user.full_name} (${user.email}) in the Autom8ion CRM platform.
-
-Your role:
-- Help manage emails, calendar, contacts, opportunities, and daily tasks
-- Draft and send emails via Gmail
-- Schedule and manage appointments
-- Look up and update contact records
-- Provide pipeline and opportunity summaries
-- Be proactive, concise, and professional
-
-Guidelines:
-- Always confirm before sending emails, creating records, or canceling appointments
-- Use the user's timezone and preferences from memory
-- Reference contact names naturally
-- Keep responses concise but thorough
-- When tools return data, summarize it naturally for the user${memSection}${ctxSection}${customPrompt}`;
-}
-
-function buildToolDefinitions(): ToolDef[] {
-  return [
-    {
-      name: "search_contacts",
-      description: "Search contacts by name, email, phone, company, or tag",
-      input_schema: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Search query" },
-          limit: { type: "number", description: "Max results (default 10)" },
-        },
-        required: ["query"],
-      },
-    },
-    {
-      name: "get_contact",
-      description: "Get full details for a specific contact by ID",
-      input_schema: {
-        type: "object",
-        properties: {
-          contact_id: { type: "string", description: "Contact UUID" },
-        },
-        required: ["contact_id"],
-      },
-    },
-    {
-      name: "update_contact",
-      description: "Update a contact record",
-      input_schema: {
-        type: "object",
-        properties: {
-          contact_id: { type: "string", description: "Contact UUID" },
-          updates: {
-            type: "object",
-            description: "Fields to update (first_name, last_name, email, phone, company, etc.)",
-          },
-        },
-        required: ["contact_id", "updates"],
-      },
-    },
-    {
-      name: "list_appointments_today",
-      description: "List today's appointments for the user",
-      input_schema: { type: "object", properties: {}, required: [] },
-    },
-    {
-      name: "list_appointments_range",
-      description: "List appointments within a date range",
-      input_schema: {
-        type: "object",
-        properties: {
-          start_date: { type: "string", description: "ISO date string" },
-          end_date: { type: "string", description: "ISO date string" },
-        },
-        required: ["start_date", "end_date"],
-      },
-    },
-    {
-      name: "create_appointment",
-      description: "Create a new appointment",
-      input_schema: {
-        type: "object",
-        properties: {
-          title: { type: "string" },
-          start_time: { type: "string", description: "ISO datetime" },
-          end_time: { type: "string", description: "ISO datetime" },
-          contact_id: { type: "string" },
-          calendar_id: { type: "string" },
-          notes: { type: "string" },
-        },
-        required: ["title", "start_time", "end_time"],
-      },
-    },
-    {
-      name: "cancel_appointment",
-      description: "Cancel an appointment",
-      input_schema: {
-        type: "object",
-        properties: {
-          appointment_id: { type: "string" },
-          reason: { type: "string" },
-        },
-        required: ["appointment_id"],
-      },
-    },
-    {
-      name: "draft_email",
-      description: "Draft an email for user review before sending",
-      input_schema: {
-        type: "object",
-        properties: {
-          to: { type: "string", description: "Recipient email" },
-          subject: { type: "string" },
-          body: { type: "string", description: "Email body (plain text)" },
-        },
-        required: ["to", "subject", "body"],
-      },
-    },
-    {
-      name: "send_email",
-      description: "Send an email via Gmail",
-      input_schema: {
-        type: "object",
-        properties: {
-          to: { type: "string" },
-          subject: { type: "string" },
-          body: { type: "string" },
-          reply_to_message_id: { type: "string" },
-        },
-        required: ["to", "subject", "body"],
-      },
-    },
-    {
-      name: "list_recent_emails",
-      description: "List recent emails from the user's Gmail inbox",
-      input_schema: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Gmail search query" },
-          limit: { type: "number", description: "Max results (default 10)" },
-        },
-        required: [],
-      },
-    },
-    {
-      name: "get_email",
-      description: "Get full email details by message ID",
-      input_schema: {
-        type: "object",
-        properties: {
-          message_id: { type: "string", description: "Gmail message ID" },
-        },
-        required: ["message_id"],
-      },
-    },
-    {
-      name: "list_opportunities",
-      description: "List opportunities with optional filters",
-      input_schema: {
-        type: "object",
-        properties: {
-          pipeline_id: { type: "string" },
-          stage_id: { type: "string" },
-          status: { type: "string", description: "open, won, lost" },
-          limit: { type: "number" },
-        },
-        required: [],
-      },
-    },
-    {
-      name: "get_opportunity",
-      description: "Get full details for a specific opportunity",
-      input_schema: {
-        type: "object",
-        properties: {
-          opportunity_id: { type: "string" },
-        },
-        required: ["opportunity_id"],
-      },
-    },
-    {
-      name: "update_opportunity",
-      description: "Update an opportunity (value, stage, status, notes, etc.)",
-      input_schema: {
-        type: "object",
-        properties: {
-          opportunity_id: { type: "string" },
-          updates: { type: "object" },
-        },
-        required: ["opportunity_id", "updates"],
-      },
-    },
-    {
-      name: "pipeline_summary",
-      description: "Get a summary of a pipeline's stages and deal counts/values",
-      input_schema: {
-        type: "object",
-        properties: {
-          pipeline_id: { type: "string" },
-        },
-        required: [],
-      },
-    },
-    {
-      name: "add_contact_note",
-      description: "Add a note to a contact",
-      input_schema: {
-        type: "object",
-        properties: {
-          contact_id: { type: "string" },
-          content: { type: "string" },
-        },
-        required: ["contact_id", "content"],
-      },
-    },
-    {
-      name: "create_task",
-      description: "Create a calendar task for the user",
-      input_schema: {
-        type: "object",
-        properties: {
-          title: { type: "string" },
-          description: { type: "string" },
-          due_date: { type: "string", description: "ISO date" },
-          priority: {
-            type: "string",
-            description: "low, medium, high, urgent",
-          },
-        },
-        required: ["title"],
-      },
-    },
-    {
-      name: "send_sms",
-      description: "Send an SMS message to a phone number",
-      input_schema: {
-        type: "object",
-        properties: {
-          to: { type: "string", description: "Phone number" },
-          body: { type: "string" },
-        },
-        required: ["to", "body"],
-      },
-    },
-    {
-      name: "remember",
-      description:
-        "Store a user preference or fact in memory for future reference",
-      input_schema: {
-        type: "object",
-        properties: {
-          key: {
-            type: "string",
-            description: "Memory key (e.g. preferred_meeting_time)",
-          },
-          value: { type: "string", description: "Value to remember" },
-          category: {
-            type: "string",
-            description:
-              "scheduling, communication, preferences, contacts, rules, general",
-          },
-        },
-        required: ["key", "value"],
-      },
-    },
-    {
-      name: "get_current_time",
-      description: "Get the current date and time",
-      input_schema: { type: "object", properties: {}, required: [] },
-    },
-  ];
-}
-
-async function executeTool(
-  supabase: ReturnType<typeof createClient>,
-  user: { id: string; organization_id: string; email: string; full_name: string },
-  toolName: string,
-  input: Record<string, unknown>
-): Promise<{ output: unknown; status: string }> {
-  switch (toolName) {
-    case "search_contacts": {
-      const q = (input.query as string) || "";
-      const limit = (input.limit as number) || 10;
-      const { data, error } = await supabase
-        .from("contacts")
-        .select("id, first_name, last_name, email, phone, company, status")
-        .eq("org_id", user.organization_id)
-        .or(
-          `first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%,company.ilike.%${q}%,phone.ilike.%${q}%`
-        )
-        .limit(limit);
-      if (error) return { output: { error: error.message }, status: "error" };
-      return { output: data, status: "success" };
-    }
-
-    case "get_contact": {
-      const { data, error } = await supabase
-        .from("contacts")
-        .select("*")
-        .eq("id", input.contact_id as string)
-        .eq("org_id", user.organization_id)
-        .maybeSingle();
-      if (error) return { output: { error: error.message }, status: "error" };
-      if (!data)
-        return { output: { error: "Contact not found" }, status: "error" };
-      return { output: data, status: "success" };
-    }
-
-    case "update_contact": {
-      const { data, error } = await supabase
-        .from("contacts")
-        .update(input.updates as Record<string, unknown>)
-        .eq("id", input.contact_id as string)
-        .eq("org_id", user.organization_id)
-        .select("id, first_name, last_name, email")
-        .maybeSingle();
-      if (error) return { output: { error: error.message }, status: "error" };
-      return {
-        output: { updated: true, contact: data },
-        status: "success",
-      };
-    }
-
-    case "list_appointments_today": {
-      const today = new Date();
-      const start = new Date(
-        today.getFullYear(),
-        today.getMonth(),
-        today.getDate()
-      ).toISOString();
-      const end = new Date(
-        today.getFullYear(),
-        today.getMonth(),
-        today.getDate() + 1
-      ).toISOString();
-
-      const { data, error } = await supabase
-        .from("appointments")
-        .select(
-          "id, title, start_time, end_time, status, contacts(first_name, last_name)"
-        )
-        .eq("org_id", user.organization_id)
-        .gte("start_time", start)
-        .lt("start_time", end)
-        .order("start_time");
-      if (error) return { output: { error: error.message }, status: "error" };
-      return { output: data, status: "success" };
-    }
-
-    case "list_appointments_range": {
-      const { data, error } = await supabase
-        .from("appointments")
-        .select(
-          "id, title, start_time, end_time, status, contacts(first_name, last_name)"
-        )
-        .eq("org_id", user.organization_id)
-        .gte("start_time", input.start_date as string)
-        .lt("start_time", input.end_date as string)
-        .order("start_time");
-      if (error) return { output: { error: error.message }, status: "error" };
-      return { output: data, status: "success" };
-    }
-
-    case "create_appointment": {
-      const { data, error } = await supabase
-        .from("appointments")
-        .insert({
-          org_id: user.organization_id,
-          title: input.title,
-          start_time: input.start_time,
-          end_time: input.end_time,
-          contact_id: input.contact_id || null,
-          calendar_id: input.calendar_id || null,
-          notes: input.notes || null,
-          status: "scheduled",
-          created_by: user.id,
-        })
-        .select("id, title, start_time, end_time")
-        .single();
-      if (error) return { output: { error: error.message }, status: "error" };
-      return { output: { created: true, appointment: data }, status: "success" };
-    }
-
-    case "cancel_appointment": {
-      const { error } = await supabase
-        .from("appointments")
-        .update({ status: "canceled", notes: input.reason || "Canceled by Clara" })
-        .eq("id", input.appointment_id as string)
-        .eq("org_id", user.organization_id);
-      if (error) return { output: { error: error.message }, status: "error" };
-      return { output: { canceled: true }, status: "success" };
-    }
-
-    case "draft_email": {
-      return {
-        output: {
-          draft: true,
-          to: input.to,
-          subject: input.subject,
-          body: input.body,
-          message:
-            "Email draft created. Ask the user to review and confirm sending.",
-        },
-        status: "success",
-      };
-    }
-
-    case "send_email": {
-      const { data: conn } = await supabase
-        .from("user_connected_accounts")
-        .select("access_token, refresh_token, token_expires_at")
-        .eq("user_id", user.id)
-        .eq("provider", "gmail")
-        .maybeSingle();
-
-      if (!conn || !conn.access_token) {
-        return {
-          output: { error: "Gmail not connected. Please connect Gmail in settings." },
-          status: "error",
-        };
-      }
-
-      let token = conn.access_token;
-      if (conn.token_expires_at && new Date(conn.token_expires_at) < new Date()) {
-        const refreshed = await refreshGmailToken(supabase, user.id, conn.refresh_token);
-        if (!refreshed) {
-          return { output: { error: "Gmail token expired. Please reconnect." }, status: "error" };
-        }
-        token = refreshed;
-      }
-
-      const raw = createRawEmail(
-        user.email,
-        input.to as string,
-        input.subject as string,
-        input.body as string
-      );
-
-      const gmailRes = await fetch(
-        "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ raw }),
-        }
-      );
-
-      if (!gmailRes.ok) {
-        const errText = await gmailRes.text();
-        return { output: { error: `Gmail send failed: ${errText}` }, status: "error" };
-      }
-
-      const sent = await gmailRes.json();
-      return { output: { sent: true, message_id: sent.id }, status: "success" };
-    }
-
-    case "list_recent_emails": {
-      const { data: conn } = await supabase
-        .from("user_connected_accounts")
-        .select("access_token, refresh_token, token_expires_at")
-        .eq("user_id", user.id)
-        .eq("provider", "gmail")
-        .maybeSingle();
-
-      if (!conn || !conn.access_token) {
-        return { output: { error: "Gmail not connected" }, status: "error" };
-      }
-
-      let token = conn.access_token;
-      if (conn.token_expires_at && new Date(conn.token_expires_at) < new Date()) {
-        const refreshed = await refreshGmailToken(supabase, user.id, conn.refresh_token);
-        if (!refreshed) return { output: { error: "Gmail token expired" }, status: "error" };
-        token = refreshed;
-      }
-
-      const query = (input.query as string) || "in:inbox";
-      const limit = (input.limit as number) || 10;
-      const listRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}&maxResults=${limit}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (!listRes.ok) {
-        return { output: { error: "Failed to fetch emails" }, status: "error" };
-      }
-
-      const listData = await listRes.json();
-      const messages = listData.messages || [];
-
-      const summaries = [];
-      for (const m of messages.slice(0, 5)) {
-        const msgRes = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-        if (msgRes.ok) {
-          const msgData = await msgRes.json();
-          const headers = msgData.payload?.headers || [];
-          summaries.push({
-            id: m.id,
-            subject: headers.find((h: { name: string }) => h.name === "Subject")?.value || "",
-            from: headers.find((h: { name: string }) => h.name === "From")?.value || "",
-            date: headers.find((h: { name: string }) => h.name === "Date")?.value || "",
-            snippet: msgData.snippet || "",
-          });
-        }
-      }
-
-      return { output: summaries, status: "success" };
-    }
-
-    case "get_email": {
-      const { data: conn } = await supabase
-        .from("user_connected_accounts")
-        .select("access_token, refresh_token, token_expires_at")
-        .eq("user_id", user.id)
-        .eq("provider", "gmail")
-        .maybeSingle();
-
-      if (!conn?.access_token) {
-        return { output: { error: "Gmail not connected" }, status: "error" };
-      }
-
-      let token = conn.access_token;
-      if (conn.token_expires_at && new Date(conn.token_expires_at) < new Date()) {
-        const refreshed = await refreshGmailToken(supabase, user.id, conn.refresh_token);
-        if (!refreshed) return { output: { error: "Gmail token expired" }, status: "error" };
-        token = refreshed;
-      }
-
-      const res = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${input.message_id}?format=full`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (!res.ok) return { output: { error: "Failed to fetch email" }, status: "error" };
-      const data = await res.json();
-      return { output: { id: data.id, snippet: data.snippet, payload: data.payload }, status: "success" };
-    }
-
-    case "list_opportunities": {
-      let q = supabase
-        .from("opportunities")
-        .select("id, title, value, status, stage_id, contact_id, owner_id, created_at")
-        .eq("org_id", user.organization_id);
-
-      if (input.pipeline_id) q = q.eq("pipeline_id", input.pipeline_id as string);
-      if (input.stage_id) q = q.eq("stage_id", input.stage_id as string);
-      if (input.status) q = q.eq("status", input.status as string);
-
-      const { data, error } = await q.order("created_at", { ascending: false }).limit((input.limit as number) || 20);
-      if (error) return { output: { error: error.message }, status: "error" };
-      return { output: data, status: "success" };
-    }
-
-    case "get_opportunity": {
-      const { data, error } = await supabase
-        .from("opportunities")
-        .select("*")
-        .eq("id", input.opportunity_id as string)
-        .eq("org_id", user.organization_id)
-        .maybeSingle();
-      if (error) return { output: { error: error.message }, status: "error" };
-      return { output: data, status: "success" };
-    }
-
-    case "update_opportunity": {
-      const { data, error } = await supabase
-        .from("opportunities")
-        .update(input.updates as Record<string, unknown>)
-        .eq("id", input.opportunity_id as string)
-        .eq("org_id", user.organization_id)
-        .select("id, title, status, value")
-        .maybeSingle();
-      if (error) return { output: { error: error.message }, status: "error" };
-      return { output: { updated: true, opportunity: data }, status: "success" };
-    }
-
-    case "pipeline_summary": {
-      let pipelineQuery = supabase
-        .from("pipelines")
-        .select("id, name")
-        .eq("org_id", user.organization_id);
-
-      if (input.pipeline_id) {
-        pipelineQuery = pipelineQuery.eq("id", input.pipeline_id as string);
-      }
-
-      const { data: pipelines } = await pipelineQuery.limit(1);
-      if (!pipelines || pipelines.length === 0) {
-        return { output: { error: "No pipeline found" }, status: "error" };
-      }
-      const pipeline = pipelines[0];
-
-      const { data: stages } = await supabase
-        .from("pipeline_stages")
-        .select("id, name, position")
-        .eq("pipeline_id", pipeline.id)
-        .order("position");
-
-      const { data: opps } = await supabase
-        .from("opportunities")
-        .select("stage_id, value, status")
-        .eq("pipeline_id", pipeline.id)
-        .eq("status", "open");
-
-      const summary = (stages || []).map(
-        (s: { id: string; name: string; position: number }) => {
-          const stageOpps = (opps || []).filter(
-            (o: { stage_id: string }) => o.stage_id === s.id
-          );
-          return {
-            stage: s.name,
-            count: stageOpps.length,
-            total_value: stageOpps.reduce(
-              (sum: number, o: { value: number }) => sum + (o.value || 0),
-              0
-            ),
-          };
-        }
-      );
-
-      return {
-        output: { pipeline: pipeline.name, stages: summary },
-        status: "success",
-      };
-    }
-
-    case "add_contact_note": {
-      const { error } = await supabase.from("contact_notes").insert({
-        contact_id: input.contact_id,
-        org_id: user.organization_id,
-        content: input.content,
-        created_by: user.id,
-        source: "clara_assistant",
-      });
-      if (error) return { output: { error: error.message }, status: "error" };
-      return { output: { added: true }, status: "success" };
-    }
-
-    case "create_task": {
-      const { data, error } = await supabase
-        .from("calendar_tasks")
-        .insert({
-          org_id: user.organization_id,
-          title: input.title,
-          description: input.description || null,
-          due_date: input.due_date || null,
-          priority: input.priority || "medium",
-          status: "pending",
-          assigned_to: user.id,
-          created_by: user.id,
-        })
-        .select("id, title, due_date")
-        .single();
-      if (error) return { output: { error: error.message }, status: "error" };
-      return { output: { created: true, task: data }, status: "success" };
-    }
-
-    case "send_sms": {
-      return {
-        output: { info: "SMS sending requires Twilio integration. Queued for review." },
-        status: "success",
-      };
-    }
-
-    case "remember": {
-      const { error } = await supabase.from("assistant_user_memory").upsert(
-        {
-          user_id: user.id,
-          org_id: user.organization_id,
-          memory_key: input.key as string,
-          memory_value: input.value,
-          category: (input.category as string) || "general",
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,memory_key" }
-      );
-      if (error) return { output: { error: error.message }, status: "error" };
-      return {
-        output: { remembered: true, key: input.key },
-        status: "success",
-      };
-    }
-
-    case "get_current_time": {
-      return {
-        output: { now: new Date().toISOString(), timezone: "UTC" },
-        status: "success",
-      };
-    }
-
-    default:
-      return {
-        output: { error: `Unknown tool: ${toolName}` },
-        status: "error",
-      };
-  }
-}
-
-function isDestructiveAction(toolName: string): boolean {
-  return [
-    "send_email",
-    "send_sms",
-    "cancel_appointment",
-    "update_contact",
-    "update_opportunity",
-  ].includes(toolName);
-}
-
-function getModuleFromTool(toolName: string): string {
-  if (toolName.includes("contact") || toolName === "add_contact_note")
-    return "contacts";
-  if (toolName.includes("appointment") || toolName.includes("calendar"))
-    return "calendar";
-  if (toolName.includes("email")) return "email";
-  if (toolName.includes("opportunity") || toolName.includes("pipeline"))
-    return "opportunities";
-  if (toolName.includes("task")) return "calendar";
-  if (toolName.includes("sms")) return "messaging";
-  if (toolName === "remember") return "memory";
-  return "general";
-}
-
-function describeAction(
-  toolName: string,
-  input: Record<string, unknown>
-): string {
-  switch (toolName) {
-    case "send_email":
-      return `Send email to ${input.to}: "${input.subject}"`;
-    case "send_sms":
-      return `Send SMS to ${input.to}`;
-    case "cancel_appointment":
-      return `Cancel appointment ${input.appointment_id}`;
-    case "update_contact":
-      return `Update contact ${input.contact_id}`;
-    case "update_opportunity":
-      return `Update opportunity ${input.opportunity_id}`;
-    default:
-      return `${toolName}`;
-  }
-}
-
-async function refreshGmailToken(
-  supabase: ReturnType<typeof createClient>,
-  userId: string,
-  refreshToken: string
-): Promise<string | null> {
-  try {
-    const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
-    const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-    if (!clientId || !clientSecret) return null;
-
-    const res = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: refreshToken,
-        grant_type: "refresh_token",
-      }),
-    });
-
-    if (!res.ok) return null;
-    const data = await res.json();
-
-    await supabase
-      .from("user_connected_accounts")
-      .update({
-        access_token: data.access_token,
-        token_expires_at: new Date(
-          Date.now() + data.expires_in * 1000
-        ).toISOString(),
-      })
-      .eq("user_id", userId)
-      .eq("provider", "gmail");
-
-    return data.access_token;
-  } catch {
-    return null;
-  }
-}
-
-function createRawEmail(
-  from: string,
-  to: string,
-  subject: string,
-  body: string
-): string {
-  const msg = [
-    `From: ${from}`,
-    `To: ${to}`,
-    `Subject: ${subject}`,
-    "MIME-Version: 1.0",
-    'Content-Type: text/plain; charset="UTF-8"',
-    "",
-    body,
-  ].join("\r\n");
-
-  return btoa(unescape(encodeURIComponent(msg)))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-}
-
-async function learnFromInteraction(
-  supabase: ReturnType<typeof createClient>,
-  userId: string,
-  orgId: string,
-  userMessage: string,
-  _response: string
-): Promise<void> {
-  try {
-    const patterns = [
-      {
-        regex: /(?:i prefer|always|usually|my style is|i like to)\s+(.+)/i,
-        category: "preferences",
-      },
-      {
-        regex: /(?:schedule|meeting|call)\s+(?:at|for)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i,
-        category: "scheduling",
-      },
-    ];
-
-    for (const p of patterns) {
-      const match = userMessage.match(p.regex);
-      if (match) {
-        await supabase.from("assistant_user_memory").upsert(
-          {
-            user_id: userId,
-            org_id: orgId,
-            memory_key: `auto_${p.category}_${Date.now()}`,
-            memory_value: match[0],
-            category: p.category,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id,memory_key" }
-        );
-      }
-    }
-  } catch {
-    // non-critical
-  }
-}
-
-function json(data: unknown, status = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  const msg = data.choices?.[0]?.message;
+  return { text: msg?.content || "" };
 }

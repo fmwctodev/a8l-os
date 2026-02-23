@@ -1,8 +1,11 @@
-import { User, Sparkles } from 'lucide-react';
+import { User, Sparkles, AlertTriangle } from 'lucide-react';
 import type { AssistantMessage, ClaraToolCall, ClaraActionConfirmation, ClaraDraft } from '../../../types/assistant';
+import type { ITSRequest, ITSExecutionResult } from '../../../types/its';
 import { ToolReceiptCard } from './ToolReceiptCard';
 import { ActionConfirmationCard } from './ActionConfirmationCard';
 import { DraftPreviewCard } from './DraftPreviewCard';
+import { ExecutionPlanCard } from './ExecutionPlanCard';
+import { ExecutionResultCard } from './ExecutionResultCard';
 
 interface MessageBubbleProps {
   message: AssistantMessage;
@@ -14,6 +17,11 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const confirmations = (meta?.confirmations || []) as ClaraActionConfirmation[];
   const drafts = (meta?.drafts || []) as ClaraDraft[];
   const toolCalls = (message.tool_calls || []) as ClaraToolCall[];
+  const itsRequest = meta?.its_request as ITSRequest | null;
+  const executionResult = meta?.execution_result as ITSExecutionResult | null;
+  const executionRequestId = meta?.execution_request_id as string | null;
+  const permissionDenied = (meta?.permission_denied || []) as { action_id: string; action_type: string; reason: string }[];
+  const integrationErrors = (meta?.integration_errors || []) as { action_id: string; action_type: string; reason: string }[];
 
   const formatTime = (iso: string) => {
     return new Date(iso).toLocaleTimeString(undefined, {
@@ -58,6 +66,39 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             </p>
           </div>
 
+          {(permissionDenied.length > 0 || integrationErrors.length > 0) && (
+            <div className="space-y-1">
+              {permissionDenied.map((d) => (
+                <div key={d.action_id} className="flex items-start gap-1.5 px-2 py-1.5 bg-red-500/5 border border-red-500/10 rounded-lg">
+                  <AlertTriangle className="w-3 h-3 text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-red-400">
+                    {d.action_type}: {d.reason}
+                  </p>
+                </div>
+              ))}
+              {integrationErrors.map((e) => (
+                <div key={e.action_id} className="flex items-start gap-1.5 px-2 py-1.5 bg-amber-500/5 border border-amber-500/10 rounded-lg">
+                  <AlertTriangle className="w-3 h-3 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-amber-400">
+                    {e.action_type}: {e.reason}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {itsRequest && itsRequest.requires_confirmation && itsRequest.actions.length > 0 && executionRequestId && (
+            <ExecutionPlanCard
+              itsRequest={itsRequest}
+              executionRequestId={executionRequestId}
+              threadId={message.thread_id}
+            />
+          )}
+
+          {executionResult && (
+            <ExecutionResultCard executionResult={executionResult} />
+          )}
+
           {toolCalls.length > 0 && (
             <div className="space-y-1">
               {toolCalls.map((tc) => (
@@ -66,7 +107,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             </div>
           )}
 
-          {confirmations.length > 0 && (
+          {confirmations.length > 0 && !itsRequest && (
             <div className="space-y-1.5">
               {confirmations.map((c) => (
                 <ActionConfirmationCard key={c.id} confirmation={c} threadId={message.thread_id} />

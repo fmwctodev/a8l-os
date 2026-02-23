@@ -1,9 +1,11 @@
 import { supabase } from '../lib/supabase';
 import type { AssistantActionLog, ActionExecutionStatus } from '../types/assistant';
+import type { ITSExecutionRequest } from '../types/its';
 
 interface ActionLogFilters {
   targetModule?: string;
   executionStatus?: ActionExecutionStatus;
+  executionRequestId?: string;
   limit?: number;
   offset?: number;
 }
@@ -12,7 +14,7 @@ export async function getActionLogs(
   userId: string,
   filters: ActionLogFilters = {}
 ): Promise<{ data: AssistantActionLog[]; count: number }> {
-  const { targetModule, executionStatus, limit = 30, offset = 0 } = filters;
+  const { targetModule, executionStatus, executionRequestId, limit = 30, offset = 0 } = filters;
 
   let query = supabase
     .from('assistant_action_logs')
@@ -25,6 +27,10 @@ export async function getActionLogs(
 
   if (executionStatus) {
     query = query.eq('execution_status', executionStatus);
+  }
+
+  if (executionRequestId) {
+    query = query.eq('execution_request_id', executionRequestId);
   }
 
   const { data, error, count } = await query
@@ -62,4 +68,32 @@ export async function getRecentActions(
 
   if (error) throw error;
   return (data || []) as AssistantActionLog[];
+}
+
+export async function getExecutionRequests(
+  userId: string,
+  limit: number = 20
+): Promise<ITSExecutionRequest[]> {
+  const { data, error } = await supabase
+    .from('assistant_execution_requests')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return (data || []) as ITSExecutionRequest[];
+}
+
+export async function getExecutionRequestDetail(
+  requestId: string
+): Promise<ITSExecutionRequest | null> {
+  const { data, error } = await supabase
+    .from('assistant_execution_requests')
+    .select('*')
+    .eq('id', requestId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as ITSExecutionRequest | null;
 }
