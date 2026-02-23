@@ -8,6 +8,8 @@ import {
   hasGmailScopes,
   hasCalendarScopes,
   hasDriveScopes,
+  resolveRefreshToken,
+  refreshAccessToken,
 } from "../_shared/google-oauth-helpers.ts";
 
 const corsHeaders = {
@@ -312,7 +314,7 @@ async function handleConnection(req: Request): Promise<Response> {
   const supabase = getServiceClient();
   const { data: master } = await supabase
     .from("google_oauth_master")
-    .select("id, email, granted_scopes, token_expiry, created_at, updated_at")
+    .select("id, org_id, email, granted_scopes, token_expiry, encrypted_refresh_token, created_at, updated_at")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -349,6 +351,32 @@ async function handleConnection(req: Request): Promise<Response> {
   }
 
   const scopes = master.granted_scopes || [];
+  let tokenExpired = false;
+
+  if (new Date(master.token_expiry) <= new Date()) {
+    try {
+      const resolved = await resolveRefreshToken(supabase, user.id, master.org_id);
+      if (resolved) {
+        const refreshed = await refreshAccessToken(resolved.refreshToken);
+        if (refreshed) {
+          const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
+          const newRefreshToken = refreshed.refresh_token || resolved.refreshToken;
+          await writeMasterToken(supabase, master.org_id, user.id, master.email, refreshed.access_token, newRefreshToken, newExpiry, scopes);
+          await crossPopulateServiceTables(supabase, master.org_id, user.id, master.email, refreshed.access_token, newRefreshToken, newExpiry, scopes);
+          console.log(`[UnifiedOAuth] Silently refreshed token for user ${user.id}`);
+        } else {
+          tokenExpired = true;
+          console.warn(`[UnifiedOAuth] Google rejected refresh for user ${user.id}`);
+        }
+      } else {
+        tokenExpired = true;
+        console.warn(`[UnifiedOAuth] No refresh token found for user ${user.id}`);
+      }
+    } catch (err) {
+      tokenExpired = true;
+      console.error(`[UnifiedOAuth] Silent refresh failed for user ${user.id}:`, err);
+    }
+  }
 
   return jsonResponse({
     connected: true,
@@ -359,7 +387,7 @@ async function handleConnection(req: Request): Promise<Response> {
     drive: hasDriveScopes(scopes),
     scopes,
     connectedAt: master.created_at,
-    tokenExpired: new Date(master.token_expiry) <= new Date(),
+    tokenExpired,
   });
 }
 

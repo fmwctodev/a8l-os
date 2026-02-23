@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { resolveRefreshToken, refreshAccessToken } from "../_shared/google-oauth-helpers.ts";
+import { resolveRefreshToken, refreshAccessToken, writeMasterToken, crossPopulateServiceTables } from "../_shared/google-oauth-helpers.ts";
+import { encryptToken } from "../_shared/crypto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -99,6 +100,7 @@ async function getValidToken(connection: Connection, supabase: Supabase): Promis
   }
 
   let result: { access_token: string; expires_in: number; refresh_token?: string };
+  let usedRefreshToken = connection.refresh_token;
   try {
     result = await refreshToken(connection.refresh_token);
   } catch {
@@ -108,6 +110,7 @@ async function getValidToken(connection: Connection, supabase: Supabase): Promis
       const fallbackResult = await refreshAccessToken(fallback.refreshToken);
       if (fallbackResult) {
         result = fallbackResult;
+        usedRefreshToken = fallback.refreshToken;
       } else {
         throw new Error("All token refresh sources exhausted");
       }
@@ -117,6 +120,7 @@ async function getValidToken(connection: Connection, supabase: Supabase): Promis
   }
 
   const newExpiry = new Date(Date.now() + result.expires_in * 1000).toISOString();
+  const finalRefreshToken = result.refresh_token || usedRefreshToken;
 
   const updateData: Record<string, unknown> = {
     access_token: result.access_token,
@@ -128,6 +132,20 @@ async function getValidToken(connection: Connection, supabase: Supabase): Promis
     .from("google_calendar_connections")
     .update(updateData)
     .eq("id", connection.id);
+
+  try {
+    const { data: master } = await supabase
+      .from("google_oauth_master")
+      .select("granted_scopes, email")
+      .eq("user_id", connection.user_id)
+      .maybeSingle();
+
+    if (master) {
+      await writeMasterToken(supabase, connection.org_id, connection.user_id, master.email, result.access_token, finalRefreshToken, newExpiry, master.granted_scopes || []);
+    }
+  } catch (masterErr) {
+    console.warn("[Runner] Failed to update master token (non-fatal):", masterErr);
+  }
 
   connection.access_token = result.access_token;
   connection.token_expiry = newExpiry;

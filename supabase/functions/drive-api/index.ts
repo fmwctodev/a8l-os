@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { writeMasterToken } from "../_shared/google-oauth-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -209,6 +210,21 @@ async function getValidAccessToken(
       updated_at: new Date().toISOString(),
     })
     .eq("id", connection.id);
+
+  try {
+    const { data: master } = await supabase
+      .from("google_oauth_master")
+      .select("granted_scopes, email, org_id")
+      .eq("user_id", connection.user_id)
+      .maybeSingle();
+
+    if (master) {
+      const refreshToken = tokens.refresh_token || connection.refresh_token_encrypted;
+      await writeMasterToken(supabase, master.org_id, connection.user_id, master.email, tokens.access_token, refreshToken, newExpiry, master.granted_scopes || []);
+    }
+  } catch (masterErr) {
+    console.warn("[DriveAPI] Failed to update master token (non-fatal):", masterErr);
+  }
 
   return tokens.access_token;
 }

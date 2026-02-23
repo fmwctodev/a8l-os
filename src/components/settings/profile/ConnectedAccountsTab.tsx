@@ -267,7 +267,7 @@ export function ConnectedAccountsTab() {
                   <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                     <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
                     <p className="text-amber-400 text-sm flex-1">
-                      Connection expired. Please reconnect to restore all services.
+                      Google has revoked access. Please reconnect your account.
                     </p>
                     <button
                       onClick={handleConnect}
