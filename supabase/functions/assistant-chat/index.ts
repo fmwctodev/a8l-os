@@ -608,15 +608,18 @@ async function executeITSAction(
       const { data: dept } = await supabase
         .from("departments")
         .select("id")
-        .eq("org_id", user.orgId)
+        .eq("organization_id", user.orgId)
         .limit(1)
         .maybeSingle();
+
+      const deptId = dept?.id || user.departmentId;
+      if (!deptId) return fail(action, "No department found for this organization. Please create a department in Settings first.");
 
       const { data, error } = await supabase
         .from("contacts")
         .insert({
           organization_id: user.orgId,
-          department_id: dept?.id || user.departmentId,
+          department_id: deptId,
           first_name: p.first_name,
           last_name: p.last_name || "",
           email: p.email || null,
@@ -699,7 +702,7 @@ async function executeITSAction(
       const { data: dept } = await supabase
         .from("departments")
         .select("id")
-        .eq("org_id", user.orgId)
+        .eq("organization_id", user.orgId)
         .limit(1)
         .maybeSingle();
 
