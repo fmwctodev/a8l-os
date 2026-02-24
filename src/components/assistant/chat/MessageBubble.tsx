@@ -6,6 +6,7 @@ import { ActionConfirmationCard } from './ActionConfirmationCard';
 import { DraftPreviewCard } from './DraftPreviewCard';
 import { ExecutionPlanCard } from './ExecutionPlanCard';
 import { ExecutionResultCard } from './ExecutionResultCard';
+import { ClaraMarkdown } from './ClaraMarkdown';
 
 interface MessageBubbleProps {
   message: AssistantMessage;
@@ -58,9 +59,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         </div>
         <div className="space-y-2">
           <div className="bg-slate-800 border border-slate-700/50 rounded-2xl rounded-tl-md px-3 py-2">
-            <p className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed">
-              {message.content}
-            </p>
+            <ClaraMarkdown content={message.content} />
             <p className="text-[9px] text-slate-500 mt-1">
               {formatTime(message.created_at)}
             </p>

@@ -363,7 +363,7 @@ Deno.serve(async (req: Request) => {
           id: r.action_id,
           tool_name: act?.type || "unknown",
           input: act?.payload || {},
-          output: r.resource_id ? { id: r.resource_id } : (r.error ? { error: r.error } : {}),
+          output: r.query_data ? r.query_data : (r.resource_id ? { id: r.resource_id } : (r.error ? { error: r.error } : {})),
           status: r.status === "success" ? "success" : "error",
           duration_ms: 0,
         };
@@ -456,8 +456,20 @@ async function handleConfirmation(
     supabase, user, userData, threadId, executionRequestId, itsRequest, execReq.model_used, null
   );
 
+  let confirmResponse = "Actions approved and executed.";
+  const confirmQueryResults = result.results.filter((r) => r.query_data !== undefined && r.status === "success");
+  if (confirmQueryResults.length > 0) {
+    try {
+      const llmConfig = await resolveLLMConfig(supabase, user.orgId);
+      const summarized = await summarizeQueryResults(
+        llmConfig, confirmQueryResults, itsRequest, execReq.response_to_user || "", userData.name || userData.email
+      );
+      if (summarized) confirmResponse = summarized;
+    } catch { /* fallback to default message */ }
+  }
+
   return jsonResponse({
-    response: "Actions approved and executed.",
+    response: confirmResponse,
     its_request: itsRequest,
     execution_result: {
       execution_id: executionRequestId,
@@ -1316,23 +1328,183 @@ You executed query actions and received the following data:
 
 ${dataBlocks.join("\n\n")}
 
-Summarize this data in a natural, conversational response. Be concise and helpful. Format times in a readable way (e.g., "2:00 PM" not ISO timestamps). If there are no results, say so clearly. Group related items logically. Use bullet points or numbered lists for multiple items. Do NOT output JSON. Just respond naturally as Clara.`;
+Summarize this data in a natural, conversational response. Be concise and helpful. Format times in a readable way (e.g., "2:00 PM" not ISO timestamps). If there are no results, say so clearly. Group related items logically. Use markdown bullet points or numbered lists for multiple items. Include details like attendees, locations, and meeting links when available. Do NOT output JSON. Do NOT wrap your response in code fences. Just respond naturally as Clara using markdown formatting.`;
 
   const result = await callLLM(config, summaryPrompt, [
     { role: "user", content: "Please summarize the query results." },
-  ]);
+  ], false);
 
-  if (result.error || !result.text) return null;
+  if (result.error || !result.text) {
+    return buildTemplateFallback(queryResults, itsRequest);
+  }
 
   let text = result.text.trim();
-  if (text.startsWith("{") && text.includes("response_to_user")) {
+
+  if (text.startsWith("{") || text.startsWith("[")) {
     try {
       const parsed = JSON.parse(text);
-      if (parsed.response_to_user) return parsed.response_to_user;
-    } catch { /* not JSON, use as-is */ }
+      const keys = ["response_to_user", "response", "summary", "message", "text", "answer"];
+      for (const k of keys) {
+        if (typeof parsed[k] === "string" && parsed[k].length > 0) return parsed[k];
+      }
+    } catch { /* not valid JSON */ }
+    return buildTemplateFallback(queryResults, itsRequest);
   }
 
   return text;
+}
+
+function formatUtcTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "UTC" });
+  } catch {
+    return iso;
+  }
+}
+
+function formatUtcDate(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  } catch {
+    return iso;
+  }
+}
+
+function buildTemplateFallback(
+  queryResults: ITSActionResult[],
+  itsRequest: ITSRequest
+): string {
+  const lines: string[] = [];
+
+  for (const r of queryResults) {
+    const action = itsRequest.actions.find((a) => a.action_id === r.action_id);
+    const qd = r.query_data as Record<string, unknown> | undefined;
+    if (!qd) continue;
+
+    const actionType = action?.type || "query";
+
+    if (actionType === "query_schedule") {
+      const events = (qd.calendar_events as unknown[]) || [];
+      const appointments = (qd.appointments as unknown[]) || [];
+      const googleEvents = (qd.google_calendar_events as unknown[]) || [];
+      const tasks = (qd.tasks as unknown[]) || [];
+      const total = events.length + appointments.length + googleEvents.length + tasks.length;
+
+      if (total === 0) {
+        lines.push("You have no events or tasks scheduled for that time period.");
+        continue;
+      }
+
+      lines.push(`Here's what's on your schedule:\n`);
+
+      for (const e of googleEvents as Record<string, unknown>[]) {
+        const time = e.start_time ? formatUtcTime(e.start_time as string) : "";
+        const endTime = e.end_time ? ` - ${formatUtcTime(e.end_time as string)}` : "";
+        const title = (e.summary as string) || "Untitled";
+        let detail = `- **${time}${endTime}** ${title}`;
+        if (e.location) detail += `\n  - Location: ${e.location}`;
+        if (e.attendees && Array.isArray(e.attendees)) {
+          const names = (e.attendees as Record<string, unknown>[])
+            .map((a) => a.email || a.displayName || "")
+            .filter(Boolean)
+            .join(", ");
+          if (names) detail += `\n  - Attendees: ${names}`;
+        }
+        if (e.hangout_link) detail += `\n  - Meet: ${e.hangout_link}`;
+        lines.push(detail);
+      }
+
+      for (const e of events as Record<string, unknown>[]) {
+        const time = e.start_at_utc ? formatUtcTime(e.start_at_utc as string) : "";
+        const endTime = e.end_at_utc ? ` - ${formatUtcTime(e.end_at_utc as string)}` : "";
+        const title = (e.title as string) || "Untitled";
+        let detail = `- **${time}${endTime}** ${title}`;
+        if (e.location) detail += `\n  - Location: ${e.location}`;
+        lines.push(detail);
+      }
+
+      for (const e of appointments as Record<string, unknown>[]) {
+        const time = e.start_at_utc ? formatUtcTime(e.start_at_utc as string) : "";
+        const endTime = e.end_at_utc ? ` - ${formatUtcTime(e.end_at_utc as string)}` : "";
+        const title = (e.notes as string) || "Appointment";
+        let detail = `- **${time}${endTime}** ${title}`;
+        if (e.location) detail += `\n  - Location: ${e.location}`;
+        if (e.google_meet_link) detail += `\n  - Meet: ${e.google_meet_link}`;
+        lines.push(detail);
+      }
+
+      if (tasks.length > 0) {
+        lines.push(`\n**Tasks due:**`);
+        for (const t of tasks as Record<string, unknown>[]) {
+          const title = (t.title as string) || "Untitled task";
+          const priority = t.priority ? ` (${t.priority} priority)` : "";
+          lines.push(`- ${title}${priority}`);
+        }
+      }
+    } else if (actionType === "query_contacts") {
+      const contacts = (qd.contacts as Record<string, unknown>[]) || [];
+      if (contacts.length === 0) {
+        lines.push("No contacts found matching your search.");
+        continue;
+      }
+      lines.push(`Found **${contacts.length}** contact${contacts.length === 1 ? "" : "s"}:\n`);
+      for (const c of contacts) {
+        const name = [c.first_name, c.last_name].filter(Boolean).join(" ") || "Unknown";
+        let detail = `- **${name}**`;
+        if (c.email) detail += ` - ${c.email}`;
+        if (c.phone) detail += ` - ${c.phone}`;
+        if (c.company) detail += ` (${c.company})`;
+        lines.push(detail);
+      }
+    } else if (actionType === "query_opportunities") {
+      const opps = (qd.opportunities as Record<string, unknown>[]) || [];
+      if (opps.length === 0) {
+        lines.push("No opportunities found matching your criteria.");
+        continue;
+      }
+      const totalValue = qd.total_value as number || 0;
+      lines.push(`Found **${opps.length}** opportunit${opps.length === 1 ? "y" : "ies"}` +
+        (totalValue > 0 ? ` with total value of **$${totalValue.toLocaleString()}**` : "") + `:\n`);
+      for (const o of opps) {
+        const val = o.value_amount ? `$${(o.value_amount as number).toLocaleString()}` : "No value";
+        const status = (o.status as string) || "unknown";
+        const closeDate = o.close_date ? ` - Close: ${formatUtcDate(o.close_date as string)}` : "";
+        lines.push(`- ${val} (${status})${closeDate}`);
+      }
+    } else if (actionType === "query_tasks") {
+      const tasks = (qd.tasks as Record<string, unknown>[]) || [];
+      if (tasks.length === 0) {
+        lines.push("No tasks found matching your criteria.");
+        continue;
+      }
+      lines.push(`Found **${tasks.length}** task${tasks.length === 1 ? "" : "s"}:\n`);
+      for (const t of tasks) {
+        const title = (t.title as string) || "Untitled";
+        const priority = t.priority ? ` [${t.priority}]` : "";
+        const due = t.due_at_utc ? ` - Due: ${formatUtcDate(t.due_at_utc as string)} ${formatUtcTime(t.due_at_utc as string)}` : "";
+        const status = t.status ? ` (${t.status})` : "";
+        lines.push(`- **${title}**${priority}${due}${status}`);
+      }
+    } else if (actionType === "query_projects") {
+      const projects = (qd.projects as Record<string, unknown>[]) || [];
+      if (projects.length === 0) {
+        lines.push("No projects found matching your criteria.");
+        continue;
+      }
+      lines.push(`Found **${projects.length}** project${projects.length === 1 ? "" : "s"}:\n`);
+      for (const p of projects) {
+        const name = (p.name as string) || "Untitled";
+        const status = (p.status as string) || "";
+        lines.push(`- **${name}**${status ? ` (${status})` : ""}`);
+      }
+    } else {
+      lines.push(`Query returned ${JSON.stringify(qd).length > 200 ? "results" : JSON.stringify(qd)}.`);
+    }
+  }
+
+  return lines.join("\n") || "Query completed but returned no displayable results.";
 }
 
 async function resolveGmailAccessToken(
@@ -1487,12 +1659,13 @@ interface LLMResult {
 async function callLLM(
   config: LLMConfig,
   systemPrompt: string,
-  messages: { role: string; content: string }[]
+  messages: { role: string; content: string }[],
+  jsonMode = true
 ): Promise<LLMResult> {
   if (config.provider === "anthropic") {
     return callAnthropic(config, systemPrompt, messages);
   }
-  return callOpenAI(config, systemPrompt, messages);
+  return callOpenAI(config, systemPrompt, messages, jsonMode);
 }
 
 async function callAnthropic(
@@ -1534,7 +1707,8 @@ async function callAnthropic(
 async function callOpenAI(
   config: LLMConfig,
   systemPrompt: string,
-  messages: { role: string; content: string }[]
+  messages: { role: string; content: string }[],
+  jsonMode = true
 ): Promise<LLMResult> {
   const url = config.baseUrl
     ? `${config.baseUrl}/v1/chat/completions`
@@ -1545,18 +1719,22 @@ async function callOpenAI(
     ...messages,
   ];
 
+  const body: Record<string, unknown> = {
+    model: config.model,
+    messages: openaiMessages,
+    max_tokens: 4096,
+  };
+  if (jsonMode) {
+    body.response_format = { type: "json_object" };
+  }
+
   const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.apiKey}`,
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages: openaiMessages,
-      max_tokens: 4096,
-      response_format: { type: "json_object" },
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {
