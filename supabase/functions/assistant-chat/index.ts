@@ -1007,12 +1007,23 @@ async function executeITSAction(
     case "query_contacts": {
       const search = (p.search as string).trim();
       const limit = (p.limit as number) || 10;
+      const words = search.split(/\s+/).filter(Boolean);
 
-      const { data, error } = await supabase
+      const cols = ["first_name", "last_name", "email", "phone", "company"];
+      const conditions = words.map(
+        (w) => `(${cols.map((c) => `${c}.ilike.%${w}%`).join(",")})`
+      );
+
+      let query = supabase
         .from("contacts")
         .select("id, first_name, last_name, email, phone, company, status, owner_id, created_at")
-        .eq("organization_id", user.orgId)
-        .or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%,company.ilike.%${search}%`)
+        .eq("organization_id", user.orgId);
+
+      for (const cond of conditions) {
+        query = query.or(cond.slice(1, -1));
+      }
+
+      const { data, error } = await query
         .order("updated_at", { ascending: false })
         .limit(limit);
 
