@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, handleCors, jsonResponse, errorResponse } from "../_shared/cors.ts";
-import { extractUserContext, requireAuth } from "../_shared/auth.ts";
+import { extractUserContext, requireAuth, AuthError } from "../_shared/auth.ts";
 import type { UserContext } from "../_shared/types.ts";
 import { validateITSRequest, validateActionPayload, stripUnknownKeys } from "../_shared/its-validator.ts";
 import { applyConfirmationOverrides } from "../_shared/its-confirmation-rules.ts";
@@ -374,6 +374,9 @@ Deno.serve(async (req: Request) => {
     });
   } catch (err) {
     console.error("[assistant-chat] Error:", err);
+    if (err instanceof AuthError) {
+      return errorResponse("AUTH_REQUIRED", "Authentication required", 401);
+    }
     return errorResponse(
       "INTERNAL_ERROR",
       err instanceof Error ? err.message : "Internal error",

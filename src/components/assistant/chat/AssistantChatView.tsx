@@ -105,7 +105,11 @@ export function AssistantChatView() {
       });
     } catch (err) {
       console.error('[Clara] Send failed:', err);
-      const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      const raw = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      const isAuthError = /invalid jwt|authentication required|session expired|unauthorized/i.test(raw);
+      const msg = isAuthError
+        ? 'Your session has expired. Please refresh the page or log out and back in.'
+        : raw;
       setMessages((prev) => [
         ...prev,
         {
