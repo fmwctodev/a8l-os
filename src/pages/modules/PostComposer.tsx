@@ -10,6 +10,7 @@ import {
   Globe,
   ChevronDown,
   Undo2,
+  Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSocialAccounts } from '../../services/socialAccounts';
@@ -29,6 +30,8 @@ import {
   CreateGroupModal,
   AIContentAssistant,
 } from '../../components/social-planner';
+import { MediaStudioPanel } from '../../components/media-studio';
+import type { MediaAsset } from '../../services/mediaGeneration';
 import type {
   SocialAccount,
   SocialAccountGroup,
@@ -78,6 +81,7 @@ export function PostComposer() {
   const [customizePerChannel, setCustomizePerChannel] = useState(false);
 
   const [showAIPanel, setShowAIPanel] = useState(false);
+  const [showMediaStudio, setShowMediaStudio] = useState(false);
   const [contentHistory, setContentHistory] = useState<string[]>([]);
   const aiButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -198,6 +202,20 @@ export function PostComposer() {
     setBody(previousContent);
   }
 
+  function handleAttachGeneratedMedia(asset: MediaAsset) {
+    const mediaItem: SocialPostMedia = {
+      id: asset.id,
+      type: asset.media_type,
+      url: asset.public_url,
+      thumbnail_url: asset.thumbnail_url || undefined,
+      filename: asset.storage_path.split('/').pop() || 'generated-media',
+      mimeType: asset.mime_type || (asset.media_type === 'video' ? 'video/mp4' : 'image/png'),
+      size: asset.file_size_bytes,
+      status: 'uploaded',
+    };
+    setMedia(prev => [...prev, mediaItem]);
+  }
+
   async function handleSave(action: 'draft' | 'post' | 'schedule') {
     if (!user?.organization_id) return;
     if (selectedTargets.length === 0) {
@@ -283,7 +301,13 @@ export function PostComposer() {
           <h1 className="text-lg font-semibold text-gray-900">
             {isEdit ? 'Edit Post' : 'New Social Post'}
           </h1>
-          <div className="w-24" />
+          <button
+            onClick={() => setShowMediaStudio(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+          >
+            <Sparkles className="w-4 h-4" />
+            Media Studio
+          </button>
         </div>
       </div>
 
@@ -535,6 +559,14 @@ export function PostComposer() {
           onClick={() => setShowPostDropdown(false)}
         />
       )}
+
+      <MediaStudioPanel
+        isOpen={showMediaStudio}
+        onClose={() => setShowMediaStudio(false)}
+        onAttachAsset={handleAttachGeneratedMedia}
+        postId={id}
+        platform={selectedProviders[0]}
+      />
     </div>
   );
 }
