@@ -2,49 +2,38 @@ export interface StylePreset {
   id: string;
   name: string;
   display_name: string;
-  description: string;
-  camera_style: string;
-  lighting: string;
-  pacing: string;
-  hook_required: boolean;
-  subtitle_style: string;
-  recommended_duration_min: number;
-  recommended_duration_max: number;
+  prompt_template: string | null;
+  llm_context_snippet: string | null;
+  camera_style: string | null;
+  lighting: string | null;
+  pacing: string | null;
   recommended_aspect_ratio: string | null;
-  prompt_template: string;
-  llm_context_snippet: string;
-  enabled: boolean;
-  display_priority: number;
+  recommended_duration_min: number | null;
+  recommended_duration_max: number | null;
 }
 
 export function buildStructuredPrompt(
-  userPrompt: string,
-  preset?: StylePreset | null
+  rawPrompt: string,
+  preset: StylePreset | null
 ): string {
-  if (!preset || !preset.prompt_template) {
-    return userPrompt;
+  if (!preset?.prompt_template) return rawPrompt;
+
+  const template = preset.prompt_template;
+  if (template.includes("{prompt}")) {
+    return template.replace("{prompt}", rawPrompt);
   }
 
-  const filled = preset.prompt_template.replace("{prompt}", userPrompt);
-  return filled;
+  return `${template}\n\n${rawPrompt}`;
 }
 
 export function buildLLMStyleContext(presets: StylePreset[]): string {
   if (!presets.length) return "";
 
-  const lines: string[] = [
-    "\nAvailable Media Styles (use these when suggesting visual_style_suggestion):",
-  ];
+  const lines = presets
+    .filter((p) => p.llm_context_snippet)
+    .map((p) => `- ${p.display_name}: ${p.llm_context_snippet}`);
 
-  for (const p of presets) {
-    if (!p.llm_context_snippet) continue;
-    lines.push(`- ${p.display_name}: ${p.llm_context_snippet}`);
-  }
+  if (!lines.length) return "";
 
-  lines.push("");
-  lines.push(
-    'When the user requests a specific style or when a style matches the content type, incorporate the style\'s camera, lighting, and pacing attributes into your visual_style_suggestion. Also include a "style_preset" field in the draft JSON set to the style name (e.g., "ugc", "cinematic").'
-  );
-
-  return lines.join("\n");
+  return `\nAvailable media style presets:\n${lines.join("\n")}`;
 }

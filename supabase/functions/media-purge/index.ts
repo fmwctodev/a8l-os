@@ -16,7 +16,6 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
@@ -25,9 +24,9 @@ Deno.serve(async (req: Request) => {
 
     const { data: expiredAssets, error: queryError } = await supabase
       .from("media_assets")
-      .select("id, storage_path, organization_id")
+      .select("id, storage_path, job_id")
       .lt("expires_at", now)
-      .limit(500);
+      .limit(100);
 
     if (queryError) {
       console.error("[media-purge] Query error:", queryError);
@@ -39,96 +38,67 @@ Deno.serve(async (req: Request) => {
 
     if (!expiredAssets || expiredAssets.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, purged: 0, message: "No expired assets" }),
+        JSON.stringify({ success: true, purged: 0 }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`[media-purge] Found ${expiredAssets.length} expired assets`);
-
     let purgedCount = 0;
-    let errorCount = 0;
+    const errors: string[] = [];
 
-    const storagePaths = expiredAssets
-      .map((a: { storage_path: string }) => a.storage_path)
-      .filter(Boolean);
+    for (const asset of expiredAssets) {
+      try {
+        if (asset.storage_path) {
+          const { error: storageError } = await supabase.storage
+            .from("social-media-assets")
+            .remove([asset.storage_path]);
 
-    if (storagePaths.length > 0) {
-      const batchSize = 100;
-      for (let i = 0; i < storagePaths.length; i += batchSize) {
-        const batch = storagePaths.slice(i, i + batchSize);
-        const { error: removeError } = await supabase.storage
-          .from("social-media-assets")
-          .remove(batch);
-
-        if (removeError) {
-          console.error("[media-purge] Storage remove error:", removeError);
-          errorCount += batch.length;
+          if (storageError) {
+            console.warn("[media-purge] Storage delete error:", asset.storage_path, storageError);
+          }
         }
+
+        const { error: deleteError } = await supabase
+          .from("media_assets")
+          .delete()
+          .eq("id", asset.id);
+
+        if (deleteError) {
+          errors.push(`Failed to delete asset ${asset.id}: ${deleteError.message}`);
+        } else {
+          purgedCount++;
+        }
+      } catch (err) {
+        errors.push(`Error processing asset ${asset.id}: ${err}`);
       }
     }
 
-    const expiredIds = expiredAssets.map((a: { id: string }) => a.id);
-    const dbBatchSize = 100;
-    for (let i = 0; i < expiredIds.length; i += dbBatchSize) {
-      const batch = expiredIds.slice(i, i + dbBatchSize);
-      const { error: deleteError } = await supabase
-        .from("media_assets")
-        .delete()
-        .in("id", batch);
-
-      if (deleteError) {
-        console.error("[media-purge] DB delete error:", deleteError);
-        errorCount += batch.length;
-      } else {
-        purgedCount += batch.length;
-      }
-    }
-
-    const { data: staleJobs } = await supabase
+    const { error: jobCleanupError } = await supabase
       .from("media_generation_jobs")
-      .select("id")
-      .in("status", ["waiting", "queuing", "generating"])
-      .lt("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-      .limit(200);
+      .update({ status: "expired" })
+      .in("status", ["success"])
+      .lt("completed_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+      .is("result_urls", null);
 
-    let staleJobsCleaned = 0;
-    if (staleJobs && staleJobs.length > 0) {
-      const staleIds = staleJobs.map((j: { id: string }) => j.id);
-      const { error: staleError } = await supabase
-        .from("media_generation_jobs")
-        .update({
-          status: "fail",
-          error_message: "Job timed out after 24 hours",
-          completed_at: new Date().toISOString(),
-        })
-        .in("id", staleIds);
-
-      if (!staleError) {
-        staleJobsCleaned = staleIds.length;
-      }
+    if (jobCleanupError) {
+      console.warn("[media-purge] Job cleanup error:", jobCleanupError);
     }
 
-    console.log(
-      `[media-purge] Complete: purged=${purgedCount}, errors=${errorCount}, staleJobs=${staleJobsCleaned}`
-    );
+    console.log(`[media-purge] Purged ${purgedCount}/${expiredAssets.length} expired assets`);
 
     return new Response(
       JSON.stringify({
         success: true,
         purged: purgedCount,
-        errors: errorCount,
-        stale_jobs_cleaned: staleJobsCleaned,
+        total_expired: expiredAssets.length,
+        errors: errors.length > 0 ? errors : undefined,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     console.error("[media-purge] Error:", err);
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: err instanceof Error ? err.message : "Unexpected error",
-      }),
+      JSON.stringify({ success: false, error: err instanceof Error ? err.message : "Unexpected error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

@@ -267,6 +267,7 @@ Deno.serve(async (req: Request) => {
     const webhookUrl = `${supabaseUrl}/functions/v1/media-kie-webhook`;
     const modelKey = model.model_key as string;
     const isVeo = modelKey.startsWith("google/veo-");
+    const endpointOverride = model.api_endpoint_override as string | null;
 
     let sourceImageUrls: string[] = payload.source_image_urls || [];
     if (!sourceImageUrls.length && payload.source_upload_id) {
@@ -290,6 +291,7 @@ Deno.serve(async (req: Request) => {
         resolution: payload.resolution,
         negativePrompt: payload.negative_prompt,
         callbackUrl: webhookUrl,
+        endpointOverride: endpointOverride || undefined,
       });
     } else if (jobType === "image_to_video" && sourceImageUrls.length > 0) {
       kieResult = await generateImageToVideo(
@@ -302,7 +304,7 @@ Deno.serve(async (req: Request) => {
           imageUrls: sourceImageUrls,
           model: isVeo ? undefined : modelKey,
         },
-        isVeo ? (model.api_endpoint_override as string) : undefined
+        isVeo ? (endpointOverride || undefined) : undefined
       );
     } else if (jobType === "multi_image_to_video" && sourceImageUrls.length > 1) {
       kieResult = await generateMultiImageToVideo(
@@ -315,7 +317,7 @@ Deno.serve(async (req: Request) => {
           imageUrls: sourceImageUrls,
           model: isVeo ? undefined : modelKey,
         },
-        isVeo ? (model.api_endpoint_override as string) : undefined
+        isVeo ? (endpointOverride || undefined) : undefined
       );
     } else {
       kieResult = await generateTextToVideo(
@@ -327,7 +329,7 @@ Deno.serve(async (req: Request) => {
           callbackUrl: webhookUrl,
           model: isVeo ? undefined : modelKey,
         },
-        isVeo ? (model.api_endpoint_override as string) : undefined
+        isVeo ? (endpointOverride || undefined) : undefined
       );
     }
 

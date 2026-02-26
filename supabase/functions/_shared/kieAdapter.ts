@@ -36,6 +36,7 @@ interface StandardGenerateParams {
   negativePrompt?: string;
   inputUrls?: string[];
   callbackUrl?: string;
+  endpointOverride?: string;
 }
 
 async function kiePost(
@@ -186,7 +187,45 @@ export async function generateTextToImage(
   apiKey: string,
   params: StandardGenerateParams
 ): Promise<KieResult> {
+  if (params.endpointOverride) {
+    return generateWithOverride(apiKey, params);
+  }
   return generateStandard(apiKey, params);
+}
+
+async function generateWithOverride(
+  apiKey: string,
+  params: StandardGenerateParams
+): Promise<KieResult> {
+  const url = params.endpointOverride!;
+
+  const is4o = url.includes("gpt4o-image");
+  const isKontext = url.includes("flux/kontext");
+
+  let body: Record<string, unknown>;
+
+  if (is4o) {
+    body = {
+      prompt: params.prompt,
+      size: params.aspectRatio || "1:1",
+    };
+    if (params.callbackUrl) body.callBackUrl = params.callbackUrl;
+  } else if (isKontext) {
+    body = {
+      prompt: params.prompt,
+      aspectRatio: params.aspectRatio || "1:1",
+      model: params.modelKey,
+    };
+    if (params.callbackUrl) body.callBackUrl = params.callbackUrl;
+  } else {
+    return generateStandard(apiKey, { ...params, endpointOverride: undefined });
+  }
+
+  const result = await kiePost(apiKey, url, body);
+  if (!result.ok) {
+    return { success: false, error: result.data.msg as string || "Generation failed" };
+  }
+  return { success: true, taskId: extractTaskId(result.data), data: result.data };
 }
 
 async function generateStandard(
@@ -231,10 +270,22 @@ export async function getTaskStatus(
 
   const d = result.data.data as Record<string, unknown> | undefined;
   const status = d?.status as string | undefined;
+  const state = d?.state as string | undefined;
   const resultUrls = extractResultUrls(result.data);
-  const errorMsg = d?.error as string | undefined;
 
-  return { success: true, status, resultUrls, error: errorMsg, data: result.data };
+  let parsedResultUrls = resultUrls;
+  if (!parsedResultUrls.length && d?.resultJson) {
+    try {
+      const rj = JSON.parse(d.resultJson as string);
+      parsedResultUrls = rj.resultUrls || [];
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  const errorMsg = d?.error as string || d?.failMsg as string || undefined;
+
+  return { success: true, status: status || state, resultUrls: parsedResultUrls, error: errorMsg, data: result.data };
 }
 
 export async function get1080pVideo(

@@ -15,7 +15,10 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method !== "GET") {
-    return jsonError("METHOD_NOT_ALLOWED", "Use GET", 405);
+    return new Response(
+      JSON.stringify({ success: false, error: "Method not allowed" }),
+      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 
   try {
@@ -33,16 +36,13 @@ Deno.serve(async (req: Request) => {
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return jsonError("AUTH_REQUIRED", "Authorization header required", 401);
+      return jsonResponse({ success: false, error: "Authorization required" }, 401);
     }
 
     const token = authHeader.replace("Bearer ", "");
-    const {
-      data: { user },
-      error: authError,
-    } = await anonClient.auth.getUser(token);
+    const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
     if (authError || !user) {
-      return jsonError("AUTH_FAILED", "Invalid or expired token", 401);
+      return jsonResponse({ success: false, error: "Invalid token" }, 401);
     }
 
     const { data: userData } = await supabase
@@ -51,122 +51,143 @@ Deno.serve(async (req: Request) => {
       .eq("id", user.id)
       .maybeSingle();
     if (!userData) {
-      return jsonError("USER_NOT_FOUND", "User not found", 404);
+      return jsonResponse({ success: false, error: "User not found" }, 404);
     }
 
     const url = new URL(req.url);
     const jobId = url.searchParams.get("job_id");
-
     if (!jobId) {
-      return jsonError("VALIDATION_ERROR", "job_id query parameter required", 400);
+      return jsonResponse({ success: false, error: "job_id is required" }, 400);
     }
 
-    const { data: job, error: jobError } = await supabase
+    const { data: job } = await supabase
       .from("media_generation_jobs")
-      .select("*, kie_models(display_name, type, badge_label, model_key)")
+      .select("*, kie_models(model_key, type)")
       .eq("id", jobId)
       .eq("organization_id", userData.organization_id)
       .maybeSingle();
 
-    if (jobError || !job) {
-      return jsonError("JOB_NOT_FOUND", "Job not found", 404);
+    if (!job) {
+      return jsonResponse({ success: false, error: "Job not found" }, 404);
     }
 
-    if (
-      job.kie_task_id &&
-      kieApiKey &&
-      (job.status === "waiting" || job.status === "queuing" || job.status === "generating")
-    ) {
-      const modelKey = job.kie_models?.model_key || "";
-      const isVeo = modelKey.startsWith("google/veo-");
+    const { data: assets } = await supabase
+      .from("media_assets")
+      .select("*")
+      .eq("job_id", jobId)
+      .order("created_at", { ascending: true });
 
-      try {
-        const pollResult = await getTaskStatus(kieApiKey, job.kie_task_id, isVeo);
+    const activeStatuses = ["waiting", "queuing", "generating"];
+    if (!activeStatuses.includes(job.status) || !job.kie_task_id || !kieApiKey) {
+      return jsonResponse({
+        success: true,
+        data: { job, assets: assets || [] },
+      });
+    }
 
-        if (pollResult.success) {
-          const remoteStatus = pollResult.status;
-          const resultUrls = pollResult.resultUrls || [];
+    const modelKey = job.kie_models?.model_key || "";
+    const isVeo = modelKey.startsWith("google/veo-");
 
-          if (remoteStatus === "success" && resultUrls.length > 0) {
-            await supabase
-              .from("media_generation_jobs")
-              .update({
-                status: "success",
-                result_urls: resultUrls,
-                completed_at: new Date().toISOString(),
-              })
-              .eq("id", job.id);
+    const statusResult = await getTaskStatus(kieApiKey, job.kie_task_id, isVeo);
 
-            const mediaType = job.kie_models?.type || "image";
+    if (!statusResult.success) {
+      return jsonResponse({
+        success: true,
+        data: { job, assets: assets || [] },
+      });
+    }
 
-            for (let i = 0; i < resultUrls.length; i++) {
-              try {
-                await downloadAndStoreAsset(supabase, resultUrls[i], job, i, mediaType);
-              } catch {
-                console.error("[media-job-status] Asset download error for index", i);
-              }
-            }
+    const newStatus = statusResult.status || job.status;
+    const mediaType = job.kie_models?.type || "image";
 
-            job.status = "success";
-            job.result_urls = resultUrls;
-          } else if (remoteStatus === "fail") {
-            const errMsg = pollResult.error || "Generation failed remotely";
-            await supabase
-              .from("media_generation_jobs")
-              .update({
-                status: "fail",
-                error_message: errMsg,
-                completed_at: new Date().toISOString(),
-              })
-              .eq("id", job.id);
-            job.status = "fail";
-            job.error_message = errMsg;
-          } else if (remoteStatus && remoteStatus !== job.status) {
-            await supabase
-              .from("media_generation_jobs")
-              .update({ status: remoteStatus })
-              .eq("id", job.id);
-            job.status = remoteStatus;
-          }
+    if (newStatus === "success" && statusResult.resultUrls && statusResult.resultUrls.length > 0) {
+      await supabase
+        .from("media_generation_jobs")
+        .update({
+          status: "success",
+          result_urls: statusResult.resultUrls,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
+
+      for (let i = 0; i < statusResult.resultUrls.length; i++) {
+        try {
+          await downloadAndStoreAsset(supabase, statusResult.resultUrls[i], job, i, mediaType);
+        } catch (dlErr) {
+          console.error("[media-job-status] Asset download error:", dlErr);
         }
-      } catch (pollErr) {
-        console.error("[media-job-status] Poll error:", pollErr);
       }
+
+      const { data: updatedAssets } = await supabase
+        .from("media_assets")
+        .select("*")
+        .eq("job_id", jobId)
+        .order("created_at", { ascending: true });
+
+      return jsonResponse({
+        success: true,
+        data: {
+          job: { ...job, status: "success", result_urls: statusResult.resultUrls },
+          assets: updatedAssets || [],
+        },
+      });
     }
 
-    if (kieApiKey && job.upgrade_task_ids) {
+    if (newStatus === "fail") {
+      await supabase
+        .from("media_generation_jobs")
+        .update({
+          status: "fail",
+          error_message: statusResult.error || "Generation failed",
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
+
+      return jsonResponse({
+        success: true,
+        data: {
+          job: { ...job, status: "fail", error_message: statusResult.error },
+          assets: assets || [],
+        },
+      });
+    }
+
+    if (newStatus !== job.status) {
+      await supabase
+        .from("media_generation_jobs")
+        .update({ status: newStatus })
+        .eq("id", job.id);
+    }
+
+    if (job.upgrade_task_ids && kieApiKey) {
       const upgrades = job.upgrade_task_ids as Record<string, { taskId: string; status: string; url?: string }>;
       let upgradesChanged = false;
 
       for (const [resolution, upgrade] of Object.entries(upgrades)) {
         if (upgrade.status === "pending" && upgrade.taskId) {
-          try {
-            const upgradeResult = await getTaskStatus(kieApiKey, upgrade.taskId, true);
-            if (upgradeResult.success && upgradeResult.status === "success" && upgradeResult.resultUrls?.length) {
-              upgrade.status = "complete";
-              upgrade.url = upgradeResult.resultUrls[0];
-              upgradesChanged = true;
+          const upgradeStatus = await getTaskStatus(kieApiKey, upgrade.taskId, isVeo);
+          if (upgradeStatus.success && upgradeStatus.status === "success" && upgradeStatus.resultUrls?.length) {
+            upgrade.status = "complete";
+            upgrade.url = upgradeStatus.resultUrls[0];
+            upgradesChanged = true;
 
-              const existingAssets = await supabase
-                .from("media_assets")
-                .select("id")
-                .eq("job_id", job.id);
-              const nextIndex = (existingAssets.data?.length || 0);
+            const existingAssets = await supabase
+              .from("media_assets")
+              .select("id")
+              .eq("job_id", job.id);
+            const nextIndex = existingAssets.data?.length || 0;
 
+            try {
               await downloadAndStoreAsset(
-                supabase,
-                upgradeResult.resultUrls[0],
-                job,
-                nextIndex,
-                "video",
+                supabase, upgradeStatus.resultUrls[0], job, nextIndex, "video",
                 { resolution, upgrade: true }
               );
-            } else if (upgradeResult.status === "fail") {
-              upgrade.status = "failed";
-              upgradesChanged = true;
+            } catch (err) {
+              console.error("[media-job-status] Upgrade download error:", err);
             }
-          } catch {
-            console.error(`[media-job-status] Upgrade poll error for ${resolution}`);
+          } else if (upgradeStatus.success && upgradeStatus.status === "fail") {
+            upgrade.status = "failed";
+            upgradesChanged = true;
           }
         }
       }
@@ -176,38 +197,20 @@ Deno.serve(async (req: Request) => {
           .from("media_generation_jobs")
           .update({ upgrade_task_ids: upgrades })
           .eq("id", job.id);
-        job.upgrade_task_ids = upgrades;
       }
     }
-
-    let assets: unknown[] = [];
-    if (job.status === "success") {
-      const { data: assetData } = await supabase
-        .from("media_assets")
-        .select("*")
-        .eq("job_id", job.id)
-        .order("created_at", { ascending: true });
-      assets = assetData || [];
-    }
-
-    const modelKey = job.kie_models?.model_key || "";
-    const isVeoModel = modelKey.startsWith("google/veo-");
-    const canUpgrade = job.status === "success" && isVeoModel;
 
     return jsonResponse({
       success: true,
       data: {
-        job,
-        assets,
-        can_upgrade_1080p: canUpgrade,
-        can_upgrade_4k: canUpgrade,
+        job: { ...job, status: newStatus },
+        assets: assets || [],
       },
     });
   } catch (err) {
     console.error("[media-job-status] Error:", err);
-    return jsonError(
-      "INTERNAL_ERROR",
-      err instanceof Error ? err.message : "Unexpected error",
+    return jsonResponse(
+      { success: false, error: err instanceof Error ? err.message : "Unexpected error" },
       500
     );
   }
@@ -218,11 +221,4 @@ function jsonResponse(body: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
-}
-
-function jsonError(code: string, message: string, status: number) {
-  return new Response(
-    JSON.stringify({ success: false, error: { code, message } }),
-    { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-  );
 }
