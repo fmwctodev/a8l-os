@@ -215,51 +215,74 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
       ...mergedHistory,
     ];
 
-    const { data: llmProvider } = await supabase
+    const { data: llmProviders } = await supabase
       .from("llm_providers")
       .select("provider, api_key_encrypted, base_url")
       .eq("org_id", orgId)
       .eq("enabled", true)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+      .in("provider", ["openai", "anthropic"])
+      .order("created_at", { ascending: true });
 
-    let apiKey = openaiKey;
-    let modelName = "gpt-4o";
-    let apiUrl = "https://api.openai.com/v1/chat/completions";
-    let modelUsed = "gpt-4o";
+    const providers = (llmProviders || []).filter(
+      (p: Record<string, unknown>) => p.api_key_encrypted
+    );
 
-    if (llmProvider?.api_key_encrypted) {
-      apiKey = llmProvider.api_key_encrypted;
-      if (llmProvider.provider === "anthropic") {
-        apiUrl =
-          llmProvider.base_url ||
-          "https://api.anthropic.com/v1/messages";
-        modelName = "claude-sonnet-4-20250514";
-        modelUsed = modelName;
-      } else if (llmProvider.base_url) {
-        apiUrl = llmProvider.base_url;
-      }
-    }
-
-    if (!apiKey) {
+    if (providers.length === 0 && !openaiKey) {
       return json({ error: "No AI API key configured" }, 500);
     }
 
-    let assistantContent: string;
+    if (providers.length === 0 && openaiKey) {
+      providers.push({
+        provider: "openai",
+        api_key_encrypted: openaiKey,
+        base_url: null,
+      });
+    }
 
-    if (
-      llmProvider?.provider === "anthropic" &&
-      llmProvider.api_key_encrypted
-    ) {
-      assistantContent = await callAnthropic(
-        apiUrl,
-        llmProvider.api_key_encrypted,
-        modelName,
-        messages
-      );
-    } else {
-      assistantContent = await callOpenAI(apiUrl, apiKey!, modelName, messages);
+    let assistantContent: string | null = null;
+    let modelUsed = "";
+    let lastError = "";
+
+    for (const provider of providers) {
+      try {
+        if (provider.provider === "anthropic") {
+          const url =
+            provider.base_url ||
+            "https://api.anthropic.com/v1/messages";
+          const model = "claude-sonnet-4-20250514";
+          assistantContent = await callAnthropic(
+            url,
+            provider.api_key_encrypted,
+            model,
+            messages
+          );
+          modelUsed = model;
+        } else {
+          const url =
+            provider.base_url ||
+            "https://api.openai.com/v1/chat/completions";
+          const model = "gpt-4o";
+          assistantContent = await callOpenAI(
+            url,
+            provider.api_key_encrypted,
+            model,
+            messages
+          );
+          modelUsed = model;
+        }
+        break;
+      } catch (providerErr) {
+        lastError =
+          providerErr instanceof Error ? providerErr.message : String(providerErr);
+        console.warn(
+          `[ai-social-chat] Provider ${provider.provider} failed, trying next:`,
+          lastError
+        );
+      }
+    }
+
+    if (assistantContent === null) {
+      return json({ error: lastError || "All AI providers failed" }, 500);
     }
 
     let drafts: DraftOutput[] = [];
