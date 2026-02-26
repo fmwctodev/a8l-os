@@ -41,10 +41,13 @@ Deno.serve(async (req: Request) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
+    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
     const {
       data: { user },
       error: authError,
-    } = await supabase.auth.getUser(token);
+    } = await anonClient.auth.getUser(token);
 
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {

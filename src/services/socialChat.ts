@@ -112,25 +112,35 @@ export async function sendMessage(
 
   if (userError) throw userError;
 
-  const response = await fetchEdge('ai-social-chat', {
-    body: {
-      thread_id: threadId,
-      content,
-      message_type: messageType,
-      attachments,
-      ...(mediaPrefs?.image_model_id && { image_model_id: mediaPrefs.image_model_id }),
-      ...(mediaPrefs?.video_model_id && { video_model_id: mediaPrefs.video_model_id }),
-      ...(mediaPrefs?.aspect_ratio && { aspect_ratio: mediaPrefs.aspect_ratio }),
-      auto_generate_media: mediaPrefs?.auto_generate_media ?? true,
-    },
-  });
+  let aiResponse: { response?: string; drafts?: unknown[]; media_jobs?: MediaJobInfo[]; model_used?: string };
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `AI chat failed: ${response.status}`);
+  try {
+    const response = await fetchEdge('ai-social-chat', {
+      body: {
+        thread_id: threadId,
+        content,
+        message_type: messageType,
+        attachments,
+        ...(mediaPrefs?.image_model_id && { image_model_id: mediaPrefs.image_model_id }),
+        ...(mediaPrefs?.video_model_id && { video_model_id: mediaPrefs.video_model_id }),
+        ...(mediaPrefs?.aspect_ratio && { aspect_ratio: mediaPrefs.aspect_ratio }),
+        auto_generate_media: mediaPrefs?.auto_generate_media ?? true,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `AI chat failed: ${response.status}`);
+    }
+
+    aiResponse = await response.json();
+  } catch (edgeErr) {
+    await supabase
+      .from('social_ai_messages')
+      .delete()
+      .eq('id', userMsg.id);
+    throw edgeErr;
   }
-
-  const aiResponse = await response.json();
 
   const fullContent = aiResponse.response || '';
   const drafts = aiResponse.drafts || [];
