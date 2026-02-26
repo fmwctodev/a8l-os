@@ -47,6 +47,7 @@ interface PostDraftCardProps {
   accounts: SocialAccount[];
   attachedAssets: MediaAsset[];
   mediaGenerating?: boolean;
+  mediaSkippedReason?: string;
   onPublish: (
     draft: PostDraft,
     mode: PublishMode,
@@ -130,6 +131,7 @@ export function PostDraftCard({
   accounts,
   attachedAssets,
   mediaGenerating = false,
+  mediaSkippedReason,
   onPublish,
   publishStatus,
 }: PostDraftCardProps) {
@@ -307,10 +309,24 @@ export function PostDraftCard({
 
       {!mediaGenerating && attachedAssets.length === 0 && draft.visual_style_suggestion && (
         <div className="w-full aspect-[4/3] bg-slate-900/50 flex flex-col items-center justify-center gap-2 border-b border-slate-700/50">
-          <Palette className="w-8 h-8 text-slate-600" />
-          <span className="text-[11px] text-slate-500 text-center px-6 leading-relaxed">
-            {draft.visual_style_suggestion}
-          </span>
+          {mediaSkippedReason ? (
+            <>
+              <ImageIcon className="w-8 h-8 text-amber-500/60" />
+              <span className="text-[11px] text-amber-400/80 text-center px-6 leading-relaxed font-medium">
+                Media generation unavailable
+              </span>
+              <span className="text-[10px] text-slate-500 text-center px-6">
+                Configure the KIE API key in Settings to enable image generation
+              </span>
+            </>
+          ) : (
+            <>
+              <Palette className="w-8 h-8 text-slate-600" />
+              <span className="text-[11px] text-slate-500 text-center px-6 leading-relaxed">
+                {draft.visual_style_suggestion}
+              </span>
+            </>
+          )}
         </div>
       )}
 

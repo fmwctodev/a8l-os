@@ -81,6 +81,7 @@ export function ChatMessageList({
         const isUser = msg.role === 'user';
         const { cleanContent, drafts } = resolveDrafts(msg);
         const msgMediaJobs = getMediaJobsForMessage(msg, activeMediaJobs);
+        const mediaSkippedReason = (msg.metadata as Record<string, unknown> | null)?.media_skipped_reason as string | undefined;
 
         return (
           <div
@@ -139,6 +140,7 @@ export function ChatMessageList({
                         accounts={accounts}
                         attachedAssets={draftAssets[idx] || []}
                         mediaGenerating={isGenerating}
+                        mediaSkippedReason={!isGenerating && jobsForDraft.length === 0 ? mediaSkippedReason : undefined}
                         onPublish={(d, mode, acctIds, media, assetIds, scheduledAt) =>
                           onPublishDraft(msg.id, idx, d, mode, acctIds, media, assetIds, scheduledAt)
                         }

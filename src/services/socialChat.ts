@@ -29,6 +29,7 @@ export interface SendMessageResult {
   userMessage: SocialAIMessage;
   aiMessage: SocialAIMessage;
   mediaJobs: MediaJobInfo[];
+  mediaSkippedReason?: string;
 }
 
 export async function getThreads(
@@ -113,7 +114,7 @@ export async function sendMessage(
 
   if (userError) throw userError;
 
-  let aiResponse: { response?: string; drafts?: unknown[]; media_jobs?: MediaJobInfo[]; model_used?: string };
+  let aiResponse: { response?: string; drafts?: unknown[]; media_jobs?: MediaJobInfo[]; media_skipped_reason?: string; model_used?: string };
 
   try {
     const response = await fetchEdge('ai-social-chat', {
@@ -167,6 +168,7 @@ export async function sendMessage(
       metadata: {
         model_used: aiResponse.model_used || 'unknown',
         media_jobs: mediaJobs.length > 0 ? mediaJobs : undefined,
+        media_skipped_reason: aiResponse.media_skipped_reason || undefined,
       },
     })
     .select()
@@ -186,7 +188,7 @@ export async function sendMessage(
     .update({ updated_at: new Date().toISOString() })
     .eq('id', threadId);
 
-  return { userMessage: userMsg, aiMessage: aiMsg, mediaJobs };
+  return { userMessage: userMsg, aiMessage: aiMsg, mediaJobs, mediaSkippedReason: aiResponse.media_skipped_reason };
 }
 
 export async function archiveThread(threadId: string): Promise<void> {

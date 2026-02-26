@@ -255,8 +255,19 @@ Keep responses concise but actionable. Use short paragraphs.`;
       draft_index: number;
     }> = [];
 
+    let mediaSkippedReason: string | null = null;
+
     if (auto_generate_media) {
       const kieApiKey = Deno.env.get("KIE_API_KEY");
+      if (!kieApiKey) {
+        const hasMediaDrafts = drafts.some(
+          (d) => d.media_type && d.media_type !== "none" && d.visual_style_suggestion
+        );
+        if (hasMediaDrafts) {
+          mediaSkippedReason = "KIE_API_KEY not configured";
+          console.warn("[ai-social-chat] KIE_API_KEY missing – skipping media generation");
+        }
+      }
       if (kieApiKey) {
         const mediaDrafts = drafts.filter(
           (d) => d.media_type && d.media_type !== "none" && d.visual_style_suggestion
@@ -392,6 +403,7 @@ Keep responses concise but actionable. Use short paragraphs.`;
         response: cleanedResponse || aiResponse,
         drafts,
         media_jobs: mediaJobs,
+        media_skipped_reason: mediaSkippedReason,
         model_used: usedProvider,
       }),
       {
