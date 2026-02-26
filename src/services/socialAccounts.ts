@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { callEdgeFunction, parseEdgeFunctionError } from '../lib/edgeFunction';
 import type {
   SocialAccount,
   SocialOAuthState,
@@ -201,4 +202,46 @@ export function getProviderColor(provider: SocialProvider): string {
     youtube: '#FF0000',
   };
   return colors[provider];
+}
+
+export async function connectViaUnipile(
+  provider: SocialProvider,
+  successRedirectUrl?: string,
+  failureRedirectUrl?: string
+): Promise<{ url: string }> {
+  const response = await callEdgeFunction('unipile-connect', {
+    provider,
+    success_redirect_url: successRedirectUrl || window.location.href,
+    failure_redirect_url: failureRedirectUrl || window.location.href,
+  });
+
+  const json = await response.json();
+  if (!response.ok) {
+    throw new Error(parseEdgeFunctionError(json, 'Failed to generate connection URL'));
+  }
+  return json.data;
+}
+
+export async function reconnectViaUnipile(
+  accountId: string,
+  provider: SocialProvider
+): Promise<{ url: string }> {
+  const { data: account } = await supabase
+    .from('social_accounts')
+    .select('unipile_account_id')
+    .eq('id', accountId)
+    .maybeSingle();
+
+  const response = await callEdgeFunction('unipile-connect', {
+    provider,
+    reconnect_account_id: account?.unipile_account_id || accountId,
+    success_redirect_url: window.location.href,
+    failure_redirect_url: window.location.href,
+  });
+
+  const json = await response.json();
+  if (!response.ok) {
+    throw new Error(parseEdgeFunctionError(json, 'Failed to generate reconnection URL'));
+  }
+  return json.data;
 }

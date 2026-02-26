@@ -14,12 +14,14 @@ import {
   Link2,
   Loader2,
   X,
+  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
   getSocialAccounts,
   disconnectSocialAccount,
-  createOAuthState,
+  connectViaUnipile,
+  reconnectViaUnipile,
   getProviderDisplayName,
   getProviderColor,
 } from '../../../services/socialAccounts';
@@ -44,6 +46,8 @@ export function SocialAccounts() {
   const [loading, setLoading] = useState(true);
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [connectingProvider, setConnectingProvider] = useState<SocialProvider | null>(null);
+  const [reconnectingId, setReconnectingId] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
 
   useEffect(() => {
     loadAccounts();
@@ -63,83 +67,26 @@ export function SocialAccounts() {
   }
 
   async function handleConnect(provider: SocialProvider) {
-    if (!user?.organization_id) return;
     try {
       setConnectingProvider(provider);
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const callbackUrl = `${supabaseUrl}/functions/v1/social-oauth-callback`;
-
-      const state = await createOAuthState(
-        user.organization_id,
-        user.id,
-        provider,
-        callbackUrl
-      );
-
-      let authUrl = '';
-      const clientId = getClientIdForProvider(provider);
-
-      switch (provider) {
-        case 'facebook':
-        case 'instagram': {
-          const scopes = provider === 'instagram'
-            ? 'instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement'
-            : 'pages_show_list,pages_read_engagement,pages_manage_posts,publish_video';
-          const params = new URLSearchParams({
-            client_id: import.meta.env.VITE_FACEBOOK_APP_ID || '',
-            redirect_uri: callbackUrl,
-            state: state.state_token,
-            scope: scopes,
-            response_type: 'code',
-          });
-          authUrl = `https://www.facebook.com/v18.0/dialog/oauth?${params.toString()}`;
-          break;
-        }
-        case 'linkedin': {
-          const params = new URLSearchParams({
-            response_type: 'code',
-            client_id: clientId,
-            redirect_uri: callbackUrl,
-            state: state.state_token,
-            scope: 'r_liteprofile r_emailaddress w_member_social r_organization_social w_organization_social',
-          });
-          authUrl = `https://www.linkedin.com/oauth/v2/authorization?${params.toString()}`;
-          break;
-        }
-        case 'google_business':
-        case 'youtube': {
-          const scopes = provider === 'youtube'
-            ? 'openid profile email https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/youtube.upload'
-            : 'openid profile email https://www.googleapis.com/auth/business.manage';
-          const params = new URLSearchParams({
-            client_id: clientId,
-            redirect_uri: callbackUrl,
-            response_type: 'code',
-            scope: scopes,
-            state: state.state_token,
-            access_type: 'offline',
-            prompt: 'consent',
-          });
-          authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-          break;
-        }
-        case 'tiktok': {
-          const params = new URLSearchParams({
-            client_key: clientId,
-            redirect_uri: callbackUrl,
-            state: state.state_token,
-            scope: 'user.info.basic,video.publish,video.upload',
-            response_type: 'code',
-          });
-          authUrl = `https://www.tiktok.com/v2/auth/authorize/?${params.toString()}`;
-          break;
-        }
-      }
-
-      window.location.href = authUrl;
+      setConnectError(null);
+      const { url } = await connectViaUnipile(provider);
+      window.location.href = url;
     } catch (error) {
-      console.error('Failed to start OAuth:', error);
+      console.error('Failed to start connection:', error);
+      setConnectError(error instanceof Error ? error.message : 'Connection failed');
       setConnectingProvider(null);
+    }
+  }
+
+  async function handleReconnect(account: SocialAccount) {
+    try {
+      setReconnectingId(account.id);
+      const { url } = await reconnectViaUnipile(account.id, account.provider);
+      window.location.href = url;
+    } catch (error) {
+      console.error('Failed to start reconnection:', error);
+      setReconnectingId(null);
     }
   }
 
@@ -207,6 +154,8 @@ export function SocialAccounts() {
           {accounts.map((account) => {
             const Icon = PROVIDER_ICONS[account.provider];
             const color = getProviderColor(account.provider);
+            const needsReconnect = account.status === 'error' || account.status === 'token_expiring';
+            const isReconnecting = reconnectingId === account.id;
             return (
               <div
                 key={account.id}
@@ -226,7 +175,7 @@ export function SocialAccounts() {
                     <div className="text-sm text-slate-400">
                       {getProviderDisplayName(account.provider)}
                     </div>
-                    <div className="mt-3 flex items-center gap-2">
+                    <div className="mt-3 flex items-center gap-2 flex-wrap">
                       {account.status === 'connected' ? (
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full">
                           <CheckCircle className="w-3 h-3" />
@@ -246,6 +195,20 @@ export function SocialAccounts() {
                         <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 bg-slate-700 px-2 py-1 rounded-full">
                           {account.status}
                         </span>
+                      )}
+                      {needsReconnect && (
+                        <button
+                          onClick={() => handleReconnect(account)}
+                          disabled={isReconnecting}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-cyan-400 hover:text-cyan-300 bg-cyan-400/10 hover:bg-cyan-400/20 px-2 py-1 rounded-full transition-colors disabled:opacity-50"
+                        >
+                          {isReconnecting ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-3 h-3" />
+                          )}
+                          Reconnect
+                        </button>
                       )}
                     </div>
                   </div>
@@ -269,58 +232,52 @@ export function SocialAccounts() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
               <h2 className="text-lg font-semibold text-white">Connect Account</h2>
               <button
-                onClick={() => setShowConnectModal(false)}
+                onClick={() => { setShowConnectModal(false); setConnectError(null); }}
                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="p-6 grid grid-cols-2 gap-3">
-              {PROVIDERS.map((provider) => {
-                const Icon = PROVIDER_ICONS[provider];
-                const color = getProviderColor(provider);
-                const isConnecting = connectingProvider === provider;
-                return (
-                  <button
-                    key={provider}
-                    onClick={() => handleConnect(provider)}
-                    disabled={!!connectingProvider}
-                    className="flex items-center gap-3 p-4 rounded-lg border border-slate-600 hover:border-slate-500 hover:bg-slate-700/50 transition-colors disabled:opacity-50"
-                  >
-                    <div className="p-2 rounded-lg" style={{ backgroundColor: color + '20' }}>
-                      {isConnecting ? (
-                        <Loader2 className="w-5 h-5 animate-spin" style={{ color }} />
-                      ) : (
-                        <Icon className="w-5 h-5" style={{ color }} />
-                      )}
-                    </div>
-                    <span className="text-sm font-medium text-slate-200">
-                      {isConnecting ? 'Connecting...' : getProviderDisplayName(provider)}
-                    </span>
-                  </button>
-                );
-              })}
+            {connectError && (
+              <div className="mx-6 mt-4 p-3 bg-red-400/10 border border-red-400/20 rounded-lg flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-red-300">{connectError}</p>
+              </div>
+            )}
+            <div className="p-6">
+              <p className="text-sm text-slate-400 mb-4">
+                You'll be redirected to securely sign in to your social account.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {PROVIDERS.map((provider) => {
+                  const Icon = PROVIDER_ICONS[provider];
+                  const color = getProviderColor(provider);
+                  const isConnecting = connectingProvider === provider;
+                  return (
+                    <button
+                      key={provider}
+                      onClick={() => handleConnect(provider)}
+                      disabled={!!connectingProvider}
+                      className="flex items-center gap-3 p-4 rounded-lg border border-slate-600 hover:border-slate-500 hover:bg-slate-700/50 transition-colors disabled:opacity-50"
+                    >
+                      <div className="p-2 rounded-lg" style={{ backgroundColor: color + '20' }}>
+                        {isConnecting ? (
+                          <Loader2 className="w-5 h-5 animate-spin" style={{ color }} />
+                        ) : (
+                          <Icon className="w-5 h-5" style={{ color }} />
+                        )}
+                      </div>
+                      <span className="text-sm font-medium text-slate-200">
+                        {isConnecting ? 'Connecting...' : getProviderDisplayName(provider)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
       )}
     </div>
   );
-}
-
-function getClientIdForProvider(provider: SocialProvider): string {
-  switch (provider) {
-    case 'facebook':
-    case 'instagram':
-      return import.meta.env.VITE_FACEBOOK_APP_ID || '';
-    case 'linkedin':
-      return import.meta.env.VITE_LINKEDIN_CLIENT_ID || '';
-    case 'google_business':
-    case 'youtube':
-      return import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-    case 'tiktok':
-      return import.meta.env.VITE_TIKTOK_CLIENT_KEY || '';
-    default:
-      return '';
-  }
 }

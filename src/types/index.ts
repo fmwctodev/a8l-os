@@ -1840,6 +1840,7 @@ export interface SocialAccount {
   organization_id: string;
   provider: SocialProvider;
   external_account_id: string;
+  unipile_account_id: string | null;
   display_name: string;
   profile_image_url: string | null;
   access_token_encrypted: string | null;
@@ -1928,6 +1929,7 @@ export interface SocialPost {
   hashtags?: string[] | null;
   visual_style_suggestion?: string | null;
   ab_variant_group?: string | null;
+  unipile_response?: Record<string, unknown> | null;
 }
 
 export type ContentAIType =

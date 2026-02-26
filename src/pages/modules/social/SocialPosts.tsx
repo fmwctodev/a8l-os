@@ -21,10 +21,12 @@ import {
   Trash2,
   Edit3,
   Eye,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getSocialPosts, deleteSocialPost, duplicatePost } from '../../../services/socialPosts';
 import { getSocialAccounts, getProviderColor } from '../../../services/socialAccounts';
+import { callEdgeFunction, parseEdgeFunctionError } from '../../../lib/edgeFunction';
 import type { SocialPost, SocialPostStatus, SocialAccount, SocialProvider } from '../../../types';
 
 const PROVIDER_ICONS: Record<SocialProvider, React.ElementType> = {
@@ -53,6 +55,7 @@ export function SocialPosts() {
   const [statusFilter, setStatusFilter] = useState<SocialPostStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [menuPostId, setMenuPostId] = useState<string | null>(null);
+  const [publishingPostId, setPublishingPostId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -95,6 +98,28 @@ export function SocialPosts() {
       console.error('Failed to duplicate post:', error);
     }
     setMenuPostId(null);
+  }
+
+  async function handlePublishNow(postId: string) {
+    if (!confirm('Publish this post immediately?')) {
+      setMenuPostId(null);
+      return;
+    }
+    setMenuPostId(null);
+    setPublishingPostId(postId);
+    try {
+      const response = await callEdgeFunction('social-worker', { post_id: postId });
+      const json = await response.json();
+      if (!response.ok) {
+        alert(parseEdgeFunctionError(json, 'Publish failed'));
+      }
+      await loadData();
+    } catch (error) {
+      console.error('Failed to publish post:', error);
+      alert(error instanceof Error ? error.message : 'Publish failed');
+    } finally {
+      setPublishingPostId(null);
+    }
   }
 
   const filteredPosts = posts.filter(p => {
@@ -276,6 +301,20 @@ export function SocialPosts() {
                       <>
                         <div className="fixed inset-0 z-10" onClick={() => setMenuPostId(null)} />
                         <div className="absolute right-0 top-10 z-20 w-44 bg-slate-800 border border-slate-700 rounded-lg shadow-xl overflow-hidden">
+                          {(post.status === 'draft' || post.status === 'scheduled') && (
+                            <button
+                              onClick={() => handlePublishNow(post.id)}
+                              disabled={publishingPostId === post.id}
+                              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-cyan-400 hover:bg-cyan-400/10 transition-colors disabled:opacity-50"
+                            >
+                              {publishingPostId === post.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Zap className="w-4 h-4" />
+                              )}
+                              Publish Now
+                            </button>
+                          )}
                           <button
                             onClick={() => { navigate(`/marketing/social/posts/${post.id}/edit`); setMenuPostId(null); }}
                             className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
