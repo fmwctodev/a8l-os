@@ -191,12 +191,28 @@ Always provide visual_style_suggestion when media_type is "image" or "video".
 Keep posts within platform character limits. Use relevant hashtags.
 Be creative and engaging. Adapt tone to each platform's audience.`;
 
+    const rawHistory = (history || []).map((m: Record<string, unknown>) => ({
+      role: m.role as string,
+      content: m.content as string,
+    }));
+
+    const mergedHistory: Array<{ role: string; content: string }> = [];
+    for (const msg of rawHistory) {
+      const prev = mergedHistory[mergedHistory.length - 1];
+      if (prev && prev.role === msg.role) {
+        prev.content += "\n\n" + msg.content;
+      } else {
+        mergedHistory.push({ ...msg });
+      }
+    }
+
+    if (mergedHistory.length > 0 && mergedHistory[0].role !== "user") {
+      mergedHistory.shift();
+    }
+
     const messages = [
       { role: "system", content: systemPrompt },
-      ...(history || []).map((m: Record<string, unknown>) => ({
-        role: m.role as string,
-        content: m.content as string,
-      })),
+      ...mergedHistory,
     ];
 
     const { data: llmProvider } = await supabase
@@ -393,10 +409,17 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
                   : undefined
               );
             } else {
+              const supportsRes = model.supports_resolutions as string[] | null;
+              const defaultRes =
+                supportsRes && supportsRes.length > 0
+                  ? supportsRes[0]
+                  : undefined;
+
               kieResult = await generateTextToImage(kieApiKey, {
                 modelKey,
                 prompt: finalPrompt,
                 aspectRatio: effectiveAspect,
+                resolution: defaultRes,
                 callbackUrl: webhookUrl,
                 endpointOverride: endpointOverride || undefined,
               });
@@ -510,8 +533,8 @@ async function callOpenAI(
 
   if (!response.ok) {
     const errText = await response.text();
-    console.error("[ai-social-chat] OpenAI error:", errText);
-    throw new Error("AI generation failed");
+    console.error("[ai-social-chat] OpenAI error:", response.status, errText);
+    throw new Error(`AI generation failed (OpenAI ${response.status}): ${errText.slice(0, 200)}`);
   }
 
   const data = await response.json();
@@ -546,8 +569,8 @@ async function callAnthropic(
 
   if (!response.ok) {
     const errText = await response.text();
-    console.error("[ai-social-chat] Anthropic error:", errText);
-    throw new Error("AI generation failed");
+    console.error("[ai-social-chat] Anthropic error:", response.status, errText);
+    throw new Error(`AI generation failed (Anthropic ${response.status}): ${errText.slice(0, 200)}`);
   }
 
   const data = await response.json();
