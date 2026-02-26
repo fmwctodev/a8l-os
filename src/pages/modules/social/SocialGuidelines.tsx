@@ -8,6 +8,7 @@ import {
   Plus,
   Check,
   Settings2,
+  ShieldAlert,
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useToast } from '../../../contexts/ToastContext';
@@ -23,8 +24,6 @@ import type {
   PlatformTweak,
   GuidelineBlock,
 } from '../../../types';
-
-type Scope = 'personal' | 'workspace';
 
 const PLATFORMS = ['linkedin', 'facebook', 'instagram', 'google_business'] as const;
 const PLATFORM_LABELS: Record<string, string> = {
@@ -44,12 +43,13 @@ const EMOJI_OPTIONS: { value: EmojiFrequency; label: string }[] = [
 const DEFAULT_TONE: TonePreferences = { formality: 50, friendliness: 50, energy: 50, confidence: 50 };
 
 export function SocialGuidelines() {
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
   const { showToast } = useToast();
-  const [scope, setScope] = useState<Scope>('personal');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+
+  const canEdit = isSuperAdmin;
 
   const [contentThemes, setContentThemes] = useState<GuidelineBlock[]>([]);
   const [imageStyle, setImageStyle] = useState<GuidelineBlock[]>([]);
@@ -74,17 +74,16 @@ export function SocialGuidelines() {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['tone']));
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const userId = scope === 'personal' ? (user?.id || null) : null;
 
   useEffect(() => {
     loadGuidelines();
-  }, [user?.organization_id, scope]);
+  }, [user?.organization_id]);
 
   async function loadGuidelines() {
     if (!user?.organization_id) return;
     try {
       setLoading(true);
-      const data = await getGuidelines(user.organization_id, userId);
+      const data = await getGuidelines(user.organization_id);
       if (data) {
         setContentThemes(Array.isArray(data.content_themes) ? data.content_themes : []);
         setImageStyle(Array.isArray(data.image_style) ? data.image_style : []);
@@ -122,15 +121,16 @@ export function SocialGuidelines() {
   }
 
   const debouncedSave = useCallback(() => {
+    if (!canEdit) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => saveGuidelines(), 800);
-  }, [contentThemes, imageStyle, writingStyle, tone, wordsToAvoid, preferredHashtags, bannedHashtags, ctaRules, emojiFrequency, industryPositioning, visualStyles, platformTweaks, user?.organization_id, userId]);
+  }, [contentThemes, imageStyle, writingStyle, tone, wordsToAvoid, preferredHashtags, bannedHashtags, ctaRules, emojiFrequency, industryPositioning, visualStyles, platformTweaks, user?.organization_id, canEdit]);
 
   async function saveGuidelines() {
-    if (!user?.organization_id) return;
+    if (!user?.organization_id || !canEdit) return;
     try {
       setSaving(true);
-      await upsertGuidelines(user.organization_id, userId, {
+      await upsertGuidelines(user.organization_id, {
         content_themes: contentThemes,
         image_style: imageStyle,
         writing_style: writingStyle,
@@ -153,7 +153,7 @@ export function SocialGuidelines() {
   }
 
   async function handleSyncFromBrandboard() {
-    if (!user?.organization_id) return;
+    if (!user?.organization_id || !canEdit) return;
     try {
       setSyncing(true);
       const brand = await getActiveBrandboardForAI(user.organization_id);
@@ -251,30 +251,21 @@ export function SocialGuidelines() {
       <div className="space-y-1">
         <h1 className="text-2xl font-bold text-white tracking-tight">Guidelines</h1>
         <p className="text-sm text-slate-400">
-          Use this space to give your AI social manager custom instructions to follow
+          Organization-wide instructions for the AI social manager
         </p>
       </div>
 
+      {!canEdit && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-slate-800/60 border border-slate-700 rounded-lg">
+          <ShieldAlert className="w-5 h-5 text-amber-400 flex-shrink-0" />
+          <p className="text-sm text-slate-400">
+            Only the System Administrator can edit guidelines. You are viewing in read-only mode.
+          </p>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex bg-slate-800 border border-slate-700 rounded-lg p-1">
-            <button
-              onClick={() => setScope('personal')}
-              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                scope === 'personal' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              My Preferences
-            </button>
-            <button
-              onClick={() => setScope('workspace')}
-              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                scope === 'workspace' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              Workspace Defaults
-            </button>
-          </div>
           {saving && (
             <span className="flex items-center gap-1 text-xs text-slate-400">
               <Loader2 className="w-3 h-3 animate-spin" />
@@ -282,14 +273,16 @@ export function SocialGuidelines() {
             </span>
           )}
         </div>
-        <button
-          onClick={handleSyncFromBrandboard}
-          disabled={syncing}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors disabled:opacity-50"
-        >
-          {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-          Sync from Brandboard
-        </button>
+        {canEdit && (
+          <button
+            onClick={handleSyncFromBrandboard}
+            disabled={syncing}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Sync from Brandboard
+          </button>
+        )}
       </div>
 
       <div className="space-y-5">
@@ -297,18 +290,21 @@ export function SocialGuidelines() {
           title="Content Themes"
           blocks={contentThemes}
           onChange={handleBlockChange(setContentThemes)}
+          readOnly={!canEdit}
         />
 
         <GuidelineBlockEditor
           title="Image Style"
           blocks={imageStyle}
           onChange={handleBlockChange(setImageStyle)}
+          readOnly={!canEdit}
         />
 
         <GuidelineBlockEditor
           title="Writing Style"
           blocks={writingStyle}
           onChange={handleBlockChange(setWritingStyle)}
+          readOnly={!canEdit}
         />
       </div>
 
@@ -346,7 +342,8 @@ export function SocialGuidelines() {
                       max="100"
                       value={tone[key]}
                       onChange={(e) => handleToneChange(key, parseInt(e.target.value))}
-                      className="w-full accent-cyan-500"
+                      disabled={!canEdit}
+                      className="w-full accent-cyan-500 disabled:opacity-60"
                     />
                     <div className="flex justify-between text-xs text-slate-500">
                       <span>{key === 'formality' ? 'Casual' : key === 'friendliness' ? 'Reserved' : key === 'energy' ? 'Calm' : 'Humble'}</span>
@@ -362,14 +359,18 @@ export function SocialGuidelines() {
               expanded={expandedSections.has('words')}
               onToggle={() => toggleSection('words')}
             >
-              <TagInput
-                tags={wordsToAvoid}
-                input={wordInput}
-                onInputChange={setWordInput}
-                onAdd={() => addTag(wordsToAvoid, setWordsToAvoid, wordInput, setWordInput)}
-                onRemove={(i) => removeTag(wordsToAvoid, setWordsToAvoid, i)}
-                placeholder="Type a word and press Enter..."
-              />
+              {canEdit ? (
+                <TagInput
+                  tags={wordsToAvoid}
+                  input={wordInput}
+                  onInputChange={setWordInput}
+                  onAdd={() => addTag(wordsToAvoid, setWordsToAvoid, wordInput, setWordInput)}
+                  onRemove={(i) => removeTag(wordsToAvoid, setWordsToAvoid, i)}
+                  placeholder="Type a word and press Enter..."
+                />
+              ) : (
+                <ReadOnlyTags tags={wordsToAvoid} emptyLabel="No words configured" />
+              )}
             </CollapsibleSection>
 
             <CollapsibleSection
@@ -380,25 +381,33 @@ export function SocialGuidelines() {
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium text-slate-400 mb-2 block">Preferred Hashtags</label>
-                  <TagInput
-                    tags={preferredHashtags}
-                    input={hashtagInput}
-                    onInputChange={setHashtagInput}
-                    onAdd={() => addTag(preferredHashtags, setPreferredHashtags, hashtagInput, setHashtagInput)}
-                    onRemove={(i) => removeTag(preferredHashtags, setPreferredHashtags, i)}
-                    placeholder="#hashtag"
-                  />
+                  {canEdit ? (
+                    <TagInput
+                      tags={preferredHashtags}
+                      input={hashtagInput}
+                      onInputChange={setHashtagInput}
+                      onAdd={() => addTag(preferredHashtags, setPreferredHashtags, hashtagInput, setHashtagInput)}
+                      onRemove={(i) => removeTag(preferredHashtags, setPreferredHashtags, i)}
+                      placeholder="#hashtag"
+                    />
+                  ) : (
+                    <ReadOnlyTags tags={preferredHashtags} emptyLabel="None configured" />
+                  )}
                 </div>
                 <div>
                   <label className="text-sm font-medium text-slate-400 mb-2 block">Banned Hashtags</label>
-                  <TagInput
-                    tags={bannedHashtags}
-                    input={bannedHashtagInput}
-                    onInputChange={setBannedHashtagInput}
-                    onAdd={() => addTag(bannedHashtags, setBannedHashtags, bannedHashtagInput, setBannedHashtagInput)}
-                    onRemove={(i) => removeTag(bannedHashtags, setBannedHashtags, i)}
-                    placeholder="#banned"
-                  />
+                  {canEdit ? (
+                    <TagInput
+                      tags={bannedHashtags}
+                      input={bannedHashtagInput}
+                      onInputChange={setBannedHashtagInput}
+                      onAdd={() => addTag(bannedHashtags, setBannedHashtags, bannedHashtagInput, setBannedHashtagInput)}
+                      onRemove={(i) => removeTag(bannedHashtags, setBannedHashtags, i)}
+                      placeholder="#banned"
+                    />
+                  ) : (
+                    <ReadOnlyTags tags={bannedHashtags} emptyLabel="None configured" />
+                  )}
                 </div>
               </div>
             </CollapsibleSection>
@@ -408,15 +417,19 @@ export function SocialGuidelines() {
               expanded={expandedSections.has('cta')}
               onToggle={() => toggleSection('cta')}
             >
-              <TagInput
-                tags={ctaRules}
-                input={ctaInput}
-                onInputChange={setCtaInput}
-                onAdd={() => addTag(ctaRules, setCtaRules, ctaInput, setCtaInput)}
-                onRemove={(i) => removeTag(ctaRules, setCtaRules, i)}
-                placeholder='e.g. "Always end LinkedIn posts with a question"'
-                fullWidth
-              />
+              {canEdit ? (
+                <TagInput
+                  tags={ctaRules}
+                  input={ctaInput}
+                  onInputChange={setCtaInput}
+                  onAdd={() => addTag(ctaRules, setCtaRules, ctaInput, setCtaInput)}
+                  onRemove={(i) => removeTag(ctaRules, setCtaRules, i)}
+                  placeholder='e.g. "Always end LinkedIn posts with a question"'
+                  fullWidth
+                />
+              ) : (
+                <ReadOnlyTags tags={ctaRules} emptyLabel="No CTA rules configured" />
+              )}
             </CollapsibleSection>
 
             <CollapsibleSection
@@ -430,12 +443,13 @@ export function SocialGuidelines() {
                   {EMOJI_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}
-                      onClick={() => { setEmojiFrequency(opt.value); debouncedSave(); }}
+                      onClick={() => { if (canEdit) { setEmojiFrequency(opt.value); debouncedSave(); } }}
+                      disabled={!canEdit}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                         emojiFrequency === opt.value
                           ? 'bg-cyan-600 text-white'
                           : 'bg-slate-700 text-slate-400 hover:text-slate-300'
-                      }`}
+                      } disabled:cursor-default`}
                     >
                       {opt.label}
                     </button>
@@ -453,8 +467,9 @@ export function SocialGuidelines() {
                 value={industryPositioning}
                 onChange={(e) => { setIndustryPositioning(e.target.value); debouncedSave(); }}
                 rows={4}
+                readOnly={!canEdit}
                 placeholder="Describe your brand's industry stance, differentiators, and positioning..."
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none text-sm"
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none text-sm read-only:opacity-70 read-only:cursor-default"
               />
             </CollapsibleSection>
 
@@ -463,14 +478,18 @@ export function SocialGuidelines() {
               expanded={expandedSections.has('visual')}
               onToggle={() => toggleSection('visual')}
             >
-              <TagInput
-                tags={visualStyles}
-                input={visualInput}
-                onInputChange={setVisualInput}
-                onAdd={() => addTag(visualStyles, setVisualStyles, visualInput, setVisualInput)}
-                onRemove={(i) => removeTag(visualStyles, setVisualStyles, i)}
-                placeholder='e.g. "minimalist", "dark mode", "corporate blue"'
-              />
+              {canEdit ? (
+                <TagInput
+                  tags={visualStyles}
+                  input={visualInput}
+                  onInputChange={setVisualInput}
+                  onAdd={() => addTag(visualStyles, setVisualStyles, visualInput, setVisualInput)}
+                  onRemove={(i) => removeTag(visualStyles, setVisualStyles, i)}
+                  placeholder='e.g. "minimalist", "dark mode", "corporate blue"'
+                />
+              ) : (
+                <ReadOnlyTags tags={visualStyles} emptyLabel="No visual styles configured" />
+              )}
             </CollapsibleSection>
 
             <CollapsibleSection
@@ -494,8 +513,9 @@ export function SocialGuidelines() {
                           debouncedSave();
                         }}
                         rows={2}
+                        readOnly={!canEdit}
                         placeholder={`Custom rules for ${PLATFORM_LABELS[platform]}...`}
-                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none text-sm"
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none text-sm read-only:opacity-70 read-only:cursor-default"
                       />
                     </div>
                   );
@@ -506,16 +526,18 @@ export function SocialGuidelines() {
         )}
       </div>
 
-      <div className="flex justify-end pt-2">
-        <button
-          onClick={saveGuidelines}
-          disabled={saving}
-          className="flex items-center gap-2 px-6 py-2.5 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors text-sm font-medium disabled:opacity-50"
-        >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-          Save Guidelines
-        </button>
-      </div>
+      {canEdit && (
+        <div className="flex justify-end pt-2">
+          <button
+            onClick={saveGuidelines}
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-2.5 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors text-sm font-medium disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            Save Guidelines
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -605,6 +627,24 @@ function TagInput({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function ReadOnlyTags({ tags, emptyLabel }: { tags: string[]; emptyLabel: string }) {
+  if (tags.length === 0) {
+    return <p className="text-sm text-slate-500 italic">{emptyLabel}</p>;
+  }
+  return (
+    <div className="flex flex-wrap gap-2">
+      {tags.map((tag, i) => (
+        <span
+          key={i}
+          className="inline-flex items-center px-3 py-1 bg-slate-700 text-slate-300 rounded-full text-sm"
+        >
+          {tag}
+        </span>
+      ))}
     </div>
   );
 }

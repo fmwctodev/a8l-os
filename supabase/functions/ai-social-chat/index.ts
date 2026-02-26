@@ -135,7 +135,8 @@ Deno.serve(async (req: Request) => {
         "content_themes, image_style, writing_style, tone_preferences, words_to_avoid, hashtag_preferences, platform_tweaks, industry_positioning"
       )
       .eq("organization_id", orgId)
-      .limit(5);
+      .is("user_id", null)
+      .maybeSingle();
 
     const { data: stylePresets } = await supabase
       .from("media_style_presets")
@@ -160,7 +161,7 @@ Deno.serve(async (req: Request) => {
       )
       .join(", ");
 
-    const guidelinesSummary = buildGuidelinesSummary(guidelines || []);
+    const guidelinesSummary = buildGuidelinesSummary(guidelines);
 
     const systemPrompt = `You are an expert AI social media strategist. You help create engaging social media content.
 
@@ -378,12 +379,9 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
 
             const rawPrompt = draft.visual_style_suggestion!;
             let enrichedPrompt = rawPrompt;
-            const imgStyleBlocks = (guidelines || [])
-              .map((g: Record<string, unknown>) =>
-                formatBlocks(g.image_style as Array<{ content: string }> | null)
-              )
-              .filter((s: string) => s.length > 0)
-              .join("\n");
+            const imgStyleBlocks = guidelines
+              ? formatBlocks(guidelines.image_style as Array<{ content: string }> | null)
+              : "";
             if (imgStyleBlocks) {
               enrichedPrompt = `${rawPrompt}\n\nImage style guidelines: ${imgStyleBlocks}`;
             }
@@ -548,45 +546,43 @@ function formatBlocks(
 }
 
 function buildGuidelinesSummary(
-  guidelines: Record<string, unknown>[]
+  g: Record<string, unknown> | null
 ): string {
-  if (!guidelines.length) return "";
+  if (!g) return "";
 
   const sections: string[] = [];
 
-  for (const g of guidelines) {
-    const contentThemes = formatBlocks(
-      g.content_themes as Array<{ content: string }> | null
-    );
-    const imageStyleBlocks = formatBlocks(
-      g.image_style as Array<{ content: string }> | null
-    );
-    const writingStyleBlocks = formatBlocks(
-      g.writing_style as Array<{ content: string }> | null
-    );
+  const contentThemes = formatBlocks(
+    g.content_themes as Array<{ content: string }> | null
+  );
+  const imageStyleBlocks = formatBlocks(
+    g.image_style as Array<{ content: string }> | null
+  );
+  const writingStyleBlocks = formatBlocks(
+    g.writing_style as Array<{ content: string }> | null
+  );
 
-    if (contentThemes) {
-      sections.push(`Content Themes:\n${contentThemes}`);
-    }
-    if (imageStyleBlocks) {
-      sections.push(`Image Style Guidelines:\n${imageStyleBlocks}`);
-    }
-    if (writingStyleBlocks) {
-      sections.push(`Writing Style Guidelines:\n${writingStyleBlocks}`);
-    }
-
-    const tone = g.tone_preferences as Record<string, unknown> | null;
-    const avoid = g.words_to_avoid as string[] | null;
-    const hashtags = g.hashtag_preferences as Record<string, unknown> | null;
-    const positioning = g.industry_positioning as string | null;
-    const tweaks = g.platform_tweaks as Record<string, unknown> | null;
-
-    if (tone) sections.push(`Tone: ${JSON.stringify(tone)}`);
-    if (avoid?.length) sections.push(`Words to avoid: ${avoid.join(", ")}`);
-    if (hashtags) sections.push(`Hashtag prefs: ${JSON.stringify(hashtags)}`);
-    if (positioning) sections.push(`Industry: ${positioning}`);
-    if (tweaks) sections.push(`Platform tweaks: ${JSON.stringify(tweaks)}`);
+  if (contentThemes) {
+    sections.push(`Content Themes:\n${contentThemes}`);
   }
+  if (imageStyleBlocks) {
+    sections.push(`Image Style Guidelines:\n${imageStyleBlocks}`);
+  }
+  if (writingStyleBlocks) {
+    sections.push(`Writing Style Guidelines:\n${writingStyleBlocks}`);
+  }
+
+  const tone = g.tone_preferences as Record<string, unknown> | null;
+  const avoid = g.words_to_avoid as string[] | null;
+  const hashtags = g.hashtag_preferences as Record<string, unknown> | null;
+  const positioning = g.industry_positioning as string | null;
+  const tweaks = g.platform_tweaks as Record<string, unknown> | null;
+
+  if (tone) sections.push(`Tone: ${JSON.stringify(tone)}`);
+  if (avoid?.length) sections.push(`Words to avoid: ${avoid.join(", ")}`);
+  if (hashtags) sections.push(`Hashtag prefs: ${JSON.stringify(hashtags)}`);
+  if (positioning) sections.push(`Industry: ${positioning}`);
+  if (tweaks) sections.push(`Platform tweaks: ${JSON.stringify(tweaks)}`);
 
   return sections.length > 0
     ? `\nGuidelines:\n${sections.join("\n\n")}`

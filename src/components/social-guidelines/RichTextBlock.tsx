@@ -17,6 +17,7 @@ interface RichTextBlockProps {
   placeholder?: string;
   onChange: (html: string) => void;
   onFocus?: () => void;
+  readOnly?: boolean;
 }
 
 export function RichTextBlock({
@@ -24,6 +25,7 @@ export function RichTextBlock({
   placeholder = 'Start typing...',
   onChange,
   onFocus,
+  readOnly = false,
 }: RichTextBlockProps) {
   const [focused, setFocused] = useState(false);
 
@@ -42,6 +44,7 @@ export function RichTextBlock({
       }),
     ],
     content,
+    editable: !readOnly,
     editorProps: {
       attributes: {
         class:

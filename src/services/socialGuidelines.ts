@@ -2,28 +2,21 @@ import { supabase } from '../lib/supabase';
 import type { SocialGuideline } from '../types';
 
 export async function getGuidelines(
-  orgId: string,
-  userId?: string | null
+  orgId: string
 ): Promise<SocialGuideline | null> {
-  let query = supabase
+  const { data, error } = await supabase
     .from('social_guidelines')
     .select('*')
-    .eq('organization_id', orgId);
+    .eq('organization_id', orgId)
+    .is('user_id', null)
+    .maybeSingle();
 
-  if (userId) {
-    query = query.eq('user_id', userId);
-  } else {
-    query = query.is('user_id', null);
-  }
-
-  const { data, error } = await query.maybeSingle();
   if (error) throw error;
   return data;
 }
 
 export async function upsertGuidelines(
   orgId: string,
-  userId: string | null,
   updates: Partial<Pick<SocialGuideline,
     'content_themes' | 'image_style' | 'writing_style' |
     'tone_preferences' | 'words_to_avoid' | 'hashtag_preferences' |
@@ -31,7 +24,7 @@ export async function upsertGuidelines(
     'visual_style_rules' | 'platform_tweaks'
   >>
 ): Promise<SocialGuideline> {
-  const existing = await getGuidelines(orgId, userId);
+  const existing = await getGuidelines(orgId);
 
   if (existing) {
     const { data, error } = await supabase
@@ -49,7 +42,7 @@ export async function upsertGuidelines(
     .from('social_guidelines')
     .insert({
       organization_id: orgId,
-      user_id: userId,
+      user_id: null,
       ...updates,
     })
     .select()
@@ -61,12 +54,11 @@ export async function upsertGuidelines(
 
 export async function mergeGuidelineFromChat(
   orgId: string,
-  userId: string,
   partialUpdate: Partial<Pick<SocialGuideline,
     'words_to_avoid' | 'cta_rules' | 'tone_preferences'
   >>
 ): Promise<SocialGuideline> {
-  const existing = await getGuidelines(orgId, userId);
+  const existing = await getGuidelines(orgId);
 
   if (existing) {
     const merged: Record<string, unknown> = {};
@@ -88,8 +80,8 @@ export async function mergeGuidelineFromChat(
       };
     }
 
-    return upsertGuidelines(orgId, userId, merged);
+    return upsertGuidelines(orgId, merged);
   }
 
-  return upsertGuidelines(orgId, userId, partialUpdate);
+  return upsertGuidelines(orgId, partialUpdate);
 }

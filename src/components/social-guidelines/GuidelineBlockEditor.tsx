@@ -7,12 +7,14 @@ interface GuidelineBlockEditorProps {
   title: string;
   blocks: GuidelineBlock[];
   onChange: (blocks: GuidelineBlock[]) => void;
+  readOnly?: boolean;
 }
 
 export function GuidelineBlockEditor({
   title,
   blocks,
   onChange,
+  readOnly = false,
 }: GuidelineBlockEditorProps) {
   const pendingNewBlock = useRef(false);
 
@@ -68,37 +70,42 @@ export function GuidelineBlockEditor({
               <RichTextBlock
                 content={block.content}
                 onChange={(html) => handleBlockChange(index, html)}
+                readOnly={readOnly}
               />
             </div>
-            <div className="flex-shrink-0 mt-1">
-              <button
-                type="button"
-                onClick={() => handleRemoveBlock(index)}
-                className="p-1 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                title="Remove block"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+            {!readOnly && (
+              <div className="flex-shrink-0 mt-1">
+                <button
+                  type="button"
+                  onClick={() => handleRemoveBlock(index)}
+                  className="p-1 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                  title="Remove block"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         ))}
 
-        <div className="flex gap-3 px-5 py-4">
-          <div className="flex-shrink-0 mt-1">
-            <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-amber-400/10 border border-amber-400/20 text-amber-400/50 text-xs font-semibold">
-              {blocks.length + 1}
-            </span>
+        {!readOnly && (
+          <div className="flex gap-3 px-5 py-4">
+            <div className="flex-shrink-0 mt-1">
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-amber-400/10 border border-amber-400/20 text-amber-400/50 text-xs font-semibold">
+                {blocks.length + 1}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <RichTextBlock
+                key={`new-${blocks.length}`}
+                content=""
+                placeholder="Start typing..."
+                onChange={handleNewBlockChange}
+                onFocus={handleNewBlockFocus}
+              />
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <RichTextBlock
-              key={`new-${blocks.length}`}
-              content=""
-              placeholder="Start typing..."
-              onChange={handleNewBlockChange}
-              onFocus={handleNewBlockFocus}
-            />
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
