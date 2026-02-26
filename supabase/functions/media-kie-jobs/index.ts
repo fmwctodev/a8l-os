@@ -1,5 +1,16 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  generateTextToVideo,
+  generateImageToVideo,
+  generateMultiImageToVideo,
+  generateTextToImage,
+  get1080pVideo,
+  get4kVideo,
+} from "../_shared/kieAdapter.ts";
+import { getRequiredAspectRatio, validateAspectRatio } from "../_shared/platformAspectMatrix.ts";
+import { buildStructuredPrompt } from "../_shared/promptBuilder.ts";
+import type { StylePreset } from "../_shared/promptBuilder.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,6 +30,9 @@ interface CreateJobPayload {
   brand_kit_id?: string;
   post_id?: string;
   extra_params?: Record<string, unknown>;
+  job_type?: string;
+  style_preset_id?: string;
+  source_image_urls?: string[];
 }
 
 Deno.serve(async (req: Request) => {
@@ -78,6 +92,14 @@ Deno.serve(async (req: Request) => {
     }
 
     if (req.method === "GET") {
+      const url = new URL(req.url);
+      const upgradeType = url.searchParams.get("upgrade");
+      const jobId = url.searchParams.get("job_id");
+
+      if (upgradeType && jobId) {
+        return await handleUpgrade(supabase, userData.organization_id, jobId, upgradeType, kieApiKey, supabaseUrl);
+      }
+
       return await handleListJobs(supabase, userData.organization_id, req);
     }
 
@@ -113,7 +135,66 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    let stylePreset: StylePreset | null = null;
+    if (payload.style_preset_id) {
+      const { data: preset } = await supabase
+        .from("media_style_presets")
+        .select("*")
+        .eq("id", payload.style_preset_id)
+        .eq("enabled", true)
+        .maybeSingle();
+      stylePreset = preset;
+    }
+
+    let jobType = payload.job_type || null;
+    if (!jobType) {
+      if (model.type === "image") {
+        jobType = "text_to_image";
+      } else if (payload.source_image_urls?.length || payload.source_upload_id) {
+        jobType = payload.source_image_urls && payload.source_image_urls.length > 1
+          ? "multi_image_to_video"
+          : "image_to_video";
+      } else {
+        jobType = "text_to_video";
+      }
+    }
+
+    if (jobType === "ugc_short_video" && !stylePreset) {
+      const { data: ugcPreset } = await supabase
+        .from("media_style_presets")
+        .select("*")
+        .eq("name", "ugc")
+        .eq("enabled", true)
+        .maybeSingle();
+      stylePreset = ugcPreset;
+    }
+    if (jobType === "explainer_long_video" && !stylePreset) {
+      const { data: explainerPreset } = await supabase
+        .from("media_style_presets")
+        .select("*")
+        .eq("name", "explainer")
+        .eq("enabled", true)
+        .maybeSingle();
+      stylePreset = explainerPreset;
+    }
+
+    let effectiveDuration = payload.duration;
+    let effectiveAspect = payload.aspect_ratio || model.default_params?.aspect_ratio as string || "16:9";
+
+    if (jobType === "ugc_short_video") {
+      effectiveAspect = "9:16";
+      if (!effectiveDuration || effectiveDuration > 30) effectiveDuration = 30;
+    } else if (jobType === "explainer_long_video") {
+      effectiveAspect = "16:9";
+      if (!effectiveDuration || effectiveDuration > 60) effectiveDuration = 60;
+    }
+
+    if (stylePreset?.recommended_aspect_ratio && !payload.aspect_ratio) {
+      effectiveAspect = stylePreset.recommended_aspect_ratio;
+    }
+
     let finalPrompt = payload.prompt;
+
     if (payload.brand_kit_id) {
       const { data: brandKit } = await supabase
         .from("brand_kits")
@@ -128,14 +209,13 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    finalPrompt = buildStructuredPrompt(finalPrompt, stylePreset);
+
     const params: Record<string, unknown> = {
-      aspect_ratio:
-        payload.aspect_ratio || model.default_params?.aspect_ratio || "16:9",
+      aspect_ratio: effectiveAspect,
       ...(payload.resolution && { resolution: payload.resolution }),
-      ...(payload.duration && { duration: payload.duration }),
-      ...(payload.negative_prompt && {
-        negative_prompt: payload.negative_prompt,
-      }),
+      ...(effectiveDuration && { duration: effectiveDuration }),
+      ...(payload.negative_prompt && { negative_prompt: payload.negative_prompt }),
       ...(payload.extra_params || {}),
     };
 
@@ -152,6 +232,9 @@ Deno.serve(async (req: Request) => {
         brand_kit_id: payload.brand_kit_id || null,
         source_upload_id: payload.source_upload_id || null,
         post_id: payload.post_id || null,
+        job_type: jobType,
+        style_preset_id: stylePreset?.id || null,
+        source_image_urls: payload.source_image_urls || [],
       })
       .select()
       .single();
@@ -182,110 +265,99 @@ Deno.serve(async (req: Request) => {
     }
 
     const webhookUrl = `${supabaseUrl}/functions/v1/media-kie-webhook`;
+    const modelKey = model.model_key as string;
+    const isVeo = modelKey.startsWith("google/veo-");
 
-    let sourceImageUrl: string | null = null;
-    if (payload.source_upload_id) {
+    let sourceImageUrls: string[] = payload.source_image_urls || [];
+    if (!sourceImageUrls.length && payload.source_upload_id) {
       const { data: upload } = await supabase
         .from("media_source_uploads")
         .select("public_url")
         .eq("id", payload.source_upload_id)
         .maybeSingle();
-      if (upload) {
-        sourceImageUrl = upload.public_url;
+      if (upload?.public_url) {
+        sourceImageUrls = [upload.public_url];
       }
     }
 
-    const isVeoModel =
-      model.model_key.startsWith("google/veo-");
-    let kieEndpoint: string;
-    let kieBody: Record<string, unknown>;
+    let kieResult;
 
-    if (isVeoModel) {
-      kieEndpoint =
-        model.api_endpoint_override || "https://api.kie.ai/api/v1/veo/generate";
-      kieBody = {
+    if (jobType === "text_to_image") {
+      kieResult = await generateTextToImage(kieApiKey, {
+        modelKey,
         prompt: finalPrompt,
-        aspect_ratio: params.aspect_ratio,
-        duration: params.duration || model.default_params?.duration || 8,
-        callBackUrl: webhookUrl,
-      };
-    } else {
-      kieEndpoint = "https://api.kie.ai/api/v1/jobs/createTask";
-      const input: Record<string, unknown> = {
-        prompt: finalPrompt,
-        aspect_ratio: params.aspect_ratio,
-      };
-      if (params.resolution) input.resolution = params.resolution;
-      if (params.duration) input.duration = params.duration;
-      if (params.negative_prompt)
-        input.negative_prompt = params.negative_prompt;
-      if (sourceImageUrl) input.input_urls = [sourceImageUrl];
-
-      kieBody = {
-        model: model.model_key,
-        callBackUrl: webhookUrl,
-        input,
-      };
-    }
-
-    let kieResponse: Response;
-    try {
-      kieResponse = await fetch(kieEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${kieApiKey}`,
+        aspectRatio: effectiveAspect,
+        resolution: payload.resolution,
+        negativePrompt: payload.negative_prompt,
+        callbackUrl: webhookUrl,
+      });
+    } else if (jobType === "image_to_video" && sourceImageUrls.length > 0) {
+      kieResult = await generateImageToVideo(
+        kieApiKey,
+        {
+          prompt: finalPrompt,
+          aspectRatio: effectiveAspect,
+          duration: effectiveDuration || model.default_params?.duration as number || 8,
+          callbackUrl: webhookUrl,
+          imageUrls: sourceImageUrls,
+          model: isVeo ? undefined : modelKey,
         },
-        body: JSON.stringify(kieBody),
-      });
-    } catch (fetchErr) {
-      console.error("Kie.ai API call failed:", fetchErr);
+        isVeo ? (model.api_endpoint_override as string) : undefined
+      );
+    } else if (jobType === "multi_image_to_video" && sourceImageUrls.length > 1) {
+      kieResult = await generateMultiImageToVideo(
+        kieApiKey,
+        {
+          prompt: finalPrompt,
+          aspectRatio: effectiveAspect,
+          duration: effectiveDuration || model.default_params?.duration as number || 8,
+          callbackUrl: webhookUrl,
+          imageUrls: sourceImageUrls,
+          model: isVeo ? undefined : modelKey,
+        },
+        isVeo ? (model.api_endpoint_override as string) : undefined
+      );
+    } else {
+      kieResult = await generateTextToVideo(
+        kieApiKey,
+        {
+          prompt: finalPrompt,
+          aspectRatio: effectiveAspect,
+          duration: effectiveDuration || model.default_params?.duration as number || 8,
+          callbackUrl: webhookUrl,
+          model: isVeo ? undefined : modelKey,
+        },
+        isVeo ? (model.api_endpoint_override as string) : undefined
+      );
+    }
+
+    if (!kieResult.success) {
       await supabase
         .from("media_generation_jobs")
         .update({
           status: "fail",
-          error_message: `Kie.ai API unreachable: ${fetchErr instanceof Error ? fetchErr.message : "unknown"}`,
+          error_message: kieResult.error || "Kie.ai API error",
           completed_at: new Date().toISOString(),
         })
         .eq("id", job.id);
 
       return jsonResponse({
         success: true,
-        data: { ...job, status: "fail", error_message: "Kie.ai API unreachable" },
+        data: { ...job, status: "fail", error_message: kieResult.error },
       });
     }
 
-    const kieResult = await kieResponse.json();
-
-    if (!kieResponse.ok || kieResult.code !== 200) {
-      const errMsg = kieResult.msg || kieResult.message || "Unknown Kie.ai error";
-      await supabase
-        .from("media_generation_jobs")
-        .update({
-          status: "fail",
-          error_message: errMsg,
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", job.id);
-
-      return jsonResponse({
-        success: true,
-        data: { ...job, status: "fail", error_message: errMsg },
-      });
-    }
-
-    const taskId = kieResult.data?.taskId || kieResult.data?.task_id;
     await supabase
       .from("media_generation_jobs")
       .update({
-        kie_task_id: taskId,
+        kie_task_id: kieResult.taskId,
         status: "queuing",
       })
       .eq("id", job.id);
 
     return jsonResponse({
       success: true,
-      data: { ...job, kie_task_id: taskId, status: "queuing" },
+      data: { ...job, kie_task_id: kieResult.taskId, status: "queuing" },
     });
   } catch (err) {
     console.error("media-kie-jobs error:", err);
@@ -297,6 +369,71 @@ Deno.serve(async (req: Request) => {
   }
 });
 
+async function handleUpgrade(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+  jobId: string,
+  upgradeType: string,
+  kieApiKey: string | undefined,
+  supabaseUrl: string
+) {
+  if (!kieApiKey) {
+    return jsonError("CONFIG_ERROR", "KIE_API_KEY not configured", 500);
+  }
+
+  const { data: job } = await supabase
+    .from("media_generation_jobs")
+    .select("*, kie_models(model_key)")
+    .eq("id", jobId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (!job) {
+    return jsonError("JOB_NOT_FOUND", "Job not found", 404);
+  }
+
+  if (job.status !== "success") {
+    return jsonError("INVALID_STATE", "Job must be completed before upgrading", 400);
+  }
+
+  const modelKey = job.kie_models?.model_key || "";
+  if (!modelKey.startsWith("google/veo-")) {
+    return jsonError("NOT_SUPPORTED", "Upgrades only available for Veo models", 400);
+  }
+
+  const webhookUrl = `${supabaseUrl}/functions/v1/media-kie-webhook`;
+
+  let result;
+  if (upgradeType === "1080p") {
+    result = await get1080pVideo(kieApiKey, job.kie_task_id, 0);
+  } else if (upgradeType === "4k") {
+    result = await get4kVideo(kieApiKey, job.kie_task_id, 0, webhookUrl);
+  } else {
+    return jsonError("INVALID_UPGRADE", "Use upgrade=1080p or upgrade=4k", 400);
+  }
+
+  if (!result.success) {
+    return jsonError("UPGRADE_FAILED", result.error || "Upgrade request failed", 500);
+  }
+
+  const existingUpgrades = job.upgrade_task_ids || {};
+  existingUpgrades[upgradeType] = { taskId: result.taskId, status: "pending" };
+
+  await supabase
+    .from("media_generation_jobs")
+    .update({ upgrade_task_ids: existingUpgrades })
+    .eq("id", job.id);
+
+  return jsonResponse({
+    success: true,
+    data: {
+      upgrade_type: upgradeType,
+      task_id: result.taskId,
+      data: result.data,
+    },
+  });
+}
+
 async function handleListJobs(
   supabase: ReturnType<typeof createClient>,
   orgId: string,
@@ -305,6 +442,7 @@ async function handleListJobs(
   const url = new URL(req.url);
   const status = url.searchParams.get("status");
   const postId = url.searchParams.get("post_id");
+  const jobType = url.searchParams.get("job_type");
   const limit = parseInt(url.searchParams.get("limit") || "20", 10);
   const offset = parseInt(url.searchParams.get("offset") || "0", 10);
 
@@ -317,6 +455,7 @@ async function handleListJobs(
 
   if (status) query = query.eq("status", status);
   if (postId) query = query.eq("post_id", postId);
+  if (jobType) query = query.eq("job_type", jobType);
 
   const { data, error, count } = await query;
 

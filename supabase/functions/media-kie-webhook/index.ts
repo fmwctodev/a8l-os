@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { downloadAndStoreAsset } from "../_shared/kieAdapter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -57,15 +58,34 @@ Deno.serve(async (req: Request) => {
 
     const { data: job, error: jobError } = await supabase
       .from("media_generation_jobs")
-      .select("*")
+      .select("*, kie_models(type)")
       .eq("kie_task_id", taskId)
       .maybeSingle();
 
-    if (jobError || !job) {
+    if (!job) {
+      const { data: upgradeJob } = await supabase
+        .from("media_generation_jobs")
+        .select("*, kie_models(type)")
+        .filter("upgrade_task_ids", "cs", JSON.stringify({ [taskId]: {} }))
+        .limit(1)
+        .maybeSingle();
+
+      if (upgradeJob) {
+        return await handleUpgradeWebhook(supabase, upgradeJob, taskId, payload);
+      }
+
       console.error("[media-kie-webhook] Job not found for taskId:", taskId);
       return new Response(
         JSON.stringify({ success: false, error: "Job not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (jobError) {
+      console.error("[media-kie-webhook] DB error:", jobError);
+      return new Response(
+        JSON.stringify({ success: false, error: "Database error" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -87,63 +107,11 @@ Deno.serve(async (req: Request) => {
         })
         .eq("id", job.id);
 
-      const { data: modelData } = await supabase
-        .from("kie_models")
-        .select("type")
-        .eq("id", job.model_id)
-        .maybeSingle();
-      const mediaType = modelData?.type || "image";
+      const mediaType = job.kie_models?.type || "image";
 
       for (let i = 0; i < resultUrls.length; i++) {
-        const resultUrl = resultUrls[i];
         try {
-          const fileResponse = await fetch(resultUrl);
-          if (!fileResponse.ok) {
-            console.error(`[media-kie-webhook] Failed to download: ${resultUrl}`);
-            continue;
-          }
-
-          const contentType =
-            fileResponse.headers.get("content-type") || (mediaType === "video" ? "video/mp4" : "image/png");
-          const fileBlob = await fileResponse.blob();
-          const ext = contentType.includes("mp4")
-            ? "mp4"
-            : contentType.includes("webm")
-              ? "webm"
-              : contentType.includes("png")
-                ? "png"
-                : contentType.includes("webp")
-                  ? "webp"
-                  : "jpg";
-          const storagePath = `${job.organization_id}/${job.id}/${i}.${ext}`;
-
-          const { error: uploadError } = await supabase.storage
-            .from("social-media-assets")
-            .upload(storagePath, fileBlob, {
-              contentType,
-              upsert: true,
-            });
-
-          if (uploadError) {
-            console.error("[media-kie-webhook] Storage upload error:", uploadError);
-            continue;
-          }
-
-          const { data: publicUrlData } = supabase.storage
-            .from("social-media-assets")
-            .getPublicUrl(storagePath);
-
-          await supabase.from("media_assets").insert({
-            organization_id: job.organization_id,
-            created_by: job.created_by,
-            job_id: job.id,
-            storage_path: storagePath,
-            public_url: publicUrlData.publicUrl,
-            media_type: mediaType,
-            mime_type: contentType,
-            file_size_bytes: fileBlob.size,
-            metadata: { source_url: resultUrl, index: i },
-          });
+          await downloadAndStoreAsset(supabase, resultUrls[i], job, i, mediaType);
         } catch (downloadErr) {
           console.error("[media-kie-webhook] Asset download/upload error:", downloadErr);
         }
@@ -185,3 +153,66 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+async function handleUpgradeWebhook(
+  supabase: ReturnType<typeof createClient>,
+  job: Record<string, unknown>,
+  taskId: string,
+  payload: KieWebhookPayload
+) {
+  const upgrades = (job.upgrade_task_ids || {}) as Record<string, { taskId: string; status: string; url?: string }>;
+  let matchedResolution: string | null = null;
+
+  for (const [resolution, upgrade] of Object.entries(upgrades)) {
+    if (upgrade.taskId === taskId) {
+      matchedResolution = resolution;
+      break;
+    }
+  }
+
+  if (!matchedResolution) {
+    return new Response(
+      JSON.stringify({ success: false, error: "Upgrade task not matched" }),
+      { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const isSuccess = payload.code === 200 && payload.msg === "success";
+  const resultUrls =
+    payload.data?.info?.resultUrls ||
+    payload.data?.info?.result_urls ||
+    payload.data?.resultUrls ||
+    [];
+
+  if (isSuccess && resultUrls.length > 0) {
+    upgrades[matchedResolution].status = "complete";
+    upgrades[matchedResolution].url = resultUrls[0];
+
+    const existingAssets = await supabase
+      .from("media_assets")
+      .select("id")
+      .eq("job_id", job.id);
+    const nextIndex = existingAssets.data?.length || 0;
+
+    try {
+      await downloadAndStoreAsset(
+        supabase, resultUrls[0], job, nextIndex, "video",
+        { resolution: matchedResolution, upgrade: true }
+      );
+    } catch (err) {
+      console.error(`[media-kie-webhook] Upgrade asset download error:`, err);
+    }
+  } else {
+    upgrades[matchedResolution].status = "failed";
+  }
+
+  await supabase
+    .from("media_generation_jobs")
+    .update({ upgrade_task_ids: upgrades })
+    .eq("id", job.id);
+
+  return new Response(
+    JSON.stringify({ success: true }),
+    { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}

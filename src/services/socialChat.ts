@@ -22,6 +22,7 @@ export interface MediaPreferences {
   video_model_id?: string;
   aspect_ratio?: string;
   auto_generate_media?: boolean;
+  style_preset_id?: string;
 }
 
 export interface SendMessageResult {
@@ -124,6 +125,7 @@ export async function sendMessage(
         ...(mediaPrefs?.image_model_id && { image_model_id: mediaPrefs.image_model_id }),
         ...(mediaPrefs?.video_model_id && { video_model_id: mediaPrefs.video_model_id }),
         ...(mediaPrefs?.aspect_ratio && { aspect_ratio: mediaPrefs.aspect_ratio }),
+        ...(mediaPrefs?.style_preset_id && { style_preset_id: mediaPrefs.style_preset_id }),
         auto_generate_media: mediaPrefs?.auto_generate_media ?? true,
       },
     });

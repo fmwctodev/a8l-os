@@ -17,6 +17,7 @@ import {
   Video,
   HeartPulse,
   Sparkles,
+  Film,
   LucideIcon,
 } from 'lucide-react';
 
@@ -106,6 +107,12 @@ const settingsNavSections: SettingsNavSection[] = [
         path: '/settings/assistant',
         icon: Sparkles,
         requiresPermission: 'personal_assistant.view',
+      },
+      {
+        name: 'Media Style Presets',
+        path: '/settings/media-presets',
+        icon: Film,
+        requiresPermission: 'ai.settings.view',
       },
     ],
   },

@@ -41,6 +41,20 @@ export interface MediaAsset {
   created_at: string;
 }
 
+export type JobType =
+  | 'text_to_video'
+  | 'image_to_video'
+  | 'multi_image_to_video'
+  | 'text_to_image'
+  | 'ugc_short_video'
+  | 'explainer_long_video';
+
+export interface UpgradeTaskInfo {
+  taskId: string;
+  status: 'pending' | 'complete' | 'failed';
+  url?: string;
+}
+
 export interface MediaGenerationJob {
   id: string;
   organization_id: string;
@@ -60,10 +74,15 @@ export interface MediaGenerationJob {
   brand_kit_id: string | null;
   source_upload_id: string | null;
   post_id: string | null;
+  job_type: JobType | null;
+  style_preset_id: string | null;
+  source_image_urls: string[];
+  upgrade_task_ids: Record<string, UpgradeTaskInfo> | null;
   kie_models?: {
     display_name: string;
     type: string;
     badge_label: string | null;
+    model_key?: string;
   };
 }
 
@@ -93,6 +112,9 @@ export interface CreateJobParams {
   brand_kit_id?: string;
   post_id?: string;
   extra_params?: Record<string, unknown>;
+  job_type?: JobType;
+  style_preset_id?: string;
+  source_image_urls?: string[];
 }
 
 export async function getKieModels(type?: 'image' | 'video'): Promise<KieModel[]> {
@@ -135,10 +157,14 @@ export async function createGenerationJob(params: CreateJobParams): Promise<Medi
   return result.data;
 }
 
-export async function getJobStatus(jobId: string): Promise<{
+export interface JobStatusResult {
   job: MediaGenerationJob;
   assets: MediaAsset[];
-}> {
+  can_upgrade_1080p: boolean;
+  can_upgrade_4k: boolean;
+}
+
+export async function getJobStatus(jobId: string): Promise<JobStatusResult> {
   const response = await fetchEdge('media-job-status', {
     method: 'GET',
     params: { job_id: jobId },
@@ -151,13 +177,30 @@ export async function getJobStatus(jobId: string): Promise<{
   return result.data;
 }
 
+export async function requestUpgrade(
+  jobId: string,
+  upgradeType: '1080p' | '4k'
+): Promise<{ upgrade_type: string; task_id: string }> {
+  const response = await fetchEdge('media-kie-jobs', {
+    method: 'GET',
+    params: { job_id: jobId, upgrade: upgradeType },
+  });
+
+  const result = await response.json();
+  if (!result.success) {
+    throw new Error(parseEdgeFunctionError(result, 'Upgrade request failed'));
+  }
+  return result.data;
+}
+
 export async function listGenerationJobs(
   organizationId: string,
-  options?: { status?: string; post_id?: string; limit?: number; offset?: number }
+  options?: { status?: string; post_id?: string; job_type?: string; limit?: number; offset?: number }
 ): Promise<{ data: MediaGenerationJob[]; total: number }> {
   const params: Record<string, string> = {};
   if (options?.status) params.status = options.status;
   if (options?.post_id) params.post_id = options.post_id;
+  if (options?.job_type) params.job_type = options.job_type;
   if (options?.limit) params.limit = String(options.limit);
   if (options?.offset) params.offset = String(options.offset);
 

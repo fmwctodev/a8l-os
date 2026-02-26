@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Wand2,
   Upload,
@@ -10,8 +10,13 @@ import {
   Monitor,
   Type,
   Palette,
+  Smartphone,
+  Film,
+  Presentation,
 } from 'lucide-react';
-import type { KieModel, CreateJobParams } from '../../services/mediaGeneration';
+import type { KieModel, CreateJobParams, JobType } from '../../services/mediaGeneration';
+import { getStylePresets } from '../../services/mediaStylePresets';
+import type { MediaStylePreset } from '../../services/mediaStylePresets';
 
 interface GenerationFormProps {
   model: KieModel | null;
@@ -33,6 +38,14 @@ const ASPECT_RATIO_LABELS: Record<string, string> = {
   '10:16': 'Narrow',
   '16:10': 'Wide',
 };
+
+const JOB_TYPE_OPTIONS: { value: JobType; label: string; icon: typeof Film; desc: string }[] = [
+  { value: 'text_to_video', label: 'Text to Video', icon: Film, desc: 'Generate from a prompt' },
+  { value: 'text_to_image', label: 'Text to Image', icon: ImageIcon, desc: 'Generate a still image' },
+  { value: 'image_to_video', label: 'Image to Video', icon: ImageIcon, desc: 'Animate a reference image' },
+  { value: 'ugc_short_video', label: 'UGC Short', icon: Smartphone, desc: '9:16, up to 30s' },
+  { value: 'explainer_long_video', label: 'Explainer', icon: Presentation, desc: '16:9, up to 60s' },
+];
 
 export default function GenerationForm({
   model,
@@ -56,7 +69,47 @@ export default function GenerationForm({
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [sourcePreview, setSourcePreview] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [jobType, setJobType] = useState<JobType | undefined>(undefined);
+  const [stylePresets, setStylePresets] = useState<MediaStylePreset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    getStylePresets().then(setStylePresets).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (model) {
+      setAspectRatio((model.default_params?.aspect_ratio as string) || '16:9');
+      setDuration((model.default_params?.duration as number) || 5);
+      setResolution((model.default_params?.resolution as string) || '');
+    }
+  }, [model?.id]);
+
+  const selectedPreset = stylePresets.find(p => p.id === selectedPresetId);
+
+  function handlePresetSelect(presetId: string) {
+    if (selectedPresetId === presetId) {
+      setSelectedPresetId(undefined);
+      return;
+    }
+    setSelectedPresetId(presetId);
+    const preset = stylePresets.find(p => p.id === presetId);
+    if (preset?.recommended_aspect_ratio) {
+      setAspectRatio(preset.recommended_aspect_ratio);
+    }
+  }
+
+  function handleJobTypeSelect(type: JobType) {
+    setJobType(type === jobType ? undefined : type);
+    if (type === 'ugc_short_video') {
+      setAspectRatio('9:16');
+      if (duration > 30) setDuration(30);
+    } else if (type === 'explainer_long_video') {
+      setAspectRatio('16:9');
+      if (duration > 60) setDuration(60);
+    }
+  }
 
   if (!model) {
     return (
@@ -70,6 +123,10 @@ export default function GenerationForm({
   const supportedRatios = (model.supports_aspect_ratios || []) as string[];
   const supportedDurations = (model.supports_durations || []) as number[];
   const supportedResolutions = (model.supports_resolutions || []) as string[];
+  const availableJobTypes = JOB_TYPE_OPTIONS.filter(jt => {
+    if (model.type === 'image') return jt.value === 'text_to_image';
+    return jt.value !== 'text_to_image';
+  });
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -107,12 +164,73 @@ export default function GenerationForm({
     if (model.type === 'video' && duration) params.duration = duration;
     if (brandKitId) params.brand_kit_id = brandKitId;
     if (postId) params.post_id = postId;
+    if (jobType) params.job_type = jobType;
+    if (selectedPresetId) params.style_preset_id = selectedPresetId;
 
     onSubmit(params);
   }
 
   return (
     <div className="space-y-4">
+      {availableJobTypes.length > 1 && (
+        <div>
+          <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+            <Film className="w-3.5 h-3.5" />
+            Generation Type
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {availableJobTypes.map((jt) => {
+              const Icon = jt.icon;
+              return (
+                <button
+                  key={jt.value}
+                  onClick={() => handleJobTypeSelect(jt.value)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    jobType === jt.value
+                      ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                  }`}
+                  title={jt.desc}
+                >
+                  <Icon className="w-3 h-3" />
+                  {jt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {stylePresets.length > 0 && model.type === 'video' && (
+        <div>
+          <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+            <Palette className="w-3.5 h-3.5" />
+            Style Preset
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {stylePresets.map((preset) => (
+              <button
+                key={preset.id}
+                onClick={() => handlePresetSelect(preset.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  selectedPresetId === preset.id
+                    ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 ring-1 ring-gray-400 dark:ring-gray-500'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700'
+                }`}
+                title={preset.description}
+              >
+                {preset.display_name}
+              </button>
+            ))}
+          </div>
+          {selectedPreset && (
+            <p className="text-xs text-gray-500 mt-1.5">
+              {selectedPreset.description}
+            </p>
+          )}
+        </div>
+      )}
+
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
           Prompt

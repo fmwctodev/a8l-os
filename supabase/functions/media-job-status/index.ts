@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getTaskStatus, downloadAndStoreAsset } from "../_shared/kieAdapter.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -62,7 +63,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: job, error: jobError } = await supabase
       .from("media_generation_jobs")
-      .select("*, kie_models(display_name, type, badge_label)")
+      .select("*, kie_models(display_name, type, badge_label, model_key)")
       .eq("id", jobId)
       .eq("organization_id", userData.organization_id)
       .maybeSingle();
@@ -76,24 +77,15 @@ Deno.serve(async (req: Request) => {
       kieApiKey &&
       (job.status === "waiting" || job.status === "queuing" || job.status === "generating")
     ) {
-      const isVeo = job.kie_models?.display_name?.toLowerCase().includes("veo");
-      const pollUrl = isVeo
-        ? `https://api.kie.ai/api/v1/veo/record-info?taskId=${job.kie_task_id}`
-        : `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${job.kie_task_id}`;
+      const modelKey = job.kie_models?.model_key || "";
+      const isVeo = modelKey.startsWith("google/veo-");
 
       try {
-        const pollResponse = await fetch(pollUrl, {
-          headers: { Authorization: `Bearer ${kieApiKey}` },
-        });
+        const pollResult = await getTaskStatus(kieApiKey, job.kie_task_id, isVeo);
 
-        if (pollResponse.ok) {
-          const pollResult = await pollResponse.json();
-          const remoteStatus = pollResult.data?.status;
-          const resultUrls =
-            pollResult.data?.info?.resultUrls ||
-            pollResult.data?.info?.result_urls ||
-            pollResult.data?.resultUrls ||
-            [];
+        if (pollResult.success) {
+          const remoteStatus = pollResult.status;
+          const resultUrls = pollResult.resultUrls || [];
 
           if (remoteStatus === "success" && resultUrls.length > 0) {
             await supabase
@@ -105,57 +97,11 @@ Deno.serve(async (req: Request) => {
               })
               .eq("id", job.id);
 
-            const { data: modelData } = await supabase
-              .from("kie_models")
-              .select("type")
-              .eq("id", job.model_id)
-              .maybeSingle();
-            const mediaType = modelData?.type || "image";
+            const mediaType = job.kie_models?.type || "image";
 
             for (let i = 0; i < resultUrls.length; i++) {
               try {
-                const fileResponse = await fetch(resultUrls[i]);
-                if (!fileResponse.ok) continue;
-
-                const contentType =
-                  fileResponse.headers.get("content-type") ||
-                  (mediaType === "video" ? "video/mp4" : "image/png");
-                const fileBlob = await fileResponse.blob();
-                const ext = contentType.includes("mp4")
-                  ? "mp4"
-                  : contentType.includes("webm")
-                    ? "webm"
-                    : contentType.includes("png")
-                      ? "png"
-                      : contentType.includes("webp")
-                        ? "webp"
-                        : "jpg";
-                const storagePath = `${job.organization_id}/${job.id}/${i}.${ext}`;
-
-                const { error: uploadError } = await supabase.storage
-                  .from("social-media-assets")
-                  .upload(storagePath, fileBlob, {
-                    contentType,
-                    upsert: true,
-                  });
-
-                if (uploadError) continue;
-
-                const { data: publicUrlData } = supabase.storage
-                  .from("social-media-assets")
-                  .getPublicUrl(storagePath);
-
-                await supabase.from("media_assets").insert({
-                  organization_id: job.organization_id,
-                  created_by: job.created_by,
-                  job_id: job.id,
-                  storage_path: storagePath,
-                  public_url: publicUrlData.publicUrl,
-                  media_type: mediaType,
-                  mime_type: contentType,
-                  file_size_bytes: fileBlob.size,
-                  metadata: { source_url: resultUrls[i], index: i },
-                });
+                await downloadAndStoreAsset(supabase, resultUrls[i], job, i, mediaType);
               } catch {
                 console.error("[media-job-status] Asset download error for index", i);
               }
@@ -164,7 +110,7 @@ Deno.serve(async (req: Request) => {
             job.status = "success";
             job.result_urls = resultUrls;
           } else if (remoteStatus === "fail") {
-            const errMsg = pollResult.data?.error || "Generation failed remotely";
+            const errMsg = pollResult.error || "Generation failed remotely";
             await supabase
               .from("media_generation_jobs")
               .update({
@@ -188,6 +134,52 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    if (kieApiKey && job.upgrade_task_ids) {
+      const upgrades = job.upgrade_task_ids as Record<string, { taskId: string; status: string; url?: string }>;
+      let upgradesChanged = false;
+
+      for (const [resolution, upgrade] of Object.entries(upgrades)) {
+        if (upgrade.status === "pending" && upgrade.taskId) {
+          try {
+            const upgradeResult = await getTaskStatus(kieApiKey, upgrade.taskId, true);
+            if (upgradeResult.success && upgradeResult.status === "success" && upgradeResult.resultUrls?.length) {
+              upgrade.status = "complete";
+              upgrade.url = upgradeResult.resultUrls[0];
+              upgradesChanged = true;
+
+              const existingAssets = await supabase
+                .from("media_assets")
+                .select("id")
+                .eq("job_id", job.id);
+              const nextIndex = (existingAssets.data?.length || 0);
+
+              await downloadAndStoreAsset(
+                supabase,
+                upgradeResult.resultUrls[0],
+                job,
+                nextIndex,
+                "video",
+                { resolution, upgrade: true }
+              );
+            } else if (upgradeResult.status === "fail") {
+              upgrade.status = "failed";
+              upgradesChanged = true;
+            }
+          } catch {
+            console.error(`[media-job-status] Upgrade poll error for ${resolution}`);
+          }
+        }
+      }
+
+      if (upgradesChanged) {
+        await supabase
+          .from("media_generation_jobs")
+          .update({ upgrade_task_ids: upgrades })
+          .eq("id", job.id);
+        job.upgrade_task_ids = upgrades;
+      }
+    }
+
     let assets: unknown[] = [];
     if (job.status === "success") {
       const { data: assetData } = await supabase
@@ -198,9 +190,18 @@ Deno.serve(async (req: Request) => {
       assets = assetData || [];
     }
 
+    const modelKey = job.kie_models?.model_key || "";
+    const isVeoModel = modelKey.startsWith("google/veo-");
+    const canUpgrade = job.status === "success" && isVeoModel;
+
     return jsonResponse({
       success: true,
-      data: { job, assets },
+      data: {
+        job,
+        assets,
+        can_upgrade_1080p: canUpgrade,
+        can_upgrade_4k: canUpgrade,
+      },
     });
   } catch (err) {
     console.error("[media-job-status] Error:", err);

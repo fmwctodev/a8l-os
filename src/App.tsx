@@ -89,6 +89,7 @@ import { BrandKitDetailPage } from './pages/settings/BrandKitDetailPage';
 import { CRUDHealthCheckPage } from './pages/settings/CRUDHealthCheckPage';
 import { MeetingFollowUpSettingsPage } from './pages/settings/MeetingFollowUpSettingsPage';
 import AssistantSettingsPage from './pages/settings/AssistantSettingsPage';
+import { MediaStylePresetsPage } from './pages/settings/MediaStylePresetsPage';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
 import { BookingPage } from './pages/public/BookingPage';
 import { PublicFormPage } from './pages/public/PublicFormPage';
@@ -557,6 +558,14 @@ function App() {
                   element={
                     <ProtectedRoute permission="personal_assistant.view" featureFlag="personal_assistant">
                       <AssistantSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="media-presets"
+                  element={
+                    <ProtectedRoute permission="ai.settings.view">
+                      <MediaStylePresetsPage />
                     </ProtectedRoute>
                   }
                 />

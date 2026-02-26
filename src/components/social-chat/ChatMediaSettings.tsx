@@ -7,9 +7,12 @@ import {
   Sparkles,
   Settings2,
   Zap,
+  Palette,
 } from 'lucide-react';
 import { getKieModels } from '../../services/mediaGeneration';
 import type { KieModel } from '../../services/mediaGeneration';
+import { getStylePresets } from '../../services/mediaStylePresets';
+import type { MediaStylePreset } from '../../services/mediaStylePresets';
 import type { MediaPreferences } from '../../services/socialChat';
 
 interface ChatMediaSettingsProps {
@@ -28,10 +31,12 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
   const [expanded, setExpanded] = useState(false);
   const [imageModels, setImageModels] = useState<KieModel[]>([]);
   const [videoModels, setVideoModels] = useState<KieModel[]>([]);
+  const [stylePresets, setStylePresets] = useState<MediaStylePreset[]>([]);
   const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
 
   useEffect(() => {
     loadModels();
+    loadPresets();
   }, []);
 
   async function loadModels() {
@@ -47,8 +52,18 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
     }
   }
 
+  async function loadPresets() {
+    try {
+      const presets = await getStylePresets();
+      setStylePresets(presets);
+    } catch {
+      // presets will stay empty
+    }
+  }
+
   const selectedImageModel = imageModels.find(m => m.id === preferences.image_model_id);
   const selectedVideoModel = videoModels.find(m => m.id === preferences.video_model_id);
+  const selectedPreset = stylePresets.find(p => p.id === preferences.style_preset_id);
   const autoGen = preferences.auto_generate_media !== false;
 
   function selectModel(model: KieModel) {
@@ -57,6 +72,20 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
     } else {
       onChange({ ...preferences, video_model_id: model.id });
     }
+  }
+
+  function selectPreset(presetId: string | undefined) {
+    const newPrefs = { ...preferences };
+    if (presetId === preferences.style_preset_id) {
+      newPrefs.style_preset_id = undefined;
+    } else {
+      newPrefs.style_preset_id = presetId;
+      const preset = stylePresets.find(p => p.id === presetId);
+      if (preset?.recommended_aspect_ratio) {
+        newPrefs.aspect_ratio = preset.recommended_aspect_ratio;
+      }
+    }
+    onChange(newPrefs);
   }
 
   const models = activeTab === 'image' ? imageModels : videoModels;
@@ -75,6 +104,11 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
             <span className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 rounded text-[10px]">
               <Zap className="w-2.5 h-2.5" />
               Auto
+            </span>
+          )}
+          {selectedPreset && (
+            <span className="px-1.5 py-0.5 bg-cyan-500/10 text-cyan-400 rounded text-[10px]">
+              {selectedPreset.display_name}
             </span>
           )}
           {selectedImageModel && (
@@ -107,6 +141,41 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
 
           {autoGen && (
             <>
+              {stylePresets.length > 0 && (
+                <div>
+                  <label className="flex items-center gap-1.5 text-[10px] text-slate-500 uppercase tracking-wider mb-1.5">
+                    <Palette className="w-3 h-3" />
+                    Style Preset
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {stylePresets.map((preset) => (
+                      <button
+                        key={preset.id}
+                        onClick={() => selectPreset(preset.id)}
+                        className={`px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-all ${
+                          preferences.style_preset_id === preset.id
+                            ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 ring-1 ring-cyan-500/20'
+                            : 'bg-slate-900 text-slate-500 border border-transparent hover:border-slate-600 hover:text-slate-400'
+                        }`}
+                        title={preset.description}
+                      >
+                        {preset.display_name}
+                      </button>
+                    ))}
+                  </div>
+                  {selectedPreset && (
+                    <p className="text-[10px] text-slate-500 mt-1.5 leading-relaxed">
+                      {selectedPreset.description}
+                      {selectedPreset.recommended_aspect_ratio && (
+                        <span className="ml-1 text-cyan-500/70">
+                          ({selectedPreset.recommended_aspect_ratio})
+                        </span>
+                      )}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="flex gap-1 bg-slate-900 rounded-lg p-0.5">
                 <button
                   onClick={() => setActiveTab('image')}

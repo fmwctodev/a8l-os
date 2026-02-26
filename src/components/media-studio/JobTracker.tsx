@@ -1,22 +1,30 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Loader2,
   CheckCircle2,
   XCircle,
   Clock,
   AlertTriangle,
-  RefreshCw,
   Image,
   Video,
   Download,
   Plus,
+  ArrowUpCircle,
+  Sparkles,
+  Monitor,
 } from 'lucide-react';
-import type { MediaGenerationJob, MediaAsset } from '../../services/mediaGeneration';
+import type {
+  MediaGenerationJob,
+  MediaAsset,
+  JobStatusResult,
+  UpgradeTaskInfo,
+} from '../../services/mediaGeneration';
 import {
   getJobStatus,
   isJobActive,
   getStatusLabel,
   getStatusColor,
+  requestUpgrade,
 } from '../../services/mediaGeneration';
 
 interface JobTrackerProps {
@@ -36,23 +44,15 @@ const STATUS_ICONS: Record<string, typeof Clock> = {
 
 export default function JobTracker({ jobs, onJobComplete, onAttachAsset }: JobTrackerProps) {
   const [jobAssets, setJobAssets] = useState<Record<string, MediaAsset[]>>({});
+  const [jobStatusResults, setJobStatusResults] = useState<Record<string, JobStatusResult>>({});
+  const [upgradeLoading, setUpgradeLoading] = useState<Record<string, string>>({});
   const pollingRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
-  useEffect(() => {
-    for (const job of jobs) {
-      if (isJobActive(job.status) && !pollingRef.current[job.id]) {
-        pollingRef.current[job.id] = setInterval(() => pollJob(job.id), 5000);
-      }
-    }
-
-    return () => {
-      Object.values(pollingRef.current).forEach(clearInterval);
-    };
-  }, [jobs]);
-
-  async function pollJob(jobId: string) {
+  const pollJob = useCallback(async (jobId: string) => {
     try {
       const result = await getJobStatus(jobId);
+      setJobStatusResults((prev) => ({ ...prev, [jobId]: result }));
+
       if (result.job.status === 'success' && result.assets.length > 0) {
         clearInterval(pollingRef.current[jobId]);
         delete pollingRef.current[jobId];
@@ -64,6 +64,40 @@ export default function JobTracker({ jobs, onJobComplete, onAttachAsset }: JobTr
       }
     } catch (err) {
       console.error('Poll error:', err);
+    }
+  }, [onJobComplete]);
+
+  useEffect(() => {
+    for (const job of jobs) {
+      if (isJobActive(job.status) && !pollingRef.current[job.id]) {
+        pollingRef.current[job.id] = setInterval(() => pollJob(job.id), 5000);
+      }
+    }
+
+    return () => {
+      Object.values(pollingRef.current).forEach(clearInterval);
+    };
+  }, [jobs, pollJob]);
+
+  async function handleUpgrade(jobId: string, upgradeType: '1080p' | '4k') {
+    const key = `${jobId}-${upgradeType}`;
+    setUpgradeLoading((prev) => ({ ...prev, [key]: 'loading' }));
+    try {
+      await requestUpgrade(jobId, upgradeType);
+      setUpgradeLoading((prev) => ({ ...prev, [key]: 'requested' }));
+      if (!pollingRef.current[jobId]) {
+        pollingRef.current[jobId] = setInterval(() => pollJob(jobId), 5000);
+      }
+    } catch (err) {
+      console.error('Upgrade error:', err);
+      setUpgradeLoading((prev) => ({ ...prev, [key]: 'error' }));
+      setTimeout(() => {
+        setUpgradeLoading((prev) => {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+      }, 3000);
     }
   }
 
@@ -83,6 +117,10 @@ export default function JobTracker({ jobs, onJobComplete, onAttachAsset }: JobTr
           const assets = jobAssets[job.id] || [];
           const modelName = job.kie_models?.display_name || 'Unknown model';
           const modelType = job.kie_models?.type || 'image';
+          const statusResult = jobStatusResults[job.id];
+          const canUpgrade1080p = statusResult?.can_upgrade_1080p ?? false;
+          const canUpgrade4k = statusResult?.can_upgrade_4k ?? false;
+          const upgradeTasks = job.upgrade_task_ids;
 
           return (
             <div
@@ -110,11 +148,14 @@ export default function JobTracker({ jobs, onJobComplete, onAttachAsset }: JobTr
                     <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
                       {modelName}
                     </span>
-                    <span
-                      className={`text-xs font-medium ${getStatusColor(job.status)}`}
-                    >
+                    <span className={`text-xs font-medium ${getStatusColor(job.status)}`}>
                       {getStatusLabel(job.status)}
                     </span>
+                    {job.job_type && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                        {job.job_type.replace(/_/g, ' ')}
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-500 truncate">{job.prompt}</p>
                 </div>
@@ -190,10 +231,162 @@ export default function JobTracker({ jobs, onJobComplete, onAttachAsset }: JobTr
                   </div>
                 </div>
               )}
+
+              {job.status === 'success' && modelType === 'video' && (canUpgrade1080p || canUpgrade4k) && (
+                <UpgradeBar
+                  jobId={job.id}
+                  canUpgrade1080p={canUpgrade1080p}
+                  canUpgrade4k={canUpgrade4k}
+                  upgradeTasks={upgradeTasks}
+                  upgradeLoading={upgradeLoading}
+                  onUpgrade={handleUpgrade}
+                />
+              )}
+
+              {upgradeTasks && Object.keys(upgradeTasks).length > 0 && (
+                <UpgradeStatusRow upgradeTasks={upgradeTasks} />
+              )}
             </div>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function UpgradeBar({
+  jobId,
+  canUpgrade1080p,
+  canUpgrade4k,
+  upgradeTasks,
+  upgradeLoading,
+  onUpgrade,
+}: {
+  jobId: string;
+  canUpgrade1080p: boolean;
+  canUpgrade4k: boolean;
+  upgradeTasks: Record<string, UpgradeTaskInfo> | null;
+  upgradeLoading: Record<string, string>;
+  onUpgrade: (jobId: string, type: '1080p' | '4k') => void;
+}) {
+  const has1080p = upgradeTasks?.['1080p'];
+  const has4k = upgradeTasks?.['4k'];
+  const loading1080p = upgradeLoading[`${jobId}-1080p`];
+  const loading4k = upgradeLoading[`${jobId}-4k`];
+
+  const show1080p = canUpgrade1080p && !has1080p && !loading1080p;
+  const show4k = canUpgrade4k && !has4k && !loading4k;
+
+  if (!show1080p && !show4k && !loading1080p && !loading4k) return null;
+
+  return (
+    <div className="px-3 pb-2.5 flex items-center gap-2 border-t border-gray-100 dark:border-gray-800 pt-2">
+      <ArrowUpCircle className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+      <span className="text-[11px] text-gray-500 dark:text-gray-400">Upscale:</span>
+      {show1080p && (
+        <button
+          onClick={() => onUpgrade(jobId, '1080p')}
+          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+        >
+          <Monitor className="w-3 h-3" />
+          1080p
+        </button>
+      )}
+      {loading1080p === 'loading' && (
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-blue-600">
+          <Loader2 className="w-3 h-3 animate-spin" /> Requesting 1080p...
+        </span>
+      )}
+      {loading1080p === 'requested' && (
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-emerald-600">
+          <CheckCircle2 className="w-3 h-3" /> 1080p requested
+        </span>
+      )}
+      {loading1080p === 'error' && (
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-red-600">
+          <XCircle className="w-3 h-3" /> 1080p failed
+        </span>
+      )}
+      {show4k && (
+        <button
+          onClick={() => onUpgrade(jobId, '4k')}
+          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+        >
+          <Sparkles className="w-3 h-3" />
+          4K
+        </button>
+      )}
+      {loading4k === 'loading' && (
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-amber-600">
+          <Loader2 className="w-3 h-3 animate-spin" /> Requesting 4K...
+        </span>
+      )}
+      {loading4k === 'requested' && (
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-emerald-600">
+          <CheckCircle2 className="w-3 h-3" /> 4K requested
+        </span>
+      )}
+      {loading4k === 'error' && (
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] text-red-600">
+          <XCircle className="w-3 h-3" /> 4K failed
+        </span>
+      )}
+    </div>
+  );
+}
+
+function UpgradeStatusRow({
+  upgradeTasks,
+}: {
+  upgradeTasks: Record<string, UpgradeTaskInfo>;
+}) {
+  const entries = Object.entries(upgradeTasks);
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="px-3 pb-2.5 space-y-1">
+      {entries.map(([resolution, task]) => (
+        <div
+          key={resolution}
+          className="flex items-center gap-2 text-[11px]"
+        >
+          {task.status === 'pending' && (
+            <>
+              <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
+              <span className="text-blue-600 dark:text-blue-400">
+                {resolution} upscale processing...
+              </span>
+            </>
+          )}
+          {task.status === 'complete' && (
+            <>
+              <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+              <span className="text-emerald-600 dark:text-emerald-400">
+                {resolution} ready
+              </span>
+              {task.url && (
+                <a
+                  href={task.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-0.5 text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                >
+                  <Download className="w-3 h-3" />
+                  Download
+                </a>
+              )}
+            </>
+          )}
+          {task.status === 'failed' && (
+            <>
+              <XCircle className="w-3 h-3 text-red-500" />
+              <span className="text-red-600 dark:text-red-400">
+                {resolution} upscale failed
+              </span>
+            </>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

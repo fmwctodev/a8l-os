@@ -1,5 +1,13 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  generateTextToVideo,
+  generateImageToVideo,
+  generateTextToImage,
+} from "../_shared/kieAdapter.ts";
+import { getRequiredAspectRatio } from "../_shared/platformAspectMatrix.ts";
+import { buildStructuredPrompt, buildLLMStyleContext } from "../_shared/promptBuilder.ts";
+import type { StylePreset } from "../_shared/promptBuilder.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +25,7 @@ interface ChatRequest {
   video_model_id?: string;
   aspect_ratio?: string;
   auto_generate_media?: boolean;
+  style_preset_id?: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -33,13 +42,7 @@ Deno.serve(async (req: Request) => {
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing authorization header" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return jsonError("Missing authorization header", 401);
     }
 
     const token = authHeader.replace("Bearer ", "");
@@ -52,10 +55,7 @@ Deno.serve(async (req: Request) => {
     } = await anonClient.auth.getUser(token);
 
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonError("Unauthorized", 401);
     }
 
     const { data: userData } = await supabase
@@ -65,15 +65,7 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (!userData?.organization_id) {
-      return new Response(
-        JSON.stringify({
-          error: "User not associated with an organization",
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return jsonError("User not associated with an organization", 400);
     }
 
     const orgId = userData.organization_id;
@@ -82,16 +74,11 @@ Deno.serve(async (req: Request) => {
       thread_id, content, message_type = "text", attachments,
       image_model_id, video_model_id, aspect_ratio,
       auto_generate_media = true,
+      style_preset_id,
     } = body;
 
     if (!thread_id || !content?.trim()) {
-      return new Response(
-        JSON.stringify({ error: "thread_id and content are required" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return jsonError("thread_id and content are required", 400);
     }
 
     const { data: thread } = await supabase
@@ -102,49 +89,52 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (!thread) {
-      return new Response(
-        JSON.stringify({ error: "Thread not found" }),
-        {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
+      return jsonError("Thread not found", 404);
     }
 
-    const { data: history } = await supabase
-      .from("social_ai_messages")
-      .select("role, content, message_type")
-      .eq("thread_id", thread_id)
-      .order("created_at", { ascending: true })
-      .limit(20);
+    const [historyResult, accountsResult, guidelinesResult, brandVoiceResult, presetsResult] = await Promise.all([
+      supabase
+        .from("social_ai_messages")
+        .select("role, content, message_type")
+        .eq("thread_id", thread_id)
+        .order("created_at", { ascending: true })
+        .limit(20),
+      supabase
+        .from("social_accounts")
+        .select("provider, display_name, status")
+        .eq("organization_id", orgId)
+        .eq("status", "connected"),
+      supabase
+        .from("social_guidelines")
+        .select("tone_preferences, words_to_avoid, hashtag_preferences, cta_rules, emoji_rules, industry_positioning, platform_tweaks")
+        .eq("organization_id", orgId)
+        .is("user_id", null)
+        .maybeSingle(),
+      supabase
+        .from("brand_voices")
+        .select("id")
+        .eq("org_id", orgId)
+        .eq("active", true)
+        .is("archived_at", null)
+        .maybeSingle(),
+      supabase
+        .from("media_style_presets")
+        .select("*")
+        .eq("enabled", true)
+        .order("display_priority", { ascending: true }),
+    ]);
 
-    const { data: accounts } = await supabase
-      .from("social_accounts")
-      .select("provider, display_name, status")
-      .eq("organization_id", orgId)
-      .eq("status", "connected");
-
-    const { data: guidelines } = await supabase
-      .from("social_guidelines")
-      .select("tone_preferences, words_to_avoid, hashtag_preferences, cta_rules, emoji_rules, industry_positioning, platform_tweaks")
-      .eq("organization_id", orgId)
-      .is("user_id", null)
-      .maybeSingle();
+    const history = historyResult.data;
+    const accounts = accountsResult.data;
+    const guidelines = guidelinesResult.data;
+    const stylePresets = (presetsResult.data || []) as StylePreset[];
 
     let brandContext = "";
-    const { data: brandVoice } = await supabase
-      .from("brand_voices")
-      .select("id")
-      .eq("org_id", orgId)
-      .eq("active", true)
-      .is("archived_at", null)
-      .maybeSingle();
-
-    if (brandVoice) {
+    if (brandVoiceResult.data) {
       const { data: version } = await supabase
         .from("brand_voice_versions")
         .select("tone_settings, dos, donts, vocabulary_preferred, vocabulary_prohibited, ai_system_prompt")
-        .eq("brand_voice_id", brandVoice.id)
+        .eq("brand_voice_id", brandVoiceResult.data.id)
         .order("version_number", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -152,6 +142,11 @@ Deno.serve(async (req: Request) => {
       if (version?.ai_system_prompt) {
         brandContext = `\nBrand Voice: ${version.ai_system_prompt}`;
       }
+    }
+
+    let selectedPreset: StylePreset | null = null;
+    if (style_preset_id) {
+      selectedPreset = stylePresets.find((p) => p.id === style_preset_id) || null;
     }
 
     const chatProviders = ["openai", "anthropic"];
@@ -182,11 +177,14 @@ Deno.serve(async (req: Request) => {
       ? buildGuidelinesContext(guidelines)
       : "";
 
+    const styleContext = buildLLMStyleContext(stylePresets);
+
     const systemPrompt = `You are an expert AI social media manager. You help the user create, strategize, and optimize their social media content across platforms.
 
 Connected accounts: ${connectedPlatforms || "None connected yet"}
 ${brandContext}
 ${guidelinesContext}
+${styleContext}
 
 Your capabilities:
 - Create post drafts for any platform with AI-generated media
@@ -198,7 +196,7 @@ Your capabilities:
 
 When creating a post draft, you MUST format it as:
 ---DRAFT---
-{"platform":"instagram","body":"Your post text here","hook_text":"Opening hook","cta_text":"Call to action","hashtags":["tag1","tag2"],"media_type":"image","visual_style_suggestion":"Detailed generation prompt for the visual"}
+{"platform":"instagram","body":"Your post text here","hook_text":"Opening hook","cta_text":"Call to action","hashtags":["tag1","tag2"],"media_type":"image","visual_style_suggestion":"Detailed generation prompt for the visual"${stylePresets.length > 0 ? ',"style_preset":"preset_name"' : ""}}
 ---END_DRAFT---
 
 IMPORTANT rules for the draft JSON:
@@ -211,6 +209,7 @@ IMPORTANT rules for the draft JSON:
   Good: "Professional flat-lay photograph of a laptop on a dark wooden desk with coffee, dramatic side lighting, warm tones, business theme"
   Bad: "Business image" or "Something professional"
   For video: describe the scene, movement, mood, and style. Example: "Smooth cinematic pan across a modern office space, natural lighting, people collaborating at standing desks, warm color grading, 5 seconds"
+${stylePresets.length > 0 ? '- "style_preset" should match a style name when the content fits that style (e.g., "ugc" for casual creator content, "cinematic" for polished brand videos)' : ""}
 
 Always be proactive with suggestions. If the user shares a topic, immediately create drafts.
 Keep responses concise but actionable. Use short paragraphs.`;
@@ -297,7 +296,21 @@ Keep responses concise but actionable. Use short paragraphs.`;
 
             if (!model) continue;
 
-            const effectiveAspect = aspect_ratio || getPlatformAspectRatio(draft.platform);
+            const effectiveAspect = aspect_ratio || getRequiredAspectRatio(draft.platform);
+
+            let draftPreset = selectedPreset;
+            if (!draftPreset && draft.style_preset) {
+              draftPreset = stylePresets.find((p) => p.name === draft.style_preset) || null;
+            }
+
+            const rawPrompt = draft.visual_style_suggestion!;
+            const finalPrompt = buildStructuredPrompt(rawPrompt, draftPreset);
+
+            const modelKey = model.model_key as string;
+            const isVeo = modelKey.startsWith("google/veo-");
+            const webhookUrl = `${supabaseUrl}/functions/v1/media-kie-webhook`;
+
+            const jobType = isVideo ? "text_to_video" : "text_to_image";
 
             const { data: job, error: jobErr } = await supabase
               .from("media_generation_jobs")
@@ -305,65 +318,47 @@ Keep responses concise but actionable. Use short paragraphs.`;
                 organization_id: orgId,
                 created_by: user.id,
                 model_id: model.id,
-                prompt: draft.visual_style_suggestion,
+                prompt: finalPrompt,
                 params: {
                   aspect_ratio: effectiveAspect,
                   ...(isVideo ? { duration: (model as Record<string, unknown>).supports_durations?.[0] || 5 } : {}),
                 },
                 status: "waiting",
+                job_type: jobType,
+                style_preset_id: draftPreset?.id || null,
               })
               .select("id")
               .single();
 
             if (jobErr || !job) continue;
 
-            const webhookUrl = `${supabaseUrl}/functions/v1/media-kie-webhook`;
-            const modelKey = model.model_key as string;
-            const isVeo = modelKey.startsWith("google/veo-");
+            let kieResult;
 
-            let kieEndpoint: string;
-            let kieBody: Record<string, unknown>;
-
-            if (isVeo) {
-              kieEndpoint = (model.api_endpoint_override as string) || "https://api.kie.ai/api/v1/veo/generate";
-              kieBody = {
-                prompt: draft.visual_style_suggestion,
-                aspect_ratio: effectiveAspect,
-                duration: (model as Record<string, unknown>).supports_durations?.[0] || 8,
-                callBackUrl: webhookUrl,
-              };
+            if (isVideo) {
+              kieResult = await generateTextToVideo(
+                kieApiKey,
+                {
+                  prompt: finalPrompt,
+                  aspectRatio: effectiveAspect,
+                  duration: (model as Record<string, unknown>).supports_durations?.[0] as number || 8,
+                  callbackUrl: webhookUrl,
+                  model: isVeo ? undefined : modelKey,
+                },
+                isVeo ? (model.api_endpoint_override as string) : undefined
+              );
             } else {
-              kieEndpoint = "https://api.kie.ai/api/v1/jobs/createTask";
-              const input: Record<string, unknown> = {
-                prompt: draft.visual_style_suggestion,
-                aspect_ratio: effectiveAspect,
-              };
-              if (isVideo) {
-                input.duration = (model as Record<string, unknown>).supports_durations?.[0] || 5;
-              }
-              kieBody = {
-                model: modelKey,
-                callBackUrl: webhookUrl,
-                input,
-              };
+              kieResult = await generateTextToImage(kieApiKey, {
+                modelKey,
+                prompt: finalPrompt,
+                aspectRatio: effectiveAspect,
+                callbackUrl: webhookUrl,
+              });
             }
 
-            const kieRes = await fetch(kieEndpoint, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${kieApiKey}`,
-              },
-              body: JSON.stringify(kieBody),
-            });
-
-            const kieResult = await kieRes.json();
-
-            if (kieRes.ok && kieResult.code === 200) {
-              const taskId = kieResult.data?.taskId || kieResult.data?.task_id;
+            if (kieResult.success && kieResult.taskId) {
               await supabase
                 .from("media_generation_jobs")
-                .update({ kie_task_id: taskId, status: "queuing" })
+                .update({ kie_task_id: kieResult.taskId, status: "queuing" })
                 .eq("id", job.id);
 
               mediaJobs.push({
@@ -371,7 +366,7 @@ Keep responses concise but actionable. Use short paragraphs.`;
                 model_id: model.id as string,
                 model_name: model.display_name as string,
                 media_type: draft.media_type!,
-                prompt: draft.visual_style_suggestion!,
+                prompt: finalPrompt,
                 status: "queuing",
                 draft_index: draftIndex,
               });
@@ -380,7 +375,7 @@ Keep responses concise but actionable. Use short paragraphs.`;
                 .from("media_generation_jobs")
                 .update({
                   status: "fail",
-                  error_message: kieResult.msg || "Kie API error",
+                  error_message: kieResult.error || "Kie API error",
                   completed_at: new Date().toISOString(),
                 })
                 .eq("id", job.id);
@@ -405,18 +400,19 @@ Keep responses concise but actionable. Use short paragraphs.`;
     );
   } catch (error) {
     console.error("AI social chat error:", error);
-    return new Response(
-      JSON.stringify({
-        error:
-          error instanceof Error ? error.message : "Internal server error",
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+    return jsonError(
+      error instanceof Error ? error.message : "Internal server error",
+      500
     );
   }
 });
+
+function jsonError(message: string, status: number) {
+  return new Response(
+    JSON.stringify({ error: message }),
+    { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
 
 function buildGuidelinesContext(guidelines: Record<string, unknown>): string {
   const parts: string[] = ["\nSocial Guidelines:"];
@@ -513,19 +509,6 @@ async function callLLM(
   throw new Error(`Unsupported provider: ${providerConfig.provider}`);
 }
 
-function getPlatformAspectRatio(platform: string): string {
-  const ratios: Record<string, string> = {
-    instagram: "1:1",
-    tiktok: "9:16",
-    youtube: "16:9",
-    facebook: "16:9",
-    linkedin: "16:9",
-    twitter: "16:9",
-    google_business: "16:9",
-  };
-  return ratios[platform] || "16:9";
-}
-
 interface ExtractedDraft {
   platform: string;
   body: string;
@@ -534,6 +517,7 @@ interface ExtractedDraft {
   hashtags?: string[];
   visual_style_suggestion?: string;
   media_type?: string;
+  style_preset?: string;
 }
 
 function extractDrafts(response: string): ExtractedDraft[] {
