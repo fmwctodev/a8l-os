@@ -7,6 +7,29 @@ import type {
   SocialAIAttachment,
 } from '../types';
 
+export interface MediaJobInfo {
+  job_id: string;
+  model_id: string;
+  model_name: string;
+  media_type: 'image' | 'video';
+  prompt: string;
+  status: string;
+  draft_index: number;
+}
+
+export interface MediaPreferences {
+  image_model_id?: string;
+  video_model_id?: string;
+  aspect_ratio?: string;
+  auto_generate_media?: boolean;
+}
+
+export interface SendMessageResult {
+  userMessage: SocialAIMessage;
+  aiMessage: SocialAIMessage;
+  mediaJobs: MediaJobInfo[];
+}
+
 export async function getThreads(
   orgId: string,
   userId: string
@@ -72,8 +95,9 @@ export async function sendMessage(
   threadId: string,
   content: string,
   messageType: SocialAIMessageType = 'text',
-  attachments: SocialAIAttachment[] = []
-): Promise<{ userMessage: SocialAIMessage; aiMessage: SocialAIMessage }> {
+  attachments: SocialAIAttachment[] = [],
+  mediaPrefs?: MediaPreferences
+): Promise<SendMessageResult> {
   const { data: userMsg, error: userError } = await supabase
     .from('social_ai_messages')
     .insert({
@@ -94,6 +118,10 @@ export async function sendMessage(
       content,
       message_type: messageType,
       attachments,
+      ...(mediaPrefs?.image_model_id && { image_model_id: mediaPrefs.image_model_id }),
+      ...(mediaPrefs?.video_model_id && { video_model_id: mediaPrefs.video_model_id }),
+      ...(mediaPrefs?.aspect_ratio && { aspect_ratio: mediaPrefs.aspect_ratio }),
+      auto_generate_media: mediaPrefs?.auto_generate_media ?? true,
     },
   });
 
@@ -106,6 +134,7 @@ export async function sendMessage(
 
   const fullContent = aiResponse.response || '';
   const drafts = aiResponse.drafts || [];
+  const mediaJobs: MediaJobInfo[] = aiResponse.media_jobs || [];
 
   const { data: aiMsg, error: aiError } = await supabase
     .from('social_ai_messages')
@@ -115,7 +144,10 @@ export async function sendMessage(
       content: fullContent,
       message_type: drafts.length > 0 ? 'post_draft' : 'text',
       generated_posts: drafts.length > 0 ? drafts : null,
-      metadata: { model_used: aiResponse.model_used || 'unknown' },
+      metadata: {
+        model_used: aiResponse.model_used || 'unknown',
+        media_jobs: mediaJobs.length > 0 ? mediaJobs : undefined,
+      },
     })
     .select()
     .single();
@@ -134,7 +166,7 @@ export async function sendMessage(
     .update({ updated_at: new Date().toISOString() })
     .eq('id', threadId);
 
-  return { userMessage: userMsg, aiMessage: aiMsg };
+  return { userMessage: userMsg, aiMessage: aiMsg, mediaJobs };
 }
 
 export async function archiveThread(threadId: string): Promise<void> {
@@ -155,6 +187,75 @@ export async function deleteThread(threadId: string): Promise<void> {
   if (error) throw error;
 }
 
+export type PublishMode = 'draft' | 'schedule' | 'post_now';
+
+export interface PublishDraftParams {
+  orgId: string;
+  userId: string;
+  draft: {
+    platform: string;
+    hook: string;
+    body: string;
+    cta: string;
+    hashtags: string[];
+    visual_style_suggestion?: string;
+    engagement_prediction?: number;
+  };
+  accountIds: string[];
+  mode: PublishMode;
+  scheduledAtUtc?: string;
+  media?: Array<{ url: string; type: string; thumbnail_url?: string }>;
+  mediaAssetIds?: string[];
+  threadId?: string;
+}
+
+export async function publishDraftFromChat(params: PublishDraftParams): Promise<string> {
+  const { orgId, userId, draft, accountIds, mode, scheduledAtUtc, media, mediaAssetIds, threadId } = params;
+
+  const fullBody = [draft.hook, draft.body, draft.cta]
+    .filter(Boolean)
+    .join('\n\n');
+
+  let status: string;
+  let scheduleTime: string | null = null;
+
+  if (mode === 'post_now') {
+    status = 'scheduled';
+    scheduleTime = new Date().toISOString();
+  } else if (mode === 'schedule') {
+    status = 'scheduled';
+    scheduleTime = scheduledAtUtc || null;
+  } else {
+    status = 'draft';
+  }
+
+  const { data, error } = await supabase
+    .from('social_posts')
+    .insert({
+      organization_id: orgId,
+      created_by: userId,
+      body: fullBody,
+      targets: accountIds,
+      status,
+      scheduled_at_utc: scheduleTime,
+      scheduled_timezone: 'UTC',
+      media: media || [],
+      media_asset_ids: mediaAssetIds || [],
+      hook_text: draft.hook,
+      cta_text: draft.cta,
+      hashtags: draft.hashtags,
+      visual_style_suggestion: draft.visual_style_suggestion || null,
+      engagement_prediction: draft.engagement_prediction || null,
+      thread_id: threadId || null,
+      ai_generated: true,
+    })
+    .select('id')
+    .single();
+
+  if (error) throw error;
+  return data.id;
+}
+
 export async function schedulePostFromDraft(
   orgId: string,
   userId: string,
@@ -171,32 +272,13 @@ export async function schedulePostFromDraft(
   scheduledAtUtc?: string,
   threadId?: string
 ): Promise<string> {
-  const fullBody = [draft.hook, draft.body, draft.cta]
-    .filter(Boolean)
-    .join('\n\n');
-
-  const { data, error } = await supabase
-    .from('social_posts')
-    .insert({
-      organization_id: orgId,
-      created_by: userId,
-      body: fullBody,
-      targets,
-      status: scheduledAtUtc ? 'scheduled' : 'draft',
-      scheduled_at_utc: scheduledAtUtc || null,
-      scheduled_timezone: 'UTC',
-      media: [],
-      hook_text: draft.hook,
-      cta_text: draft.cta,
-      hashtags: draft.hashtags,
-      visual_style_suggestion: draft.visual_style_suggestion || null,
-      engagement_prediction: draft.engagement_prediction || null,
-      thread_id: threadId || null,
-      ai_generated: true,
-    })
-    .select('id')
-    .single();
-
-  if (error) throw error;
-  return data.id;
+  return publishDraftFromChat({
+    orgId,
+    userId,
+    draft,
+    accountIds: targets,
+    mode: scheduledAtUtc ? 'schedule' : 'draft',
+    scheduledAtUtc,
+    threadId,
+  });
 }

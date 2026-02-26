@@ -2,30 +2,45 @@ import { useRef, useEffect } from 'react';
 import {
   BrainCircuit,
   User,
-  Loader2,
 } from 'lucide-react';
 import { PostDraftCard } from './PostDraftCard';
+import { ChatMediaTracker } from './ChatMediaTracker';
 import type { SocialAIMessage } from '../../types';
-
-interface ParsedDraft {
-  platform: string;
-  body: string;
-  hook_text?: string;
-  cta_text?: string;
-  hashtags?: string[];
-  visual_style_suggestion?: string;
-}
+import type { PostDraft, SocialAccount } from './PostDraftCard';
+import type { MediaJobInfo, PublishMode } from '../../services/socialChat';
+import type { MediaAsset } from '../../services/mediaGeneration';
 
 interface ChatMessageListProps {
   messages: SocialAIMessage[];
   isTyping: boolean;
-  onScheduleDraft: (draft: ParsedDraft) => void;
+  accounts: SocialAccount[];
+  activeMediaJobs: MediaJobInfo[];
+  draftAssets: Record<number, MediaAsset[]>;
+  publishStatuses: Record<string, { mode: PublishMode; scheduledAt?: string }>;
+  onPublishDraft: (
+    msgId: string,
+    draftIndex: number,
+    draft: PostDraft,
+    mode: PublishMode,
+    accountIds: string[],
+    media: Array<{ url: string; type: string; thumbnail_url?: string }>,
+    mediaAssetIds: string[],
+    scheduledAt?: string
+  ) => void;
+  onMediaAssetReady: (draftIndex: number, assets: MediaAsset[]) => void;
+  onSendPrompt: (prompt: string) => void;
 }
 
 export function ChatMessageList({
   messages,
   isTyping,
-  onScheduleDraft,
+  accounts,
+  activeMediaJobs,
+  draftAssets,
+  publishStatuses,
+  onPublishDraft,
+  onMediaAssetReady,
+  onSendPrompt,
 }: ChatMessageListProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -49,6 +64,7 @@ export function ChatMessageList({
           {STARTER_PROMPTS.map((prompt, i) => (
             <button
               key={i}
+              onClick={() => onSendPrompt(prompt)}
               className="text-left p-3 bg-slate-800 border border-slate-700 rounded-xl text-sm text-slate-300 hover:border-cyan-500/50 hover:text-white transition-colors"
             >
               {prompt}
@@ -64,6 +80,7 @@ export function ChatMessageList({
       {messages.map((msg) => {
         const isUser = msg.role === 'user';
         const { cleanContent, drafts } = parseMessageContent(msg.content);
+        const msgMediaJobs = getMediaJobsForMessage(msg, activeMediaJobs);
 
         return (
           <div
@@ -72,9 +89,7 @@ export function ChatMessageList({
           >
             <div
               className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                isUser
-                  ? 'bg-slate-700'
-                  : 'bg-cyan-500/10'
+                isUser ? 'bg-slate-700' : 'bg-cyan-500/10'
               }`}
             >
               {isUser ? (
@@ -95,13 +110,25 @@ export function ChatMessageList({
                 <div className="whitespace-pre-wrap">{cleanContent}</div>
               </div>
 
+              {msgMediaJobs.length > 0 && (
+                <ChatMediaTracker
+                  jobs={msgMediaJobs}
+                  onAssetReady={onMediaAssetReady}
+                />
+              )}
+
               {drafts.length > 0 && (
                 <div className="mt-2 text-left">
                   {drafts.map((draft, idx) => (
                     <PostDraftCard
                       key={idx}
                       draft={draft}
-                      onSchedule={onScheduleDraft}
+                      accounts={accounts}
+                      attachedAssets={draftAssets[idx] || []}
+                      onPublish={(d, mode, acctIds, media, assetIds, scheduledAt) =>
+                        onPublishDraft(msg.id, idx, d, mode, acctIds, media, assetIds, scheduledAt)
+                      }
+                      publishStatus={publishStatuses[`${msg.id}-${idx}`] || null}
                     />
                   ))}
                 </div>
@@ -146,6 +173,16 @@ const STARTER_PROMPTS = [
   'Help me plan a social media campaign',
 ];
 
+interface ParsedDraft {
+  platform: string;
+  body: string;
+  hook_text?: string;
+  cta_text?: string;
+  hashtags?: string[];
+  visual_style_suggestion?: string;
+  media_type?: string;
+}
+
 function parseMessageContent(content: string): {
   cleanContent: string;
   drafts: ParsedDraft[];
@@ -170,6 +207,17 @@ function parseMessageContent(content: string): {
     .trim();
 
   return { cleanContent, drafts };
+}
+
+function getMediaJobsForMessage(
+  msg: SocialAIMessage,
+  allJobs: MediaJobInfo[]
+): MediaJobInfo[] {
+  const metadata = msg.metadata as Record<string, unknown> | null;
+  const msgJobs = metadata?.media_jobs as MediaJobInfo[] | undefined;
+  if (!msgJobs || msgJobs.length === 0) return [];
+  const jobIds = new Set(msgJobs.map(j => j.job_id));
+  return allJobs.filter(j => jobIds.has(j.job_id));
 }
 
 function formatTime(dateStr: string): string {

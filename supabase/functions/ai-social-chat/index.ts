@@ -13,6 +13,10 @@ interface ChatRequest {
   content: string;
   message_type?: "text" | "url_share" | "image_share";
   attachments?: Array<{ type: string; url: string; title?: string }>;
+  image_model_id?: string;
+  video_model_id?: string;
+  aspect_ratio?: string;
+  auto_generate_media?: boolean;
 }
 
 Deno.serve(async (req: Request) => {
@@ -69,7 +73,11 @@ Deno.serve(async (req: Request) => {
 
     const orgId = userData.organization_id;
     const body: ChatRequest = await req.json();
-    const { thread_id, content, message_type = "text", attachments } = body;
+    const {
+      thread_id, content, message_type = "text", attachments,
+      image_model_id, video_model_id, aspect_ratio,
+      auto_generate_media = true,
+    } = body;
 
     if (!thread_id || !content?.trim()) {
       return new Response(
@@ -144,11 +152,19 @@ Deno.serve(async (req: Request) => {
     const { data: providerConfig } = await supabase
       .from("llm_providers")
       .select("*")
-      .eq("organization_id", orgId)
-      .eq("is_enabled", true)
+      .eq("org_id", orgId)
+      .eq("enabled", true)
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
+
+    let effectiveProvider = providerConfig;
+    if (!effectiveProvider?.api_key_encrypted) {
+      const envKey = Deno.env.get("OPENAI_API_KEY");
+      if (envKey) {
+        effectiveProvider = { provider: "openai", api_key_encrypted: envKey };
+      }
+    }
 
     const connectedPlatforms = (accounts || [])
       .map((a) => `${a.display_name} (${a.provider})`)
@@ -165,19 +181,30 @@ ${brandContext}
 ${guidelinesContext}
 
 Your capabilities:
-- Create post drafts for any platform (include the draft in a clearly marked section starting with "---DRAFT---" and ending with "---END_DRAFT---", include platform, body, hook_text, cta_text, hashtags as JSON)
+- Create post drafts for any platform with AI-generated media
 - Suggest optimal posting times based on engagement data
 - Recommend content strategies and themes
 - Analyze URLs shared by the user to extract content for repurposing
 - Generate campaign ideas with multiple post variations
 - Advise on hashtag strategy, CTAs, and audience engagement
 
-When creating a post draft, format it as:
+When creating a post draft, you MUST format it as:
 ---DRAFT---
-{"platform":"instagram","body":"Your post text here","hook_text":"Opening hook","cta_text":"Call to action","hashtags":["tag1","tag2"],"visual_style_suggestion":"Description of recommended visual"}
+{"platform":"instagram","body":"Your post text here","hook_text":"Opening hook","cta_text":"Call to action","hashtags":["tag1","tag2"],"media_type":"image","visual_style_suggestion":"Detailed generation prompt for the visual"}
 ---END_DRAFT---
 
-Always be proactive with suggestions. If the user shares a topic, immediately offer to create drafts.
+IMPORTANT rules for the draft JSON:
+- "media_type" MUST be one of: "image", "video", or "none"
+  - Instagram feed/carousel: "image"
+  - Instagram Reels, TikTok, YouTube Shorts: "video"
+  - LinkedIn, Facebook, Twitter text posts: "none" (unless visual content is relevant)
+  - When in doubt for visual platforms, use "image"
+- "visual_style_suggestion" MUST be a detailed, specific image/video generation prompt (NOT vague).
+  Good: "Professional flat-lay photograph of a laptop on a dark wooden desk with coffee, dramatic side lighting, warm tones, business theme"
+  Bad: "Business image" or "Something professional"
+  For video: describe the scene, movement, mood, and style. Example: "Smooth cinematic pan across a modern office space, natural lighting, people collaborating at standing desks, warm color grading, 5 seconds"
+
+Always be proactive with suggestions. If the user shares a topic, immediately create drafts.
 Keep responses concise but actionable. Use short paragraphs.`;
 
     const messages = [
@@ -191,8 +218,8 @@ Keep responses concise but actionable. Use short paragraphs.`;
 
     let aiResponse: string;
 
-    if (providerConfig?.api_key_encrypted) {
-      aiResponse = await callLLM(providerConfig, messages);
+    if (effectiveProvider?.api_key_encrypted) {
+      aiResponse = await callLLM(effectiveProvider, messages);
     } else {
       aiResponse = generateFallbackResponse(content, connectedPlatforms);
     }
@@ -202,11 +229,158 @@ Keep responses concise but actionable. Use short paragraphs.`;
       .replace(/---DRAFT---[\s\S]*?---END_DRAFT---/g, "")
       .trim();
 
+    const mediaJobs: Array<{
+      job_id: string;
+      model_id: string;
+      model_name: string;
+      media_type: string;
+      prompt: string;
+      status: string;
+      draft_index: number;
+    }> = [];
+
+    if (auto_generate_media) {
+      const kieApiKey = Deno.env.get("KIE_API_KEY");
+      if (kieApiKey) {
+        const mediaDrafts = drafts.filter(
+          (d) => d.media_type && d.media_type !== "none" && d.visual_style_suggestion
+        );
+
+        for (let i = 0; i < mediaDrafts.length; i++) {
+          const draft = mediaDrafts[i];
+          const draftIndex = drafts.indexOf(draft);
+          const isVideo = draft.media_type === "video";
+          const preferredModelId = isVideo ? video_model_id : image_model_id;
+
+          try {
+            let model: Record<string, unknown> | null = null;
+
+            if (preferredModelId) {
+              const { data: preferred } = await supabase
+                .from("kie_models")
+                .select("*")
+                .eq("id", preferredModelId)
+                .eq("enabled", true)
+                .maybeSingle();
+              model = preferred;
+            }
+
+            if (!model) {
+              const { data: recommended } = await supabase
+                .from("kie_models")
+                .select("*")
+                .eq("type", isVideo ? "video" : "image")
+                .eq("enabled", true)
+                .eq("is_recommended", true)
+                .order("display_priority", { ascending: true })
+                .limit(1)
+                .maybeSingle();
+              model = recommended;
+            }
+
+            if (!model) continue;
+
+            const effectiveAspect = aspect_ratio || getPlatformAspectRatio(draft.platform);
+
+            const { data: job, error: jobErr } = await supabase
+              .from("media_generation_jobs")
+              .insert({
+                organization_id: orgId,
+                created_by: user.id,
+                model_id: model.id,
+                prompt: draft.visual_style_suggestion,
+                params: {
+                  aspect_ratio: effectiveAspect,
+                  ...(isVideo ? { duration: (model as Record<string, unknown>).supports_durations?.[0] || 5 } : {}),
+                },
+                status: "waiting",
+              })
+              .select("id")
+              .single();
+
+            if (jobErr || !job) continue;
+
+            const webhookUrl = `${supabaseUrl}/functions/v1/media-kie-webhook`;
+            const modelKey = model.model_key as string;
+            const isVeo = modelKey.startsWith("google/veo-");
+
+            let kieEndpoint: string;
+            let kieBody: Record<string, unknown>;
+
+            if (isVeo) {
+              kieEndpoint = (model.api_endpoint_override as string) || "https://api.kie.ai/api/v1/veo/generate";
+              kieBody = {
+                prompt: draft.visual_style_suggestion,
+                aspect_ratio: effectiveAspect,
+                duration: (model as Record<string, unknown>).supports_durations?.[0] || 8,
+                callBackUrl: webhookUrl,
+              };
+            } else {
+              kieEndpoint = "https://api.kie.ai/api/v1/jobs/createTask";
+              const input: Record<string, unknown> = {
+                prompt: draft.visual_style_suggestion,
+                aspect_ratio: effectiveAspect,
+              };
+              if (isVideo) {
+                input.duration = (model as Record<string, unknown>).supports_durations?.[0] || 5;
+              }
+              kieBody = {
+                model: modelKey,
+                callBackUrl: webhookUrl,
+                input,
+              };
+            }
+
+            const kieRes = await fetch(kieEndpoint, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${kieApiKey}`,
+              },
+              body: JSON.stringify(kieBody),
+            });
+
+            const kieResult = await kieRes.json();
+
+            if (kieRes.ok && kieResult.code === 200) {
+              const taskId = kieResult.data?.taskId || kieResult.data?.task_id;
+              await supabase
+                .from("media_generation_jobs")
+                .update({ kie_task_id: taskId, status: "queuing" })
+                .eq("id", job.id);
+
+              mediaJobs.push({
+                job_id: job.id,
+                model_id: model.id as string,
+                model_name: model.display_name as string,
+                media_type: draft.media_type!,
+                prompt: draft.visual_style_suggestion!,
+                status: "queuing",
+                draft_index: draftIndex,
+              });
+            } else {
+              await supabase
+                .from("media_generation_jobs")
+                .update({
+                  status: "fail",
+                  error_message: kieResult.msg || "Kie API error",
+                  completed_at: new Date().toISOString(),
+                })
+                .eq("id", job.id);
+            }
+          } catch (mediaErr) {
+            console.error("Media generation error for draft:", mediaErr);
+          }
+        }
+      }
+    }
+
     return new Response(
       JSON.stringify({
         response: cleanedResponse || aiResponse,
         drafts,
-        model_used: providerConfig?.provider || "fallback",
+        media_jobs: mediaJobs,
+        model_used: effectiveProvider?.provider || "fallback",
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -318,24 +492,31 @@ async function callLLM(
   throw new Error(`Unsupported provider: ${providerConfig.provider}`);
 }
 
-function extractDrafts(
-  response: string
-): Array<{
+function getPlatformAspectRatio(platform: string): string {
+  const ratios: Record<string, string> = {
+    instagram: "1:1",
+    tiktok: "9:16",
+    youtube: "16:9",
+    facebook: "16:9",
+    linkedin: "16:9",
+    twitter: "16:9",
+    google_business: "16:9",
+  };
+  return ratios[platform] || "16:9";
+}
+
+interface ExtractedDraft {
   platform: string;
   body: string;
   hook_text?: string;
   cta_text?: string;
   hashtags?: string[];
   visual_style_suggestion?: string;
-}> {
-  const drafts: Array<{
-    platform: string;
-    body: string;
-    hook_text?: string;
-    cta_text?: string;
-    hashtags?: string[];
-    visual_style_suggestion?: string;
-  }> = [];
+  media_type?: string;
+}
+
+function extractDrafts(response: string): ExtractedDraft[] {
+  const drafts: ExtractedDraft[] = [];
 
   const draftRegex = /---DRAFT---\s*([\s\S]*?)\s*---END_DRAFT---/g;
   let match;

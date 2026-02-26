@@ -128,14 +128,24 @@ Deno.serve(async (req: Request) => {
     const body: RequestPayload = await req.json();
     const { action } = body;
 
-    const { data: providerConfig } = await supabase
+    let providerConfig: { provider: string; api_key_encrypted: string; base_url?: string } | null = null;
+    const { data: dbProvider } = await supabase
       .from("llm_providers")
       .select("*")
-      .eq("organization_id", orgId)
-      .eq("is_enabled", true)
+      .eq("org_id", orgId)
+      .eq("enabled", true)
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
+
+    if (dbProvider?.api_key_encrypted) {
+      providerConfig = dbProvider;
+    } else {
+      const envKey = Deno.env.get("OPENAI_API_KEY");
+      if (envKey) {
+        providerConfig = { provider: "openai", api_key_encrypted: envKey };
+      }
+    }
 
     let brandVoiceSettings: BrandVoiceSettings | null = null;
     if (body.brand_voice_id || body.tone === 'brandboard_default') {

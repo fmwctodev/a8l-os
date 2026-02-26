@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useToast } from '../../../contexts/ToastContext';
 import {
   ThreadSidebar,
   ChatMessageList,
   ChatInput,
+  ChatMediaSettings,
 } from '../../../components/social-chat';
 import {
   getThreads,
@@ -14,28 +14,22 @@ import {
   sendMessage,
   archiveThread,
   deleteThread,
-  schedulePostFromDraft,
+  publishDraftFromChat,
 } from '../../../services/socialChat';
+import { supabase } from '../../../lib/supabase';
 import type {
   SocialAIThread,
   SocialAIMessage,
   SocialAIMessageType,
   SocialAIAttachment,
 } from '../../../types';
-
-interface ParsedDraft {
-  platform: string;
-  body: string;
-  hook_text?: string;
-  cta_text?: string;
-  hashtags?: string[];
-  visual_style_suggestion?: string;
-}
+import type { PostDraft, SocialAccount } from '../../../components/social-chat/PostDraftCard';
+import type { MediaPreferences, MediaJobInfo, PublishMode } from '../../../services/socialChat';
+import type { MediaAsset } from '../../../services/mediaGeneration';
 
 export function SocialChat() {
   const { user } = useAuth();
   const { addToast } = useToast();
-  const navigate = useNavigate();
 
   const [threads, setThreads] = useState<SocialAIThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -44,12 +38,23 @@ export function SocialChat() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
 
+  const [accounts, setAccounts] = useState<SocialAccount[]>([]);
+  const [mediaPreferences, setMediaPreferences] = useState<MediaPreferences>({
+    auto_generate_media: true,
+  });
+  const [activeMediaJobs, setActiveMediaJobs] = useState<MediaJobInfo[]>([]);
+  const [draftAssets, setDraftAssets] = useState<Record<number, MediaAsset[]>>({});
+  const [publishStatuses, setPublishStatuses] = useState<
+    Record<string, { mode: PublishMode; scheduledAt?: string }>
+  >({});
+
   const orgId = user?.organization_id;
   const userId = user?.id;
 
   useEffect(() => {
     if (orgId && userId) {
       loadThreads();
+      loadAccounts();
     }
   }, [orgId, userId]);
 
@@ -59,6 +64,9 @@ export function SocialChat() {
     } else {
       setMessages([]);
     }
+    setActiveMediaJobs([]);
+    setDraftAssets({});
+    setPublishStatuses({});
   }, [activeThreadId]);
 
   async function loadThreads() {
@@ -86,6 +94,20 @@ export function SocialChat() {
     }
   }
 
+  async function loadAccounts() {
+    if (!orgId) return;
+    try {
+      const { data } = await supabase
+        .from('social_accounts')
+        .select('id, provider, display_name, profile_image_url')
+        .eq('organization_id', orgId)
+        .eq('status', 'active');
+      setAccounts((data as SocialAccount[]) || []);
+    } catch {
+      // accounts stay empty
+    }
+  }
+
   async function handleNewThread() {
     if (!orgId || !userId) return;
     try {
@@ -93,9 +115,8 @@ export function SocialChat() {
       setThreads((prev) => [thread, ...prev]);
       setActiveThreadId(thread.id);
       setMessages([]);
-    } catch (err) {
+    } catch {
       addToast('error', 'Failed to create new chat');
-      console.error(err);
     }
   }
 
@@ -115,7 +136,7 @@ export function SocialChat() {
           setThreads((prev) => [thread, ...prev]);
           setActiveThreadId(thread.id);
           threadId = thread.id;
-        } catch (err) {
+        } catch {
           addToast('error', 'Failed to create chat');
           return;
         }
@@ -123,13 +144,18 @@ export function SocialChat() {
 
       try {
         setSending(true);
-        const { userMessage, aiMessage } = await sendMessage(
+        const result = await sendMessage(
           threadId,
           content,
           (messageType as SocialAIMessageType) || 'text',
-          (attachments as SocialAIAttachment[]) || []
+          (attachments as SocialAIAttachment[]) || [],
+          mediaPreferences
         );
-        setMessages((prev) => [...prev, userMessage, aiMessage]);
+        setMessages((prev) => [...prev, result.userMessage, result.aiMessage]);
+
+        if (result.mediaJobs.length > 0) {
+          setActiveMediaJobs((prev) => [...prev, ...result.mediaJobs]);
+        }
 
         setThreads((prev) =>
           prev.map((t) =>
@@ -148,12 +174,75 @@ export function SocialChat() {
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to send message';
         addToast('error', msg);
-        console.error(err);
       } finally {
         setSending(false);
       }
     },
+    [orgId, userId, activeThreadId, addToast, mediaPreferences]
+  );
+
+  const handleSendPrompt = useCallback(
+    (prompt: string) => {
+      handleSend(prompt);
+    },
+    [handleSend]
+  );
+
+  const handlePublishDraft = useCallback(
+    async (
+      msgId: string,
+      draftIndex: number,
+      draft: PostDraft,
+      mode: PublishMode,
+      accountIds: string[],
+      media: Array<{ url: string; type: string; thumbnail_url?: string }>,
+      mediaAssetIds: string[],
+      scheduledAt?: string
+    ) => {
+      if (!orgId || !userId) return;
+      try {
+        await publishDraftFromChat({
+          orgId,
+          userId,
+          draft: {
+            platform: draft.platform,
+            hook: draft.hook_text || '',
+            body: draft.body,
+            cta: draft.cta_text || '',
+            hashtags: draft.hashtags || [],
+            visual_style_suggestion: draft.visual_style_suggestion,
+          },
+          accountIds,
+          mode,
+          scheduledAtUtc: scheduledAt,
+          media,
+          mediaAssetIds,
+          threadId: activeThreadId || undefined,
+        });
+
+        setPublishStatuses((prev) => ({
+          ...prev,
+          [`${msgId}-${draftIndex}`]: { mode, scheduledAt },
+        }));
+
+        const label =
+          mode === 'post_now' ? 'Posted' : mode === 'schedule' ? 'Scheduled' : 'Saved as draft';
+        addToast('success', label);
+      } catch {
+        addToast('error', 'Failed to publish draft');
+      }
+    },
     [orgId, userId, activeThreadId, addToast]
+  );
+
+  const handleMediaAssetReady = useCallback(
+    (draftIndex: number, assets: MediaAsset[]) => {
+      setDraftAssets((prev) => ({
+        ...prev,
+        [draftIndex]: [...(prev[draftIndex] || []), ...assets],
+      }));
+    },
+    []
   );
 
   async function handleArchiveThread(threadId: string) {
@@ -184,33 +273,11 @@ export function SocialChat() {
     }
   }
 
-  async function handleScheduleDraft(draft: ParsedDraft) {
-    if (!orgId || !userId) return;
-    try {
-      await schedulePostFromDraft(
-        orgId,
-        userId,
-        {
-          platform: draft.platform,
-          hook: draft.hook_text || '',
-          body: draft.body,
-          cta: draft.cta_text || '',
-          hashtags: draft.hashtags || [],
-          visual_style_suggestion: draft.visual_style_suggestion,
-        },
-        [draft.platform],
-        undefined,
-        activeThreadId || undefined
-      );
-      addToast('success', 'Draft saved to posts');
-      navigate('/marketing/social/posts');
-    } catch {
-      addToast('error', 'Failed to schedule draft');
-    }
-  }
-
   return (
-    <div className="flex bg-slate-900 rounded-xl border border-slate-700 overflow-hidden" style={{ height: 'calc(100vh - 260px)', minHeight: '500px' }}>
+    <div
+      className="flex bg-slate-900 rounded-xl border border-slate-700 overflow-hidden"
+      style={{ height: 'calc(100vh - 260px)', minHeight: '500px' }}
+    >
       <div className="w-72 flex-shrink-0">
         <ThreadSidebar
           threads={threads}
@@ -227,7 +294,17 @@ export function SocialChat() {
         <ChatMessageList
           messages={messages}
           isTyping={sending}
-          onScheduleDraft={handleScheduleDraft}
+          accounts={accounts}
+          activeMediaJobs={activeMediaJobs}
+          draftAssets={draftAssets}
+          publishStatuses={publishStatuses}
+          onPublishDraft={handlePublishDraft}
+          onMediaAssetReady={handleMediaAssetReady}
+          onSendPrompt={handleSendPrompt}
+        />
+        <ChatMediaSettings
+          preferences={mediaPreferences}
+          onChange={setMediaPreferences}
         />
         <ChatInput
           onSend={handleSend}

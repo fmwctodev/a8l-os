@@ -96,14 +96,24 @@ Deno.serve(async (req: Request) => {
       ? Math.min(...platforms.map(p => PLATFORM_CHARACTER_LIMITS[p] || 2200))
       : 2200;
 
-    const { data: providerConfig } = await supabase
+    let providerConfig: { provider: string; api_key_encrypted: string; base_url?: string } | null = null;
+    const { data: dbProvider } = await supabase
       .from("llm_providers")
       .select("*")
-      .eq("organization_id", userData.organization_id)
-      .eq("is_enabled", true)
+      .eq("org_id", userData.organization_id)
+      .eq("enabled", true)
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
+
+    if (dbProvider?.api_key_encrypted) {
+      providerConfig = dbProvider;
+    } else {
+      const envKey = Deno.env.get("OPENAI_API_KEY");
+      if (envKey) {
+        providerConfig = { provider: "openai", api_key_encrypted: envKey };
+      }
+    }
 
     let suggestions: string[];
 
