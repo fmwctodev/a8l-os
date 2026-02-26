@@ -154,20 +154,23 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const { data: providerConfig } = await supabase
+    const chatProviders = ["openai", "anthropic"];
+    const { data: allProviders } = await supabase
       .from("llm_providers")
-      .select("*")
+      .select("provider, api_key_encrypted, base_url")
       .eq("org_id", orgId)
       .eq("enabled", true)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+      .in("provider", chatProviders);
 
-    let effectiveProvider = providerConfig;
-    if (!effectiveProvider?.api_key_encrypted) {
+    const providerPriority: Record<string, number> = { openai: 0, anthropic: 1 };
+    const sortedProviders = (allProviders || [])
+      .filter((p) => p.api_key_encrypted)
+      .sort((a, b) => (providerPriority[a.provider] ?? 99) - (providerPriority[b.provider] ?? 99));
+
+    if (sortedProviders.length === 0) {
       const envKey = Deno.env.get("OPENAI_API_KEY");
       if (envKey) {
-        effectiveProvider = { provider: "openai", api_key_encrypted: envKey };
+        sortedProviders.push({ provider: "openai", api_key_encrypted: envKey, base_url: null });
       }
     }
 
@@ -221,16 +224,20 @@ Keep responses concise but actionable. Use short paragraphs.`;
       { role: "user" as const, content },
     ];
 
-    let aiResponse: string;
+    let aiResponse: string | null = null;
+    let usedProvider = "fallback";
 
-    if (effectiveProvider?.api_key_encrypted) {
+    for (const provider of sortedProviders) {
       try {
-        aiResponse = await callLLM(effectiveProvider, messages);
+        aiResponse = await callLLM(provider, messages);
+        usedProvider = provider.provider;
+        break;
       } catch (llmErr) {
-        console.error("LLM call failed, using fallback:", llmErr);
-        aiResponse = generateFallbackResponse(content, connectedPlatforms);
+        console.error(`${provider.provider} LLM call failed:`, llmErr);
       }
-    } else {
+    }
+
+    if (!aiResponse) {
       aiResponse = generateFallbackResponse(content, connectedPlatforms);
     }
 
@@ -390,7 +397,7 @@ Keep responses concise but actionable. Use short paragraphs.`;
         response: cleanedResponse || aiResponse,
         drafts,
         media_jobs: mediaJobs,
-        model_used: effectiveProvider?.provider || "fallback",
+        model_used: usedProvider,
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
