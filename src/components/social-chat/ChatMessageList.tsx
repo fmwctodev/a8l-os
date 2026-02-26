@@ -79,7 +79,7 @@ export function ChatMessageList({
     <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
       {messages.map((msg) => {
         const isUser = msg.role === 'user';
-        const { cleanContent, drafts } = parseMessageContent(msg.content);
+        const { cleanContent, drafts } = resolveDrafts(msg);
         const msgMediaJobs = getMediaJobsForMessage(msg, activeMediaJobs);
 
         return (
@@ -119,18 +119,33 @@ export function ChatMessageList({
 
               {drafts.length > 0 && (
                 <div className="mt-2 text-left">
-                  {drafts.map((draft, idx) => (
-                    <PostDraftCard
-                      key={idx}
-                      draft={draft}
-                      accounts={accounts}
-                      attachedAssets={draftAssets[idx] || []}
-                      onPublish={(d, mode, acctIds, media, assetIds, scheduledAt) =>
-                        onPublishDraft(msg.id, idx, d, mode, acctIds, media, assetIds, scheduledAt)
-                      }
-                      publishStatus={publishStatuses[`${msg.id}-${idx}`] || null}
-                    />
-                  ))}
+                  {drafts.map((draft, idx) => {
+                    const jobsForDraft = msgMediaJobs.filter(
+                      (j) => j.draft_index === idx
+                    );
+                    const isGenerating =
+                      jobsForDraft.length > 0 &&
+                      jobsForDraft.some(
+                        (j) =>
+                          j.status === 'waiting' ||
+                          j.status === 'queuing' ||
+                          j.status === 'generating'
+                      );
+
+                    return (
+                      <PostDraftCard
+                        key={idx}
+                        draft={draft}
+                        accounts={accounts}
+                        attachedAssets={draftAssets[idx] || []}
+                        mediaGenerating={isGenerating}
+                        onPublish={(d, mode, acctIds, media, assetIds, scheduledAt) =>
+                          onPublishDraft(msg.id, idx, d, mode, acctIds, media, assetIds, scheduledAt)
+                        }
+                        publishStatus={publishStatuses[`${msg.id}-${idx}`] || null}
+                      />
+                    );
+                  })}
                 </div>
               )}
 
@@ -207,6 +222,42 @@ function parseMessageContent(content: string): {
     .trim();
 
   return { cleanContent, drafts };
+}
+
+function resolveDrafts(msg: SocialAIMessage): {
+  cleanContent: string;
+  drafts: ParsedDraft[];
+} {
+  const parsed = parseMessageContent(msg.content);
+
+  if (parsed.drafts.length > 0) {
+    return parsed;
+  }
+
+  if (
+    msg.generated_posts &&
+    Array.isArray(msg.generated_posts) &&
+    msg.generated_posts.length > 0
+  ) {
+    const fallbackDrafts: ParsedDraft[] = msg.generated_posts.map((gp) => {
+      const raw = gp as Record<string, unknown>;
+      return {
+        platform: (raw.platform as string) || 'all',
+        body: (raw.body as string) || '',
+        hook_text:
+          (raw.hook_text as string) || (raw.hook as string) || undefined,
+        cta_text:
+          (raw.cta_text as string) || (raw.cta as string) || undefined,
+        hashtags: (raw.hashtags as string[]) || undefined,
+        visual_style_suggestion:
+          (raw.visual_style_suggestion as string) || undefined,
+        media_type: (raw.media_type as string) || undefined,
+      };
+    });
+    return { cleanContent: parsed.cleanContent, drafts: fallbackDrafts };
+  }
+
+  return parsed;
 }
 
 function getMediaJobsForMessage(

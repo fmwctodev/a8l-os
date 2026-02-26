@@ -142,9 +142,17 @@ export async function sendMessage(
     throw edgeErr;
   }
 
-  const fullContent = aiResponse.response || '';
+  const cleanContent = aiResponse.response || '';
   const drafts = aiResponse.drafts || [];
   const mediaJobs: MediaJobInfo[] = aiResponse.media_jobs || [];
+
+  let fullContent = cleanContent;
+  if (drafts.length > 0) {
+    const draftBlocks = drafts
+      .map((d) => `\n---DRAFT---\n${JSON.stringify(d)}\n---END_DRAFT---`)
+      .join('');
+    fullContent = cleanContent + draftBlocks;
+  }
 
   const { data: aiMsg, error: aiError } = await supabase
     .from('social_ai_messages')
