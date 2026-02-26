@@ -29,7 +29,7 @@ import type { MediaAsset } from '../../../services/mediaGeneration';
 
 export function SocialChat() {
   const { user } = useAuth();
-  const { addToast } = useToast();
+  const { showToast } = useToast();
 
   const [threads, setThreads] = useState<SocialAIThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -116,7 +116,7 @@ export function SocialChat() {
       setActiveThreadId(thread.id);
       setMessages([]);
     } catch {
-      addToast('error', 'Failed to create new chat');
+      showToast('warning', 'Failed to create new chat');
     }
   }
 
@@ -137,7 +137,7 @@ export function SocialChat() {
           setActiveThreadId(thread.id);
           threadId = thread.id;
         } catch {
-          addToast('error', 'Failed to create chat');
+          showToast('warning', 'Failed to create chat');
           return;
         }
       }
@@ -173,12 +173,12 @@ export function SocialChat() {
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to send message';
-        addToast('error', msg);
+        showToast('warning', msg);
       } finally {
         setSending(false);
       }
     },
-    [orgId, userId, activeThreadId, addToast, mediaPreferences]
+    [orgId, userId, activeThreadId, showToast, mediaPreferences]
   );
 
   const handleSendPrompt = useCallback(
@@ -227,12 +227,12 @@ export function SocialChat() {
 
         const label =
           mode === 'post_now' ? 'Posted' : mode === 'schedule' ? 'Scheduled' : 'Saved as draft';
-        addToast('success', label);
+        showToast('success', label);
       } catch {
-        addToast('error', 'Failed to publish draft');
+        showToast('warning', 'Failed to publish draft');
       }
     },
-    [orgId, userId, activeThreadId, addToast]
+    [orgId, userId, activeThreadId, showToast]
   );
 
   const handleMediaAssetReady = useCallback(
@@ -253,9 +253,9 @@ export function SocialChat() {
         setActiveThreadId(null);
         setMessages([]);
       }
-      addToast('success', 'Chat archived');
+      showToast('success', 'Chat archived');
     } catch {
-      addToast('error', 'Failed to archive chat');
+      showToast('warning', 'Failed to archive chat');
     }
   }
 
@@ -267,9 +267,9 @@ export function SocialChat() {
         setActiveThreadId(null);
         setMessages([]);
       }
-      addToast('success', 'Chat deleted');
+      showToast('success', 'Chat deleted');
     } catch {
-      addToast('error', 'Failed to delete chat');
+      showToast('warning', 'Failed to delete chat');
     }
   }
 

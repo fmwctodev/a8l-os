@@ -29,7 +29,7 @@ export function SocialCampaignDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { addToast } = useToast();
+  const { showToast } = useToast();
   const [campaign, setCampaign] = useState<SocialCampaign | null>(null);
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,9 +61,9 @@ export function SocialCampaignDetail() {
       const newStatus = campaign.status === 'active' ? 'paused' : 'active';
       const updated = await updateCampaign(campaign.id, { status: newStatus });
       setCampaign(updated);
-      addToast(`Campaign ${newStatus === 'active' ? 'resumed' : 'paused'}`, 'success');
+      showToast('success', `Campaign ${newStatus === 'active' ? 'resumed' : 'paused'}`);
     } catch (error) {
-      addToast('Failed to update campaign', 'error');
+      showToast('warning', 'Failed to update campaign');
     }
   }
 
@@ -72,11 +72,11 @@ export function SocialCampaignDetail() {
     try {
       setGenerating(true);
       const result = await generatePosts(campaign.id);
-      addToast(`Generated ${result.generated} posts`, 'success');
+      showToast('success', `Generated ${result.generated} posts`);
       loadData();
     } catch (error) {
       console.error('Generation failed:', error);
-      addToast('Failed to generate posts', 'error');
+      showToast('warning', 'Failed to generate posts');
     } finally {
       setGenerating(false);
     }
@@ -87,10 +87,10 @@ export function SocialCampaignDetail() {
     if (!confirm('Delete this campaign?')) return;
     try {
       await deleteCampaign(campaign.id);
-      addToast('Campaign deleted', 'success');
+      showToast('success', 'Campaign deleted');
       navigate('/marketing/social/campaigns');
     } catch (error) {
-      addToast('Failed to delete campaign', 'error');
+      showToast('warning', 'Failed to delete campaign');
     }
   }
 

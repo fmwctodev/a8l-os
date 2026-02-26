@@ -224,7 +224,12 @@ Keep responses concise but actionable. Use short paragraphs.`;
     let aiResponse: string;
 
     if (effectiveProvider?.api_key_encrypted) {
-      aiResponse = await callLLM(effectiveProvider, messages);
+      try {
+        aiResponse = await callLLM(effectiveProvider, messages);
+      } catch (llmErr) {
+        console.error("LLM call failed, using fallback:", llmErr);
+        aiResponse = generateFallbackResponse(content, connectedPlatforms);
+      }
     } else {
       aiResponse = generateFallbackResponse(content, connectedPlatforms);
     }
@@ -462,7 +467,9 @@ async function callLLM(
       const data = await response.json();
       return data.choices?.[0]?.message?.content || "";
     }
-    throw new Error("OpenAI API request failed");
+    const errBody = await response.text().catch(() => "");
+    console.error("OpenAI API error:", response.status, errBody);
+    throw new Error(`OpenAI API failed (${response.status})`);
   }
 
   if (providerConfig.provider === "anthropic") {
@@ -491,7 +498,9 @@ async function callLLM(
       const data = await response.json();
       return data.content?.[0]?.text || "";
     }
-    throw new Error("Anthropic API request failed");
+    const errBody = await response.text().catch(() => "");
+    console.error("Anthropic API error:", response.status, errBody);
+    throw new Error(`Anthropic API failed (${response.status})`);
   }
 
   throw new Error(`Unsupported provider: ${providerConfig.provider}`);
@@ -551,10 +560,15 @@ function generateFallbackResponse(
     lower.includes("write") ||
     lower.includes("draft")
   ) {
+    const safebody = JSON.stringify(
+      content.substring(0, 100) +
+        "... [AI-generated content would appear here with a configured LLM provider]"
+    );
+    const draftJson = `{"platform":"all","body":${safebody},"hook_text":"Attention-grabbing opener","cta_text":"Take action today!","hashtags":["social","content","strategy"]}`;
     return `I'd be happy to help create content for you! Here's a draft to get started:
 
 ---DRAFT---
-{"platform":"all","body":"${content.replace(/"/g, '\\"').substring(0, 100)}... [AI-generated content would appear here with a configured LLM provider]","hook_text":"Attention-grabbing opener","cta_text":"Take action today!","hashtags":["social","content","strategy"]}
+${draftJson}
 ---END_DRAFT---
 
 To get fully AI-generated content, connect an LLM provider (OpenAI or Anthropic) in Settings > AI Agents.`;

@@ -63,7 +63,7 @@ const HOOK_STYLE_LABELS: Record<HookStylePreset, string> = {
 export function SocialCampaigns() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { addToast } = useToast();
+  const { showToast } = useToast();
   const [campaigns, setCampaigns] = useState<SocialCampaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<SocialCampaignStatus | 'all'>('all');
@@ -94,10 +94,10 @@ export function SocialCampaigns() {
       setCampaigns(prev =>
         prev.map(c => c.id === campaign.id ? { ...c, status: newStatus as SocialCampaignStatus } : c)
       );
-      addToast(`Campaign ${newStatus === 'active' ? 'resumed' : 'paused'}`, 'success');
+      showToast('success', `Campaign ${newStatus === 'active' ? 'resumed' : 'paused'}`);
     } catch (error) {
       console.error('Failed to update campaign:', error);
-      addToast('Failed to update campaign', 'error');
+      showToast('warning', 'Failed to update campaign');
     }
     setMenuId(null);
   }
@@ -107,10 +107,10 @@ export function SocialCampaigns() {
     try {
       await deleteCampaign(id);
       setCampaigns(prev => prev.filter(c => c.id !== id));
-      addToast('Campaign deleted', 'success');
+      showToast('success', 'Campaign deleted');
     } catch (error) {
       console.error('Failed to delete:', error);
-      addToast('Failed to delete campaign', 'error');
+      showToast('warning', 'Failed to delete campaign');
     }
     setMenuId(null);
   }
@@ -271,11 +271,11 @@ export function SocialCampaigns() {
               const campaign = await createCampaign(user.organization_id, user.id, data);
               setCampaigns(prev => [campaign, ...prev]);
               setShowCreateModal(false);
-              addToast('Campaign created', 'success');
+              showToast('success', 'Campaign created');
               navigate(`/marketing/social/campaigns/${campaign.id}`);
             } catch (error) {
               console.error('Failed to create campaign:', error);
-              addToast('Failed to create campaign', 'error');
+              showToast('warning', 'Failed to create campaign');
             }
           }}
         />

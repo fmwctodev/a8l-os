@@ -26,7 +26,7 @@ const CHANNEL_OPTIONS: { value: MeetingFollowUpSettings['default_channel']; labe
 
 export function MeetingFollowUpSettingsPage() {
   const { user } = useAuth();
-  const { addToast } = useToast();
+  const { showToast } = useToast();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -58,12 +58,12 @@ export function MeetingFollowUpSettingsPage() {
           setAiInstructions(settings.ai_instructions || '');
         }
       } catch {
-        addToast('Failed to load follow-up settings', 'error');
+        showToast('warning', 'Failed to load follow-up settings');
       } finally {
         setLoading(false);
       }
     })();
-  }, [orgId, addToast]);
+  }, [orgId, showToast]);
 
   const handleSave = async () => {
     if (!orgId) return;
@@ -84,9 +84,9 @@ export function MeetingFollowUpSettingsPage() {
         internal_domains: domains,
         ai_instructions: aiInstructions || null,
       });
-      addToast('Follow-up settings saved', 'success');
+      showToast('success', 'Follow-up settings saved');
     } catch {
-      addToast('Failed to save settings', 'error');
+      showToast('warning', 'Failed to save settings');
     } finally {
       setSaving(false);
     }

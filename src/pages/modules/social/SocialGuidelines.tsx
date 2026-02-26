@@ -44,7 +44,7 @@ const DEFAULT_TONE: TonePreferences = { formality: 50, friendliness: 50, energy:
 
 export function SocialGuidelines() {
   const { user } = useAuth();
-  const { addToast } = useToast();
+  const { showToast } = useToast();
   const [scope, setScope] = useState<Scope>('personal');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -128,10 +128,10 @@ export function SocialGuidelines() {
         visual_style_rules: visualStyles,
         platform_tweaks: platformTweaks,
       });
-      addToast('Guidelines saved', 'success');
+      showToast('success', 'Guidelines saved');
     } catch (error) {
       console.error('Failed to save guidelines:', error);
-      addToast('Failed to save guidelines', 'error');
+      showToast('warning', 'Failed to save guidelines');
     } finally {
       setSaving(false);
     }
@@ -147,14 +147,14 @@ export function SocialGuidelines() {
         setTone(bv.tone_settings || DEFAULT_TONE);
         setWordsToAvoid(prev => [...new Set([...prev, ...bv.vocabulary_prohibited])]);
         setCtaRules(prev => [...new Set([...prev, ...bv.dos])]);
-        addToast('Synced from Brandboard', 'success');
+        showToast('success', 'Synced from Brandboard');
         debouncedSave();
       } else {
-        addToast('No active brand voice found', 'info');
+        showToast('info', 'No active brand voice found');
       }
     } catch (error) {
       console.error('Sync failed:', error);
-      addToast('Failed to sync from Brandboard', 'error');
+      showToast('warning', 'Failed to sync from Brandboard');
     } finally {
       setSyncing(false);
     }
