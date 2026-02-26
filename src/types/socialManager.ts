@@ -79,10 +79,17 @@ export interface SocialCampaign {
   updated_at: string;
 }
 
+export interface GuidelineBlock {
+  content: string;
+}
+
 export interface SocialGuideline {
   id: string;
   organization_id: string;
   user_id: string | null;
+  content_themes: GuidelineBlock[];
+  image_style: GuidelineBlock[];
+  writing_style: GuidelineBlock[];
   tone_preferences: TonePreferences;
   words_to_avoid: string[];
   hashtag_preferences: HashtagPreferences;

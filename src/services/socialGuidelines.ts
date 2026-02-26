@@ -25,6 +25,7 @@ export async function upsertGuidelines(
   orgId: string,
   userId: string | null,
   updates: Partial<Pick<SocialGuideline,
+    'content_themes' | 'image_style' | 'writing_style' |
     'tone_preferences' | 'words_to_avoid' | 'hashtag_preferences' |
     'cta_rules' | 'emoji_rules' | 'industry_positioning' |
     'visual_style_rules' | 'platform_tweaks'

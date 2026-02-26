@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  BookOpen,
   Loader2,
   RefreshCw,
   ChevronDown,
@@ -8,6 +7,7 @@ import {
   X,
   Plus,
   Check,
+  Settings2,
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useToast } from '../../../contexts/ToastContext';
@@ -16,11 +16,12 @@ import {
   upsertGuidelines,
 } from '../../../services/socialGuidelines';
 import { getActiveBrandboardForAI } from '../../../services/socialAI';
+import { GuidelineBlockEditor } from '../../../components/social-guidelines';
 import type {
-  SocialGuideline,
   TonePreferences,
   EmojiFrequency,
   PlatformTweak,
+  GuidelineBlock,
 } from '../../../types';
 
 type Scope = 'personal' | 'workspace';
@@ -50,6 +51,10 @@ export function SocialGuidelines() {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
+  const [contentThemes, setContentThemes] = useState<GuidelineBlock[]>([]);
+  const [imageStyle, setImageStyle] = useState<GuidelineBlock[]>([]);
+  const [writingStyle, setWritingStyle] = useState<GuidelineBlock[]>([]);
+
   const [tone, setTone] = useState<TonePreferences>(DEFAULT_TONE);
   const [wordsToAvoid, setWordsToAvoid] = useState<string[]>([]);
   const [wordInput, setWordInput] = useState('');
@@ -64,10 +69,11 @@ export function SocialGuidelines() {
   const [visualStyles, setVisualStyles] = useState<string[]>([]);
   const [visualInput, setVisualInput] = useState('');
   const [platformTweaks, setPlatformTweaks] = useState<Record<string, PlatformTweak>>({});
+
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['tone']));
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const userId = scope === 'personal' ? (user?.id || null) : null;
 
   useEffect(() => {
@@ -80,6 +86,9 @@ export function SocialGuidelines() {
       setLoading(true);
       const data = await getGuidelines(user.organization_id, userId);
       if (data) {
+        setContentThemes(Array.isArray(data.content_themes) ? data.content_themes : []);
+        setImageStyle(Array.isArray(data.image_style) ? data.image_style : []);
+        setWritingStyle(Array.isArray(data.writing_style) ? data.writing_style : []);
         setTone(data.tone_preferences || DEFAULT_TONE);
         setWordsToAvoid(data.words_to_avoid || []);
         const hp = data.hashtag_preferences || { preferred: [], banned: [] };
@@ -92,6 +101,9 @@ export function SocialGuidelines() {
         setVisualStyles(Array.isArray(data.visual_style_rules) ? data.visual_style_rules : []);
         setPlatformTweaks(data.platform_tweaks || {});
       } else {
+        setContentThemes([]);
+        setImageStyle([]);
+        setWritingStyle([]);
         setTone(DEFAULT_TONE);
         setWordsToAvoid([]);
         setPreferredHashtags([]);
@@ -112,13 +124,16 @@ export function SocialGuidelines() {
   const debouncedSave = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => saveGuidelines(), 800);
-  }, [tone, wordsToAvoid, preferredHashtags, bannedHashtags, ctaRules, emojiFrequency, industryPositioning, visualStyles, platformTweaks, user?.organization_id, userId]);
+  }, [contentThemes, imageStyle, writingStyle, tone, wordsToAvoid, preferredHashtags, bannedHashtags, ctaRules, emojiFrequency, industryPositioning, visualStyles, platformTweaks, user?.organization_id, userId]);
 
   async function saveGuidelines() {
     if (!user?.organization_id) return;
     try {
       setSaving(true);
       await upsertGuidelines(user.organization_id, userId, {
+        content_themes: contentThemes,
+        image_style: imageStyle,
+        writing_style: writingStyle,
         tone_preferences: tone,
         words_to_avoid: wordsToAvoid,
         hashtag_preferences: { preferred: preferredHashtags, banned: bannedHashtags },
@@ -147,6 +162,29 @@ export function SocialGuidelines() {
         setTone(bv.tone_settings || DEFAULT_TONE);
         setWordsToAvoid(prev => [...new Set([...prev, ...bv.vocabulary_prohibited])]);
         setCtaRules(prev => [...new Set([...prev, ...bv.dos])]);
+
+        if (bv.ai_system_prompt) {
+          setWritingStyle(prev => {
+            const existing = prev.map(b => b.content);
+            if (!existing.includes(bv.ai_system_prompt!)) {
+              return [...prev, { content: `<p>${bv.ai_system_prompt}</p>` }];
+            }
+            return prev;
+          });
+        }
+        if (bv.dos && bv.dos.length > 0) {
+          setWritingStyle(prev => {
+            const dosHtml = `<p><strong>Brand Voice Guidelines:</strong></p><ul>${bv.dos.map((d: string) => `<li>${d}</li>`).join('')}</ul>`;
+            return [...prev, { content: dosHtml }];
+          });
+        }
+        if (bv.donts && bv.donts.length > 0) {
+          setWritingStyle(prev => {
+            const dontsHtml = `<p><strong>Things to Avoid:</strong></p><ul>${bv.donts.map((d: string) => `<li>${d}</li>`).join('')}</ul>`;
+            return [...prev, { content: dontsHtml }];
+          });
+        }
+
         showToast('success', 'Synced from Brandboard');
         debouncedSave();
       } else {
@@ -191,6 +229,15 @@ export function SocialGuidelines() {
     debouncedSave();
   }
 
+  function handleBlockChange(
+    setter: (v: GuidelineBlock[]) => void
+  ) {
+    return (blocks: GuidelineBlock[]) => {
+      setter(blocks);
+      debouncedSave();
+    };
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -200,7 +247,14 @@ export function SocialGuidelines() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold text-white tracking-tight">Guidelines</h1>
+        <p className="text-sm text-slate-400">
+          Use this space to give your AI social manager custom instructions to follow
+        </p>
+      </div>
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex bg-slate-800 border border-slate-700 rounded-lg p-1">
@@ -238,184 +292,221 @@ export function SocialGuidelines() {
         </button>
       </div>
 
-      <div className="space-y-3">
-        <CollapsibleSection
-          title="Tone Preferences"
-          expanded={expandedSections.has('tone')}
-          onToggle={() => toggleSection('tone')}
-        >
-          <div className="space-y-4">
-            {(['formality', 'friendliness', 'energy', 'confidence'] as const).map((key) => (
-              <div key={key} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-slate-300 capitalize">{key}</label>
-                  <span className="text-sm text-slate-500">{tone[key]}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={tone[key]}
-                  onChange={(e) => handleToneChange(key, parseInt(e.target.value))}
-                  className="w-full accent-cyan-500"
-                />
-                <div className="flex justify-between text-xs text-slate-500">
-                  <span>{key === 'formality' ? 'Casual' : key === 'friendliness' ? 'Reserved' : key === 'energy' ? 'Calm' : 'Humble'}</span>
-                  <span>{key === 'formality' ? 'Formal' : key === 'friendliness' ? 'Warm' : key === 'energy' ? 'Energetic' : 'Confident'}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CollapsibleSection>
+      <div className="space-y-5">
+        <GuidelineBlockEditor
+          title="Content Themes"
+          blocks={contentThemes}
+          onChange={handleBlockChange(setContentThemes)}
+        />
 
-        <CollapsibleSection
-          title="Words to Avoid"
-          expanded={expandedSections.has('words')}
-          onToggle={() => toggleSection('words')}
-        >
-          <TagInput
-            tags={wordsToAvoid}
-            input={wordInput}
-            onInputChange={setWordInput}
-            onAdd={() => addTag(wordsToAvoid, setWordsToAvoid, wordInput, setWordInput)}
-            onRemove={(i) => removeTag(wordsToAvoid, setWordsToAvoid, i)}
-            placeholder="Type a word and press Enter..."
-          />
-        </CollapsibleSection>
+        <GuidelineBlockEditor
+          title="Image Style"
+          blocks={imageStyle}
+          onChange={handleBlockChange(setImageStyle)}
+        />
 
-        <CollapsibleSection
-          title="Hashtag Preferences"
-          expanded={expandedSections.has('hashtags')}
-          onToggle={() => toggleSection('hashtags')}
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-slate-400 mb-2 block">Preferred Hashtags</label>
-              <TagInput
-                tags={preferredHashtags}
-                input={hashtagInput}
-                onInputChange={setHashtagInput}
-                onAdd={() => addTag(preferredHashtags, setPreferredHashtags, hashtagInput, setHashtagInput)}
-                onRemove={(i) => removeTag(preferredHashtags, setPreferredHashtags, i)}
-                placeholder="#hashtag"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-slate-400 mb-2 block">Banned Hashtags</label>
-              <TagInput
-                tags={bannedHashtags}
-                input={bannedHashtagInput}
-                onInputChange={setBannedHashtagInput}
-                onAdd={() => addTag(bannedHashtags, setBannedHashtags, bannedHashtagInput, setBannedHashtagInput)}
-                onRemove={(i) => removeTag(bannedHashtags, setBannedHashtags, i)}
-                placeholder="#banned"
-              />
-            </div>
-          </div>
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          title="CTA Rules"
-          expanded={expandedSections.has('cta')}
-          onToggle={() => toggleSection('cta')}
-        >
-          <TagInput
-            tags={ctaRules}
-            input={ctaInput}
-            onInputChange={setCtaInput}
-            onAdd={() => addTag(ctaRules, setCtaRules, ctaInput, setCtaInput)}
-            onRemove={(i) => removeTag(ctaRules, setCtaRules, i)}
-            placeholder='e.g. "Always end LinkedIn posts with a question"'
-            fullWidth
-          />
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          title="Emoji Rules"
-          expanded={expandedSections.has('emoji')}
-          onToggle={() => toggleSection('emoji')}
-        >
-          <div>
-            <label className="text-sm font-medium text-slate-400 mb-2 block">Frequency</label>
-            <div className="flex gap-2">
-              {EMOJI_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => { setEmojiFrequency(opt.value); debouncedSave(); }}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    emojiFrequency === opt.value
-                      ? 'bg-cyan-600 text-white'
-                      : 'bg-slate-700 text-slate-400 hover:text-slate-300'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          title="Industry Positioning"
-          expanded={expandedSections.has('industry')}
-          onToggle={() => toggleSection('industry')}
-        >
-          <textarea
-            value={industryPositioning}
-            onChange={(e) => { setIndustryPositioning(e.target.value); debouncedSave(); }}
-            rows={4}
-            placeholder="Describe your brand's industry stance, differentiators, and positioning..."
-            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none text-sm"
-          />
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          title="Visual Style Rules"
-          expanded={expandedSections.has('visual')}
-          onToggle={() => toggleSection('visual')}
-        >
-          <TagInput
-            tags={visualStyles}
-            input={visualInput}
-            onInputChange={setVisualInput}
-            onAdd={() => addTag(visualStyles, setVisualStyles, visualInput, setVisualInput)}
-            onRemove={(i) => removeTag(visualStyles, setVisualStyles, i)}
-            placeholder='e.g. "minimalist", "dark mode", "corporate blue"'
-          />
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          title="Platform-Specific Tweaks"
-          expanded={expandedSections.has('platform')}
-          onToggle={() => toggleSection('platform')}
-        >
-          <div className="space-y-4">
-            {PLATFORMS.map((platform) => {
-              const tweak = platformTweaks[platform] || {};
-              return (
-                <div key={platform} className="space-y-2">
-                  <label className="text-sm font-medium text-slate-300">{PLATFORM_LABELS[platform]}</label>
-                  <textarea
-                    value={tweak.additional_rules || ''}
-                    onChange={(e) => {
-                      setPlatformTweaks(prev => ({
-                        ...prev,
-                        [platform]: { ...prev[platform], additional_rules: e.target.value },
-                      }));
-                      debouncedSave();
-                    }}
-                    rows={2}
-                    placeholder={`Custom rules for ${PLATFORM_LABELS[platform]}...`}
-                    className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none text-sm"
-                  />
-                </div>
-              );
-            })}
-          </div>
-        </CollapsibleSection>
+        <GuidelineBlockEditor
+          title="Writing Style"
+          blocks={writingStyle}
+          onChange={handleBlockChange(setWritingStyle)}
+        />
       </div>
 
-      <div className="flex justify-end pt-4">
+      <div className="border-t border-slate-700/50 pt-6">
+        <button
+          onClick={() => setAdvancedOpen(!advancedOpen)}
+          className="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-slate-300 transition-colors"
+        >
+          <Settings2 className="w-4 h-4" />
+          Advanced Settings
+          {advancedOpen ? (
+            <ChevronDown className="w-4 h-4" />
+          ) : (
+            <ChevronRight className="w-4 h-4" />
+          )}
+        </button>
+
+        {advancedOpen && (
+          <div className="mt-4 space-y-3">
+            <CollapsibleSection
+              title="Tone Preferences"
+              expanded={expandedSections.has('tone')}
+              onToggle={() => toggleSection('tone')}
+            >
+              <div className="space-y-4">
+                {(['formality', 'friendliness', 'energy', 'confidence'] as const).map((key) => (
+                  <div key={key} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-slate-300 capitalize">{key}</label>
+                      <span className="text-sm text-slate-500">{tone[key]}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={tone[key]}
+                      onChange={(e) => handleToneChange(key, parseInt(e.target.value))}
+                      className="w-full accent-cyan-500"
+                    />
+                    <div className="flex justify-between text-xs text-slate-500">
+                      <span>{key === 'formality' ? 'Casual' : key === 'friendliness' ? 'Reserved' : key === 'energy' ? 'Calm' : 'Humble'}</span>
+                      <span>{key === 'formality' ? 'Formal' : key === 'friendliness' ? 'Warm' : key === 'energy' ? 'Energetic' : 'Confident'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Words to Avoid"
+              expanded={expandedSections.has('words')}
+              onToggle={() => toggleSection('words')}
+            >
+              <TagInput
+                tags={wordsToAvoid}
+                input={wordInput}
+                onInputChange={setWordInput}
+                onAdd={() => addTag(wordsToAvoid, setWordsToAvoid, wordInput, setWordInput)}
+                onRemove={(i) => removeTag(wordsToAvoid, setWordsToAvoid, i)}
+                placeholder="Type a word and press Enter..."
+              />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Hashtag Preferences"
+              expanded={expandedSections.has('hashtags')}
+              onToggle={() => toggleSection('hashtags')}
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-slate-400 mb-2 block">Preferred Hashtags</label>
+                  <TagInput
+                    tags={preferredHashtags}
+                    input={hashtagInput}
+                    onInputChange={setHashtagInput}
+                    onAdd={() => addTag(preferredHashtags, setPreferredHashtags, hashtagInput, setHashtagInput)}
+                    onRemove={(i) => removeTag(preferredHashtags, setPreferredHashtags, i)}
+                    placeholder="#hashtag"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-400 mb-2 block">Banned Hashtags</label>
+                  <TagInput
+                    tags={bannedHashtags}
+                    input={bannedHashtagInput}
+                    onInputChange={setBannedHashtagInput}
+                    onAdd={() => addTag(bannedHashtags, setBannedHashtags, bannedHashtagInput, setBannedHashtagInput)}
+                    onRemove={(i) => removeTag(bannedHashtags, setBannedHashtags, i)}
+                    placeholder="#banned"
+                  />
+                </div>
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="CTA Rules"
+              expanded={expandedSections.has('cta')}
+              onToggle={() => toggleSection('cta')}
+            >
+              <TagInput
+                tags={ctaRules}
+                input={ctaInput}
+                onInputChange={setCtaInput}
+                onAdd={() => addTag(ctaRules, setCtaRules, ctaInput, setCtaInput)}
+                onRemove={(i) => removeTag(ctaRules, setCtaRules, i)}
+                placeholder='e.g. "Always end LinkedIn posts with a question"'
+                fullWidth
+              />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Emoji Rules"
+              expanded={expandedSections.has('emoji')}
+              onToggle={() => toggleSection('emoji')}
+            >
+              <div>
+                <label className="text-sm font-medium text-slate-400 mb-2 block">Frequency</label>
+                <div className="flex gap-2">
+                  {EMOJI_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => { setEmojiFrequency(opt.value); debouncedSave(); }}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        emojiFrequency === opt.value
+                          ? 'bg-cyan-600 text-white'
+                          : 'bg-slate-700 text-slate-400 hover:text-slate-300'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Industry Positioning"
+              expanded={expandedSections.has('industry')}
+              onToggle={() => toggleSection('industry')}
+            >
+              <textarea
+                value={industryPositioning}
+                onChange={(e) => { setIndustryPositioning(e.target.value); debouncedSave(); }}
+                rows={4}
+                placeholder="Describe your brand's industry stance, differentiators, and positioning..."
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none text-sm"
+              />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Visual Style Rules"
+              expanded={expandedSections.has('visual')}
+              onToggle={() => toggleSection('visual')}
+            >
+              <TagInput
+                tags={visualStyles}
+                input={visualInput}
+                onInputChange={setVisualInput}
+                onAdd={() => addTag(visualStyles, setVisualStyles, visualInput, setVisualInput)}
+                onRemove={(i) => removeTag(visualStyles, setVisualStyles, i)}
+                placeholder='e.g. "minimalist", "dark mode", "corporate blue"'
+              />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Platform-Specific Tweaks"
+              expanded={expandedSections.has('platform')}
+              onToggle={() => toggleSection('platform')}
+            >
+              <div className="space-y-4">
+                {PLATFORMS.map((platform) => {
+                  const tweak = platformTweaks[platform] || {};
+                  return (
+                    <div key={platform} className="space-y-2">
+                      <label className="text-sm font-medium text-slate-300">{PLATFORM_LABELS[platform]}</label>
+                      <textarea
+                        value={tweak.additional_rules || ''}
+                        onChange={(e) => {
+                          setPlatformTweaks(prev => ({
+                            ...prev,
+                            [platform]: { ...prev[platform], additional_rules: e.target.value },
+                          }));
+                          debouncedSave();
+                        }}
+                        rows={2}
+                        placeholder={`Custom rules for ${PLATFORM_LABELS[platform]}...`}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none text-sm"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </CollapsibleSection>
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end pt-2">
         <button
           onClick={saveGuidelines}
           disabled={saving}

@@ -132,7 +132,7 @@ Deno.serve(async (req: Request) => {
     const { data: guidelines } = await supabase
       .from("social_guidelines")
       .select(
-        "tone_preferences, words_to_avoid, hashtag_preferences, platform_tweaks, industry_positioning"
+        "content_themes, image_style, writing_style, tone_preferences, words_to_avoid, hashtag_preferences, platform_tweaks, industry_positioning"
       )
       .eq("organization_id", orgId)
       .limit(5);
@@ -377,7 +377,17 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
             }
 
             const rawPrompt = draft.visual_style_suggestion!;
-            const finalPrompt = buildStructuredPrompt(rawPrompt, draftPreset);
+            let enrichedPrompt = rawPrompt;
+            const imgStyleBlocks = (guidelines || [])
+              .map((g: Record<string, unknown>) =>
+                formatBlocks(g.image_style as Array<{ content: string }> | null)
+              )
+              .filter((s: string) => s.length > 0)
+              .join("\n");
+            if (imgStyleBlocks) {
+              enrichedPrompt = `${rawPrompt}\n\nImage style guidelines: ${imgStyleBlocks}`;
+            }
+            const finalPrompt = buildStructuredPrompt(enrichedPrompt, draftPreset);
 
             const modelKey = model.model_key as string;
             const isVeo = modelKey.startsWith("google/veo-");
@@ -511,27 +521,76 @@ function json(body: unknown, status = 200) {
   });
 }
 
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li>/gi, "- ")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function formatBlocks(
+  blocks: Array<{ content: string }> | null | undefined
+): string {
+  if (!blocks || !Array.isArray(blocks) || blocks.length === 0) return "";
+  return blocks
+    .map((b) => stripHtml(b.content || ""))
+    .filter((t) => t.length > 0)
+    .join("\n\n");
+}
+
 function buildGuidelinesSummary(
   guidelines: Record<string, unknown>[]
 ): string {
   if (!guidelines.length) return "";
 
-  const parts: string[] = [];
+  const sections: string[] = [];
+
   for (const g of guidelines) {
+    const contentThemes = formatBlocks(
+      g.content_themes as Array<{ content: string }> | null
+    );
+    const imageStyleBlocks = formatBlocks(
+      g.image_style as Array<{ content: string }> | null
+    );
+    const writingStyleBlocks = formatBlocks(
+      g.writing_style as Array<{ content: string }> | null
+    );
+
+    if (contentThemes) {
+      sections.push(`Content Themes:\n${contentThemes}`);
+    }
+    if (imageStyleBlocks) {
+      sections.push(`Image Style Guidelines:\n${imageStyleBlocks}`);
+    }
+    if (writingStyleBlocks) {
+      sections.push(`Writing Style Guidelines:\n${writingStyleBlocks}`);
+    }
+
     const tone = g.tone_preferences as Record<string, unknown> | null;
     const avoid = g.words_to_avoid as string[] | null;
     const hashtags = g.hashtag_preferences as Record<string, unknown> | null;
     const positioning = g.industry_positioning as string | null;
     const tweaks = g.platform_tweaks as Record<string, unknown> | null;
 
-    if (tone) parts.push(`Tone: ${JSON.stringify(tone)}`);
-    if (avoid?.length) parts.push(`Words to avoid: ${avoid.join(", ")}`);
-    if (hashtags) parts.push(`Hashtag prefs: ${JSON.stringify(hashtags)}`);
-    if (positioning) parts.push(`Industry: ${positioning}`);
-    if (tweaks) parts.push(`Platform tweaks: ${JSON.stringify(tweaks)}`);
+    if (tone) sections.push(`Tone: ${JSON.stringify(tone)}`);
+    if (avoid?.length) sections.push(`Words to avoid: ${avoid.join(", ")}`);
+    if (hashtags) sections.push(`Hashtag prefs: ${JSON.stringify(hashtags)}`);
+    if (positioning) sections.push(`Industry: ${positioning}`);
+    if (tweaks) sections.push(`Platform tweaks: ${JSON.stringify(tweaks)}`);
   }
 
-  return parts.length > 0 ? `\nGuidelines: ${parts.join("; ")}` : "";
+  return sections.length > 0
+    ? `\nGuidelines:\n${sections.join("\n\n")}`
+    : "";
 }
 
 async function callOpenAI(
