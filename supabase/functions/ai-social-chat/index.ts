@@ -2,11 +2,13 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   generateTextToVideo,
-  generateImageToVideo,
   generateTextToImage,
 } from "../_shared/kieAdapter.ts";
 import { getRequiredAspectRatio } from "../_shared/platformAspectMatrix.ts";
-import { buildStructuredPrompt, buildLLMStyleContext } from "../_shared/promptBuilder.ts";
+import {
+  buildStructuredPrompt,
+  buildLLMStyleContext,
+} from "../_shared/promptBuilder.ts";
 import type { StylePreset } from "../_shared/promptBuilder.ts";
 
 const corsHeaders = {
@@ -30,7 +32,9 @@ interface ChatRequest {
 
 interface DraftOutput {
   platform: string;
-  content: string;
+  body: string;
+  hook_text?: string;
+  cta_text?: string;
   media_type?: string;
   visual_style_suggestion?: string;
   style_preset?: string;
@@ -43,10 +47,7 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ success: false, error: "Method not allowed" }),
-      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return json({ error: "Method not allowed" }, 405);
   }
 
   try {
@@ -64,22 +65,25 @@ Deno.serve(async (req: Request) => {
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return jsonResponse({ success: false, error: "Authorization required" }, 401);
+      return json({ error: "Authorization required" }, 401);
     }
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
+    const {
+      data: { user },
+      error: authError,
+    } = await anonClient.auth.getUser(token);
     if (authError || !user) {
-      return jsonResponse({ success: false, error: "Invalid token" }, 401);
+      return json({ error: "Invalid token" }, 401);
     }
 
     const { data: userData } = await supabase
       .from("users")
-      .select("id, organization_id, role_id")
+      .select("id, organization_id")
       .eq("id", user.id)
       .maybeSingle();
     if (!userData) {
-      return jsonResponse({ success: false, error: "User not found" }, 404);
+      return json({ error: "User not found" }, 404);
     }
 
     const orgId = userData.organization_id;
@@ -98,30 +102,22 @@ Deno.serve(async (req: Request) => {
     } = body;
 
     if (!thread_id || !content) {
-      return jsonResponse({ success: false, error: "thread_id and content are required" }, 400);
+      return json({ error: "thread_id and content are required" }, 400);
     }
 
     const { data: thread } = await supabase
-      .from("social_chat_threads")
+      .from("social_ai_threads")
       .select("id, organization_id")
       .eq("id", thread_id)
       .eq("organization_id", orgId)
       .maybeSingle();
 
     if (!thread) {
-      return jsonResponse({ success: false, error: "Thread not found" }, 404);
+      return json({ error: "Thread not found" }, 404);
     }
 
-    await supabase.from("social_chat_messages").insert({
-      thread_id,
-      role: "user",
-      content,
-      message_type,
-      attachments,
-    });
-
     const { data: history } = await supabase
-      .from("social_chat_messages")
+      .from("social_ai_messages")
       .select("role, content, message_type, attachments")
       .eq("thread_id", thread_id)
       .order("created_at", { ascending: true })
@@ -129,15 +125,17 @@ Deno.serve(async (req: Request) => {
 
     const { data: accounts } = await supabase
       .from("social_accounts")
-      .select("platform, account_name")
+      .select("provider, display_name")
       .eq("organization_id", orgId)
       .eq("status", "connected");
 
     const { data: guidelines } = await supabase
       .from("social_guidelines")
-      .select("platform, tone, topics_to_avoid, hashtag_rules, content_rules")
+      .select(
+        "tone_preferences, words_to_avoid, hashtag_preferences, platform_tweaks, industry_positioning"
+      )
       .eq("organization_id", orgId)
-      .limit(10);
+      .limit(5);
 
     const { data: stylePresets } = await supabase
       .from("media_style_presets")
@@ -147,20 +145,27 @@ Deno.serve(async (req: Request) => {
 
     let selectedPreset: StylePreset | null = null;
     if (style_preset_id) {
-      selectedPreset = (stylePresets || []).find((p: StylePreset) => p.id === style_preset_id) || null;
+      selectedPreset =
+        (stylePresets || []).find(
+          (p: StylePreset) => p.id === style_preset_id
+        ) || null;
     }
 
     const styleContext = buildLLMStyleContext(stylePresets || []);
 
-    const connectedPlatforms = (accounts || []).map((a: Record<string, unknown>) => a.platform).join(", ");
-    const guidelinesSummary = (guidelines || [])
-      .map((g: Record<string, unknown>) => `${g.platform}: tone=${g.tone || "professional"}, avoid=${g.topics_to_avoid || "none"}`)
-      .join("; ");
+    const connectedPlatforms = (accounts || [])
+      .map(
+        (a: Record<string, unknown>) =>
+          `${a.provider} (${a.display_name || "unnamed"})`
+      )
+      .join(", ");
+
+    const guidelinesSummary = buildGuidelinesSummary(guidelines || []);
 
     const systemPrompt = `You are an expert AI social media strategist. You help create engaging social media content.
 
 Connected platforms: ${connectedPlatforms || "none yet"}
-Guidelines: ${guidelinesSummary || "none set"}
+${guidelinesSummary}
 ${styleContext}
 
 When the user asks you to create a post, respond with:
@@ -168,8 +173,10 @@ When the user asks you to create a post, respond with:
 2. One or more draft posts as JSON in a code block tagged \`\`\`drafts
 
 Each draft should be a JSON array of objects with these fields:
-- platform: the target platform
-- content: the post text with hashtags
+- platform: the target platform (e.g. "instagram", "facebook", "linkedin", "tiktok", "twitter")
+- body: the main post text
+- hook_text: an attention-grabbing opening line
+- cta_text: a call-to-action line
 - media_type: "image", "video", or "none"
 - visual_style_suggestion: a detailed prompt for generating the media (describe the visual in detail)
 - style_preset: name of a style preset to use (optional)
@@ -177,7 +184,7 @@ Each draft should be a JSON array of objects with these fields:
 
 Example:
 \`\`\`drafts
-[{"platform":"instagram","content":"Check out...","media_type":"image","visual_style_suggestion":"A vibrant flat-lay photo of...","hashtags":["#tech","#innovation"]}]
+[{"platform":"instagram","body":"Check out our latest...","hook_text":"Stop scrolling!","cta_text":"Link in bio","media_type":"image","visual_style_suggestion":"A vibrant flat-lay photo of...","hashtags":["#tech","#innovation"]}]
 \`\`\`
 
 Always provide visual_style_suggestion when media_type is "image" or "video".
@@ -192,62 +199,57 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
       })),
     ];
 
-    const { data: aiSettings } = await supabase
-      .from("ai_settings")
-      .select("provider, model, api_key_encrypted")
-      .eq("organization_id", orgId)
-      .eq("feature", "social_chat")
+    const { data: llmProvider } = await supabase
+      .from("llm_providers")
+      .select("provider, api_key_encrypted, base_url")
+      .eq("org_id", orgId)
+      .eq("enabled", true)
+      .order("created_at", { ascending: true })
+      .limit(1)
       .maybeSingle();
 
     let apiKey = openaiKey;
-    let model = "gpt-4o";
+    let modelName = "gpt-4o";
     let apiUrl = "https://api.openai.com/v1/chat/completions";
+    let modelUsed = "gpt-4o";
 
-    if (aiSettings) {
-      if (aiSettings.api_key_encrypted) {
-        apiKey = aiSettings.api_key_encrypted;
-      }
-      if (aiSettings.model) model = aiSettings.model;
-      if (aiSettings.provider === "anthropic") {
-        apiUrl = "https://api.anthropic.com/v1/messages";
+    if (llmProvider?.api_key_encrypted) {
+      apiKey = llmProvider.api_key_encrypted;
+      if (llmProvider.provider === "anthropic") {
+        apiUrl =
+          llmProvider.base_url ||
+          "https://api.anthropic.com/v1/messages";
+        modelName = "claude-sonnet-4-20250514";
+        modelUsed = modelName;
+      } else if (llmProvider.base_url) {
+        apiUrl = llmProvider.base_url;
       }
     }
 
     if (!apiKey) {
-      return jsonResponse({ success: false, error: "No AI API key configured" }, 500);
+      return json({ error: "No AI API key configured" }, 500);
     }
 
-    const llmResponse = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: 0.7,
-        max_tokens: 2000,
-      }),
-    });
+    let assistantContent: string;
 
-    if (!llmResponse.ok) {
-      const errText = await llmResponse.text();
-      console.error("[ai-social-chat] LLM error:", errText);
-      return jsonResponse({ success: false, error: "AI generation failed" }, 502);
+    if (
+      llmProvider?.provider === "anthropic" &&
+      llmProvider.api_key_encrypted
+    ) {
+      assistantContent = await callAnthropic(
+        apiUrl,
+        llmProvider.api_key_encrypted,
+        modelName,
+        messages
+      );
+    } else {
+      assistantContent = await callOpenAI(apiUrl, apiKey!, modelName, messages);
     }
-
-    const llmData = await llmResponse.json();
-    const assistantContent = llmData.choices?.[0]?.message?.content || "";
-
-    await supabase.from("social_chat_messages").insert({
-      thread_id,
-      role: "assistant",
-      content: assistantContent,
-    });
 
     let drafts: DraftOutput[] = [];
-    const draftMatch = assistantContent.match(/```drafts\s*\n?([\s\S]*?)\n?```/);
+    const draftMatch = assistantContent.match(
+      /```drafts\s*\n?([\s\S]*?)\n?```/
+    );
     if (draftMatch) {
       try {
         drafts = JSON.parse(draftMatch[1]);
@@ -256,45 +258,28 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
       }
     }
 
-    const savedDrafts: Record<string, unknown>[] = [];
-    for (const draft of drafts) {
-      const { data: saved } = await supabase
-        .from("social_post_drafts")
-        .insert({
-          organization_id: orgId,
-          created_by: user.id,
-          thread_id,
-          platform: draft.platform,
-          content: draft.content,
-          media_type: draft.media_type || "none",
-          visual_style_suggestion: draft.visual_style_suggestion || null,
-          hashtags: draft.hashtags || [],
-          status: "draft",
-        })
-        .select()
-        .single();
-      if (saved) savedDrafts.push(saved);
-    }
+    const cleanContent = assistantContent.replace(
+      /```drafts\s*\n?[\s\S]*?\n?```/g,
+      ""
+    ).trim();
 
     const mediaJobs: Record<string, unknown>[] = [];
     let mediaSkippedReason: string | null = null;
 
     if (auto_generate_media) {
       const kieApiKey = Deno.env.get("KIE_API_KEY");
-      if (!kieApiKey) {
-        const hasMediaDrafts = drafts.some(
-          (d) => d.media_type && d.media_type !== "none" && d.visual_style_suggestion
-        );
-        if (hasMediaDrafts) {
-          mediaSkippedReason = "KIE_API_KEY not configured";
-          console.warn("[ai-social-chat] KIE_API_KEY missing – skipping media generation");
-        }
-      }
-      if (kieApiKey) {
-        const mediaDrafts = drafts.filter(
-          (d) => d.media_type && d.media_type !== "none" && d.visual_style_suggestion
-        );
+      const mediaDrafts = drafts.filter(
+        (d) =>
+          d.media_type &&
+          d.media_type !== "none" &&
+          d.visual_style_suggestion
+      );
 
+      if (!kieApiKey && mediaDrafts.length > 0) {
+        mediaSkippedReason = "KIE_API_KEY not configured";
+      }
+
+      if (kieApiKey && mediaDrafts.length > 0) {
         for (let i = 0; i < mediaDrafts.length; i++) {
           const draft = mediaDrafts[i];
           const draftIndex = drafts.indexOf(draft);
@@ -327,13 +312,29 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
               model = recommended;
             }
 
+            if (!model) {
+              const { data: anyEnabled } = await supabase
+                .from("kie_models")
+                .select("*")
+                .eq("type", isVideo ? "video" : "image")
+                .eq("enabled", true)
+                .order("display_priority", { ascending: true })
+                .limit(1)
+                .maybeSingle();
+              model = anyEnabled;
+            }
+
             if (!model) continue;
 
-            const effectiveAspect = aspect_ratio || getRequiredAspectRatio(draft.platform);
+            const effectiveAspect =
+              aspect_ratio || getRequiredAspectRatio(draft.platform);
 
             let draftPreset = selectedPreset;
             if (!draftPreset && draft.style_preset) {
-              draftPreset = (stylePresets || []).find((p: StylePreset) => p.name === draft.style_preset) || null;
+              draftPreset =
+                (stylePresets || []).find(
+                  (p: StylePreset) => p.name === draft.style_preset
+                ) || null;
             }
 
             const rawPrompt = draft.visual_style_suggestion!;
@@ -342,9 +343,18 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
             const modelKey = model.model_key as string;
             const isVeo = modelKey.startsWith("google/veo-");
             const webhookUrl = `${supabaseUrl}/functions/v1/media-kie-webhook`;
-            const endpointOverride = model.api_endpoint_override as string | null;
+            const endpointOverride =
+              (model.api_endpoint_override as string) || null;
 
             const jobType = isVideo ? "text_to_video" : "text_to_image";
+
+            const supportedDurations = model.supports_durations as
+              | number[]
+              | null;
+            const defaultDuration =
+              supportedDurations && supportedDurations.length > 0
+                ? supportedDurations[0]
+                : 5;
 
             const { data: job, error: jobErr } = await supabase
               .from("media_generation_jobs")
@@ -355,7 +365,7 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
                 prompt: finalPrompt,
                 params: {
                   aspect_ratio: effectiveAspect,
-                  ...(isVideo ? { duration: (model as Record<string, unknown>).supports_durations?.[0] || 5 } : {}),
+                  ...(isVideo ? { duration: defaultDuration } : {}),
                 },
                 status: "waiting",
                 job_type: jobType,
@@ -374,11 +384,13 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
                 {
                   prompt: finalPrompt,
                   aspectRatio: effectiveAspect,
-                  duration: (model as Record<string, unknown>).supports_durations?.[0] as number || 8,
+                  duration: defaultDuration,
                   callbackUrl: webhookUrl,
                   model: isVeo ? undefined : modelKey,
                 },
-                isVeo ? (endpointOverride || undefined) : undefined
+                isVeo
+                  ? endpointOverride || undefined
+                  : undefined
               );
             } else {
               kieResult = await generateTextToImage(kieApiKey, {
@@ -393,7 +405,10 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
             if (kieResult.success && kieResult.taskId) {
               await supabase
                 .from("media_generation_jobs")
-                .update({ kie_task_id: kieResult.taskId, status: "queuing" })
+                .update({
+                  kie_task_id: kieResult.taskId,
+                  status: "queuing",
+                })
                 .eq("id", job.id);
 
               mediaJobs.push({
@@ -416,33 +431,125 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
                 .eq("id", job.id);
             }
           } catch (mediaErr) {
-            console.error("Media generation error for draft:", mediaErr);
+            console.error(
+              "[ai-social-chat] Media generation error for draft:",
+              mediaErr
+            );
           }
         }
       }
     }
 
-    return jsonResponse({
-      success: true,
-      data: {
-        message: assistantContent,
-        drafts: savedDrafts,
-        media_jobs: mediaJobs,
-        media_skipped_reason: mediaSkippedReason,
-      },
+    return json({
+      response: cleanContent,
+      drafts,
+      media_jobs: mediaJobs,
+      media_skipped_reason: mediaSkippedReason,
+      model_used: modelUsed,
     });
   } catch (err) {
     console.error("[ai-social-chat] Error:", err);
-    return jsonResponse(
-      { success: false, error: err instanceof Error ? err.message : "Unexpected error" },
+    return json(
+      {
+        error: err instanceof Error ? err.message : "Unexpected error",
+      },
       500
     );
   }
 });
 
-function jsonResponse(body: unknown, status = 200) {
+function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+function buildGuidelinesSummary(
+  guidelines: Record<string, unknown>[]
+): string {
+  if (!guidelines.length) return "";
+
+  const parts: string[] = [];
+  for (const g of guidelines) {
+    const tone = g.tone_preferences as Record<string, unknown> | null;
+    const avoid = g.words_to_avoid as string[] | null;
+    const hashtags = g.hashtag_preferences as Record<string, unknown> | null;
+    const positioning = g.industry_positioning as string | null;
+    const tweaks = g.platform_tweaks as Record<string, unknown> | null;
+
+    if (tone) parts.push(`Tone: ${JSON.stringify(tone)}`);
+    if (avoid?.length) parts.push(`Words to avoid: ${avoid.join(", ")}`);
+    if (hashtags) parts.push(`Hashtag prefs: ${JSON.stringify(hashtags)}`);
+    if (positioning) parts.push(`Industry: ${positioning}`);
+    if (tweaks) parts.push(`Platform tweaks: ${JSON.stringify(tweaks)}`);
+  }
+
+  return parts.length > 0 ? `\nGuidelines: ${parts.join("; ")}` : "";
+}
+
+async function callOpenAI(
+  apiUrl: string,
+  apiKey: string,
+  model: string,
+  messages: Array<{ role: string; content: string }>
+): Promise<string> {
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0.7,
+      max_tokens: 2000,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error("[ai-social-chat] OpenAI error:", errText);
+    throw new Error("AI generation failed");
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || "";
+}
+
+async function callAnthropic(
+  apiUrl: string,
+  apiKey: string,
+  model: string,
+  messages: Array<{ role: string; content: string }>
+): Promise<string> {
+  const systemMsg = messages.find((m) => m.role === "system");
+  const chatMessages = messages
+    .filter((m) => m.role !== "system")
+    .map((m) => ({ role: m.role, content: m.content }));
+
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 2000,
+      system: systemMsg?.content || "",
+      messages: chatMessages,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error("[ai-social-chat] Anthropic error:", errText);
+    throw new Error("AI generation failed");
+  }
+
+  const data = await response.json();
+  return data.content?.[0]?.text || "";
 }
