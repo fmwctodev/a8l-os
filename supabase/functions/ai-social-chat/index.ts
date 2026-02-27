@@ -475,14 +475,25 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
                 draft_index: draftIndex,
               });
             } else {
+              const errMsg = kieResult.error || "Kie API error";
               await supabase
                 .from("media_generation_jobs")
                 .update({
                   status: "fail",
-                  error_message: kieResult.error || "Kie API error",
+                  error_message: errMsg,
                   completed_at: new Date().toISOString(),
                 })
                 .eq("id", job.id);
+
+              mediaJobs.push({
+                job_id: job.id,
+                model_id: model.id as string,
+                model_name: model.display_name as string,
+                media_type: draft.media_type!,
+                prompt: finalPrompt,
+                status: "fail",
+                draft_index: draftIndex,
+              });
             }
           } catch (mediaErr) {
             console.error(

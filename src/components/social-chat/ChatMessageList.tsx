@@ -1,8 +1,11 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import {
   BrainCircuit,
   User,
+  Loader2,
+  Image as ImageIcon,
 } from 'lucide-react';
+import { isJobActive } from '../../services/mediaGeneration';
 import { PostDraftCard } from './PostDraftCard';
 import { ChatMediaTracker } from './ChatMediaTracker';
 import type { SocialAIMessage } from '../../types';
@@ -28,6 +31,7 @@ interface ChatMessageListProps {
     scheduledAt?: string
   ) => void;
   onMediaAssetReady: (draftIndex: number, assets: MediaAsset[]) => void;
+  onMediaJobStatusChange: (jobId: string, newStatus: string) => void;
   onSendPrompt: (prompt: string) => void;
 }
 
@@ -40,13 +44,18 @@ export function ChatMessageList({
   publishStatuses,
   onPublishDraft,
   onMediaAssetReady,
+  onMediaJobStatusChange,
   onSendPrompt,
 }: ChatMessageListProps) {
   const endRef = useRef<HTMLDivElement>(null);
+  const hasActiveMediaJobs = useMemo(
+    () => activeMediaJobs.some((j) => isJobActive(j.status)),
+    [activeMediaJobs]
+  );
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
+  }, [messages, isTyping, hasActiveMediaJobs]);
 
   if (messages.length === 0 && !isTyping) {
     return (
@@ -115,6 +124,7 @@ export function ChatMessageList({
                 <ChatMediaTracker
                   jobs={msgMediaJobs}
                   onAssetReady={onMediaAssetReady}
+                  onJobStatusChange={onMediaJobStatusChange}
                 />
               )}
 
@@ -173,6 +183,21 @@ export function ChatMessageList({
               <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
               <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
               <div className="w-2 h-2 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isTyping && hasActiveMediaJobs && (
+        <div className="flex gap-3">
+          <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center flex-shrink-0">
+            <BrainCircuit className="w-4 h-4 text-cyan-400" />
+          </div>
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl rounded-tl-md px-4 py-3">
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              <Loader2 className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
+              <ImageIcon className="w-3.5 h-3.5 text-slate-500" />
+              <span>Generating media...</span>
             </div>
           </div>
         </div>

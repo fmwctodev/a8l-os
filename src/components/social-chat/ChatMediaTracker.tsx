@@ -22,16 +22,19 @@ interface TrackedJob extends MediaJobInfo {
 interface ChatMediaTrackerProps {
   jobs: MediaJobInfo[];
   onAssetReady: (draftIndex: number, assets: MediaAsset[]) => void;
+  onJobStatusChange?: (jobId: string, newStatus: string) => void;
   onRetry?: (job: MediaJobInfo) => void;
 }
 
-export function ChatMediaTracker({ jobs, onAssetReady, onRetry }: ChatMediaTrackerProps) {
+export function ChatMediaTracker({ jobs, onAssetReady, onJobStatusChange, onRetry }: ChatMediaTrackerProps) {
   const [trackedJobs, setTrackedJobs] = useState<TrackedJob[]>(() =>
     jobs.map(j => ({ ...j, currentStatus: j.status, assets: [] }))
   );
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onAssetReadyRef = useRef(onAssetReady);
   onAssetReadyRef.current = onAssetReady;
+  const onJobStatusChangeRef = useRef(onJobStatusChange);
+  onJobStatusChangeRef.current = onJobStatusChange;
 
   const pollJobs = useCallback(async () => {
     const activeJobs = trackedJobs.filter(j => isJobActive(j.currentStatus));
@@ -60,6 +63,8 @@ export function ChatMediaTracker({ jobs, onAssetReady, onRetry }: ChatMediaTrack
             assets: result.assets || [],
             error: result.job.error_message || undefined,
           };
+
+          onJobStatusChangeRef.current?.(job.job_id, result.job.status);
 
           if (result.job.status === 'success' && result.assets?.length > 0) {
             onAssetReadyRef.current(updates[idx].draft_index, result.assets);

@@ -245,6 +245,15 @@ export function SocialChat() {
     []
   );
 
+  const handleMediaJobStatusChange = useCallback(
+    (jobId: string, newStatus: string) => {
+      setActiveMediaJobs((prev) =>
+        prev.map((j) => (j.job_id === jobId ? { ...j, status: newStatus } : j))
+      );
+    },
+    []
+  );
+
   async function handleArchiveThread(threadId: string) {
     try {
       await archiveThread(threadId);
@@ -300,6 +309,7 @@ export function SocialChat() {
           publishStatuses={publishStatuses}
           onPublishDraft={handlePublishDraft}
           onMediaAssetReady={handleMediaAssetReady}
+          onMediaJobStatusChange={handleMediaJobStatusChange}
           onSendPrompt={handleSendPrompt}
         />
         <ChatMediaSettings
