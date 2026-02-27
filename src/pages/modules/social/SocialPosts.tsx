@@ -16,6 +16,7 @@ import {
   Youtube,
   MapPin,
   Music2,
+  MessageSquare,
   MoreVertical,
   Copy,
   Trash2,
@@ -36,6 +37,7 @@ const PROVIDER_ICONS: Record<SocialProvider, React.ElementType> = {
   google_business: MapPin,
   tiktok: Music2,
   youtube: Youtube,
+  reddit: MessageSquare,
 };
 
 const STATUS_TABS: { value: SocialPostStatus | 'all'; label: string }[] = [

@@ -1829,7 +1829,7 @@ export interface SurveySubmission {
   contact?: Contact | null;
 }
 
-export type SocialProvider = 'facebook' | 'instagram' | 'linkedin' | 'google_business' | 'tiktok' | 'youtube';
+export type SocialProvider = 'facebook' | 'instagram' | 'linkedin' | 'google_business' | 'tiktok' | 'youtube' | 'reddit';
 export type SocialAccountType = 'page' | 'profile' | 'channel' | 'location' | 'business';
 export type SocialAccountStatus = 'connected' | 'disconnected' | 'error' | 'token_expiring';
 export type SocialPostStatus = 'draft' | 'pending_approval' | 'scheduled' | 'queued' | 'posting' | 'posted' | 'failed' | 'cancelled' | 'denied';
@@ -1841,6 +1841,7 @@ export interface SocialAccount {
   provider: SocialProvider;
   external_account_id: string;
   unipile_account_id: string | null;
+  late_account_id: string | null;
   display_name: string;
   profile_image_url: string | null;
   access_token_encrypted: string | null;
@@ -1909,6 +1910,9 @@ export interface SocialPost {
   link_preview: SocialPostLinkPreview | null;
   ai_generated: boolean;
   ai_generation_id: string | null;
+  late_post_id: string | null;
+  late_status: string | null;
+  late_response: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
   created_by_user?: User | null;

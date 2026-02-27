@@ -105,6 +105,12 @@ const PLATFORM_CONFIG: Record<
     bg: 'bg-emerald-600',
     label: 'Google Business',
   },
+  reddit: {
+    icon: Globe,
+    color: 'text-orange-400',
+    bg: 'bg-orange-600',
+    label: 'Reddit',
+  },
   all: {
     icon: FileText,
     color: 'text-cyan-400',
@@ -121,6 +127,7 @@ const CHAR_LIMITS: Record<string, number> = {
   tiktok: 2200,
   youtube: 5000,
   google_business: 1500,
+  reddit: 40000,
   all: 2200,
 };
 

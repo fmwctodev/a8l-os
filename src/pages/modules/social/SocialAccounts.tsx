@@ -11,6 +11,7 @@ import {
   Youtube,
   MapPin,
   Music2,
+  MessageSquare,
   Link2,
   Loader2,
   X,
@@ -20,8 +21,8 @@ import { useAuth } from '../../../contexts/AuthContext';
 import {
   getSocialAccounts,
   disconnectSocialAccount,
-  connectViaUnipile,
-  reconnectViaUnipile,
+  connectViaLate,
+  reconnectViaLate,
   getProviderDisplayName,
   getProviderColor,
 } from '../../../services/socialAccounts';
@@ -34,10 +35,11 @@ const PROVIDER_ICONS: Record<SocialProvider, React.ElementType> = {
   google_business: MapPin,
   tiktok: Music2,
   youtube: Youtube,
+  reddit: MessageSquare,
 };
 
 const PROVIDERS: SocialProvider[] = [
-  'facebook', 'instagram', 'linkedin', 'google_business', 'tiktok', 'youtube',
+  'facebook', 'instagram', 'linkedin', 'google_business', 'tiktok', 'youtube', 'reddit',
 ];
 
 export function SocialAccounts() {
@@ -70,7 +72,7 @@ export function SocialAccounts() {
     try {
       setConnectingProvider(provider);
       setConnectError(null);
-      const { url } = await connectViaUnipile(provider);
+      const { url } = await connectViaLate(provider);
       window.location.href = url;
     } catch (error) {
       console.error('Failed to start connection:', error);
@@ -82,7 +84,7 @@ export function SocialAccounts() {
   async function handleReconnect(account: SocialAccount) {
     try {
       setReconnectingId(account.id);
-      const { url } = await reconnectViaUnipile(account.id, account.provider);
+      const { url } = await reconnectViaLate(account.id, account.provider);
       window.location.href = url;
     } catch (error) {
       console.error('Failed to start reconnection:', error);

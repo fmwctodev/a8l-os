@@ -8,6 +8,7 @@ import {
   Youtube,
   MapPin,
   Music2,
+  MessageSquare,
 } from 'lucide-react';
 import type {
   SocialProvider,
@@ -28,6 +29,7 @@ const PROVIDER_ICONS: Record<SocialProvider, React.ElementType> = {
   google_business: MapPin,
   tiktok: Music2,
   youtube: Youtube,
+  reddit: MessageSquare,
 };
 
 const GBP_POST_TYPES: { value: GoogleBusinessPostType; label: string }[] = [

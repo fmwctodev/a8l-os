@@ -8,13 +8,16 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+const LATE_API_BASE = "https://api.getlate.dev/api/v1";
+
 type SocialProvider =
   | "facebook"
   | "instagram"
   | "linkedin"
   | "google_business"
   | "tiktok"
-  | "youtube";
+  | "youtube"
+  | "reddit";
 
 interface SocialAccount {
   id: string;
@@ -25,6 +28,7 @@ interface SocialAccount {
   refresh_token_encrypted: string | null;
   token_expiry: string | null;
   token_meta: Record<string, unknown>;
+  organization_id: string;
 }
 
 interface SocialPost {
@@ -36,6 +40,7 @@ interface SocialPost {
   status: string;
   attempt_count: number;
   scheduled_at_utc: string | null;
+  scheduled_timezone: string;
   platform_options?: Record<string, Record<string, unknown>>;
   customized_per_channel?: boolean;
 }
@@ -44,7 +49,7 @@ interface PublishResult {
   success: boolean;
   postId?: string;
   error?: string;
-  unipileResponse?: Record<string, unknown>;
+  lateResponse?: Record<string, unknown>;
 }
 
 const MAX_ATTEMPTS = 3;
@@ -56,6 +61,17 @@ const CHARACTER_LIMITS: Record<string, number> = {
   google_business: 1500,
   tiktok: 2200,
   youtube: 5000,
+  reddit: 40000,
+};
+
+const PROVIDER_TO_LATE_PLATFORM: Record<string, string> = {
+  facebook: "facebook",
+  instagram: "instagram",
+  linkedin: "linkedin",
+  google_business: "googlebusiness",
+  tiktok: "tiktok",
+  youtube: "youtube",
+  reddit: "reddit",
 };
 
 function validatePlatformConstraints(
@@ -112,87 +128,130 @@ function preparePostText(provider: SocialProvider, text: string): string {
   return text;
 }
 
-async function publishViaUnipile(
-  unipileDsn: string,
-  unipileApiKey: string,
+async function resolveLateAccountId(
+  supabase: SupabaseClient,
+  account: SocialAccount
+): Promise<string | null> {
+  const lateId = account.token_meta?.late_account_id as string;
+  if (lateId) return lateId;
+
+  const { data: lateConn } = await supabase
+    .from("late_connections")
+    .select("late_account_id")
+    .eq("org_id", account.organization_id)
+    .eq("platform", account.provider)
+    .eq("status", "connected")
+    .limit(1)
+    .maybeSingle();
+
+  return lateConn?.late_account_id || null;
+}
+
+async function publishViaLate(
+  lateApiKey: string,
+  supabase: SupabaseClient,
   account: SocialAccount,
   post: SocialPost
 ): Promise<PublishResult> {
   try {
-    if (!account.unipile_account_id) {
+    const lateAccountId = await resolveLateAccountId(supabase, account);
+
+    if (!lateAccountId) {
       return {
         success: false,
-        error: "Account not connected via Unipile (missing unipile_account_id)",
+        error:
+          "Account not connected via Late.dev (missing late_account_id)",
       };
     }
 
     const text = preparePostText(account.provider, post.body);
+    const latePlatform = PROVIDER_TO_LATE_PLATFORM[account.provider];
 
-    const unipileBody: Record<string, unknown> = {
-      account_id: account.unipile_account_id,
-      text,
+    if (!latePlatform) {
+      return {
+        success: false,
+        error: `Unsupported platform for Late.dev: ${account.provider}`,
+      };
+    }
+
+    const latePayload: Record<string, unknown> = {
+      content: text,
+      publishNow: true,
+      platforms: [
+        {
+          platform: latePlatform,
+          accountId: lateAccountId,
+        },
+      ],
     };
 
+    if (post.scheduled_at_utc && post.status === "scheduled") {
+      latePayload.publishNow = false;
+      latePayload.scheduledFor = post.scheduled_at_utc;
+      if (post.scheduled_timezone) {
+        latePayload.timezone = post.scheduled_timezone;
+      }
+    }
+
     if (post.media && post.media.length > 0) {
-      unipileBody.media = post.media
+      latePayload.media = post.media
         .filter((m) => m.url)
-        .map((m) => ({ url: m.url }));
+        .map((m) => ({ url: m.url, type: m.type }));
     }
 
     console.log(
-      `[social-worker] Publishing to ${account.provider} via Unipile account ${account.unipile_account_id}`
+      `[social-worker] Publishing to ${account.provider} via Late.dev account ${lateAccountId}`
     );
 
-    const response = await fetch(`${unipileDsn}/api/v1/posts`, {
+    const response = await fetch(`${LATE_API_BASE}/posts`, {
       method: "POST",
       headers: {
-        "X-API-KEY": unipileApiKey,
+        Authorization: `Bearer ${lateApiKey}`,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify(unipileBody),
+      body: JSON.stringify(latePayload),
     });
 
     const responseData = await response.json().catch(() => ({}));
 
     if (!response.ok) {
       const errorMessage =
-        responseData.error?.message ||
-        responseData.message ||
-        responseData.title ||
-        `Unipile API error (${response.status})`;
+        (responseData as Record<string, unknown>).error ||
+        (responseData as Record<string, unknown>).message ||
+        `Late.dev API error (${response.status})`;
       console.error(
-        `[social-worker] Unipile publish failed for ${account.provider}:`,
+        `[social-worker] Late.dev publish failed for ${account.provider}:`,
         response.status,
         JSON.stringify(responseData)
       );
       return {
         success: false,
-        error: errorMessage,
-        unipileResponse: responseData,
+        error: typeof errorMessage === "string" ? errorMessage : JSON.stringify(errorMessage),
+        lateResponse: responseData as Record<string, unknown>,
       };
     }
 
-    const externalPostId =
-      responseData.id ||
-      responseData.post_id ||
-      responseData.social_id ||
-      responseData.object_id;
+    const latePostId =
+      (responseData as Record<string, unknown>).id ||
+      (responseData as Record<string, unknown>).postId ||
+      (responseData as Record<string, unknown>).post_id;
 
     console.log(
-      `[social-worker] Published successfully to ${account.provider}, postId: ${externalPostId}`
+      `[social-worker] Published successfully to ${account.provider}, latePostId: ${latePostId}`
     );
 
     return {
       success: true,
-      postId: externalPostId || "unipile_success",
-      unipileResponse: responseData,
+      postId: (latePostId as string) || "late_success",
+      lateResponse: responseData as Record<string, unknown>,
     };
   } catch (error) {
-    console.error(`[social-worker] Unipile publish exception:`, error);
+    console.error(`[social-worker] Late.dev publish exception:`, error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Unknown publish error",
+      error:
+        error instanceof Error ? error.message : "Unknown publish error",
     };
   }
 }
@@ -215,8 +274,7 @@ async function createPostLog(
 async function processPost(
   supabase: SupabaseClient,
   post: SocialPost,
-  unipileDsn: string,
-  unipileApiKey: string
+  lateApiKey: string
 ): Promise<{ success: boolean }> {
   await supabase
     .from("social_posts")
@@ -251,9 +309,10 @@ async function processPost(
     .eq("id", post.id);
 
   const providerPostIds: Record<string, string> = {};
-  const unipileResponses: Record<string, unknown> = {};
+  const lateResponses: Record<string, unknown> = {};
   let allSucceeded = true;
   let lastError: string | undefined;
+  let latePostId: string | null = null;
 
   for (const account of accounts as SocialAccount[]) {
     const validationError = validatePlatformConstraints(
@@ -272,32 +331,35 @@ async function processPost(
 
     await createPostLog(supabase, post.id, account.id, "attempt", {
       provider: account.provider,
-      via: "unipile",
+      via: "late",
     });
 
-    const result = await publishViaUnipile(
-      unipileDsn,
-      unipileApiKey,
+    const result = await publishViaLate(
+      lateApiKey,
+      supabase,
       account,
       post
     );
 
     if (result.success && result.postId) {
       providerPostIds[account.id] = result.postId;
-      if (result.unipileResponse) {
-        unipileResponses[account.id] = result.unipileResponse;
+      if (result.lateResponse) {
+        lateResponses[account.id] = result.lateResponse;
+      }
+      if (!latePostId) {
+        latePostId = result.postId;
       }
       await createPostLog(supabase, post.id, account.id, "success", {
         provider_post_id: result.postId,
-        via: "unipile",
+        via: "late",
       });
     } else {
       allSucceeded = false;
       lastError = result.error;
       await createPostLog(supabase, post.id, account.id, "failure", {
         error: result.error,
-        via: "unipile",
-        unipile_response: result.unipileResponse,
+        via: "late",
+        late_response: result.lateResponse,
       });
     }
   }
@@ -309,14 +371,17 @@ async function processPost(
         status: "posted",
         posted_at: new Date().toISOString(),
         provider_post_ids: providerPostIds,
-        unipile_response: unipileResponses,
+        late_post_id: latePostId,
+        late_status: "published",
+        late_response: lateResponses,
         attempt_count: post.attempt_count + 1,
       })
       .eq("id", post.id);
     return { success: true };
   } else {
     const newAttemptCount = post.attempt_count + 1;
-    const newStatus = newAttemptCount >= MAX_ATTEMPTS ? "failed" : "scheduled";
+    const newStatus =
+      newAttemptCount >= MAX_ATTEMPTS ? "failed" : "scheduled";
 
     await supabase
       .from("social_posts")
@@ -325,7 +390,9 @@ async function processPost(
         last_error: lastError,
         attempt_count: newAttemptCount,
         provider_post_ids: providerPostIds,
-        unipile_response: unipileResponses,
+        late_post_id: latePostId,
+        late_status: "failed",
+        late_response: lateResponses,
       })
       .eq("id", post.id);
 
@@ -341,12 +408,11 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const unipileDsn = Deno.env.get("UNIPILE_DSN");
-    const unipileApiKey = Deno.env.get("UNIPILE_API_KEY");
+    const lateApiKey = Deno.env.get("LATE_API_KEY");
 
-    if (!unipileDsn || !unipileApiKey) {
+    if (!lateApiKey) {
       return new Response(
-        JSON.stringify({ error: "Unipile not configured" }),
+        JSON.stringify({ error: "Late.dev not configured" }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -400,13 +466,14 @@ Deno.serve(async (req: Request) => {
       const result = await processPost(
         supabase,
         post as SocialPost,
-        unipileDsn,
-        unipileApiKey
+        lateApiKey
       );
 
       return new Response(
         JSON.stringify({
-          message: result.success ? "Published successfully" : "Publish failed",
+          message: result.success
+            ? "Published successfully"
+            : "Publish failed",
           success: result.success,
           post_id: publishPostId,
         }),
@@ -451,12 +518,7 @@ Deno.serve(async (req: Request) => {
     let failureCount = 0;
 
     for (const post of duePosts as SocialPost[]) {
-      const result = await processPost(
-        supabase,
-        post,
-        unipileDsn,
-        unipileApiKey
-      );
+      const result = await processPost(supabase, post, lateApiKey);
       processedCount++;
       if (result.success) {
         successCount++;

@@ -14,6 +14,7 @@ import {
   Youtube,
   MapPin,
   Music2,
+  MessageSquare,
   Trash2,
   RefreshCw,
 } from 'lucide-react';
@@ -35,6 +36,7 @@ const PROVIDER_ICONS: Record<SocialProvider, React.ElementType> = {
   google_business: MapPin,
   tiktok: Music2,
   youtube: Youtube,
+  reddit: MessageSquare,
 };
 
 const PROVIDERS: SocialProvider[] = [
@@ -44,6 +46,7 @@ const PROVIDERS: SocialProvider[] = [
   'google_business',
   'tiktok',
   'youtube',
+  'reddit',
 ];
 
 export function SocialPlanner() {

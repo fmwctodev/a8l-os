@@ -13,6 +13,7 @@ import {
   Youtube,
   MapPin,
   Music2,
+  MessageSquare,
   Clock,
   CheckCircle,
   AlertCircle,
@@ -38,6 +39,7 @@ const PROVIDER_ICONS: Record<SocialProvider, React.ElementType> = {
   google_business: MapPin,
   tiktok: Music2,
   youtube: Youtube,
+  reddit: MessageSquare,
 };
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

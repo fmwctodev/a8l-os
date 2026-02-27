@@ -188,6 +188,7 @@ export function getProviderDisplayName(provider: SocialProvider): string {
     google_business: 'Google Business Profile',
     tiktok: 'TikTok',
     youtube: 'YouTube',
+    reddit: 'Reddit',
   };
   return names[provider];
 }
@@ -200,16 +201,17 @@ export function getProviderColor(provider: SocialProvider): string {
     google_business: '#4285F4',
     tiktok: '#000000',
     youtube: '#FF0000',
+    reddit: '#FF4500',
   };
   return colors[provider];
 }
 
-export async function connectViaUnipile(
+export async function connectViaLate(
   provider: SocialProvider,
   successRedirectUrl?: string,
   failureRedirectUrl?: string
 ): Promise<{ url: string }> {
-  const response = await callEdgeFunction('unipile-connect', {
+  const response = await callEdgeFunction('late-connect', {
     provider,
     success_redirect_url: successRedirectUrl || window.location.href,
     failure_redirect_url: failureRedirectUrl || window.location.href,
@@ -222,19 +224,13 @@ export async function connectViaUnipile(
   return json.data;
 }
 
-export async function reconnectViaUnipile(
+export async function reconnectViaLate(
   accountId: string,
   provider: SocialProvider
 ): Promise<{ url: string }> {
-  const { data: account } = await supabase
-    .from('social_accounts')
-    .select('unipile_account_id')
-    .eq('id', accountId)
-    .maybeSingle();
-
-  const response = await callEdgeFunction('unipile-connect', {
+  const response = await callEdgeFunction('late-connect', {
     provider,
-    reconnect_account_id: account?.unipile_account_id || accountId,
+    reconnect_account_id: accountId,
     success_redirect_url: window.location.href,
     failure_redirect_url: window.location.href,
   });

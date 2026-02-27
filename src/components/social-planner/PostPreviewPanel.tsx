@@ -5,6 +5,7 @@ import {
   Youtube,
   MapPin,
   Music2,
+  MessageSquare,
   MoreHorizontal,
   ThumbsUp,
   MessageCircle,
@@ -24,6 +25,7 @@ const PROVIDER_ICONS: Record<SocialProvider, React.ElementType> = {
   google_business: MapPin,
   tiktok: Music2,
   youtube: Youtube,
+  reddit: MessageSquare,
 };
 
 const PROVIDER_COLORS: Record<SocialProvider, string> = {
@@ -33,6 +35,7 @@ const PROVIDER_COLORS: Record<SocialProvider, string> = {
   google_business: '#4285F4',
   tiktok: '#000000',
   youtube: '#FF0000',
+  reddit: '#FF4500',
 };
 
 interface PostPreviewPanelProps {
