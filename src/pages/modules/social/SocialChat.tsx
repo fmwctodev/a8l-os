@@ -101,7 +101,7 @@ export function SocialChat() {
         .from('social_accounts')
         .select('id, provider, display_name, profile_image_url')
         .eq('organization_id', orgId)
-        .eq('status', 'active');
+        .eq('status', 'connected');
       setAccounts((data as SocialAccount[]) || []);
     } catch {
       // accounts stay empty
