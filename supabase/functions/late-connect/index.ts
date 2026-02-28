@@ -111,12 +111,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const body: ConnectRequest = await req.json();
-    const {
-      provider,
-      reconnect_account_id,
-      success_redirect_url,
-      failure_redirect_url,
-    } = body;
+    const { provider, reconnect_account_id } = body;
 
     const latePlatform = PROVIDER_TO_LATE_PLATFORM[provider];
     if (!provider || !latePlatform) {
@@ -178,25 +173,48 @@ Deno.serve(async (req: Request) => {
       }
 
       const profileData = await profileResponse.json();
-      profileId = profileData.id || profileData.profileId;
+      profileId = profileData._id || profileData.id || profileData.profileId;
+
+      if (profileId) {
+        await supabase.from("late_connections").insert({
+          org_id: orgId,
+          connected_by_user_id: userData.id,
+          late_profile_id: profileId,
+          platform: provider,
+          status: "pending",
+        });
+      }
+    }
+
+    if (!profileId) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: {
+            code: "LATE_ERROR",
+            message: "Failed to obtain Late.dev profile ID",
+          },
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     const appBaseUrl =
       Deno.env.get("APP_BASE_URL") ||
       supabaseUrl.replace(/\.supabase\.co.*/, ".supabase.co");
-    const callbackUrl = `${supabaseUrl}/functions/v1/late-callback?org_id=${orgId}&user_id=${userData.id}&provider=${provider}&profile_id=${profileId}`;
-    const successUrl =
-      success_redirect_url ||
-      `${appBaseUrl}/marketing/social/accounts?late=success`;
-    const failureUrl =
-      failure_redirect_url ||
-      `${appBaseUrl}/marketing/social/accounts?late=error`;
 
-    let connectUrl = `${LATE_API_BASE}/connect/${latePlatform}?profileId=${profileId}&callbackUrl=${encodeURIComponent(callbackUrl)}&successUrl=${encodeURIComponent(successUrl)}&failureUrl=${encodeURIComponent(failureUrl)}`;
+    const redirectUrl = `${supabaseUrl}/functions/v1/late-callback?org_id=${orgId}&user_id=${userData.id}&provider=${provider}&profile_id=${profileId}&app_base_url=${encodeURIComponent(appBaseUrl)}`;
+
+    let connectUrl = `${LATE_API_BASE}/connect/${latePlatform}?profileId=${profileId}&redirect_url=${encodeURIComponent(redirectUrl)}`;
 
     if (reconnect_account_id) {
       connectUrl += `&reconnect=true&accountId=${encodeURIComponent(reconnect_account_id)}`;
     }
+
+    console.log("[late-connect] Calling connect URL:", connectUrl);
 
     const connectResponse = await fetch(connectUrl, {
       headers: lateHeaders,
@@ -221,6 +239,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const connectData = await connectResponse.json();
+    console.log("[late-connect] Connect response:", JSON.stringify(connectData));
+
     const authUrl = connectData.authUrl || connectData.url || connectData.connectUrl;
 
     if (!authUrl) {
