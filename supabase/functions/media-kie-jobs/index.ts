@@ -264,7 +264,10 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const webhookUrl = `${supabaseUrl}/functions/v1/media-kie-webhook`;
+    const webhookSecret = Deno.env.get("KIE_WEBHOOK_SECRET");
+    const webhookUrl = webhookSecret
+      ? `${supabaseUrl}/functions/v1/media-kie-webhook?token=${encodeURIComponent(webhookSecret)}`
+      : `${supabaseUrl}/functions/v1/media-kie-webhook`;
     const modelKey = model.model_key as string;
     const isVeo = modelKey.startsWith("google/veo-");
     const endpointOverride = model.api_endpoint_override as string | null;
@@ -403,7 +406,10 @@ async function handleUpgrade(
     return jsonError("NOT_SUPPORTED", "Upgrades only available for Veo models", 400);
   }
 
-  const webhookUrl = `${supabaseUrl}/functions/v1/media-kie-webhook`;
+  const webhookSecret = Deno.env.get("KIE_WEBHOOK_SECRET");
+  const webhookUrl = webhookSecret
+    ? `${supabaseUrl}/functions/v1/media-kie-webhook?token=${encodeURIComponent(webhookSecret)}`
+    : `${supabaseUrl}/functions/v1/media-kie-webhook`;
 
   let result;
   if (upgradeType === "1080p") {

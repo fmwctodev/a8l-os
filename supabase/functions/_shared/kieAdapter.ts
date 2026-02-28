@@ -39,6 +39,45 @@ interface StandardGenerateParams {
   endpointOverride?: string;
 }
 
+const IMAGE_SIZE_MODELS = new Set([
+  "bytedance/seedream",
+  "ideogram/v3-text-to-image",
+  "ideogram/character-text-to-image",
+]);
+
+const QUALITY_MODELS = new Set([
+  "seedream/4.5-text-to-image",
+]);
+
+const ASPECT_TO_IMAGE_SIZE: Record<string, string> = {
+  "1:1": "square_hd",
+  "4:3": "landscape_4_3",
+  "3:4": "portrait_4_3",
+  "16:9": "landscape_16_9",
+  "9:16": "portrait_16_9",
+  "3:2": "landscape_4_3",
+  "2:3": "portrait_4_3",
+  "16:10": "landscape_16_9",
+  "10:16": "portrait_16_9",
+  "21:9": "landscape_16_9",
+};
+
+function normalizeResolution(res: string | undefined): string | undefined {
+  if (!res) return undefined;
+  if (/^\d+K$/i.test(res)) return res.toUpperCase();
+  const px = parseInt(res.split(/x/i)[0], 10);
+  if (px <= 1024) return "1K";
+  if (px <= 2048) return "2K";
+  if (px <= 4096) return "4K";
+  return "1K";
+}
+
+function resolutionToQuality(res: string | undefined): string {
+  const norm = normalizeResolution(res);
+  if (norm === "4K") return "high";
+  return "basic";
+}
+
 async function kiePost(
   apiKey: string,
   url: string,
@@ -232,17 +271,34 @@ async function generateStandard(
   apiKey: string,
   params: StandardGenerateParams
 ): Promise<KieResult> {
+  const modelKey = params.modelKey;
+  const usesImageSize = IMAGE_SIZE_MODELS.has(modelKey);
+  const usesQuality = QUALITY_MODELS.has(modelKey);
+  const aspect = params.aspectRatio || "1:1";
+
   const input: Record<string, unknown> = {
     prompt: params.prompt,
-    aspect_ratio: params.aspectRatio || "16:9",
   };
+
+  if (usesImageSize) {
+    input.image_size = ASPECT_TO_IMAGE_SIZE[aspect] || "square_hd";
+  } else {
+    input.aspect_ratio = aspect;
+  }
+
+  if (usesQuality) {
+    input.quality = resolutionToQuality(params.resolution);
+  } else if (params.resolution) {
+    const normalized = normalizeResolution(params.resolution);
+    if (normalized) input.resolution = normalized;
+  }
+
   if (params.duration) input.duration = params.duration;
-  if (params.resolution) input.resolution = params.resolution;
   if (params.negativePrompt) input.negative_prompt = params.negativePrompt;
   if (params.inputUrls?.length) input.input_urls = params.inputUrls;
 
   const body: Record<string, unknown> = {
-    model: params.modelKey,
+    model: modelKey,
     input,
   };
   if (params.callbackUrl) body.callBackUrl = params.callbackUrl;

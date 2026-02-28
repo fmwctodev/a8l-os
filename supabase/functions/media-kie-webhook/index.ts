@@ -16,13 +16,47 @@ interface KieWebhookPayload {
     taskId: string;
     task_id?: string;
     status?: string;
+    state?: string;
     info?: {
       resultUrls?: string[];
       result_urls?: string[];
     };
     resultUrls?: string[];
+    resultJson?: string;
     error?: string;
+    failMsg?: string;
   };
+}
+
+function isSuccessMessage(code: number, msg: string): boolean {
+  if (code !== 200) return false;
+  if (!msg) return false;
+  const lower = msg.toLowerCase();
+  return lower === "success" || lower.includes("completed successfully");
+}
+
+function extractWebhookResultUrls(payload: KieWebhookPayload): string[] {
+  const d = payload.data;
+  if (!d) return [];
+
+  const urls =
+    d.info?.resultUrls ||
+    d.info?.result_urls ||
+    d.resultUrls ||
+    [];
+
+  if (urls.length > 0) return urls;
+
+  if (d.resultJson) {
+    try {
+      const rj = JSON.parse(d.resultJson);
+      return rj.resultUrls || rj.result_urls || [];
+    } catch {
+      // ignore
+    }
+  }
+
+  return [];
 }
 
 Deno.serve(async (req: Request) => {
@@ -38,6 +72,19 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    const webhookSecret = Deno.env.get("KIE_WEBHOOK_SECRET");
+    if (webhookSecret) {
+      const url = new URL(req.url);
+      const token = url.searchParams.get("token");
+      if (token !== webhookSecret) {
+        console.warn("[media-kie-webhook] Invalid webhook token");
+        return new Response(
+          JSON.stringify({ success: false, error: "Unauthorized" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
@@ -89,14 +136,11 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const isSuccess = payload.code === 200 && payload.msg === "success";
-    const resultUrls =
-      payload.data?.info?.resultUrls ||
-      payload.data?.info?.result_urls ||
-      payload.data?.resultUrls ||
-      [];
+    const isSuccess = isSuccessMessage(payload.code, payload.msg);
+    const resultUrls = extractWebhookResultUrls(payload);
+    const taskStatus = payload.data?.status || payload.data?.state;
 
-    if (isSuccess && resultUrls.length > 0) {
+    if ((isSuccess || taskStatus === "success") && resultUrls.length > 0) {
       await supabase
         .from("media_generation_jobs")
         .update({
@@ -116,29 +160,30 @@ Deno.serve(async (req: Request) => {
           console.error("[media-kie-webhook] Asset download/upload error:", downloadErr);
         }
       }
+    } else if (taskStatus === "generating" || taskStatus === "queuing") {
+      await supabase
+        .from("media_generation_jobs")
+        .update({
+          status: taskStatus,
+          webhook_received_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
     } else {
-      const status = payload.data?.status || "fail";
-      const errorMsg = payload.data?.error || payload.msg || "Generation failed";
+      const errorMsg =
+        payload.data?.error ||
+        payload.data?.failMsg ||
+        (isSuccess ? "Generation completed but no result URLs returned" : payload.msg) ||
+        "Generation failed";
 
-      if (status === "generating" || status === "queuing") {
-        await supabase
-          .from("media_generation_jobs")
-          .update({
-            status,
-            webhook_received_at: new Date().toISOString(),
-          })
-          .eq("id", job.id);
-      } else {
-        await supabase
-          .from("media_generation_jobs")
-          .update({
-            status: "fail",
-            error_message: errorMsg,
-            webhook_received_at: new Date().toISOString(),
-            completed_at: new Date().toISOString(),
-          })
-          .eq("id", job.id);
-      }
+      await supabase
+        .from("media_generation_jobs")
+        .update({
+          status: "fail",
+          error_message: errorMsg,
+          webhook_received_at: new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
     }
 
     return new Response(
@@ -177,14 +222,11 @@ async function handleUpgradeWebhook(
     );
   }
 
-  const isSuccess = payload.code === 200 && payload.msg === "success";
-  const resultUrls =
-    payload.data?.info?.resultUrls ||
-    payload.data?.info?.result_urls ||
-    payload.data?.resultUrls ||
-    [];
+  const isSuccess = isSuccessMessage(payload.code, payload.msg);
+  const taskStatus = payload.data?.status || payload.data?.state;
+  const resultUrls = extractWebhookResultUrls(payload);
 
-  if (isSuccess && resultUrls.length > 0) {
+  if ((isSuccess || taskStatus === "success") && resultUrls.length > 0) {
     upgrades[matchedResolution].status = "complete";
     upgrades[matchedResolution].url = resultUrls[0];
 

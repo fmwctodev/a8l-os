@@ -389,7 +389,10 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
 
             const modelKey = model.model_key as string;
             const isVeo = modelKey.startsWith("google/veo-");
-            const webhookUrl = `${supabaseUrl}/functions/v1/media-kie-webhook`;
+            const webhookSecret = Deno.env.get("KIE_WEBHOOK_SECRET");
+            const webhookUrl = webhookSecret
+              ? `${supabaseUrl}/functions/v1/media-kie-webhook?token=${encodeURIComponent(webhookSecret)}`
+              : `${supabaseUrl}/functions/v1/media-kie-webhook`;
             const endpointOverride =
               (model.api_endpoint_override as string) || null;
 
