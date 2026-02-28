@@ -156,13 +156,19 @@ Deno.serve(async (req: Request) => {
 
       if (!profileResponse.ok) {
         const errText = await profileResponse.text();
-        console.error("[late-connect] Failed to create profile:", errText);
+        console.error("[late-connect] Failed to create profile:", profileResponse.status, errText);
+
+        let parsedErr: unknown;
+        try { parsedErr = JSON.parse(errText); } catch { parsedErr = errText; }
+
         return new Response(
           JSON.stringify({
             success: false,
             error: {
               code: "LATE_ERROR",
               message: "Failed to create Late.dev profile",
+              detail: parsedErr,
+              status: profileResponse.status,
             },
           }),
           {
@@ -173,21 +179,12 @@ Deno.serve(async (req: Request) => {
       }
 
       const profileData = await profileResponse.json();
+      console.log("[late-connect] Profile created:", JSON.stringify(profileData));
       profileId =
         profileData?.profile?._id ||
         profileData?._id ||
         profileData?.id ||
         profileData?.profileId;
-
-      if (profileId) {
-        await supabase.from("late_connections").insert({
-          org_id: orgId,
-          connected_by_user_id: userData.id,
-          late_profile_id: profileId,
-          platform: provider,
-          status: "pending",
-        });
-      }
     }
 
     if (!profileId) {
