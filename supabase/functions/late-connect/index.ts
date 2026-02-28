@@ -173,7 +173,11 @@ Deno.serve(async (req: Request) => {
       }
 
       const profileData = await profileResponse.json();
-      profileId = profileData._id || profileData.id || profileData.profileId;
+      profileId =
+        profileData?.profile?._id ||
+        profileData?._id ||
+        profileData?.id ||
+        profileData?.profileId;
 
       if (profileId) {
         await supabase.from("late_connections").insert({
@@ -208,10 +212,10 @@ Deno.serve(async (req: Request) => {
 
     const redirectUrl = `${supabaseUrl}/functions/v1/late-callback?org_id=${orgId}&user_id=${userData.id}&provider=${provider}&profile_id=${profileId}&app_base_url=${encodeURIComponent(appBaseUrl)}`;
 
-    let connectUrl = `${LATE_API_BASE}/connect/${latePlatform}?profileId=${profileId}&redirect_url=${encodeURIComponent(redirectUrl)}`;
+    let connectUrl = `${LATE_API_BASE}/accounts/get-oauth-connect-url?profile_id=${profileId}&provider=${latePlatform}&redirect_url=${encodeURIComponent(redirectUrl)}`;
 
     if (reconnect_account_id) {
-      connectUrl += `&reconnect=true&accountId=${encodeURIComponent(reconnect_account_id)}`;
+      connectUrl += `&reconnect=true&account_id=${encodeURIComponent(reconnect_account_id)}`;
     }
 
     console.log("[late-connect] Calling connect URL:", connectUrl);
