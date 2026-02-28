@@ -6,6 +6,7 @@ import type {
   SocialAIMessageType,
   SocialAIAttachment,
 } from '../types';
+import type { MediaAsset } from './mediaGeneration';
 
 export interface MediaJobInfo {
   job_id: string;
@@ -15,6 +16,7 @@ export interface MediaJobInfo {
   prompt: string;
   status: string;
   draft_index: number;
+  preloadedAssets?: MediaAsset[];
 }
 
 export interface MediaPreferences {

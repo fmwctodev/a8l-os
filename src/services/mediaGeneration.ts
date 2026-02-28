@@ -250,6 +250,26 @@ export async function getMediaAssetsByJobId(jobId: string): Promise<MediaAsset[]
   return data || [];
 }
 
+export async function getAssetsByJobIds(jobIds: string[]): Promise<Record<string, MediaAsset[]>> {
+  if (jobIds.length === 0) return {};
+
+  const { data, error } = await supabase
+    .from('media_assets')
+    .select('*')
+    .in('job_id', jobIds)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+
+  const result: Record<string, MediaAsset[]> = {};
+  for (const asset of data || []) {
+    if (!asset.job_id) continue;
+    if (!result[asset.job_id]) result[asset.job_id] = [];
+    result[asset.job_id].push(asset);
+  }
+  return result;
+}
+
 export async function getPlatformDefaults(platform?: string): Promise<PlatformMediaDefault[]> {
   let query = supabase
     .from('platform_media_defaults')

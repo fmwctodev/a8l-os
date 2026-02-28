@@ -30,7 +30,11 @@ interface ChatMediaTrackerProps {
 
 export function ChatMediaTracker({ jobs, onAssetReady, onJobStatusChange, onRetry }: ChatMediaTrackerProps) {
   const [trackedJobs, setTrackedJobs] = useState<TrackedJob[]>(() =>
-    jobs.map(j => ({ ...j, currentStatus: j.status, assets: [] }))
+    jobs.map(j => ({
+      ...j,
+      currentStatus: j.status,
+      assets: j.preloadedAssets && j.preloadedAssets.length > 0 ? j.preloadedAssets : [],
+    }))
   );
   const [lightbox, setLightbox] = useState<{ items: LightboxItem[]; index: number } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -102,7 +106,14 @@ export function ChatMediaTracker({ jobs, onAssetReady, onJobStatusChange, onRetr
       const existing = new Set(prev.map(j => j.job_id));
       const newJobs = jobs.filter(j => !existing.has(j.job_id));
       if (newJobs.length === 0) return prev;
-      return [...prev, ...newJobs.map(j => ({ ...j, currentStatus: j.status, assets: [] }))];
+      return [
+        ...prev,
+        ...newJobs.map(j => ({
+          ...j,
+          currentStatus: j.status,
+          assets: j.preloadedAssets && j.preloadedAssets.length > 0 ? j.preloadedAssets : [],
+        })),
+      ];
     });
   }, [jobs]);
 

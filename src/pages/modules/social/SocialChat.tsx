@@ -16,6 +16,7 @@ import {
   deleteThread,
   publishDraftFromChat,
 } from '../../../services/socialChat';
+import { getAssetsByJobIds } from '../../../services/mediaGeneration';
 import { supabase } from '../../../lib/supabase';
 import type {
   SocialAIThread,
@@ -87,6 +88,36 @@ export function SocialChat() {
       setLoadingMessages(true);
       const data = await getThreadMessages(threadId);
       setMessages(data);
+
+      const allJobInfos: MediaJobInfo[] = [];
+      for (const msg of data) {
+        const meta = msg.metadata as Record<string, unknown> | null;
+        const msgJobs = meta?.media_jobs as MediaJobInfo[] | undefined;
+        if (msgJobs && msgJobs.length > 0) {
+          allJobInfos.push(...msgJobs);
+        }
+      }
+
+      if (allJobInfos.length > 0) {
+        const jobIds = allJobInfos.map((j) => j.job_id);
+        const assetMap = await getAssetsByJobIds(jobIds);
+
+        const rehydratedJobs: MediaJobInfo[] = allJobInfos.map((j) => ({
+          ...j,
+          preloadedAssets: assetMap[j.job_id] || [],
+        }));
+
+        const restoredDraftAssets: Record<number, MediaAsset[]> = {};
+        for (const j of rehydratedJobs) {
+          if (j.preloadedAssets && j.preloadedAssets.length > 0) {
+            const existing = restoredDraftAssets[j.draft_index] || [];
+            restoredDraftAssets[j.draft_index] = [...existing, ...j.preloadedAssets];
+          }
+        }
+
+        setActiveMediaJobs(rehydratedJobs);
+        setDraftAssets(restoredDraftAssets);
+      }
     } catch (err) {
       console.error('Failed to load messages:', err);
     } finally {
