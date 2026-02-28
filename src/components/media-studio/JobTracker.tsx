@@ -12,6 +12,8 @@ import {
   ArrowUpCircle,
   Sparkles,
   Monitor,
+  Eye,
+  Play,
 } from 'lucide-react';
 import type {
   MediaGenerationJob,
@@ -26,6 +28,7 @@ import {
   getStatusColor,
   requestUpgrade,
 } from '../../services/mediaGeneration';
+import { MediaLightbox, type LightboxItem } from '../ui/MediaLightbox';
 
 interface JobTrackerProps {
   jobs: MediaGenerationJob[];
@@ -46,6 +49,7 @@ export default function JobTracker({ jobs, onJobComplete, onAttachAsset }: JobTr
   const [jobAssets, setJobAssets] = useState<Record<string, MediaAsset[]>>({});
   const [jobStatusResults, setJobStatusResults] = useState<Record<string, JobStatusResult>>({});
   const [upgradeLoading, setUpgradeLoading] = useState<Record<string, string>>({});
+  const [lightbox, setLightbox] = useState<{ items: LightboxItem[]; index: number } | null>(null);
   const pollingRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
   const pollJob = useCallback(async (jobId: string) => {
@@ -193,7 +197,7 @@ export default function JobTracker({ jobs, onJobComplete, onAttachAsset }: JobTr
               {job.status === 'success' && assets.length > 0 && (
                 <div className="px-3 pb-2.5">
                   <div className="flex gap-2 overflow-x-auto">
-                    {assets.map((asset) => (
+                    {assets.map((asset, assetIdx) => (
                       <div key={asset.id} className="relative group flex-shrink-0">
                         {asset.media_type === 'image' ? (
                           <img
@@ -202,11 +206,32 @@ export default function JobTracker({ jobs, onJobComplete, onAttachAsset }: JobTr
                             className="w-20 h-20 object-cover rounded-lg border border-gray-200 dark:border-gray-700"
                           />
                         ) : (
-                          <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center">
-                            <Video className="w-6 h-6 text-gray-400" />
+                          <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center relative overflow-hidden">
+                            {asset.thumbnail_url ? (
+                              <img src={asset.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <Video className="w-6 h-6 text-gray-400" />
+                            )}
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                              <Play className="w-5 h-5 text-white" />
+                            </div>
                           </div>
                         )}
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 rounded-lg transition-colors flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
+                          <button
+                            onClick={() => setLightbox({
+                              items: assets.map((a): LightboxItem => ({
+                                url: a.public_url,
+                                thumbnailUrl: a.thumbnail_url,
+                                mediaType: a.media_type,
+                              })),
+                              index: assetIdx,
+                            })}
+                            className="p-1.5 bg-white rounded-full shadow-sm hover:bg-gray-100"
+                            title="Preview"
+                          >
+                            <Eye className="w-3 h-3 text-gray-900" />
+                          </button>
                           {onAttachAsset && (
                             <button
                               onClick={() => onAttachAsset(asset)}
@@ -250,6 +275,14 @@ export default function JobTracker({ jobs, onJobComplete, onAttachAsset }: JobTr
           );
         })}
       </div>
+
+      {lightbox && (
+        <MediaLightbox
+          items={lightbox.items}
+          startIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </div>
   );
 }

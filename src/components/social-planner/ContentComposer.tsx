@@ -13,8 +13,11 @@ import {
   AtSign,
   X,
   Undo2,
+  Maximize2,
+  Play,
 } from 'lucide-react';
 import type { SocialProvider, SocialPostMedia } from '../../types';
+import { MediaLightbox, InlineVideoPlayer, type LightboxItem } from '../ui/MediaLightbox';
 
 const EMOJI_LIST = ['😀', '😂', '❤️', '👍', '🎉', '🔥', '✨', '💪', '🙌', '👏', '💯', '🚀', '⭐', '💡', '📣', '🎯', '💼', '📈', '🤝', '✅'];
 
@@ -56,6 +59,7 @@ export function ContentComposer({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(!!linkUrl);
   const [showFollowUpSection, setShowFollowUpSection] = useState(!!followUpComment);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const insertText = (text: string) => {
@@ -303,12 +307,14 @@ export function ContentComposer({
 
       {media.length > 0 && (
         <div className="grid grid-cols-4 gap-2">
-          {media.map((item) => (
+          {media.map((item, idx) => (
             <div key={item.id} className="relative group aspect-square">
               {item.type === 'video' ? (
-                <div className="w-full h-full bg-gray-900 rounded-lg flex items-center justify-center">
-                  <Video className="w-8 h-8 text-white" />
-                </div>
+                <InlineVideoPlayer
+                  src={item.url}
+                  poster={item.thumbnail_url}
+                  className="w-full h-full rounded-lg overflow-hidden"
+                />
               ) : (
                 <img
                   src={item.url}
@@ -325,6 +331,14 @@ export function ContentComposer({
               )}
               <button
                 type="button"
+                onClick={(e) => { e.stopPropagation(); setLightboxIndex(idx); }}
+                className="absolute top-1 left-1 p-1 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
+                title="Preview"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
                 onClick={() => item.id && onMediaRemove(item.id)}
                 className="absolute top-1 right-1 p-1 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
               >
@@ -333,6 +347,19 @@ export function ContentComposer({
             </div>
           ))}
         </div>
+      )}
+
+      {lightboxIndex !== null && (
+        <MediaLightbox
+          items={media.map((m): LightboxItem => ({
+            url: m.url,
+            thumbnailUrl: m.thumbnail_url,
+            mediaType: m.type,
+            filename: m.filename,
+          }))}
+          startIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       )}
 
       {showFollowUpToggle && (

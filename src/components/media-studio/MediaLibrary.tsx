@@ -8,10 +8,13 @@ import {
   Clock,
   FolderOpen,
   Filter,
+  Eye,
+  Play,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import type { MediaAsset } from '../../services/mediaGeneration';
 import { getMediaAssets } from '../../services/mediaGeneration';
+import { MediaLightbox, type LightboxItem } from '../ui/MediaLightbox';
 
 interface MediaLibraryProps {
   onAttach?: (asset: MediaAsset) => void;
@@ -23,6 +26,7 @@ export default function MediaLibrary({ onAttach, compact }: MediaLibraryProps) {
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'image' | 'video'>('all');
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (user?.organization_id) {
@@ -93,6 +97,18 @@ export default function MediaLibrary({ onAttach, compact }: MediaLibraryProps) {
         </div>
       </div>
 
+      {lightboxIndex !== null && (
+        <MediaLightbox
+          items={assets.map((a): LightboxItem => ({
+            url: a.public_url,
+            thumbnailUrl: a.thumbnail_url,
+            mediaType: a.media_type,
+          }))}
+          startIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
+
       {assets.length === 0 ? (
         <div className="text-center py-6 text-gray-400">
           <Image className="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -107,7 +123,7 @@ export default function MediaLibrary({ onAttach, compact }: MediaLibraryProps) {
             compact ? 'grid-cols-3' : 'grid-cols-4'
           } max-h-[360px] overflow-y-auto pr-1`}
         >
-          {assets.map((asset) => (
+          {assets.map((asset, idx) => (
             <div
               key={asset.id}
               className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
@@ -120,7 +136,7 @@ export default function MediaLibrary({ onAttach, compact }: MediaLibraryProps) {
                   loading="lazy"
                 />
               ) : (
-                <div className="w-full aspect-square flex items-center justify-center bg-gray-100 dark:bg-gray-800">
+                <div className="w-full aspect-square flex items-center justify-center bg-gray-100 dark:bg-gray-800 relative">
                   {asset.thumbnail_url ? (
                     <img
                       src={asset.thumbnail_url}
@@ -131,6 +147,11 @@ export default function MediaLibrary({ onAttach, compact }: MediaLibraryProps) {
                   ) : (
                     <Video className="w-8 h-8 text-gray-400" />
                   )}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                    <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center">
+                      <Play className="w-3.5 h-3.5 text-gray-900 ml-0.5" />
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -147,6 +168,13 @@ export default function MediaLibrary({ onAttach, compact }: MediaLibraryProps) {
               </div>
 
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center gap-1.5 opacity-0 group-hover:opacity-100">
+                <button
+                  onClick={() => setLightboxIndex(idx)}
+                  className="p-2 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors"
+                  title="Preview"
+                >
+                  <Eye className="w-3.5 h-3.5 text-gray-900" />
+                </button>
                 {onAttach && (
                   <button
                     onClick={() => onAttach(asset)}

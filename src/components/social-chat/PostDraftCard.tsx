@@ -13,6 +13,7 @@ import {
   Palette,
   Image as ImageIcon,
   Film,
+  Maximize2,
   Instagram,
   Twitter,
   Facebook,
@@ -24,6 +25,7 @@ import {
 } from 'lucide-react';
 import type { MediaAsset } from '../../services/mediaGeneration';
 import type { PublishMode } from '../../services/socialChat';
+import { MediaLightbox, InlineVideoPlayer, type LightboxItem } from '../ui/MediaLightbox';
 
 export interface PostDraft {
   platform: string;
@@ -151,6 +153,7 @@ export function PostDraftCard({
   const [showScheduler, setShowScheduler] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const platform = PLATFORM_CONFIG[draft.platform] || PLATFORM_CONFIG.all;
   const PlatformIcon = platform.icon;
@@ -294,11 +297,13 @@ export function PostDraftCard({
       )}
 
       {attachedAssets.length > 0 && (
-        <div className="relative">
+        <div className="relative group/media">
           {attachedAssets[0].media_type === 'video' ? (
-            <div className="w-full aspect-[4/3] bg-slate-900 flex items-center justify-center">
-              <Film className="w-10 h-10 text-slate-500" />
-            </div>
+            <InlineVideoPlayer
+              src={attachedAssets[0].public_url}
+              poster={attachedAssets[0].thumbnail_url}
+              className="w-full aspect-[4/3]"
+            />
           ) : (
             <img
               src={attachedAssets[0].thumbnail_url || attachedAssets[0].public_url}
@@ -306,12 +311,34 @@ export function PostDraftCard({
               className="w-full aspect-[4/3] object-cover"
             />
           )}
+          <button
+            onClick={() => setLightboxIndex(0)}
+            className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/50 hover:bg-black/70 text-white opacity-0 group-hover/media:opacity-100 transition-opacity z-[1]"
+            title="Preview full size"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
           {attachedAssets.length > 1 && (
-            <div className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/70 rounded-full text-[10px] text-white font-medium">
+            <button
+              onClick={() => setLightboxIndex(1)}
+              className="absolute bottom-2 right-2 px-2 py-0.5 bg-black/70 hover:bg-black/80 rounded-full text-[10px] text-white font-medium transition-colors cursor-pointer"
+            >
               +{attachedAssets.length - 1} more
-            </div>
+            </button>
           )}
         </div>
+      )}
+
+      {lightboxIndex !== null && (
+        <MediaLightbox
+          items={attachedAssets.map((a): LightboxItem => ({
+            url: a.public_url,
+            thumbnailUrl: a.thumbnail_url,
+            mediaType: a.media_type,
+          }))}
+          startIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       )}
 
       {!mediaGenerating && attachedAssets.length === 0 && draft.visual_style_suggestion && (

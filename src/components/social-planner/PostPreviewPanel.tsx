@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Facebook,
   Instagram,
@@ -15,8 +16,11 @@ import {
   Bookmark,
   Image as ImageIcon,
   Video,
+  Maximize2,
+  Play,
 } from 'lucide-react';
 import type { SocialAccount, SocialProvider, SocialPostMedia } from '../../types';
+import { MediaLightbox, InlineVideoPlayer, type LightboxItem } from '../ui/MediaLightbox';
 
 const PROVIDER_ICONS: Record<SocialProvider, React.ElementType> = {
   facebook: Facebook,
@@ -159,8 +163,15 @@ function PreviewCard({
   body: string;
   media: SocialPostMedia[];
 }) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const Icon = PROVIDER_ICONS[account.provider];
   const color = PROVIDER_COLORS[account.provider];
+
+  const lightboxItems: LightboxItem[] = media.map((m) => ({
+    url: m.url,
+    thumbnailUrl: m.thumbnail_url,
+    mediaType: m.type,
+  }));
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -201,10 +212,25 @@ function PreviewCard({
       {media.length > 0 ? (
         <div className={`${media.length === 1 ? '' : 'grid grid-cols-2 gap-0.5'} bg-gray-100`}>
           {media.slice(0, 4).map((item, idx) => (
-            <div key={item.id || idx} className="relative aspect-square">
+            <div
+              key={item.id || idx}
+              className="relative aspect-square group cursor-pointer"
+              onClick={() => setLightboxIndex(idx)}
+            >
               {item.type === 'video' ? (
-                <div className="w-full h-full bg-gray-900 flex items-center justify-center">
-                  <Video className="w-8 h-8 text-white" />
+                <div className="w-full h-full bg-gray-900 relative overflow-hidden">
+                  {item.thumbnail_url ? (
+                    <img src={item.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Video className="w-8 h-8 text-white" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                    <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
+                      <Play className="w-4 h-4 text-gray-900 ml-0.5" />
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <img
@@ -213,6 +239,9 @@ function PreviewCard({
                   className="w-full h-full object-cover"
                 />
               )}
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                <Maximize2 className="w-5 h-5 text-white drop-shadow-lg" />
+              </div>
               {idx === 3 && media.length > 4 && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                   <span className="text-white font-bold text-xl">+{media.length - 4}</span>
@@ -239,6 +268,14 @@ function PreviewCard({
       )}
 
       <PlatformEngagement provider={account.provider} />
+
+      {lightboxIndex !== null && (
+        <MediaLightbox
+          items={lightboxItems}
+          startIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
     </div>
   );
 }

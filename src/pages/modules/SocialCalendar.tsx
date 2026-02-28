@@ -22,7 +22,11 @@ import {
   X,
   GripVertical,
   Eye,
+  Maximize2,
+  Play,
+  Video,
 } from 'lucide-react';
+import { MediaLightbox, type LightboxItem } from '../../components/ui/MediaLightbox';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSocialAccounts, getProviderColor } from '../../services/socialAccounts';
 import {
@@ -569,6 +573,14 @@ function PostPreviewModal({
   onEdit: () => void;
   onReschedule: () => void;
 }) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  const lightboxItems: LightboxItem[] = (post.media || []).map((m) => ({
+    url: m.url,
+    thumbnailUrl: m.thumbnail_url,
+    mediaType: m.type,
+  }));
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden">
@@ -624,8 +636,37 @@ function PostPreviewModal({
           {post.media && post.media.length > 0 && (
             <div className="mt-4 grid grid-cols-2 gap-2">
               {post.media.slice(0, 4).map((item, idx) => (
-                <div key={idx} className="aspect-square bg-gray-100 rounded-lg overflow-hidden">
-                  <img src={item.url} alt="" className="w-full h-full object-cover" />
+                <div
+                  key={idx}
+                  className="aspect-square bg-gray-100 rounded-lg overflow-hidden relative group cursor-pointer"
+                  onClick={() => setLightboxIndex(idx)}
+                >
+                  {item.type === 'video' ? (
+                    <div className="w-full h-full bg-gray-900 relative">
+                      {item.thumbnail_url ? (
+                        <img src={item.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Video className="w-8 h-8 text-white" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                        <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
+                          <Play className="w-4 h-4 text-gray-900 ml-0.5" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <img src={item.url} alt="" className="w-full h-full object-cover" />
+                  )}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                    <Maximize2 className="w-5 h-5 text-white drop-shadow-lg" />
+                  </div>
+                  {idx === 3 && post.media!.length > 4 && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <span className="text-white font-bold text-xl">+{post.media!.length - 4}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -649,6 +690,14 @@ function PostPreviewModal({
           </button>
         </div>
       </div>
+
+      {lightboxIndex !== null && (
+        <MediaLightbox
+          items={lightboxItems}
+          startIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
     </div>
   );
 }

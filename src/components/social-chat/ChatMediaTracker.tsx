@@ -6,12 +6,14 @@ import {
   CheckCircle2,
   AlertCircle,
   RotateCcw,
-  ArrowDownToLine,
+  Maximize2,
+  Play,
   Clock,
 } from 'lucide-react';
 import { getJobStatus, isJobActive } from '../../services/mediaGeneration';
 import type { MediaJobInfo } from '../../services/socialChat';
 import type { MediaAsset } from '../../services/mediaGeneration';
+import { MediaLightbox, type LightboxItem } from '../ui/MediaLightbox';
 
 interface TrackedJob extends MediaJobInfo {
   currentStatus: string;
@@ -30,6 +32,7 @@ export function ChatMediaTracker({ jobs, onAssetReady, onJobStatusChange, onRetr
   const [trackedJobs, setTrackedJobs] = useState<TrackedJob[]>(() =>
     jobs.map(j => ({ ...j, currentStatus: j.status, assets: [] }))
   );
+  const [lightbox, setLightbox] = useState<{ items: LightboxItem[]; index: number } | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onAssetReadyRef = useRef(onAssetReady);
   onAssetReadyRef.current = onAssetReady;
@@ -133,17 +136,29 @@ export function ChatMediaTracker({ jobs, onAssetReady, onJobStatusChange, onRetr
 
             {job.currentStatus === 'success' && job.assets.length > 0 && (
               <div className="flex gap-1.5 mt-2">
-                {job.assets.map((asset) => (
-                  <a
+                {job.assets.map((asset, assetIdx) => (
+                  <button
                     key={asset.id}
-                    href={asset.public_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    onClick={() => setLightbox({
+                      items: job.assets.map((a): LightboxItem => ({
+                        url: a.public_url,
+                        thumbnailUrl: a.thumbnail_url,
+                        mediaType: a.media_type,
+                      })),
+                      index: assetIdx,
+                    })}
                     className="block relative group"
                   >
                     {asset.media_type === 'video' ? (
-                      <div className="w-16 h-16 rounded-md bg-slate-700 flex items-center justify-center border border-slate-600 group-hover:border-cyan-500/50 transition-colors">
-                        <Film className="w-6 h-6 text-slate-400" />
+                      <div className="w-16 h-16 rounded-md bg-slate-700 flex items-center justify-center border border-slate-600 group-hover:border-cyan-500/50 transition-colors relative overflow-hidden">
+                        {asset.thumbnail_url ? (
+                          <img src={asset.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <Film className="w-6 h-6 text-slate-400" />
+                        )}
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          <Play className="w-4 h-4 text-white" />
+                        </div>
                       </div>
                     ) : (
                       <img
@@ -153,9 +168,9 @@ export function ChatMediaTracker({ jobs, onAssetReady, onJobStatusChange, onRetr
                       />
                     )}
                     <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
-                      <ArrowDownToLine className="w-4 h-4 text-white" />
+                      <Maximize2 className="w-4 h-4 text-white" />
                     </div>
-                  </a>
+                  </button>
                 ))}
               </div>
             )}
@@ -177,6 +192,13 @@ export function ChatMediaTracker({ jobs, onAssetReady, onJobStatusChange, onRetr
           </div>
         </div>
       ))}
+      {lightbox && (
+        <MediaLightbox
+          items={lightbox.items}
+          startIndex={lightbox.index}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </div>
   );
 }
