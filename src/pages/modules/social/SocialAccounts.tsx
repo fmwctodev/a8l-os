@@ -134,7 +134,7 @@ export function SocialAccounts() {
         </button>
       </div>
 
-      {accounts.length === 0 ? (
+      {accounts.filter(a => a.status !== 'disconnected').length === 0 ? (
         <div className="bg-slate-800 rounded-xl border border-slate-700 p-12 text-center">
           <div className="w-16 h-16 bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
             <Link2 className="w-8 h-8 text-slate-500" />
@@ -153,7 +153,7 @@ export function SocialAccounts() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {accounts.map((account) => {
+          {accounts.filter(a => a.status !== 'disconnected').map((account) => {
             const Icon = PROVIDER_ICONS[account.provider];
             const color = getProviderColor(account.provider);
             const needsReconnect = account.status === 'error' || account.status === 'token_expiring';
