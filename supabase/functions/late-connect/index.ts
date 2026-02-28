@@ -148,13 +148,52 @@ Deno.serve(async (req: Request) => {
     let profileId = existingConnection?.late_profile_id;
 
     if (!profileId) {
+      const profileName = `org-${orgId}`;
       const profileResponse = await fetch(`${LATE_API_BASE}/profiles`, {
         method: "POST",
         headers: lateHeaders,
-        body: JSON.stringify({ name: `org-${orgId}` }),
+        body: JSON.stringify({ name: profileName }),
       });
 
-      if (!profileResponse.ok) {
+      if (profileResponse.ok) {
+        const profileData = await profileResponse.json();
+        console.log("[late-connect] Profile created:", JSON.stringify(profileData));
+        profileId =
+          profileData?.profile?._id ||
+          profileData?._id ||
+          profileData?.id ||
+          profileData?.profileId;
+      } else if (profileResponse.status === 409) {
+        console.log("[late-connect] Profile name conflict, listing existing profiles to find match");
+        const listResponse = await fetch(`${LATE_API_BASE}/profiles`, {
+          headers: lateHeaders,
+        });
+        if (listResponse.ok) {
+          const listData = await listResponse.json();
+          const profiles: Array<{ _id?: string; id?: string; name?: string }> =
+            listData?.profiles || listData?.data || listData || [];
+          const match = profiles.find((p) => p.name === profileName);
+          if (match) {
+            profileId = match._id || match.id;
+            console.log("[late-connect] Found existing profile by name:", profileId);
+          }
+        }
+        if (!profileId) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: {
+                code: "LATE_ERROR",
+                message: "Profile name conflict and could not find existing profile",
+              },
+            }),
+            {
+              status: 502,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            }
+          );
+        }
+      } else {
         const errText = await profileResponse.text();
         console.error("[late-connect] Failed to create profile:", profileResponse.status, errText);
 
@@ -177,14 +216,6 @@ Deno.serve(async (req: Request) => {
           }
         );
       }
-
-      const profileData = await profileResponse.json();
-      console.log("[late-connect] Profile created:", JSON.stringify(profileData));
-      profileId =
-        profileData?.profile?._id ||
-        profileData?._id ||
-        profileData?.id ||
-        profileData?.profileId;
     }
 
     if (!profileId) {

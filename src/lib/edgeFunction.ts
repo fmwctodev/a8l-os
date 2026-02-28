@@ -136,7 +136,10 @@ export function parseEdgeFunctionError(
   const errObj = err.error;
   if (typeof errObj === 'string') return errObj;
   if (errObj && typeof errObj === 'object') {
-    const msg = (errObj as Record<string, string>).message;
+    const e = errObj as Record<string, unknown>;
+    const msg = e.message as string | undefined;
+    const detail = e.detail;
+    if (msg && detail) return `${msg}: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`;
     if (msg) return msg;
   }
   return (err.message as string) || (err.msg as string) || fallback;
