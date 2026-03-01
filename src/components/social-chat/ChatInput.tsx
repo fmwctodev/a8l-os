@@ -58,7 +58,7 @@ export function ChatInput({
   }
 
   return (
-    <div className="border-t border-slate-700 bg-slate-800 p-4">
+    <div className="border-t border-slate-700 bg-slate-800 p-4 flex-shrink-0">
       {showUrlInput && (
         <div className="flex items-center gap-2 mb-3 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2">
           <Link className="w-4 h-4 text-slate-500 flex-shrink-0" />

@@ -92,7 +92,7 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
   const selectedId = activeTab === 'image' ? preferences.image_model_id : preferences.video_model_id;
 
   return (
-    <div className="border-t border-slate-700 bg-slate-800/50">
+    <div className="border-t border-slate-700 bg-slate-800/50 flex-shrink-0">
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center justify-between px-4 py-2 text-xs text-slate-400 hover:text-slate-300 transition-colors"
@@ -126,7 +126,7 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
       </button>
 
       {expanded && (
-        <div className="px-4 pb-3 space-y-3">
+        <div className="px-4 pb-3 space-y-3 max-h-64 overflow-y-auto custom-scrollbar">
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
               <input
