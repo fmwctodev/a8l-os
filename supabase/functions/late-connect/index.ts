@@ -103,28 +103,28 @@ Deno.serve(async (req: Request) => {
     const orgId = userData.organization_id;
     const lateHeaders = {
       Authorization: `Bearer ${lateApiKey}`,
-      "Content-Type": "application/json",
       Accept: "application/json",
     };
 
+    const lateProfileId = Deno.env.get("LATE_PROFILE_ID") || "69a352613ecb689ae9742cc0";
     const appBaseUrl = Deno.env.get("APP_BASE_URL") || "https://os.autom8ionlab.com";
     const redirectUrl = `${supabaseUrl}/functions/v1/late-callback?org_id=${orgId}&user_id=${userData.id}&provider=${provider}&app_base_url=${encodeURIComponent(appBaseUrl)}`;
 
-    const connectPayload: Record<string, unknown> = {
-      platform: latePlatform,
-      redirectUrl,
-    };
+    const connectParams = new URLSearchParams({
+      profileId: lateProfileId,
+      redirect_url: redirectUrl,
+    });
 
     if (reconnect_account_id) {
-      connectPayload.accountId = reconnect_account_id;
+      connectParams.set("accountId", reconnect_account_id);
     }
 
-    console.log("[late-connect] Calling POST /v1/connect/get-connect-url for platform:", latePlatform);
+    const connectUrl = `${LATE_API_BASE}/connect/${latePlatform}?${connectParams.toString()}`;
+    console.log("[late-connect] Calling GET", connectUrl);
 
-    const connectResponse = await fetch(`${LATE_API_BASE}/connect/get-connect-url`, {
-      method: "POST",
+    const connectResponse = await fetch(connectUrl, {
+      method: "GET",
       headers: lateHeaders,
-      body: JSON.stringify(connectPayload),
     });
 
     const connectRaw = await connectResponse.text();
