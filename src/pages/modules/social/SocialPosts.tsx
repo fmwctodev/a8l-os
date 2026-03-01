@@ -241,11 +241,29 @@ export function SocialPosts() {
                         {post.body}
                       </p>
                     </Link>
-                    <div className="flex items-center gap-3 mt-3">
+                    <div className="flex items-center gap-3 mt-3 flex-wrap">
                       <span className={`inline-flex items-center gap-1 text-xs font-medium ${status.text} ${status.bg} px-2 py-1 rounded-full`}>
                         <StatusIcon className="w-3 h-3" />
                         {status.label}
                       </span>
+                      {(post as { late_status?: string }).late_status && (post as { late_status?: string }).late_status !== post.status && (
+                        <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
+                          (post as { late_status?: string }).late_status === 'published'
+                            ? 'bg-emerald-400/10 text-emerald-400'
+                            : (post as { late_status?: string }).late_status === 'failed'
+                            ? 'bg-red-400/10 text-red-400'
+                            : (post as { late_status?: string }).late_status === 'publishing'
+                            ? 'bg-amber-400/10 text-amber-400'
+                            : 'bg-slate-400/10 text-slate-400'
+                        }`}>
+                          Late: {(post as { late_status?: string }).late_status}
+                        </span>
+                      )}
+                      {(post as { published_at?: string }).published_at && (
+                        <span className="text-xs text-slate-500">
+                          Published {new Date((post as { published_at?: string }).published_at!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </span>
+                      )}
                       {post.engagement_prediction != null && (
                         <span className={`text-xs font-medium px-2 py-1 rounded-full ${
                           post.engagement_prediction >= 70

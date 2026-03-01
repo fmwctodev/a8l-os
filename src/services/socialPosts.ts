@@ -518,6 +518,24 @@ export async function getChannelContent(
   return result as Record<SocialProvider, SocialPostChannelContent>;
 }
 
+export async function publishPost(postId: string): Promise<{ success: boolean; error?: string }> {
+  const { callEdgeFunction } = await import('../lib/edgeFunction');
+  const response = await callEdgeFunction('social-worker', { post_id: postId });
+  const json = await response.json();
+  if (!response.ok) {
+    return { success: false, error: json.error || 'Publish failed' };
+  }
+  return { success: json.success !== false };
+}
+
+export async function fetchPostMetrics(postId: string): Promise<Record<string, unknown> | null> {
+  const { callEdgeFunction } = await import('../lib/edgeFunction');
+  const response = await callEdgeFunction('late-metrics', { post_id: postId });
+  const json = await response.json();
+  if (!response.ok) return null;
+  return json.metrics || null;
+}
+
 export function getCharacterLimits(): Record<string, { text: number; title?: number }> {
   return {
     facebook: { text: 63206 },

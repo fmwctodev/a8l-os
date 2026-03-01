@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Plus,
   Trash2,
@@ -15,9 +16,9 @@ import {
   Link2,
   Loader2,
   X,
-  ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useToast } from '../../../contexts/ToastContext';
 import {
   getSocialAccounts,
   disconnectSocialAccount,
@@ -44,12 +45,31 @@ const PROVIDERS: SocialProvider[] = [
 
 export function SocialAccounts() {
   const { user } = useAuth();
+  const { addToast } = useToast();
+  const location = useLocation();
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [connectingProvider, setConnectingProvider] = useState<SocialProvider | null>(null);
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const lateSuccess = params.get('late');
+    const errorParam = params.get('error');
+    const count = params.get('count');
+
+    if (lateSuccess === 'success') {
+      const n = parseInt(count || '1', 10);
+      addToast(`${n} account${n !== 1 ? 's' : ''} connected successfully`, 'success');
+      window.history.replaceState({}, '', location.pathname);
+      loadAccounts();
+    } else if (errorParam) {
+      addToast(decodeURIComponent(errorParam), 'error');
+      window.history.replaceState({}, '', location.pathname);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     loadAccounts();

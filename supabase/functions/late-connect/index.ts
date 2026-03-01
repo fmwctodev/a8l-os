@@ -8,7 +8,7 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const LATE_API_BASE = "https://getlate.dev/api/v1";
+const LATE_API_BASE = "https://api.getlate.dev/v1";
 
 const PROVIDER_TO_LATE_PLATFORM: Record<string, string> = {
   facebook: "facebook",
@@ -42,26 +42,17 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           success: false,
-          error: { code: "CONFIG_ERROR", message: "Late.dev not configured" },
+          error: { code: "CONFIG_ERROR", message: "Late.dev not configured — set LATE_API_KEY" },
         }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(
-        JSON.stringify({
-          success: false,
-          error: { code: "AUTH_REQUIRED", message: "Missing authorization" },
-        }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        JSON.stringify({ success: false, error: { code: "AUTH_REQUIRED", message: "Missing authorization" } }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -69,21 +60,12 @@ Deno.serve(async (req: Request) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
     const token = authHeader.replace("Bearer ", "");
-    const {
-      data: { user },
-      error: authError,
-    } = await anonClient.auth.getUser(token);
+    const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
 
     if (authError || !user) {
       return new Response(
-        JSON.stringify({
-          success: false,
-          error: { code: "AUTH_FAILED", message: "Invalid credentials" },
-        }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        JSON.stringify({ success: false, error: { code: "AUTH_FAILED", message: "Invalid credentials" } }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -99,14 +81,8 @@ Deno.serve(async (req: Request) => {
 
     if (userError || !userData) {
       return new Response(
-        JSON.stringify({
-          success: false,
-          error: { code: "USER_NOT_FOUND", message: "User not found" },
-        }),
-        {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        JSON.stringify({ success: false, error: { code: "USER_NOT_FOUND", message: "User not found" } }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -118,15 +94,9 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           success: false,
-          error: {
-            code: "INVALID_PROVIDER",
-            message: `Unsupported provider: ${provider}`,
-          },
+          error: { code: "INVALID_PROVIDER", message: `Unsupported provider: ${provider}` },
         }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -137,162 +107,71 @@ Deno.serve(async (req: Request) => {
       Accept: "application/json",
     };
 
-    const { data: existingConnection } = await supabase
-      .from("late_connections")
-      .select("late_profile_id")
-      .eq("org_id", orgId)
-      .not("late_profile_id", "is", null)
-      .limit(1)
-      .maybeSingle();
+    const appBaseUrl = Deno.env.get("APP_BASE_URL") || "https://os.autom8ionlab.com";
+    const redirectUrl = `${supabaseUrl}/functions/v1/late-callback?org_id=${orgId}&user_id=${userData.id}&provider=${provider}&app_base_url=${encodeURIComponent(appBaseUrl)}`;
 
-    let profileId = existingConnection?.late_profile_id;
-
-    if (!profileId) {
-      const profileName = `org-${orgId}`;
-
-      console.log("[late-connect] No cached profile, checking Late.dev API for existing profiles");
-      const listResponse = await fetch(`${LATE_API_BASE}/profiles`, {
-        headers: lateHeaders,
-      });
-
-      if (listResponse.ok) {
-        const listData = await listResponse.json();
-        const profiles: Array<{ _id?: string; id?: string; name?: string }> =
-          listData?.profiles || listData?.data || listData || [];
-        console.log("[late-connect] Found", profiles.length, "existing profiles on Late.dev");
-
-        const match = profiles.find((p) => p.name === profileName);
-        if (match) {
-          profileId = match._id || match.id;
-          console.log("[late-connect] Reusing existing profile by name:", profileId);
-        } else if (profiles.length > 0) {
-          profileId = profiles[0]._id || profiles[0].id;
-          console.log("[late-connect] No name match, reusing first available profile:", profileId);
-        }
-      } else {
-        console.warn("[late-connect] Could not list profiles:", listResponse.status);
-      }
-
-      if (!profileId) {
-        console.log("[late-connect] No existing profile found, creating new one");
-        const profileResponse = await fetch(`${LATE_API_BASE}/profiles`, {
-          method: "POST",
-          headers: lateHeaders,
-          body: JSON.stringify({ name: profileName }),
-        });
-
-        if (profileResponse.ok) {
-          const profileData = await profileResponse.json();
-          console.log("[late-connect] Profile created:", JSON.stringify(profileData));
-          profileId =
-            profileData?.profile?._id ||
-            profileData?._id ||
-            profileData?.id ||
-            profileData?.profileId;
-        } else {
-          const errText = await profileResponse.text();
-          console.error("[late-connect] Failed to create profile:", profileResponse.status, errText);
-
-          let parsedErr: unknown;
-          try { parsedErr = JSON.parse(errText); } catch { parsedErr = errText; }
-
-          return new Response(
-            JSON.stringify({
-              success: false,
-              error: {
-                code: "LATE_ERROR",
-                message: "Failed to create Late.dev profile",
-                detail: parsedErr,
-                status: profileResponse.status,
-              },
-            }),
-            {
-              status: 502,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
-      }
-
-      if (profileId) {
-        await supabase.from("late_connections").upsert(
-          { org_id: orgId, late_profile_id: profileId, provider: "_profile_cache", status: "active" },
-          { onConflict: "org_id,provider" }
-        );
-        console.log("[late-connect] Cached profile ID to DB:", profileId);
-      }
-    }
-
-    if (!profileId) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: {
-            code: "LATE_ERROR",
-            message: "Failed to obtain Late.dev profile ID",
-          },
-        }),
-        {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    const appBaseUrl =
-      Deno.env.get("APP_BASE_URL") ||
-      supabaseUrl.replace(/\.supabase\.co.*/, ".supabase.co");
-
-    const redirectUrl = `${supabaseUrl}/functions/v1/late-callback?org_id=${orgId}&user_id=${userData.id}&provider=${provider}&profile_id=${profileId}&app_base_url=${encodeURIComponent(appBaseUrl)}`;
-
-    let connectUrl = `${LATE_API_BASE}/accounts/get-oauth-connect-url?profile_id=${profileId}&provider=${latePlatform}&redirect_url=${encodeURIComponent(redirectUrl)}`;
+    const connectPayload: Record<string, unknown> = {
+      platform: latePlatform,
+      redirectUrl,
+    };
 
     if (reconnect_account_id) {
-      connectUrl += `&reconnect=true&account_id=${encodeURIComponent(reconnect_account_id)}`;
+      connectPayload.accountId = reconnect_account_id;
     }
 
-    console.log("[late-connect] Calling connect URL:", connectUrl);
+    console.log("[late-connect] Calling POST /v1/connect/get-connect-url for platform:", latePlatform);
 
-    const connectResponse = await fetch(connectUrl, {
+    const connectResponse = await fetch(`${LATE_API_BASE}/connect/get-connect-url`, {
+      method: "POST",
       headers: lateHeaders,
+      body: JSON.stringify(connectPayload),
     });
 
+    const connectRaw = await connectResponse.text();
+    console.log("[late-connect] Connect response status:", connectResponse.status, "body:", connectRaw.slice(0, 500));
+
     if (!connectResponse.ok) {
-      const errText = await connectResponse.text();
-      console.error("[late-connect] Connect URL error:", errText);
+      let parsedErr: unknown;
+      try { parsedErr = JSON.parse(connectRaw); } catch { parsedErr = connectRaw; }
       return new Response(
         JSON.stringify({
           success: false,
           error: {
             code: "LATE_ERROR",
             message: "Failed to generate connection link",
+            detail: parsedErr,
+            status: connectResponse.status,
           },
         }),
-        {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const connectData = await connectResponse.json();
-    console.log("[late-connect] Connect response:", JSON.stringify(connectData));
+    let connectData: Record<string, unknown>;
+    try {
+      connectData = JSON.parse(connectRaw);
+    } catch {
+      return new Response(
+        JSON.stringify({ success: false, error: { code: "LATE_ERROR", message: "Invalid response from Late.dev" } }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    const authUrl = connectData.authUrl || connectData.url || connectData.connectUrl;
+    const authUrl =
+      (connectData.url as string) ||
+      (connectData.authUrl as string) ||
+      (connectData.connectUrl as string) ||
+      (connectData.oauthUrl as string) ||
+      ((connectData.data as Record<string, unknown>)?.url as string);
 
     if (!authUrl) {
+      console.error("[late-connect] No URL in response:", JSON.stringify(connectData));
       return new Response(
         JSON.stringify({
           success: false,
-          error: {
-            code: "LATE_ERROR",
-            message: "No auth URL returned from Late.dev",
-          },
+          error: { code: "LATE_ERROR", message: "No auth URL returned from Late.dev", detail: connectData },
         }),
-        {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -305,26 +184,16 @@ Deno.serve(async (req: Request) => {
           type: reconnect_account_id ? "reconnect" : "create",
         },
       }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("[late-connect] Error:", error);
     return new Response(
       JSON.stringify({
         success: false,
-        error: {
-          code: "INTERNAL_ERROR",
-          message:
-            error instanceof Error ? error.message : "Unexpected error",
-        },
+        error: { code: "INTERNAL_ERROR", message: error instanceof Error ? error.message : "Unexpected error" },
       }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

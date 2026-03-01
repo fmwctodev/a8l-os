@@ -8,13 +8,14 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const LATE_API_BASE = "https://getlate.dev/api/v1";
+const LATE_API_BASE = "https://api.getlate.dev/v1";
 
 const LATE_PLATFORM_TO_PROVIDER: Record<string, string> = {
   facebook: "facebook",
   instagram: "instagram",
   linkedin: "linkedin",
   googlebusiness: "google_business",
+  google_business: "google_business",
   tiktok: "tiktok",
   youtube: "youtube",
   reddit: "reddit",
@@ -22,22 +23,14 @@ const LATE_PLATFORM_TO_PROVIDER: Record<string, string> = {
 
 function resolveAccountType(provider: string): string {
   switch (provider) {
-    case "facebook":
-      return "page";
-    case "instagram":
-      return "business";
-    case "linkedin":
-      return "profile";
-    case "google_business":
-      return "location";
-    case "youtube":
-      return "channel";
-    case "tiktok":
-      return "profile";
-    case "reddit":
-      return "profile";
-    default:
-      return "profile";
+    case "facebook": return "page";
+    case "instagram": return "business";
+    case "linkedin": return "profile";
+    case "google_business": return "location";
+    case "youtube": return "channel";
+    case "tiktok": return "profile";
+    case "reddit": return "profile";
+    default: return "profile";
   }
 }
 
@@ -50,9 +43,8 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const lateApiKey = Deno.env.get("LATE_API_KEY")!;
-    const appBaseUrl =
-      Deno.env.get("APP_BASE_URL") ||
-      supabaseUrl.replace(/\.supabase\.co.*/, ".supabase.co");
+
+    const appBaseUrlDefault = Deno.env.get("APP_BASE_URL") || "https://os.autom8ionlab.com";
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -62,115 +54,131 @@ Deno.serve(async (req: Request) => {
     const orgId = url.searchParams.get("org_id");
     const userId = url.searchParams.get("user_id");
     const provider = url.searchParams.get("provider");
-    const profileId = url.searchParams.get("profile_id");
+    const appBaseUrl = url.searchParams.get("app_base_url")
+      ? decodeURIComponent(url.searchParams.get("app_base_url")!)
+      : appBaseUrlDefault;
     const error = url.searchParams.get("error");
-    const accountId = url.searchParams.get("accountId") || url.searchParams.get("account_id");
+
+    // Late.dev may pass these on callback
+    const lateAccountId = url.searchParams.get("accountId") || url.searchParams.get("account_id");
 
     if (error) {
       console.error("[late-callback] OAuth error:", error);
       return new Response(null, {
         status: 302,
-        headers: {
-          Location: `${appBaseUrl}/marketing/social/accounts?error=${encodeURIComponent(error)}`,
-        },
+        headers: { Location: `${appBaseUrl}/marketing/social/accounts?error=${encodeURIComponent(error)}` },
       });
     }
 
     if (!orgId || !userId || !provider) {
       return new Response(null, {
         status: 302,
-        headers: {
-          Location: `${appBaseUrl}/marketing/social/accounts?error=${encodeURIComponent("Missing required callback parameters")}`,
-        },
+        headers: { Location: `${appBaseUrl}/marketing/social/accounts?error=${encodeURIComponent("Missing required callback parameters")}` },
       });
     }
 
+    const lateHeaders = {
+      Authorization: `Bearer ${lateApiKey}`,
+      Accept: "application/json",
+    };
+
     let accounts: Array<Record<string, unknown>> = [];
 
-    if (accountId) {
-      const accountResponse = await fetch(
-        `${LATE_API_BASE}/accounts/${accountId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${lateApiKey}`,
-            Accept: "application/json",
-          },
-        }
-      );
-
+    // If Late.dev passed back a specific accountId on the redirect, fetch just that account
+    if (lateAccountId) {
+      console.log("[late-callback] Fetching specific account:", lateAccountId);
+      const accountResponse = await fetch(`${LATE_API_BASE}/accounts/${lateAccountId}`, { headers: lateHeaders });
       if (accountResponse.ok) {
         const accountData = await accountResponse.json();
-        accounts = [accountData];
+        const acc = accountData.account || accountData;
+        accounts = [acc];
+        console.log("[late-callback] Got account:", JSON.stringify(acc).slice(0, 200));
+      } else {
+        console.warn("[late-callback] Single account fetch failed:", accountResponse.status);
       }
     }
 
-    if (accounts.length === 0 && profileId) {
-      const listResponse = await fetch(
-        `${LATE_API_BASE}/accounts?profileId=${profileId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${lateApiKey}`,
-            Accept: "application/json",
-          },
-        }
-      );
+    // Fall back: list all accounts and filter by platform
+    if (accounts.length === 0) {
+      console.log("[late-callback] Listing all accounts via GET /v1/accounts/list-accounts");
+      const listResponse = await fetch(`${LATE_API_BASE}/accounts/list-accounts`, { headers: lateHeaders });
 
       if (listResponse.ok) {
         const listData = await listResponse.json();
-        const allAccounts = listData.accounts || listData.data || listData || [];
-        accounts = Array.isArray(allAccounts) ? allAccounts : [];
+        const allAccounts: Array<Record<string, unknown>> =
+          listData.accounts || listData.data || (Array.isArray(listData) ? listData : []);
+
+        console.log("[late-callback] Total accounts returned:", allAccounts.length);
 
         const latePlatformKey = provider === "google_business" ? "googlebusiness" : provider;
-        accounts = accounts.filter(
-          (a) =>
-            (a.platform as string)?.toLowerCase() === latePlatformKey ||
-            (a.provider as string)?.toLowerCase() === latePlatformKey
-        );
+        accounts = allAccounts.filter((a) => {
+          const p = ((a.platform as string) || (a.provider as string) || "").toLowerCase();
+          return p === latePlatformKey || p === provider;
+        });
+
+        console.log("[late-callback] Filtered to", accounts.length, "accounts for provider:", provider);
+      } else {
+        const errText = await listResponse.text();
+        console.error("[late-callback] List accounts failed:", listResponse.status, errText.slice(0, 300));
       }
     }
 
     if (accounts.length === 0) {
-      console.error("[late-callback] No accounts found after OAuth");
+      console.error("[late-callback] No accounts found after OAuth for provider:", provider);
       return new Response(null, {
         status: 302,
-        headers: {
-          Location: `${appBaseUrl}/marketing/social/accounts?error=${encodeURIComponent("No accounts found after authorization")}`,
-        },
+        headers: { Location: `${appBaseUrl}/marketing/social/accounts?error=${encodeURIComponent("No accounts found after authorization. Please try again.")}` },
       });
     }
 
     let savedCount = 0;
 
     for (const account of accounts) {
-      const lateAccountId =
+      const accountId =
         (account.id as string) ||
+        (account._id as string) ||
         (account.accountId as string) ||
         "";
+
       const displayName =
         (account.name as string) ||
-        (account.username as string) ||
         (account.displayName as string) ||
+        (account.username as string) ||
         `${provider} Account`;
+
       const avatarUrl =
         (account.avatar as string) ||
         (account.avatarUrl as string) ||
+        (account.profilePicture as string) ||
         (account.profile_picture_url as string) ||
         null;
+
       const externalId =
         (account.externalId as string) ||
         (account.socialId as string) ||
-        lateAccountId;
-      const accountType = resolveAccountType(provider);
+        (account.platformUserId as string) ||
+        accountId;
 
+      const resolvedProvider = LATE_PLATFORM_TO_PROVIDER[
+        ((account.platform as string) || provider).toLowerCase()
+      ] || provider;
+
+      const accountType = resolveAccountType(resolvedProvider);
+
+      if (!accountId) {
+        console.warn("[late-callback] Account missing ID, skipping:", JSON.stringify(account).slice(0, 200));
+        continue;
+      }
+
+      // Upsert into late_connections
       const { error: lateUpsertError } = await supabase
         .from("late_connections")
         .upsert(
           {
             org_id: orgId,
             connected_by_user_id: userId,
-            late_account_id: lateAccountId,
-            late_profile_id: profileId,
-            platform: provider,
+            late_account_id: accountId,
+            platform: resolvedProvider,
             account_name: displayName,
             avatar_url: avatarUrl,
             status: "connected",
@@ -180,15 +188,16 @@ Deno.serve(async (req: Request) => {
         );
 
       if (lateUpsertError) {
-        console.error("[late-callback] Late connection upsert failed:", lateUpsertError);
+        console.error("[late-callback] late_connections upsert failed:", lateUpsertError);
       }
 
+      // Upsert into social_accounts
       const { error: socialUpsertError } = await supabase
         .from("social_accounts")
         .upsert(
           {
             organization_id: orgId,
-            provider,
+            provider: resolvedProvider,
             external_account_id: externalId,
             display_name: displayName,
             profile_image_url: avatarUrl,
@@ -197,8 +206,7 @@ Deno.serve(async (req: Request) => {
             last_error: null,
             connected_by: userId,
             token_meta: {
-              late_account_id: lateAccountId,
-              late_profile_id: profileId,
+              late_account_id: accountId,
               connected_via: "late_dev",
             },
             updated_at: new Date().toISOString(),
@@ -207,31 +215,24 @@ Deno.serve(async (req: Request) => {
         );
 
       if (socialUpsertError) {
-        console.error("[late-callback] Social account upsert failed:", socialUpsertError);
+        console.error("[late-callback] social_accounts upsert failed:", socialUpsertError);
       } else {
         savedCount++;
       }
     }
 
-    console.log(
-      `[late-callback] Saved ${savedCount} account(s) for org ${orgId}, provider ${provider}`
-    );
+    console.log(`[late-callback] Saved ${savedCount} account(s) for org ${orgId}, provider ${provider}`);
 
     return new Response(null, {
       status: 302,
-      headers: {
-        Location: `${appBaseUrl}/marketing/social/accounts?late=success&count=${savedCount}`,
-      },
+      headers: { Location: `${appBaseUrl}/marketing/social/accounts?late=success&count=${savedCount}` },
     });
   } catch (error) {
     console.error("[late-callback] Error:", error);
-    const appBaseUrl =
-      Deno.env.get("APP_BASE_URL") || "https://app.example.com";
+    const appBaseUrl = Deno.env.get("APP_BASE_URL") || "https://os.autom8ionlab.com";
     return new Response(null, {
       status: 302,
-      headers: {
-        Location: `${appBaseUrl}/marketing/social/accounts?error=${encodeURIComponent("Connection failed unexpectedly")}`,
-      },
+      headers: { Location: `${appBaseUrl}/marketing/social/accounts?error=${encodeURIComponent("Connection failed unexpectedly")}` },
     });
   }
 });

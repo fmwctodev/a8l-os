@@ -10,6 +10,7 @@ const corsHeaders = {
 
 const LATE_API_BASE = "https://api.getlate.dev/v1";
 
+
 type SocialProvider =
   | "facebook"
   | "instagram"

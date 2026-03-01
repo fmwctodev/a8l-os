@@ -16,13 +16,26 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const webhookSecret = Deno.env.get("LATE_WEBHOOK_SECRET");
+
+    // Validate webhook signature if secret is configured
+    if (webhookSecret) {
+      const signature = req.headers.get("x-late-signature") || req.headers.get("x-webhook-signature");
+      if (!signature) {
+        console.warn("[late-webhook] Missing signature header — rejecting");
+        return new Response(
+          JSON.stringify({ success: false, error: "Missing webhook signature" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
     const rawBody = await req.text();
-    console.log("[late-webhook] Received:", rawBody);
+    console.log("[late-webhook] Received event, body length:", rawBody.length);
 
     let payload: Record<string, unknown>;
     try {
@@ -30,10 +43,7 @@ Deno.serve(async (req: Request) => {
     } catch {
       return new Response(
         JSON.stringify({ success: false, error: "Invalid JSON" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -43,6 +53,8 @@ Deno.serve(async (req: Request) => {
       (payload.eventType as string) ||
       "";
 
+    const data = (payload.data as Record<string, unknown>) || {};
+
     console.log(`[late-webhook] Event type: ${eventType}`);
 
     if (
@@ -50,19 +62,16 @@ Deno.serve(async (req: Request) => {
       eventType === "post.success" ||
       eventType === "post_published"
     ) {
-      const postId =
+      const latePostId =
         (payload.postId as string) ||
         (payload.post_id as string) ||
-        ((payload.data as Record<string, unknown>)?.postId as string) ||
-        ((payload.data as Record<string, unknown>)?.id as string);
+        (data.postId as string) ||
+        (data.id as string);
 
-      if (!postId) {
+      if (!latePostId) {
         return new Response(
           JSON.stringify({ success: true, action: "ignored", reason: "no postId" }),
-          {
-            status: 200,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -71,33 +80,21 @@ Deno.serve(async (req: Request) => {
         .update({
           status: "posted",
           late_status: "published",
-          posted_at: new Date().toISOString(),
+          posted_at: (data.publishedAt as string) || new Date().toISOString(),
+          published_at: (data.publishedAt as string) || new Date().toISOString(),
           late_response: payload,
         })
-        .eq("late_post_id", postId);
+        .eq("late_post_id", latePostId);
 
       if (updateError) {
         console.error("[late-webhook] Post update failed:", updateError);
+      } else {
+        console.log("[late-webhook] Marked post published:", latePostId);
       }
-
-      await supabase.from("social_post_logs").insert({
-        post_id: null,
-        account_id: null,
-        action: "success",
-        details: {
-          via: "late_webhook",
-          event: eventType,
-          late_post_id: postId,
-          payload,
-        },
-      });
 
       return new Response(
         JSON.stringify({ success: true, action: "post_published" }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -106,17 +103,19 @@ Deno.serve(async (req: Request) => {
       eventType === "post.error" ||
       eventType === "post_failed"
     ) {
-      const postId =
+      const latePostId =
         (payload.postId as string) ||
         (payload.post_id as string) ||
-        ((payload.data as Record<string, unknown>)?.postId as string) ||
-        ((payload.data as Record<string, unknown>)?.id as string);
+        (data.postId as string) ||
+        (data.id as string);
+
       const errorMsg =
         (payload.error as string) ||
-        ((payload.data as Record<string, unknown>)?.error as string) ||
+        (data.error as string) ||
+        (data.message as string) ||
         "Post publishing failed";
 
-      if (postId) {
+      if (latePostId) {
         const { error: updateError } = await supabase
           .from("social_posts")
           .update({
@@ -125,32 +124,53 @@ Deno.serve(async (req: Request) => {
             last_error: typeof errorMsg === "string" ? errorMsg : JSON.stringify(errorMsg),
             late_response: payload,
           })
-          .eq("late_post_id", postId);
+          .eq("late_post_id", latePostId);
 
         if (updateError) {
           console.error("[late-webhook] Post failure update failed:", updateError);
+        } else {
+          console.log("[late-webhook] Marked post failed:", latePostId);
         }
-
-        await supabase.from("social_post_logs").insert({
-          post_id: null,
-          account_id: null,
-          action: "failure",
-          details: {
-            via: "late_webhook",
-            event: eventType,
-            late_post_id: postId,
-            error: errorMsg,
-            payload,
-          },
-        });
       }
 
       return new Response(
         JSON.stringify({ success: true, action: "post_failed" }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (
+      eventType === "post.updated" ||
+      eventType === "post_updated"
+    ) {
+      const latePostId =
+        (payload.postId as string) ||
+        (data.postId as string) ||
+        (data.id as string);
+
+      const newStatus = (data.status as string) || (payload.status as string);
+
+      if (latePostId && newStatus) {
+        const lateStatusMap: Record<string, { status: string; late_status: string }> = {
+          published: { status: "posted", late_status: "published" },
+          failed: { status: "failed", late_status: "failed" },
+          scheduled: { status: "scheduled", late_status: "scheduled" },
+          draft: { status: "draft", late_status: "draft" },
+          publishing: { status: "posting", late_status: "publishing" },
+        };
+
+        const mapped = lateStatusMap[newStatus.toLowerCase()];
+        if (mapped) {
+          await supabase
+            .from("social_posts")
+            .update({ ...mapped, late_response: payload })
+            .eq("late_post_id", latePostId);
         }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, action: "post_updated" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -162,20 +182,14 @@ Deno.serve(async (req: Request) => {
       const lateAccountId =
         (payload.accountId as string) ||
         (payload.account_id as string) ||
-        ((payload.data as Record<string, unknown>)?.accountId as string);
+        (data.accountId as string) ||
+        (data.id as string);
 
       if (lateAccountId) {
-        const { error: lateUpdateError } = await supabase
+        await supabase
           .from("late_connections")
-          .update({
-            status: "expired",
-            updated_at: new Date().toISOString(),
-          })
+          .update({ status: "expired", updated_at: new Date().toISOString() })
           .eq("late_account_id", lateAccountId);
-
-        if (lateUpdateError) {
-          console.error("[late-webhook] Late connection update failed:", lateUpdateError);
-        }
 
         const { data: lateConn } = await supabase
           .from("late_connections")
@@ -187,7 +201,7 @@ Deno.serve(async (req: Request) => {
           await supabase
             .from("social_accounts")
             .update({
-              status: "disconnected",
+              status: "error",
               last_error: "Account disconnected via Late.dev",
               updated_at: new Date().toISOString(),
             })
@@ -195,36 +209,26 @@ Deno.serve(async (req: Request) => {
             .eq("provider", lateConn.platform)
             .contains("token_meta", { late_account_id: lateAccountId });
         }
+
+        console.log("[late-webhook] Marked account disconnected:", lateAccountId);
       }
 
       return new Response(
         JSON.stringify({ success: true, action: "account_disconnected" }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`[late-webhook] Unhandled event type: ${eventType}`);
+    console.log(`[late-webhook] Unhandled event: ${eventType}`);
     return new Response(
       JSON.stringify({ success: true, action: "ignored", event: eventType }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("[late-webhook] Error:", error);
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      JSON.stringify({ success: false, error: error instanceof Error ? error.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
