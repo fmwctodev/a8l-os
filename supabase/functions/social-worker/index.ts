@@ -195,7 +195,7 @@ async function publishViaLate(
     }
 
     if (post.media && post.media.length > 0) {
-      latePayload.media = post.media
+      latePayload.mediaItems = post.media
         .filter((m) => m.url)
         .map((m) => ({ url: m.url, type: m.type }));
     }
