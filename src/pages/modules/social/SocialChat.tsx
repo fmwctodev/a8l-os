@@ -17,6 +17,7 @@ import {
   publishDraftFromChat,
 } from '../../../services/socialChat';
 import { getAssetsByJobIds } from '../../../services/mediaGeneration';
+import { callEdgeFunction } from '../../../lib/edgeFunction';
 import { supabase } from '../../../lib/supabase';
 import type {
   SocialAIThread,
@@ -232,7 +233,7 @@ export function SocialChat() {
     ) => {
       if (!orgId || !userId) return;
       try {
-        await publishDraftFromChat({
+        const postId = await publishDraftFromChat({
           orgId,
           userId,
           draft: {
@@ -251,6 +252,14 @@ export function SocialChat() {
           threadId: activeThreadId || undefined,
         });
 
+        if (mode === 'post_now') {
+          const res = await callEdgeFunction('social-worker', { post_id: postId });
+          if (!res.ok) {
+            const json = await res.json().catch(() => ({}));
+            throw new Error(json.error || 'Publish failed');
+          }
+        }
+
         setPublishStatuses((prev) => ({
           ...prev,
           [`${msgId}-${draftIndex}`]: { mode, scheduledAt },
@@ -259,8 +268,9 @@ export function SocialChat() {
         const label =
           mode === 'post_now' ? 'Posted' : mode === 'schedule' ? 'Scheduled' : 'Saved as draft';
         showToast('success', label);
-      } catch {
-        showToast('warning', 'Failed to publish draft');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to publish draft';
+        showToast('warning', msg);
       }
     },
     [orgId, userId, activeThreadId, showToast]
