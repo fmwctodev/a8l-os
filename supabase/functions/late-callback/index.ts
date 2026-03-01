@@ -34,6 +34,40 @@ function resolveAccountType(provider: string): string {
   }
 }
 
+async function fetchAccountsByPlatform(
+  lateHeaders: Record<string, string>,
+  profileId: string,
+  provider: string,
+): Promise<Array<Record<string, unknown>>> {
+  const listUrl = `${LATE_API_BASE}/accounts?profileId=${encodeURIComponent(profileId)}`;
+  console.log("[late-callback] Fetching accounts via GET", listUrl);
+
+  const listResponse = await fetch(listUrl, { headers: lateHeaders });
+
+  if (!listResponse.ok) {
+    const errText = await listResponse.text();
+    console.error("[late-callback] List accounts failed:", listResponse.status, errText.slice(0, 500));
+    return [];
+  }
+
+  const listData = await listResponse.json();
+  console.log("[late-callback] Raw list response:", JSON.stringify(listData).slice(0, 500));
+
+  const allAccounts: Array<Record<string, unknown>> =
+    listData.accounts || (Array.isArray(listData) ? listData : []);
+
+  console.log("[late-callback] Total accounts returned:", allAccounts.length);
+
+  const latePlatformKey = provider === "google_business" ? "googlebusiness" : provider;
+  const filtered = allAccounts.filter((a) => {
+    const p = ((a.platform as string) || "").toLowerCase();
+    return p === latePlatformKey || p === provider;
+  });
+
+  console.log("[late-callback] Filtered to", filtered.length, "accounts for provider:", provider);
+  return filtered;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -43,6 +77,7 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const lateApiKey = Deno.env.get("LATE_API_KEY")!;
+    const lateProfileId = Deno.env.get("LATE_PROFILE_ID") || "69a352613ecb689ae9742cc0";
 
     const appBaseUrlDefault = Deno.env.get("APP_BASE_URL") || "https://os.autom8ionlab.com";
 
@@ -59,7 +94,6 @@ Deno.serve(async (req: Request) => {
       : appBaseUrlDefault;
     const error = url.searchParams.get("error");
 
-    // Late.dev may pass these on callback
     const lateAccountId = url.searchParams.get("accountId") || url.searchParams.get("account_id");
 
     if (error) {
@@ -84,7 +118,6 @@ Deno.serve(async (req: Request) => {
 
     let accounts: Array<Record<string, unknown>> = [];
 
-    // If Late.dev passed back a specific accountId on the redirect, fetch just that account
     if (lateAccountId) {
       console.log("[late-callback] Fetching specific account:", lateAccountId);
       const accountResponse = await fetch(`${LATE_API_BASE}/accounts/${lateAccountId}`, { headers: lateHeaders });
@@ -92,35 +125,21 @@ Deno.serve(async (req: Request) => {
         const accountData = await accountResponse.json();
         const acc = accountData.account || accountData;
         accounts = [acc];
-        console.log("[late-callback] Got account:", JSON.stringify(acc).slice(0, 200));
+        console.log("[late-callback] Got account:", JSON.stringify(acc).slice(0, 300));
       } else {
-        console.warn("[late-callback] Single account fetch failed:", accountResponse.status);
+        const errText = await accountResponse.text();
+        console.warn("[late-callback] Single account fetch failed:", accountResponse.status, errText.slice(0, 300));
       }
     }
 
-    // Fall back: list all accounts and filter by platform
     if (accounts.length === 0) {
-      console.log("[late-callback] Listing all accounts via GET /v1/accounts/list-accounts");
-      const listResponse = await fetch(`${LATE_API_BASE}/accounts/list-accounts`, { headers: lateHeaders });
+      accounts = await fetchAccountsByPlatform(lateHeaders, lateProfileId, provider);
+    }
 
-      if (listResponse.ok) {
-        const listData = await listResponse.json();
-        const allAccounts: Array<Record<string, unknown>> =
-          listData.accounts || listData.data || (Array.isArray(listData) ? listData : []);
-
-        console.log("[late-callback] Total accounts returned:", allAccounts.length);
-
-        const latePlatformKey = provider === "google_business" ? "googlebusiness" : provider;
-        accounts = allAccounts.filter((a) => {
-          const p = ((a.platform as string) || (a.provider as string) || "").toLowerCase();
-          return p === latePlatformKey || p === provider;
-        });
-
-        console.log("[late-callback] Filtered to", accounts.length, "accounts for provider:", provider);
-      } else {
-        const errText = await listResponse.text();
-        console.error("[late-callback] List accounts failed:", listResponse.status, errText.slice(0, 300));
-      }
+    if (accounts.length === 0) {
+      console.log("[late-callback] No accounts on first attempt, retrying after 2s...");
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      accounts = await fetchAccountsByPlatform(lateHeaders, lateProfileId, provider);
     }
 
     if (accounts.length === 0) {
@@ -135,14 +154,14 @@ Deno.serve(async (req: Request) => {
 
     for (const account of accounts) {
       const accountId =
-        (account.id as string) ||
         (account._id as string) ||
+        (account.id as string) ||
         (account.accountId as string) ||
         "";
 
       const displayName =
-        (account.name as string) ||
         (account.displayName as string) ||
+        (account.name as string) ||
         (account.username as string) ||
         `${provider} Account`;
 
@@ -166,11 +185,12 @@ Deno.serve(async (req: Request) => {
       const accountType = resolveAccountType(resolvedProvider);
 
       if (!accountId) {
-        console.warn("[late-callback] Account missing ID, skipping:", JSON.stringify(account).slice(0, 200));
+        console.warn("[late-callback] Account missing ID, skipping:", JSON.stringify(account).slice(0, 300));
         continue;
       }
 
-      // Upsert into late_connections
+      console.log(`[late-callback] Saving account: id=${accountId}, name=${displayName}, provider=${resolvedProvider}`);
+
       const { error: lateUpsertError } = await supabase
         .from("late_connections")
         .upsert(
@@ -191,7 +211,6 @@ Deno.serve(async (req: Request) => {
         console.error("[late-callback] late_connections upsert failed:", lateUpsertError);
       }
 
-      // Upsert into social_accounts
       const { error: socialUpsertError } = await supabase
         .from("social_accounts")
         .upsert(
