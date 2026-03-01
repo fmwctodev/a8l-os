@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Check,
   Copy,
@@ -148,8 +148,20 @@ export function PostDraftCard({
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [editMode, setEditMode] = useState(false);
-  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>(() =>
+    accounts
+      .filter((a) => draft.platform === 'all' || a.provider === draft.platform)
+      .map((a) => a.id)
+  );
   const [showAccountPicker, setShowAccountPicker] = useState(false);
+
+  useEffect(() => {
+    if (selectedAccounts.length > 0) return;
+    const matching = accounts
+      .filter((a) => draft.platform === 'all' || a.provider === draft.platform)
+      .map((a) => a.id);
+    if (matching.length > 0) setSelectedAccounts(matching);
+  }, [accounts, draft.platform]);
   const [showScheduler, setShowScheduler] = useState(false);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
