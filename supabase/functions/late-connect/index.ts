@@ -149,42 +149,61 @@ Deno.serve(async (req: Request) => {
 
     if (!profileId) {
       const profileName = `org-${orgId}`;
-      const profileResponse = await fetch(`${LATE_API_BASE}/profiles`, {
-        method: "POST",
+
+      console.log("[late-connect] No cached profile, checking Late.dev API for existing profiles");
+      const listResponse = await fetch(`${LATE_API_BASE}/profiles`, {
         headers: lateHeaders,
-        body: JSON.stringify({ name: profileName }),
       });
 
-      if (profileResponse.ok) {
-        const profileData = await profileResponse.json();
-        console.log("[late-connect] Profile created:", JSON.stringify(profileData));
-        profileId =
-          profileData?.profile?._id ||
-          profileData?._id ||
-          profileData?.id ||
-          profileData?.profileId;
-      } else if (profileResponse.status === 409) {
-        console.log("[late-connect] Profile name conflict, listing existing profiles to find match");
-        const listResponse = await fetch(`${LATE_API_BASE}/profiles`, {
-          headers: lateHeaders,
-        });
-        if (listResponse.ok) {
-          const listData = await listResponse.json();
-          const profiles: Array<{ _id?: string; id?: string; name?: string }> =
-            listData?.profiles || listData?.data || listData || [];
-          const match = profiles.find((p) => p.name === profileName);
-          if (match) {
-            profileId = match._id || match.id;
-            console.log("[late-connect] Found existing profile by name:", profileId);
-          }
+      if (listResponse.ok) {
+        const listData = await listResponse.json();
+        const profiles: Array<{ _id?: string; id?: string; name?: string }> =
+          listData?.profiles || listData?.data || listData || [];
+        console.log("[late-connect] Found", profiles.length, "existing profiles on Late.dev");
+
+        const match = profiles.find((p) => p.name === profileName);
+        if (match) {
+          profileId = match._id || match.id;
+          console.log("[late-connect] Reusing existing profile by name:", profileId);
+        } else if (profiles.length > 0) {
+          profileId = profiles[0]._id || profiles[0].id;
+          console.log("[late-connect] No name match, reusing first available profile:", profileId);
         }
-        if (!profileId) {
+      } else {
+        console.warn("[late-connect] Could not list profiles:", listResponse.status);
+      }
+
+      if (!profileId) {
+        console.log("[late-connect] No existing profile found, creating new one");
+        const profileResponse = await fetch(`${LATE_API_BASE}/profiles`, {
+          method: "POST",
+          headers: lateHeaders,
+          body: JSON.stringify({ name: profileName }),
+        });
+
+        if (profileResponse.ok) {
+          const profileData = await profileResponse.json();
+          console.log("[late-connect] Profile created:", JSON.stringify(profileData));
+          profileId =
+            profileData?.profile?._id ||
+            profileData?._id ||
+            profileData?.id ||
+            profileData?.profileId;
+        } else {
+          const errText = await profileResponse.text();
+          console.error("[late-connect] Failed to create profile:", profileResponse.status, errText);
+
+          let parsedErr: unknown;
+          try { parsedErr = JSON.parse(errText); } catch { parsedErr = errText; }
+
           return new Response(
             JSON.stringify({
               success: false,
               error: {
                 code: "LATE_ERROR",
-                message: "Profile name conflict and could not find existing profile",
+                message: "Failed to create Late.dev profile",
+                detail: parsedErr,
+                status: profileResponse.status,
               },
             }),
             {
@@ -193,28 +212,14 @@ Deno.serve(async (req: Request) => {
             }
           );
         }
-      } else {
-        const errText = await profileResponse.text();
-        console.error("[late-connect] Failed to create profile:", profileResponse.status, errText);
+      }
 
-        let parsedErr: unknown;
-        try { parsedErr = JSON.parse(errText); } catch { parsedErr = errText; }
-
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: {
-              code: "LATE_ERROR",
-              message: "Failed to create Late.dev profile",
-              detail: parsedErr,
-              status: profileResponse.status,
-            },
-          }),
-          {
-            status: 502,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+      if (profileId) {
+        await supabase.from("late_connections").upsert(
+          { org_id: orgId, late_profile_id: profileId, provider: "_profile_cache", status: "active" },
+          { onConflict: "org_id,provider" }
         );
+        console.log("[late-connect] Cached profile ID to DB:", profileId);
       }
     }
 
