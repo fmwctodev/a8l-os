@@ -133,6 +133,20 @@ export async function getKieModels(type?: 'image' | 'video'): Promise<KieModel[]
   return data || [];
 }
 
+export const LOCKED_IMAGE_MODEL_KEY = 'nano-banana-2';
+
+export async function getLockedImageModel(): Promise<KieModel | null> {
+  const { data, error } = await supabase
+    .from('kie_models')
+    .select('*')
+    .eq('model_key', LOCKED_IMAGE_MODEL_KEY)
+    .eq('enabled', true)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function getAllKieModels(): Promise<KieModel[]> {
   const { data, error } = await supabase
     .from('kie_models')

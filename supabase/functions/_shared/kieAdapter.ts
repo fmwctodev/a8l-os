@@ -226,6 +226,12 @@ export async function generateTextToImage(
   apiKey: string,
   params: StandardGenerateParams
 ): Promise<KieResult> {
+  if (params.modelKey !== "nano-banana-2") {
+    console.warn(
+      `[kieAdapter] Image model override: requested "${params.modelKey}", forcing nano-banana-2`
+    );
+    params = { ...params, modelKey: "nano-banana-2" };
+  }
   if (params.endpointOverride) {
     return generateWithOverride(apiKey, params);
   }

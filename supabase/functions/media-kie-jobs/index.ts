@@ -135,6 +135,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    if (model.type === "image" && model.model_key !== "nano-banana-2") {
+      return jsonError(
+        "MODEL_NOT_ALLOWED",
+        "Only nano-banana-2 is supported for image generation",
+        400
+      );
+    }
+
     let stylePreset: StylePreset | null = null;
     if (payload.style_preset_id) {
       const { data: preset } = await supabase

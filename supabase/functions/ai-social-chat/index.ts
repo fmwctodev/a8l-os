@@ -23,7 +23,6 @@ interface ChatRequest {
   content: string;
   message_type?: "text" | "url_share" | "image_share";
   attachments?: Array<{ type: string; url: string; title?: string }>;
-  image_model_id?: string;
   video_model_id?: string;
   aspect_ratio?: string;
   auto_generate_media?: boolean;
@@ -94,7 +93,6 @@ Deno.serve(async (req: Request) => {
       content,
       message_type = "text",
       attachments = [],
-      image_model_id,
       video_model_id,
       aspect_ratio,
       auto_generate_media = true,
@@ -190,7 +188,8 @@ Example:
 
 Always provide visual_style_suggestion when media_type is "image" or "video".
 Keep posts within platform character limits. Use relevant hashtags.
-Be creative and engaging. Adapt tone to each platform's audience.`;
+Be creative and engaging. Adapt tone to each platform's audience.
+For image generation, the model is always Nano Banana 2. Do not suggest, recommend, or reference any other image generation model.`;
 
     const rawHistory = (history || []).map((m: Record<string, unknown>) => ({
       role: m.role as string,
@@ -310,44 +309,53 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
           const draft = mediaDrafts[i];
           const draftIndex = drafts.indexOf(draft);
           const isVideo = draft.media_type === "video";
-          const preferredModelId = isVideo ? video_model_id : image_model_id;
 
           try {
             let model: Record<string, unknown> | null = null;
 
-            if (preferredModelId) {
-              const { data: preferred } = await supabase
-                .from("kie_models")
-                .select("*")
-                .eq("id", preferredModelId)
-                .eq("enabled", true)
-                .maybeSingle();
-              model = preferred;
-            }
+            if (isVideo) {
+              if (video_model_id) {
+                const { data: preferred } = await supabase
+                  .from("kie_models")
+                  .select("*")
+                  .eq("id", video_model_id)
+                  .eq("enabled", true)
+                  .maybeSingle();
+                model = preferred;
+              }
 
-            if (!model) {
-              const { data: recommended } = await supabase
-                .from("kie_models")
-                .select("*")
-                .eq("type", isVideo ? "video" : "image")
-                .eq("enabled", true)
-                .eq("is_recommended", true)
-                .order("display_priority", { ascending: true })
-                .limit(1)
-                .maybeSingle();
-              model = recommended;
-            }
+              if (!model) {
+                const { data: recommended } = await supabase
+                  .from("kie_models")
+                  .select("*")
+                  .eq("type", "video")
+                  .eq("enabled", true)
+                  .eq("is_recommended", true)
+                  .order("display_priority", { ascending: true })
+                  .limit(1)
+                  .maybeSingle();
+                model = recommended;
+              }
 
-            if (!model) {
-              const { data: anyEnabled } = await supabase
+              if (!model) {
+                const { data: anyEnabled } = await supabase
+                  .from("kie_models")
+                  .select("*")
+                  .eq("type", "video")
+                  .eq("enabled", true)
+                  .order("display_priority", { ascending: true })
+                  .limit(1)
+                  .maybeSingle();
+                model = anyEnabled;
+              }
+            } else {
+              const { data: nb2 } = await supabase
                 .from("kie_models")
                 .select("*")
-                .eq("type", isVideo ? "video" : "image")
+                .eq("model_key", "nano-banana-2")
                 .eq("enabled", true)
-                .order("display_priority", { ascending: true })
-                .limit(1)
                 .maybeSingle();
-              model = anyEnabled;
+              model = nb2;
             }
 
             if (!model) continue;

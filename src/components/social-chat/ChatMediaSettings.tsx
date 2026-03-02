@@ -8,8 +8,9 @@ import {
   Settings2,
   Zap,
   Palette,
+  Lock,
 } from 'lucide-react';
-import { getKieModels } from '../../services/mediaGeneration';
+import { getKieModels, getLockedImageModel } from '../../services/mediaGeneration';
 import type { KieModel } from '../../services/mediaGeneration';
 import { getStylePresets } from '../../services/mediaStylePresets';
 import type { MediaStylePreset } from '../../services/mediaStylePresets';
@@ -29,7 +30,7 @@ const ASPECT_RATIOS = [
 
 export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsProps) {
   const [expanded, setExpanded] = useState(false);
-  const [imageModels, setImageModels] = useState<KieModel[]>([]);
+  const [lockedImageModel, setLockedImageModel] = useState<KieModel | null>(null);
   const [videoModels, setVideoModels] = useState<KieModel[]>([]);
   const [stylePresets, setStylePresets] = useState<MediaStylePreset[]>([]);
   const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
@@ -41,14 +42,13 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
 
   async function loadModels() {
     try {
-      const [imgs, vids] = await Promise.all([
-        getKieModels('image'),
+      const [imgModel, vids] = await Promise.all([
+        getLockedImageModel(),
         getKieModels('video'),
       ]);
-      setImageModels(imgs);
+      setLockedImageModel(imgModel);
       setVideoModels(vids);
     } catch {
-      // models will stay empty
     }
   }
 
@@ -57,21 +57,15 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
       const presets = await getStylePresets();
       setStylePresets(presets);
     } catch {
-      // presets will stay empty
     }
   }
 
-  const selectedImageModel = imageModels.find(m => m.id === preferences.image_model_id);
   const selectedVideoModel = videoModels.find(m => m.id === preferences.video_model_id);
   const selectedPreset = stylePresets.find(p => p.id === preferences.style_preset_id);
   const autoGen = preferences.auto_generate_media !== false;
 
-  function selectModel(model: KieModel) {
-    if (model.type === 'image') {
-      onChange({ ...preferences, image_model_id: model.id });
-    } else {
-      onChange({ ...preferences, video_model_id: model.id });
-    }
+  function selectVideoModel(model: KieModel) {
+    onChange({ ...preferences, video_model_id: model.id });
   }
 
   function selectPreset(presetId: string | undefined) {
@@ -87,9 +81,6 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
     }
     onChange(newPrefs);
   }
-
-  const models = activeTab === 'image' ? imageModels : videoModels;
-  const selectedId = activeTab === 'image' ? preferences.image_model_id : preferences.video_model_id;
 
   return (
     <div className="border-t border-slate-700 bg-slate-800/50 flex-shrink-0">
@@ -111,9 +102,9 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
               {selectedPreset.display_name}
             </span>
           )}
-          {selectedImageModel && (
+          {lockedImageModel && (
             <span className="px-1.5 py-0.5 bg-slate-700 text-slate-300 rounded text-[10px]">
-              {selectedImageModel.display_name}
+              {lockedImageModel.display_name}
             </span>
           )}
           {selectedVideoModel && (
@@ -186,7 +177,7 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
                   }`}
                 >
                   <Image className="w-3 h-3" />
-                  Image ({imageModels.length})
+                  Image
                 </button>
                 <button
                   onClick={() => setActiveTab('video')}
@@ -201,44 +192,76 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
                 </button>
               </div>
 
-              <div className="max-h-60 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                {models.map((model) => (
-                  <button
-                    key={model.id}
-                    onClick={() => selectModel(model)}
-                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors ${
-                      selectedId === model.id
-                        ? 'bg-cyan-500/10 border border-cyan-500/30'
-                        : 'bg-slate-900/50 border border-transparent hover:border-slate-600'
-                    }`}
-                  >
+              {activeTab === 'image' ? (
+                lockedImageModel ? (
+                  <div className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className={`text-xs font-medium ${selectedId === model.id ? 'text-cyan-300' : 'text-slate-300'}`}>
-                          {model.display_name}
+                        <span className="text-xs font-medium text-cyan-300">
+                          {lockedImageModel.display_name}
                         </span>
-                        {model.badge_label && (
-                          <span className={`px-1 py-px rounded text-[9px] font-semibold ${
-                            model.is_recommended
-                              ? 'bg-amber-500/15 text-amber-400'
-                              : 'bg-slate-700 text-slate-400'
-                          }`}>
-                            {model.badge_label}
+                        {lockedImageModel.badge_label && (
+                          <span className="px-1 py-px rounded text-[9px] font-semibold bg-amber-500/15 text-amber-400">
+                            {lockedImageModel.badge_label}
                           </span>
                         )}
                       </div>
-                      {model.short_description && (
+                      {lockedImageModel.short_description && (
                         <p className="text-[10px] text-slate-500 mt-0.5 truncate">
-                          {model.short_description}
+                          {lockedImageModel.short_description}
                         </p>
                       )}
                     </div>
-                    {selectedId === model.id && (
-                      <Sparkles className="w-3 h-3 text-cyan-400 flex-shrink-0" />
-                    )}
-                  </button>
-                ))}
-              </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <Lock className="w-3 h-3 text-slate-500" />
+                      <Sparkles className="w-3 h-3 text-cyan-400" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-4 text-slate-500 text-xs">
+                    Image model not available
+                  </div>
+                )
+              ) : (
+                <div className="max-h-60 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                  {videoModels.map((model) => (
+                    <button
+                      key={model.id}
+                      onClick={() => selectVideoModel(model)}
+                      className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors ${
+                        preferences.video_model_id === model.id
+                          ? 'bg-cyan-500/10 border border-cyan-500/30'
+                          : 'bg-slate-900/50 border border-transparent hover:border-slate-600'
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-xs font-medium ${preferences.video_model_id === model.id ? 'text-cyan-300' : 'text-slate-300'}`}>
+                            {model.display_name}
+                          </span>
+                          {model.badge_label && (
+                            <span className={`px-1 py-px rounded text-[9px] font-semibold ${
+                              model.is_recommended
+                                ? 'bg-amber-500/15 text-amber-400'
+                                : 'bg-slate-700 text-slate-400'
+                            }`}>
+                              {model.badge_label}
+                            </span>
+                          )}
+                        </div>
+                        {model.short_description && (
+                          <p className="text-[10px] text-slate-500 mt-0.5 truncate">
+                            {model.short_description}
+                          </p>
+                        )}
+                      </div>
+                      {preferences.video_model_id === model.id && (
+                        <Sparkles className="w-3 h-3 text-cyan-400 flex-shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div>
                 <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">

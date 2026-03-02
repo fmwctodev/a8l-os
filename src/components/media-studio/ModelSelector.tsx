@@ -9,9 +9,10 @@ import {
   Zap,
   Sparkles,
   Search,
+  Lock,
 } from 'lucide-react';
 import type { KieModel } from '../../services/mediaGeneration';
-import { getKieModels } from '../../services/mediaGeneration';
+import { getKieModels, getLockedImageModel } from '../../services/mediaGeneration';
 
 interface ModelSelectorProps {
   selectedModelId: string | null;
@@ -39,6 +40,7 @@ export default function ModelSelector({
   platformHint,
 }: ModelSelectorProps) {
   const [models, setModels] = useState<KieModel[]>([]);
+  const [lockedImageModel, setLockedImageModel] = useState<KieModel | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'image' | 'video'>(mediaType || 'image');
   const [showAll, setShowAll] = useState(false);
@@ -52,11 +54,24 @@ export default function ModelSelector({
     if (mediaType) setActiveTab(mediaType);
   }, [mediaType]);
 
+  useEffect(() => {
+    if (activeTab === 'image' && lockedImageModel && selectedModelId !== lockedImageModel.id) {
+      onSelect(lockedImageModel);
+    }
+  }, [activeTab, lockedImageModel]);
+
   async function loadModels() {
     try {
       setLoading(true);
-      const data = await getKieModels();
-      setModels(data);
+      const [allModels, imgModel] = await Promise.all([
+        getKieModels(),
+        getLockedImageModel(),
+      ]);
+      setModels(allModels);
+      setLockedImageModel(imgModel);
+      if (imgModel) {
+        onSelect(imgModel);
+      }
     } catch (err) {
       console.error('Failed to load models:', err);
     } finally {
@@ -64,8 +79,8 @@ export default function ModelSelector({
     }
   }
 
-  const filtered = models.filter((m) => {
-    if (m.type !== activeTab) return false;
+  const videoModels = models.filter((m) => {
+    if (m.type !== 'video') return false;
     if (!showAll && !m.is_recommended) return false;
     if (search) {
       const q = search.toLowerCase();
@@ -89,7 +104,7 @@ export default function ModelSelector({
     );
   }
 
-  if (models.length === 0) {
+  if (models.length === 0 && !lockedImageModel) {
     return (
       <div className="text-center py-8 text-gray-500">
         <Sparkles className="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -125,138 +140,167 @@ export default function ModelSelector({
           Video
         </button>
 
-        <div className="ml-auto flex items-center gap-2">
-          {showAll && (
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search..."
-                className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:border-gray-700 w-36 focus:outline-none focus:ring-1 focus:ring-gray-300"
-              />
-            </div>
-          )}
-          <button
-            onClick={() => {
-              setShowAll(!showAll);
-              setSearch('');
-            }}
-            className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1"
-          >
-            {showAll ? (
-              <>
-                <Star className="w-3 h-3" />
-                Recommended
-                <ChevronUp className="w-3 h-3" />
-              </>
-            ) : (
-              <>
-                All Models
-                <ChevronDown className="w-3 h-3" />
-              </>
+        {activeTab === 'video' && (
+          <div className="ml-auto flex items-center gap-2">
+            {showAll && (
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search..."
+                  className="pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:border-gray-700 w-36 focus:outline-none focus:ring-1 focus:ring-gray-300"
+                />
+              </div>
             )}
-          </button>
-        </div>
+            <button
+              onClick={() => {
+                setShowAll(!showAll);
+                setSearch('');
+              }}
+              className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1"
+            >
+              {showAll ? (
+                <>
+                  <Star className="w-3 h-3" />
+                  Recommended
+                  <ChevronUp className="w-3 h-3" />
+                </>
+              ) : (
+                <>
+                  All Models
+                  <ChevronDown className="w-3 h-3" />
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
-      {selectedModel && (
-        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div className="w-8 h-8 rounded-lg bg-gray-900 dark:bg-white flex items-center justify-center flex-shrink-0">
-            {selectedModel.type === 'image' ? (
+      {activeTab === 'image' ? (
+        lockedImageModel ? (
+          <div className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="w-8 h-8 rounded-lg bg-gray-900 dark:bg-white flex items-center justify-center flex-shrink-0">
               <Image className="w-4 h-4 text-white dark:text-gray-900" />
-            ) : (
-              <Video className="w-4 h-4 text-white dark:text-gray-900" />
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                {selectedModel.display_name}
-              </span>
-              {selectedModel.badge_label && (
-                <span
-                  className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${
-                    BADGE_STYLES[selectedModel.badge_label] || BADGE_STYLES['UTILITY']
-                  }`}
-                >
-                  {selectedModel.badge_label}
-                </span>
-              )}
             </div>
-            <span className="text-xs text-gray-500 capitalize">{selectedModel.provider}</span>
-          </div>
-          <Zap className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 gap-1.5 max-h-[280px] overflow-y-auto pr-1">
-        {filtered.map((model) => {
-          const isSelected = model.id === selectedModelId;
-          return (
-            <button
-              key={model.id}
-              onClick={() => onSelect(model)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-all ${
-                isSelected
-                  ? 'border-gray-900 bg-gray-50 dark:border-white dark:bg-gray-800/50 ring-1 ring-gray-900 dark:ring-white'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/30'
-              }`}
-            >
-              <div
-                className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  isSelected
-                    ? 'bg-gray-900 dark:bg-white'
-                    : 'bg-gray-100 dark:bg-gray-800'
-                }`}
-              >
-                {model.type === 'image' ? (
-                  <Image
-                    className={`w-4 h-4 ${
-                      isSelected ? 'text-white dark:text-gray-900' : 'text-gray-500'
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                  {lockedImageModel.display_name}
+                </span>
+                {lockedImageModel.badge_label && (
+                  <span
+                    className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${
+                      BADGE_STYLES[lockedImageModel.badge_label] || BADGE_STYLES['UTILITY']
                     }`}
-                  />
-                ) : (
-                  <Video
-                    className={`w-4 h-4 ${
-                      isSelected ? 'text-white dark:text-gray-900' : 'text-gray-500'
-                    }`}
-                  />
+                  >
+                    {lockedImageModel.badge_label}
+                  </span>
                 )}
+              </div>
+              <span className="text-xs text-gray-500">
+                {lockedImageModel.short_description || lockedImageModel.provider}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <Lock className="w-3.5 h-3.5 text-gray-400" />
+              <Zap className="w-4 h-4 text-emerald-500" />
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-6 text-gray-500 text-sm">
+            Image model not available. Contact your administrator.
+          </div>
+        )
+      ) : (
+        <>
+          {selectedModel && selectedModel.type === 'video' && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="w-8 h-8 rounded-lg bg-gray-900 dark:bg-white flex items-center justify-center flex-shrink-0">
+                <Video className="w-4 h-4 text-white dark:text-gray-900" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                    {model.display_name}
+                    {selectedModel.display_name}
                   </span>
-                  {model.badge_label && (
+                  {selectedModel.badge_label && (
                     <span
-                      className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full whitespace-nowrap ${
-                        BADGE_STYLES[model.badge_label] || BADGE_STYLES['UTILITY']
+                      className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${
+                        BADGE_STYLES[selectedModel.badge_label] || BADGE_STYLES['UTILITY']
                       }`}
                     >
-                      {model.badge_label}
+                      {selectedModel.badge_label}
                     </span>
                   )}
-                  {model.is_recommended && !model.badge_label && (
-                    <Star className="w-3 h-3 text-amber-500 fill-amber-500 flex-shrink-0" />
-                  )}
                 </div>
-                <p className="text-xs text-gray-500 truncate">
-                  {model.short_description || model.provider}
-                </p>
+                <span className="text-xs text-gray-500 capitalize">{selectedModel.provider}</span>
               </div>
-            </button>
-          );
-        })}
+              <Zap className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+            </div>
+          )}
 
-        {filtered.length === 0 && (
-          <div className="text-center py-6 text-gray-500 text-sm">
-            {search ? 'No models match your search.' : 'No models available for this category.'}
+          <div className="grid grid-cols-1 gap-1.5 max-h-[280px] overflow-y-auto pr-1">
+            {videoModels.map((model) => {
+              const isSelected = model.id === selectedModelId;
+              return (
+                <button
+                  key={model.id}
+                  onClick={() => onSelect(model)}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-all ${
+                    isSelected
+                      ? 'border-gray-900 bg-gray-50 dark:border-white dark:bg-gray-800/50 ring-1 ring-gray-900 dark:ring-white'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/30'
+                  }`}
+                >
+                  <div
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                      isSelected
+                        ? 'bg-gray-900 dark:bg-white'
+                        : 'bg-gray-100 dark:bg-gray-800'
+                    }`}
+                  >
+                    <Video
+                      className={`w-4 h-4 ${
+                        isSelected ? 'text-white dark:text-gray-900' : 'text-gray-500'
+                      }`}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                        {model.display_name}
+                      </span>
+                      {model.badge_label && (
+                        <span
+                          className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full whitespace-nowrap ${
+                            BADGE_STYLES[model.badge_label] || BADGE_STYLES['UTILITY']
+                          }`}
+                        >
+                          {model.badge_label}
+                        </span>
+                      )}
+                      {model.is_recommended && !model.badge_label && (
+                        <Star className="w-3 h-3 text-amber-500 fill-amber-500 flex-shrink-0" />
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 truncate">
+                      {model.short_description || model.provider}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+
+            {videoModels.length === 0 && (
+              <div className="text-center py-6 text-gray-500 text-sm">
+                {search ? 'No models match your search.' : 'No models available for this category.'}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }

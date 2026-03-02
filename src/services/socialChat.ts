@@ -20,7 +20,6 @@ export interface MediaJobInfo {
 }
 
 export interface MediaPreferences {
-  image_model_id?: string;
   video_model_id?: string;
   aspect_ratio?: string;
   auto_generate_media?: boolean;
@@ -125,7 +124,6 @@ export async function sendMessage(
         content,
         message_type: messageType,
         attachments,
-        ...(mediaPrefs?.image_model_id && { image_model_id: mediaPrefs.image_model_id }),
         ...(mediaPrefs?.video_model_id && { video_model_id: mediaPrefs.video_model_id }),
         ...(mediaPrefs?.aspect_ratio && { aspect_ratio: mediaPrefs.aspect_ratio }),
         ...(mediaPrefs?.style_preset_id && { style_preset_id: mediaPrefs.style_preset_id }),
