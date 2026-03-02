@@ -1,40 +1,52 @@
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import { useVAD } from './useVAD';
 import { useSegmentRecorder } from './useSegmentRecorder';
 import { transcribeWake } from '../services/assistantVoice';
 import { playWakeChime } from '../utils/audioChime';
+
+const MAX_CONSECUTIVE_FAILURES = 3;
+const BACKOFF_PAUSE_MS = 15_000;
 
 export interface WakeWordOptions {
   enabled: boolean;
   wakePhrase?: string;
   stream: MediaStream | null;
   onWakeDetected: (commandPrefix?: string) => void;
+  onError?: (message: string) => void;
+  onErrorCleared?: () => void;
 }
 
 export interface WakeWordState {
   isListening: boolean;
-  start: () => void;
-  stop: () => void;
+  rmsLevel: number;
+  isPaused: boolean;
 }
 
 export function useWakeWord(options: WakeWordOptions): WakeWordState {
-  const { enabled, wakePhrase = 'clara', stream, onWakeDetected } = options;
+  const { enabled, wakePhrase = 'clara', stream, onWakeDetected, onError, onErrorCleared } = options;
   const processingRef = useRef(false);
-  const activeRef = useRef(false);
   const callbackRef = useRef(onWakeDetected);
   callbackRef.current = onWakeDetected;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  const onErrorClearedRef = useRef(onErrorCleared);
+  onErrorClearedRef.current = onErrorCleared;
   const wakePhraseRef = useRef(wakePhrase.toLowerCase());
   wakePhraseRef.current = wakePhrase.toLowerCase();
+
+  const failureCountRef = useRef(0);
+  const pauseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
 
   const segmentRecorder = useSegmentRecorder();
 
   const handleSpeechStart = useCallback(() => {
-    if (!activeRef.current || processingRef.current || !stream) return;
+    if (processingRef.current || !stream) return;
     segmentRecorder.startSegment(stream);
   }, [stream, segmentRecorder]);
 
   const handleSpeechEnd = useCallback(async () => {
-    if (!activeRef.current || processingRef.current) return;
+    if (processingRef.current) return;
     processingRef.current = true;
 
     try {
@@ -46,6 +58,8 @@ export function useWakeWord(options: WakeWordOptions): WakeWordState {
 
       const result = await transcribeWake(blob);
       const text = (result.text || '').toLowerCase().trim();
+
+      failureCountRef.current = 0;
 
       if (!text) {
         processingRef.current = false;
@@ -66,7 +80,18 @@ export function useWakeWord(options: WakeWordOptions): WakeWordState {
       const commandPrefix = afterWake.length > 2 ? afterWake : undefined;
       callbackRef.current(commandPrefix);
     } catch {
-      // Swallow STT errors silently, return to passive listening
+      failureCountRef.current += 1;
+
+      if (failureCountRef.current >= MAX_CONSECUTIVE_FAILURES) {
+        setIsPaused(true);
+        onErrorRef.current?.('Wake word temporarily unavailable, retrying...');
+
+        pauseTimerRef.current = setTimeout(() => {
+          failureCountRef.current = 0;
+          setIsPaused(false);
+          onErrorClearedRef.current?.();
+        }, BACKOFF_PAUSE_MS);
+      }
     } finally {
       processingRef.current = false;
     }
@@ -79,28 +104,26 @@ export function useWakeWord(options: WakeWordOptions): WakeWordState {
     onSpeechEnd: handleSpeechEnd,
   });
 
-  const start = useCallback(() => {
-    if (!enabled || !stream) return;
-    activeRef.current = true;
-    vad.setMode('passive');
-    vad.start(stream);
-  }, [enabled, stream, vad]);
-
-  const stop = useCallback(() => {
-    activeRef.current = false;
+  useEffect(() => {
+    if (enabled && stream && !isPaused) {
+      vad.setMode('passive');
+      vad.start(stream);
+      return () => vad.stop();
+    }
     vad.stop();
-    segmentRecorder.cancelSegment();
-  }, [vad, segmentRecorder]);
+  }, [enabled, stream, isPaused, vad]);
 
   useEffect(() => {
     return () => {
-      activeRef.current = false;
+      if (pauseTimerRef.current) {
+        clearTimeout(pauseTimerRef.current);
+      }
     };
   }, []);
 
   return {
-    isListening: activeRef.current && enabled,
-    start,
-    stop,
+    isListening: enabled && !!stream && !isPaused,
+    rmsLevel: vad.rmsLevel,
+    isPaused,
   };
 }

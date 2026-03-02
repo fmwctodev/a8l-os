@@ -53,7 +53,7 @@ export async function transcribeWake(audioBlob: Blob): Promise<{ text: string }>
   });
 
   if (!response.ok) {
-    return { text: '' };
+    throw new Error(`Wake STT failed: ${response.status}`);
   }
 
   return response.json();

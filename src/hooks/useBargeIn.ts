@@ -14,6 +14,7 @@ export interface BargeInOptions {
 
 export interface BargeInState {
   isActive: boolean;
+  rmsLevel: number;
 }
 
 export function useBargeIn(options: BargeInOptions): BargeInState {
@@ -59,5 +60,5 @@ export function useBargeIn(options: BargeInOptions): BargeInState {
     };
   }, [enabled, stream, isSpeaking, vad]);
 
-  return { isActive: enabled && isSpeaking };
+  return { isActive: enabled && isSpeaking, rmsLevel: vad.rmsLevel };
 }

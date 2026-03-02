@@ -6,10 +6,11 @@ import { usePersistentMic } from '../../../hooks/usePersistentMic';
 import { useVAD } from '../../../hooks/useVAD';
 import { useSegmentRecorder } from '../../../hooks/useSegmentRecorder';
 import { useVoicePlayer } from '../../../hooks/useVoicePlayer';
-import { transcribeWake, transcribeFinal, textToSpeech, cancelTTS } from '../../../services/assistantVoice';
+import { useWakeWord } from '../../../hooks/useWakeWord';
+import { useBargeIn } from '../../../hooks/useBargeIn';
+import { transcribeFinal, textToSpeech } from '../../../services/assistantVoice';
 import { sendMessage, createThread } from '../../../services/assistantChat';
 import { logVoiceEvent } from '../../../services/claraVoiceEvents';
-import { playWakeChime, playInterruptChime } from '../../../utils/audioChime';
 import { VoiceOrb } from './VoiceOrb';
 import type { ClaraVoiceMode } from '../../../types/assistant';
 
@@ -33,7 +34,6 @@ export function AssistantVoiceView() {
   const mic = usePersistentMic();
   const player = useVoicePlayer();
   const commandRecorder = useSegmentRecorder();
-  const wakeRecorder = useSegmentRecorder();
 
   const [transcript, setTranscript] = useState('');
   const [response, setResponse] = useState('');
@@ -167,100 +167,68 @@ export function AssistantVoiceView() {
     commandVad.start(stream);
   }, [commandRecorder, commandVad, setVoiceMode]);
 
-  const handleBargeIn = useCallback(() => {
-    if (!bargeInEnabled) return;
-    player.stop();
-    ttsAbortRef.current?.abort();
-    playInterruptChime();
+  const handleWakeDetected = useCallback((commandPrefix?: string) => {
     if (user && profile) {
-      cancelTTS(currentMessageIdRef.current || undefined).catch(() => {});
-      logVoiceEvent(user.id, profile.org_id, 'tts_interrupted', currentMessageIdRef.current);
+      logVoiceEvent(user.id, profile.org_id, 'wake_detected');
     }
+
+    if (commandPrefix) {
+      processCommand(new Blob([], { type: 'audio/webm' }), commandPrefix);
+      return;
+    }
+
+    if (mic.stream) {
+      startActiveListening(mic.stream);
+    }
+  }, [user, profile, mic.stream, processCommand, startActiveListening]);
+
+  const handleWakeError = useCallback((message: string) => {
+    setError(message);
+  }, []);
+
+  const handleWakeErrorCleared = useCallback(() => {
+    setError(null);
+  }, []);
+
+  const wakeWord = useWakeWord({
+    enabled: voiceMode === 'passive_listening' && !!mic.stream,
+    wakePhrase,
+    stream: mic.stream,
+    onWakeDetected: handleWakeDetected,
+    onError: handleWakeError,
+    onErrorCleared: handleWakeErrorCleared,
+  });
+
+  const handleBargeInInterrupted = useCallback(() => {
     setVoiceMode('interrupted');
     setTimeout(() => {
       if (mic.stream) {
         startActiveListening(mic.stream);
       }
     }, 100);
-  }, [bargeInEnabled, player, mic.stream, user, profile, setVoiceMode, startActiveListening]);
+  }, [mic.stream, setVoiceMode, startActiveListening]);
 
-  const speakingVad = useVAD({
-    startSpeechThreshold: 0.02,
-    bargeInDelayMs: 150,
-    onBargeIn: handleBargeIn,
+  const bargeIn = useBargeIn({
+    enabled: bargeInEnabled,
+    stream: mic.stream,
+    isSpeaking: voiceMode === 'speaking',
+    onInterrupted: handleBargeInInterrupted,
+    stopPlayer: player.stop,
+    currentMessageId: currentMessageIdRef.current,
   });
 
-  useEffect(() => {
-    if (voiceMode === 'speaking' && bargeInEnabled && mic.stream) {
-      speakingVad.setMode('speaking');
-      speakingVad.start(mic.stream);
-      return () => speakingVad.stop();
-    }
-  }, [voiceMode, bargeInEnabled, mic.stream]);
-
-  const handleWakeSpeechStart = useCallback(() => {
-    if (voiceMode !== 'passive_listening' || !mic.stream) return;
-    wakeRecorder.startSegment(mic.stream);
-  }, [voiceMode, mic.stream, wakeRecorder]);
-
-  const handleWakeSpeechEnd = useCallback(async () => {
-    try {
-      const blob = await wakeRecorder.stopSegment();
-      if (blob.size < 500) return;
-
-      const result = await transcribeWake(blob);
-      const text = (result.text || '').toLowerCase().trim();
-      if (!text) return;
-
-      const idx = text.indexOf(wakePhrase);
-      if (idx === -1) return;
-
-      playWakeChime();
-      if (user && profile) {
-        logVoiceEvent(user.id, profile.org_id, 'wake_detected');
-      }
-
-      const afterWake = text.slice(idx + wakePhrase.length).trim();
-
-      if (afterWake.length > 2) {
-        processCommand(new Blob([], { type: 'audio/webm' }), afterWake);
-        return;
-      }
-
-      if (mic.stream) {
-        startActiveListening(mic.stream);
-      }
-    } catch {
-      // Swallow wake detection errors
-    }
-  }, [wakePhrase, user, profile, mic.stream, wakeRecorder, processCommand, startActiveListening]);
-
-  const wakeVad = useVAD({
-    startSpeechThreshold: 0.015,
-    endSpeechSilenceMs: 700,
-    onSpeechStart: handleWakeSpeechStart,
-    onSpeechEnd: handleWakeSpeechEnd,
-  });
-
-  useEffect(() => {
-    if (voiceMode === 'passive_listening' && mic.stream) {
-      wakeVad.setMode('passive');
-      wakeVad.start(mic.stream);
-      return () => wakeVad.stop();
-    }
-  }, [voiceMode, mic.stream]);
-
-  const rmsLevel = voiceMode === 'active_listening' ? commandVad.rmsLevel : wakeVad.rmsLevel;
+  const rmsLevel = voiceMode === 'active_listening'
+    ? commandVad.rmsLevel
+    : voiceMode === 'speaking'
+      ? bargeIn.rmsLevel
+      : wakeWord.rmsLevel;
 
   const toggleMic = useCallback(async () => {
     if (micEnabled) {
       abortRef.current = true;
       player.stop();
       commandVad.stop();
-      wakeVad.stop();
-      speakingVad.stop();
       commandRecorder.cancelSegment();
-      wakeRecorder.cancelSegment();
       mic.releaseMic();
       setMicEnabled(false);
       setVoiceMode('idle');
@@ -284,7 +252,7 @@ export function AssistantVoiceView() {
     if (wakeEnabled) {
       setVoiceMode('passive_listening');
     }
-  }, [micEnabled, mic, player, commandVad, wakeVad, speakingVad, commandRecorder, wakeRecorder, setMicEnabled, wakeEnabled, user, profile, setVoiceMode]);
+  }, [micEnabled, mic, player, commandVad, commandRecorder, setMicEnabled, wakeEnabled, user, profile, setVoiceMode]);
 
   const handleHoldStart = useCallback(async () => {
     if (!user) return;
@@ -318,13 +286,12 @@ export function AssistantVoiceView() {
     abortRef.current = true;
     player.stop();
     commandVad.stop();
-    speakingVad.stop();
     commandRecorder.cancelSegment();
     ttsAbortRef.current?.abort();
     setTranscript('');
     setResponse('');
     setVoiceMode(defaultMode());
-  }, [player, commandVad, speakingVad, commandRecorder, setVoiceMode, defaultMode]);
+  }, [player, commandVad, commandRecorder, setVoiceMode, defaultMode]);
 
   if (!profile?.voice_enabled) {
     return (
@@ -352,7 +319,7 @@ export function AssistantVoiceView() {
 
   const stateLabels: Record<ClaraVoiceMode, string> = {
     idle: 'Mic off',
-    passive_listening: 'Listening for "Clara"...',
+    passive_listening: wakeWord.isPaused ? 'Reconnecting...' : 'Listening for "Clara"...',
     active_listening: 'Listening...',
     processing: 'Processing...',
     speaking: 'Speaking...',
@@ -377,10 +344,16 @@ export function AssistantVoiceView() {
             {micEnabled ? <Radio className="w-3 h-3" /> : <MicOff className="w-3 h-3" />}
             {micEnabled ? 'Mic On' : 'Mic Off'}
           </button>
-          {micEnabled && voiceMode === 'passive_listening' && (
+          {micEnabled && voiceMode === 'passive_listening' && !wakeWord.isPaused && (
             <span className="flex items-center gap-1 text-[10px] text-teal-400/70">
               <span className="w-1.5 h-1.5 rounded-full bg-teal-400/60 animate-pulse" />
               Wake word active
+            </span>
+          )}
+          {micEnabled && voiceMode === 'passive_listening' && wakeWord.isPaused && (
+            <span className="flex items-center gap-1 text-[10px] text-amber-400/70">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400/60 animate-pulse" />
+              Reconnecting
             </span>
           )}
         </div>
