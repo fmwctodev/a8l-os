@@ -1,5 +1,14 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  CLARA_MODEL,
+  CLARA_TEMPERATURE,
+  CLARA_MAX_TOKENS,
+  getResponsesApiUrl,
+  extractTextFromResponse,
+  type ResponsesApiInput,
+  type ResponsesApiResponse,
+} from "../_shared/claraConfig.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -147,7 +156,7 @@ async function resolveLLMConfig(
       if (p.provider === "openai" && p.api_key_encrypted) {
         return {
           provider: "openai",
-          model: "gpt-5.1",
+          model: CLARA_MODEL,
           apiKey: p.api_key_encrypted,
           baseUrl: p.base_url || undefined,
         };
@@ -157,7 +166,7 @@ async function resolveLLMConfig(
 
   const openaiKey = Deno.env.get("OPENAI_API_KEY");
   if (openaiKey) {
-    return { provider: "openai", model: "gpt-5.1", apiKey: openaiKey };
+    return { provider: "openai", model: CLARA_MODEL, apiKey: openaiKey };
   }
 
   throw new Error("No LLM provider configured");
@@ -168,9 +177,14 @@ async function callLLM(
   systemPrompt: string,
   transcript: string
 ): Promise<string> {
-  const url = config.baseUrl
-    ? `${config.baseUrl}/v1/chat/completions`
-    : "https://api.openai.com/v1/chat/completions";
+  const url = getResponsesApiUrl(config.baseUrl);
+
+  console.log("Clara using model:", CLARA_MODEL);
+
+  const input: ResponsesApiInput[] = [
+    { role: "developer", content: systemPrompt },
+    { role: "user", content: transcript.slice(0, 100000) },
+  ];
 
   const res = await fetch(url, {
     method: "POST",
@@ -179,18 +193,16 @@ async function callLLM(
       Authorization: `Bearer ${config.apiKey}`,
     },
     body: JSON.stringify({
-      model: config.model,
-      max_completion_tokens: 4096,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: transcript.slice(0, 100000) },
-      ],
+      model: CLARA_MODEL,
+      input,
+      temperature: CLARA_TEMPERATURE,
+      max_output_tokens: CLARA_MAX_TOKENS,
     }),
   });
 
   if (!res.ok) throw new Error(`OpenAI error: ${res.status}`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content || "";
+  const data = await res.json() as ResponsesApiResponse;
+  return extractTextFromResponse(data);
 }
 
 function json(data: unknown, status = 200): Response {

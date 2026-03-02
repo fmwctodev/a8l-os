@@ -9,6 +9,15 @@ import { validatePermissions } from "../_shared/its-permissions.ts";
 import { validateIntegrationState } from "../_shared/its-integration-check.ts";
 import { buildITSSystemPrompt } from "../_shared/its-system-prompt.ts";
 import { resolveRefreshToken, refreshAccessToken } from "../_shared/google-oauth-helpers.ts";
+import {
+  CLARA_MODEL,
+  CLARA_TEMPERATURE,
+  CLARA_MAX_TOKENS,
+  getResponsesApiUrl,
+  extractTextFromResponse,
+  type ResponsesApiInput,
+  type ResponsesApiResponse,
+} from "../_shared/claraConfig.ts";
 
 interface PageContext {
   current_path: string;
@@ -1637,7 +1646,7 @@ async function resolveLLMConfig(
       if (p.provider === "openai" && p.api_key_encrypted) {
         return {
           provider: "openai",
-          model: "gpt-5.1",
+          model: CLARA_MODEL,
           apiKey: p.api_key_encrypted,
           baseUrl: p.base_url || undefined,
         };
@@ -1647,7 +1656,7 @@ async function resolveLLMConfig(
 
   const openaiKey = Deno.env.get("OPENAI_API_KEY");
   if (openaiKey) {
-    return { provider: "openai", model: "gpt-5.1", apiKey: openaiKey };
+    return { provider: "openai", model: CLARA_MODEL, apiKey: openaiKey };
   }
 
   throw new Error("No LLM provider configured");
@@ -1673,22 +1682,26 @@ async function callOpenAI(
   messages: { role: string; content: string }[],
   jsonMode = true
 ): Promise<LLMResult> {
-  const url = config.baseUrl
-    ? `${config.baseUrl}/v1/chat/completions`
-    : "https://api.openai.com/v1/chat/completions";
+  const url = getResponsesApiUrl(config.baseUrl);
 
-  const openaiMessages = [
-    { role: "system", content: systemPrompt },
-    ...messages,
+  console.log("Clara using model:", CLARA_MODEL);
+
+  const input: ResponsesApiInput[] = [
+    { role: "developer", content: systemPrompt },
+    ...messages.map((m) => ({
+      role: (m.role === "assistant" ? "assistant" : "user") as ResponsesApiInput["role"],
+      content: m.content,
+    })),
   ];
 
   const body: Record<string, unknown> = {
-    model: config.model,
-    messages: openaiMessages,
-    max_completion_tokens: 4096,
+    model: CLARA_MODEL,
+    input,
+    temperature: CLARA_TEMPERATURE,
+    max_output_tokens: CLARA_MAX_TOKENS,
   };
   if (jsonMode) {
-    body.response_format = { type: "json_object" };
+    body.text = { format: { type: "json_object" } };
   }
 
   const res = await fetch(url, {
@@ -1705,7 +1718,7 @@ async function callOpenAI(
     return { text: "", error: `OpenAI API error ${res.status}: ${errText}` };
   }
 
-  const data = await res.json();
-  const msg = data.choices?.[0]?.message;
-  return { text: msg?.content || "" };
+  const data = await res.json() as ResponsesApiResponse;
+  const text = extractTextFromResponse(data);
+  return { text };
 }

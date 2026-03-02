@@ -1,6 +1,12 @@
-const LOCKED_MODEL = "gpt-5.1";
-const TEMPERATURE = 0.7;
-const MAX_TOKENS = 2000;
+import {
+  CLARA_MODEL,
+  CLARA_TEMPERATURE,
+  extractTextFromResponse,
+  type ResponsesApiInput,
+  type ResponsesApiResponse,
+} from "./claraConfig.ts";
+
+const MAX_OUTPUT_TOKENS = 2000;
 
 export interface TextCompletionResult {
   content: string;
@@ -12,17 +18,26 @@ export async function generateText(
   apiKey: string,
   messages: Array<{ role: string; content: string }>
 ): Promise<TextCompletionResult> {
-  const response = await fetch(apiUrl, {
+  const url = apiUrl.replace(/\/v1\/chat\/completions\/?$/, "/v1/responses");
+
+  console.log("Clara using model:", CLARA_MODEL);
+
+  const input: ResponsesApiInput[] = messages.map((m) => ({
+    role: (m.role === "system" ? "developer" : m.role === "assistant" ? "assistant" : "user") as ResponsesApiInput["role"],
+    content: m.content,
+  }));
+
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: LOCKED_MODEL,
-      messages,
-      temperature: TEMPERATURE,
-      max_completion_tokens: MAX_TOKENS,
+      model: CLARA_MODEL,
+      input,
+      temperature: CLARA_TEMPERATURE,
+      max_output_tokens: MAX_OUTPUT_TOKENS,
     }),
   });
 
@@ -34,9 +49,9 @@ export async function generateText(
     );
   }
 
-  const data = await response.json();
+  const data = await response.json() as ResponsesApiResponse;
   return {
-    content: data.choices?.[0]?.message?.content || "",
-    model: LOCKED_MODEL,
+    content: extractTextFromResponse(data),
+    model: CLARA_MODEL,
   };
 }

@@ -1,5 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  CLARA_MODEL,
+  CLARA_TEMPERATURE,
+  extractTextFromResponse,
+  type ResponsesApiResponse,
+} from "../_shared/claraConfig.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -197,23 +203,25 @@ Deno.serve(async (req: Request) => {
           ai_instructions || null
         );
 
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        console.log("Clara using model:", CLARA_MODEL);
+
+        const response = await fetch("https://api.openai.com/v1/responses", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${openaiKey}`,
           },
           body: JSON.stringify({
-            model: "gpt-5.1",
-            max_completion_tokens: 256,
-            temperature: 0.7,
-            messages: [{ role: "user", content: prompt }],
+            model: CLARA_MODEL,
+            max_output_tokens: 256,
+            temperature: CLARA_TEMPERATURE,
+            input: [{ role: "user", content: prompt }],
           }),
         });
 
         if (response.ok) {
-          const result = await response.json();
-          aiDraftContent = result.choices?.[0]?.message?.content?.trim() || "";
+          const result = await response.json() as ResponsesApiResponse;
+          aiDraftContent = extractTextFromResponse(result).trim();
         }
       }
 
@@ -237,23 +245,25 @@ Deno.serve(async (req: Request) => {
           ai_instructions || null
         );
 
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        console.log("Clara using model:", CLARA_MODEL);
+
+        const response = await fetch("https://api.openai.com/v1/responses", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${openaiKey}`,
           },
           body: JSON.stringify({
-            model: "gpt-5.1",
-            max_completion_tokens: 1024,
-            temperature: 0.7,
-            messages: [{ role: "user", content: prompt }],
+            model: CLARA_MODEL,
+            max_output_tokens: 1024,
+            temperature: CLARA_TEMPERATURE,
+            input: [{ role: "user", content: prompt }],
           }),
         });
 
         if (response.ok) {
-          const result = await response.json();
-          const fullText = result.choices?.[0]?.message?.content?.trim() || "";
+          const result = await response.json() as ResponsesApiResponse;
+          const fullText = extractTextFromResponse(result).trim();
           const subjectMatch = fullText.match(/^Subject:\s*(.+)/im);
           if (subjectMatch) {
             aiDraftSubject = subjectMatch[1].trim();

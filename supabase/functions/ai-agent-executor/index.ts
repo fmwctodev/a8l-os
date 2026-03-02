@@ -1,5 +1,13 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  CLARA_MODEL,
+  CLARA_TEMPERATURE,
+  extractTextFromResponse,
+  extractToolCallsFromResponse,
+  type ResponsesApiInput,
+  type ResponsesApiResponse,
+} from "../_shared/claraConfig.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -336,7 +344,7 @@ Deno.serve(async (req: Request) => {
     let draftSubject: string | null = null;
     const actionsSummary: string[] = [];
     const toolResults: Array<{ name: string; result: unknown }> = [];
-    let llmMessages: Array<{ role: string; content: unknown }> = [
+    let llmMessages: Array<Record<string, unknown>> = [
       { role: "user", content: inputPrompt },
     ];
 
@@ -721,14 +729,12 @@ Deno.serve(async (req: Request) => {
       }
     };
 
-    const openaiTools = tools.length > 0
+    const responsesTools = tools.length > 0
       ? tools.map((t) => ({
           type: "function" as const,
-          function: {
-            name: t.name,
-            description: t.description,
-            parameters: t.input_schema,
-          },
+          name: t.name,
+          description: t.description,
+          parameters: t.input_schema,
         }))
       : undefined;
 
@@ -740,24 +746,39 @@ Deno.serve(async (req: Request) => {
         throw new Error("Execution timeout exceeded");
       }
 
-      const openaiMessages = [
-        { role: "system", content: agent.system_prompt },
-        ...llmMessages,
+      const input: Array<ResponsesApiInput | { type: string; call_id: string; output: string }> = [
+        { role: "developer" as const, content: agent.system_prompt },
+        ...llmMessages.map((m) => {
+          if ((m as { type?: string }).type === "function_call_output") {
+            return m as { type: string; call_id: string; output: string };
+          }
+          return {
+            role: (m.role === "assistant" ? "assistant" : "user") as ResponsesApiInput["role"],
+            content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+          };
+        }),
       ];
 
-      const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
+      console.log("Clara using model:", CLARA_MODEL);
+
+      const requestBody: Record<string, unknown> = {
+        model: CLARA_MODEL,
+        input,
+        max_output_tokens: agent.max_tokens || 1024,
+        temperature: CLARA_TEMPERATURE,
+      };
+
+      if (responsesTools) {
+        requestBody.tools = responsesTools;
+      }
+
+      const openaiResponse = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${openaiApiKey}`,
         },
-        body: JSON.stringify({
-          model: "gpt-5.1",
-          max_completion_tokens: agent.max_tokens || 1024,
-          temperature: agent.temperature || 0.7,
-          tools: openaiTools,
-          messages: openaiMessages,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!openaiResponse.ok) {
@@ -765,41 +786,36 @@ Deno.serve(async (req: Request) => {
         throw new Error(`OpenAI API error: ${openaiResponse.status} - ${errorBody}`);
       }
 
-      const openaiData = await openaiResponse.json();
-      const choice = openaiData.choices?.[0];
-      const finishReason = choice?.finish_reason;
-      const message = choice?.message;
+      const openaiData = await openaiResponse.json() as ResponsesApiResponse;
+      const functionCalls = extractToolCallsFromResponse(openaiData);
+      const textContent = extractTextFromResponse(openaiData);
 
-      if (finishReason === "stop" || !message?.tool_calls || message.tool_calls.length === 0) {
-        outputSummary = message?.content || "";
+      if (functionCalls.length === 0) {
+        outputSummary = textContent;
         continueProcessing = false;
-      } else if (finishReason === "tool_calls" || message?.tool_calls?.length > 0) {
-        llmMessages.push({ role: "assistant", content: message.content || null, tool_calls: message.tool_calls });
-
-        for (const toolCall of message.tool_calls) {
+      } else {
+        for (const fc of functionCalls) {
           toolCallsCount++;
-          const toolName = toolCall.function.name;
+          const toolName = fc.name;
           let toolInput: Record<string, unknown> = {};
           try {
-            toolInput = JSON.parse(toolCall.function.arguments || "{}");
+            toolInput = JSON.parse(fc.arguments || "{}");
           } catch { /* empty */ }
 
           const result = await executeToolCall(toolName, toolInput);
           toolResults.push({ name: toolName, result });
 
           llmMessages.push({
-            role: "tool",
-            content: JSON.stringify(result),
-            tool_call_id: toolCall.id,
-          });
+            type: "function_call_output",
+            call_id: fc.call_id,
+            output: JSON.stringify(result),
+          } as unknown as { role: string; content: unknown });
 
           if (!result.success) {
             continueProcessing = false;
             break;
           }
         }
-      } else {
-        continueProcessing = false;
       }
     }
 
