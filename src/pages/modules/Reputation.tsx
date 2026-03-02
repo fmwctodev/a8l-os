@@ -1,31 +1,25 @@
 import { useState } from 'react';
 import { Send } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
 import { usePermission } from '../../hooks/usePermission';
 import { OverviewTab } from '../../components/reputation/OverviewTab';
 import { RequestsTab } from '../../components/reputation/RequestsTab';
-import { ReviewsTab } from '../../components/reputation/ReviewsTab';
-import { SettingsTab } from '../../components/reputation/SettingsTab';
+import { ReviewsInbox } from '../../components/reputation/ReviewsInbox';
+import { ReputationSettingsTab } from '../../components/reputation/ReputationSettingsTab';
 import { RequestReviewModal } from '../../components/reputation/RequestReviewModal';
-import { ReviewDetailModal } from '../../components/reputation/ReviewDetailModal';
-import type { Review } from '../../types';
 
 type TabType = 'overview' | 'requests' | 'reviews' | 'settings';
 
 export function Reputation() {
-  const { user } = useAuth();
   const canRequest = usePermission('reputation.request');
   const canManageProviders = usePermission('reputation.providers.manage');
 
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [showRequestModal, setShowRequestModal] = useState(false);
-  const [selectedReview, setSelectedReview] = useState<Review | null>(null);
-  const [showAddReviewModal, setShowAddReviewModal] = useState(false);
 
   const tabs = [
     { id: 'overview' as const, label: 'Overview' },
     { id: 'requests' as const, label: 'Requests' },
-    { id: 'reviews' as const, label: 'Reviews' },
+    { id: 'reviews' as const, label: 'Reviews Inbox' },
     { id: 'settings' as const, label: 'Settings', requiresPermission: true },
   ];
 
@@ -35,10 +29,6 @@ export function Reputation() {
 
   function handleConfigureLink() {
     setActiveTab('settings');
-  }
-
-  function handleAddReview() {
-    setShowAddReviewModal(true);
   }
 
   return (
@@ -86,15 +76,10 @@ export function Reputation() {
         />
       )}
 
-      {activeTab === 'reviews' && (
-        <ReviewsTab
-          onRequestReview={handleRequestReview}
-          onAddReview={handleAddReview}
-        />
-      )}
+      {activeTab === 'reviews' && <ReviewsInbox />}
 
       {activeTab === 'settings' && canManageProviders && (
-        <SettingsTab />
+        <ReputationSettingsTab />
       )}
 
       {showRequestModal && (
@@ -103,13 +88,6 @@ export function Reputation() {
           onSuccess={() => {
             setShowRequestModal(false);
           }}
-        />
-      )}
-
-      {selectedReview && (
-        <ReviewDetailModal
-          review={selectedReview}
-          onClose={() => setSelectedReview(null)}
         />
       )}
     </div>

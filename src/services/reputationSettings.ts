@@ -38,6 +38,16 @@ export async function getSettings(orgId: string): Promise<ReputationSettings> {
       negative_review_notify_sms: false,
       notification_recipients: [],
       response_time_goal_hours: 24,
+      default_temperature: 0.7,
+      default_signature: null,
+      auto_append_signature: false,
+      sla_hours_positive: 48,
+      sla_hours_negative: 4,
+      escalation_email: null,
+      escalation_user_id: null,
+      escalation_keywords: [],
+      auto_route_negative: false,
+      auto_route_positive: false,
     };
 
     const { data: created, error: createError } = await supabase
@@ -111,7 +121,7 @@ export async function getAvailableRecipients(
     id: u.id,
     name: u.name,
     email: u.email,
-    role_name: (u.role as { name: string } | null)?.name || 'User',
+    role_name: (u.role as unknown as { name: string } | null)?.name || 'User',
   }));
 }
 

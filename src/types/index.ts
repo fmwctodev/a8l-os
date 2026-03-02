@@ -2860,6 +2860,16 @@ export interface ReputationSettings {
   negative_review_notify_sms: boolean;
   notification_recipients: string[];
   response_time_goal_hours: number;
+  default_temperature: number;
+  default_signature: string | null;
+  auto_append_signature: boolean;
+  sla_hours_positive: number;
+  sla_hours_negative: number;
+  escalation_email: string | null;
+  escalation_user_id: string | null;
+  escalation_keywords: string[];
+  auto_route_negative: boolean;
+  auto_route_positive: boolean;
   created_at: string;
   updated_at: string;
 }

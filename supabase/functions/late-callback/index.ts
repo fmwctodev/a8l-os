@@ -95,19 +95,24 @@ Deno.serve(async (req: Request) => {
     const error = url.searchParams.get("error");
 
     const lateAccountId = url.searchParams.get("accountId") || url.searchParams.get("account_id");
+    const returnPath = url.searchParams.get("return_path")
+      ? decodeURIComponent(url.searchParams.get("return_path")!)
+      : null;
+
+    const defaultRedirectPath = returnPath || "/marketing/social/accounts";
 
     if (error) {
       console.error("[late-callback] OAuth error:", error);
       return new Response(null, {
         status: 302,
-        headers: { Location: `${appBaseUrl}/marketing/social/accounts?error=${encodeURIComponent(error)}` },
+        headers: { Location: `${appBaseUrl}${defaultRedirectPath}?error=${encodeURIComponent(error)}` },
       });
     }
 
     if (!orgId || !userId || !provider) {
       return new Response(null, {
         status: 302,
-        headers: { Location: `${appBaseUrl}/marketing/social/accounts?error=${encodeURIComponent("Missing required callback parameters")}` },
+        headers: { Location: `${appBaseUrl}${defaultRedirectPath}?error=${encodeURIComponent("Missing required callback parameters")}` },
       });
     }
 
@@ -146,7 +151,7 @@ Deno.serve(async (req: Request) => {
       console.error("[late-callback] No accounts found after OAuth for provider:", provider);
       return new Response(null, {
         status: 302,
-        headers: { Location: `${appBaseUrl}/marketing/social/accounts?error=${encodeURIComponent("No accounts found after authorization. Please try again.")}` },
+        headers: { Location: `${appBaseUrl}${defaultRedirectPath}?error=${encodeURIComponent("No accounts found after authorization. Please try again.")}` },
       });
     }
 
@@ -242,16 +247,40 @@ Deno.serve(async (req: Request) => {
 
     console.log(`[late-callback] Saved ${savedCount} account(s) for org ${orgId}, provider ${provider}`);
 
+    const isReputationFlow = returnPath && returnPath.includes("reputation");
+    if (isReputationFlow && (provider === "google_business" || provider === "facebook")) {
+      const connectedAccounts = accounts.map((a) => ({
+        id: (a._id as string) || (a.id as string) || "",
+        name: (a.displayName as string) || (a.name as string) || "",
+        platform: ((a.platform as string) || provider).toLowerCase(),
+      }));
+
+      await supabase.from("reputation_integration_status").upsert(
+        {
+          org_id: orgId,
+          provider: "late",
+          connected: true,
+          accounts_connected: JSON.stringify(connectedAccounts),
+          last_error: null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "org_id,provider" }
+      );
+
+      console.log(`[late-callback] Updated reputation_integration_status for org ${orgId}`);
+    }
+
     return new Response(null, {
       status: 302,
-      headers: { Location: `${appBaseUrl}/marketing/social/accounts?late=success&count=${savedCount}` },
+      headers: { Location: `${appBaseUrl}${defaultRedirectPath}?late=success&count=${savedCount}` },
     });
   } catch (error) {
     console.error("[late-callback] Error:", error);
     const appBaseUrl = Deno.env.get("APP_BASE_URL") || "https://os.autom8ionlab.com";
+    const fallbackPath = "/marketing/social/accounts";
     return new Response(null, {
       status: 302,
-      headers: { Location: `${appBaseUrl}/marketing/social/accounts?error=${encodeURIComponent("Connection failed unexpectedly")}` },
+      headers: { Location: `${appBaseUrl}${fallbackPath}?error=${encodeURIComponent("Connection failed unexpectedly")}` },
     });
   }
 });

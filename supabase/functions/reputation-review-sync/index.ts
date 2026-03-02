@@ -1,0 +1,478 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, X-Client-Info, Apikey",
+};
+
+const LATE_API_BASE = "https://getlate.dev/api/v1";
+
+interface LateReview {
+  id: string;
+  platform: string;
+  accountId: string;
+  accountUsername?: string;
+  reviewer?: {
+    id?: string | null;
+    name?: string;
+    profileImage?: string | null;
+  };
+  rating: number;
+  text?: string;
+  created: string;
+  hasReply?: boolean;
+  reply?: {
+    id?: string;
+    text?: string;
+    created?: string;
+  } | null;
+  reviewUrl?: string | null;
+}
+
+interface LateListResponse {
+  status?: string;
+  data?: LateReview[];
+  pagination?: {
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  };
+  meta?: {
+    accountsQueried?: number;
+    accountsFailed?: number;
+    failedAccounts?: Array<{
+      accountId?: string;
+      accountUsername?: string | null;
+      platform?: string;
+      error?: string;
+      retryAfter?: number | null;
+    }>;
+    lastUpdated?: string;
+  };
+  summary?: {
+    totalReviews?: number;
+    averageRating?: number | null;
+  };
+}
+
+interface RoutingRule {
+  id: string;
+  platform: string | null;
+  min_rating: number | null;
+  max_rating: number | null;
+  assign_to_user_id: string | null;
+  assign_to_role: string | null;
+  priority: string;
+  requires_manual_approval: boolean;
+}
+
+interface ReputationSettings {
+  sla_hours_positive: number;
+  sla_hours_negative: number;
+  escalation_keywords: string[];
+  escalation_user_id: string | null;
+  escalation_email: string | null;
+}
+
+function computeSlaBreached(
+  reviewCreatedAt: string,
+  rating: number,
+  hasReply: boolean,
+  settings: ReputationSettings
+): boolean {
+  if (hasReply) return false;
+  const created = new Date(reviewCreatedAt);
+  const slaHours =
+    rating >= 4 ? settings.sla_hours_positive : settings.sla_hours_negative;
+  const deadline = new Date(created.getTime() + slaHours * 60 * 60 * 1000);
+  return new Date() > deadline;
+}
+
+function checkEscalation(
+  rating: number,
+  text: string | undefined,
+  keywords: string[]
+): boolean {
+  if (rating <= 2) return true;
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  return keywords.some((kw) => lower.includes(kw.toLowerCase()));
+}
+
+function matchRoutingRule(
+  rules: RoutingRule[],
+  platform: string,
+  rating: number
+): RoutingRule | null {
+  const priorityOrder: Record<string, number> = {
+    urgent: 4,
+    high: 3,
+    normal: 2,
+    low: 1,
+  };
+  const sorted = [...rules].sort(
+    (a, b) =>
+      (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0)
+  );
+  for (const rule of sorted) {
+    if (rule.platform && rule.platform !== platform) continue;
+    if (rule.min_rating && rating < rule.min_rating) continue;
+    if (rule.max_rating && rating > rule.max_rating) continue;
+    return rule;
+  }
+  return null;
+}
+
+async function fetchAllReviews(
+  lateApiKey: string,
+  profileId: string,
+  platform?: string,
+  maxPages = 10
+): Promise<{
+  reviews: LateReview[];
+  meta: LateListResponse["meta"];
+  summary: LateListResponse["summary"];
+}> {
+  const allReviews: LateReview[] = [];
+  let cursor: string | undefined;
+  let meta: LateListResponse["meta"];
+  let summary: LateListResponse["summary"];
+  let page = 0;
+
+  while (page < maxPages) {
+    const params = new URLSearchParams({ limit: "50" });
+    if (profileId) params.set("profileId", profileId);
+    if (platform) params.set("platform", platform);
+    params.set("sortBy", "date");
+    params.set("sortOrder", "desc");
+    if (cursor) params.set("cursor", cursor);
+
+    const url = `${LATE_API_BASE}/inbox/reviews?${params.toString()}`;
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${lateApiKey}`,
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(
+        `Late.dev API error ${response.status}: ${errText.slice(0, 500)}`
+      );
+    }
+
+    const data: LateListResponse = await response.json();
+    meta = data.meta;
+    summary = data.summary;
+
+    if (data.data && data.data.length > 0) {
+      allReviews.push(...data.data);
+    }
+
+    if (!data.pagination?.hasMore || !data.pagination?.nextCursor) break;
+    cursor = data.pagination.nextCursor;
+    page++;
+  }
+
+  return { reviews: allReviews, meta, summary };
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const lateApiKey = Deno.env.get("LATE_API_KEY");
+    const lateProfileId =
+      Deno.env.get("LATE_PROFILE_ID") || "69a352613ecb689ae9742cc0";
+
+    if (!lateApiKey) {
+      return new Response(
+        JSON.stringify({ error: "LATE_API_KEY not configured" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const isServiceRole = token === serviceRoleKey;
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    let orgId: string;
+    let userId: string | null = null;
+
+    if (isServiceRole) {
+      const body = req.method === "POST" ? await req.json() : {};
+      orgId = body.org_id || new URL(req.url).searchParams.get("org_id") || "";
+      userId = body.user_id || null;
+    } else {
+      const anonClient = createClient(
+        supabaseUrl,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { auth: { autoRefreshToken: false, persistSession: false } }
+      );
+      const { data: authData, error: authError } =
+        await anonClient.auth.getUser(token);
+      if (authError || !authData.user) {
+        return new Response(
+          JSON.stringify({ error: "Invalid or expired token" }),
+          {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+      userId = authData.user.id;
+      const { data: userData } = await supabase
+        .from("users")
+        .select("organization_id")
+        .eq("id", userId)
+        .maybeSingle();
+      orgId = userData?.organization_id || "";
+    }
+
+    if (!orgId) {
+      return new Response(
+        JSON.stringify({ error: "Organization ID required" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const url = new URL(req.url);
+    const platformFilter = url.searchParams.get("platform") || undefined;
+
+    console.log(
+      `[reputation-review-sync] Syncing reviews for org ${orgId}, platform: ${platformFilter || "all"}`
+    );
+
+    const { reviews, meta, summary } = await fetchAllReviews(
+      lateApiKey,
+      lateProfileId,
+      platformFilter
+    );
+
+    console.log(
+      `[reputation-review-sync] Fetched ${reviews.length} reviews from Late.dev`
+    );
+
+    const { data: settings } = await supabase
+      .from("reputation_settings")
+      .select(
+        "sla_hours_positive, sla_hours_negative, escalation_keywords, escalation_user_id, escalation_email"
+      )
+      .eq("organization_id", orgId)
+      .maybeSingle();
+
+    const slaSettings: ReputationSettings = {
+      sla_hours_positive: settings?.sla_hours_positive ?? 48,
+      sla_hours_negative: settings?.sla_hours_negative ?? 12,
+      escalation_keywords: settings?.escalation_keywords ?? [
+        "refund",
+        "lawsuit",
+        "attorney",
+        "scam",
+        "lawyer",
+        "legal",
+      ],
+      escalation_user_id: settings?.escalation_user_id ?? null,
+      escalation_email: settings?.escalation_email ?? null,
+    };
+
+    const { data: routingRules } = await supabase
+      .from("reputation_routing_rules")
+      .select("*")
+      .eq("org_id", orgId);
+
+    let upserted = 0;
+    let errors: string[] = [];
+
+    for (const review of reviews) {
+      try {
+        const hasReply = review.hasReply ?? false;
+        const slaBreached = computeSlaBreached(
+          review.created,
+          review.rating,
+          hasReply,
+          slaSettings
+        );
+        const escalated = checkEscalation(
+          review.rating,
+          review.text,
+          slaSettings.escalation_keywords
+        );
+
+        const matchedRule = matchRoutingRule(
+          (routingRules || []) as RoutingRule[],
+          review.platform,
+          review.rating
+        );
+
+        const reviewRow = {
+          org_id: orgId,
+          late_review_id: review.id,
+          platform: review.platform,
+          account_id: review.accountId,
+          account_username: review.accountUsername || null,
+          reviewer_name: review.reviewer?.name || "Anonymous",
+          reviewer_profile_image: review.reviewer?.profileImage || null,
+          rating: review.rating,
+          review_text: review.text || null,
+          review_created_at: review.created,
+          has_reply: hasReply,
+          reply_id: review.reply?.id || null,
+          reply_text: review.reply?.text || null,
+          reply_created_at: review.reply?.created || null,
+          review_url: review.reviewUrl || null,
+          sla_breached: slaBreached,
+          escalated,
+          assigned_to_user_id: matchedRule?.assign_to_user_id || null,
+          priority: escalated
+            ? "urgent"
+            : matchedRule?.priority || "normal",
+          requires_approval:
+            matchedRule?.requires_manual_approval || false,
+          last_synced_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: upsertError } = await supabase
+          .from("reputation_reviews")
+          .upsert(reviewRow, { onConflict: "org_id,late_review_id" });
+
+        if (upsertError) {
+          errors.push(
+            `Failed to upsert review ${review.id}: ${upsertError.message}`
+          );
+          continue;
+        }
+
+        upserted++;
+
+        if (review.reply && review.reply.text) {
+          const { data: existingReview } = await supabase
+            .from("reputation_reviews")
+            .select("id")
+            .eq("org_id", orgId)
+            .eq("late_review_id", review.id)
+            .maybeSingle();
+
+          if (existingReview) {
+            const { data: existingReply } = await supabase
+              .from("reputation_review_replies")
+              .select("id")
+              .eq("review_id", existingReview.id)
+              .eq("late_reply_id", review.reply.id || "")
+              .maybeSingle();
+
+            if (!existingReply) {
+              await supabase.from("reputation_review_replies").insert({
+                org_id: orgId,
+                review_id: existingReview.id,
+                late_reply_id: review.reply.id || null,
+                reply_text: review.reply.text,
+                reply_created_at: review.reply.created || null,
+                source: "late",
+                status: "published",
+              });
+            }
+          }
+        }
+      } catch (err) {
+        errors.push(
+          `Error processing review ${review.id}: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }
+
+    await supabase.from("reputation_integration_status").upsert(
+      {
+        org_id: orgId,
+        provider: "late",
+        connected: true,
+        last_sync_at: new Date().toISOString(),
+        last_error: errors.length > 0 ? errors.join("; ") : null,
+        accounts_connected: meta?.accountsQueried
+          ? JSON.stringify({
+              queried: meta.accountsQueried,
+              failed: meta.accountsFailed || 0,
+              failedAccounts: meta.failedAccounts || [],
+            })
+          : "{}",
+        sync_success_count:
+          errors.length === 0
+            ? supabase.rpc ? 1 : 1
+            : 0,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "org_id,provider" }
+    );
+
+    if (userId) {
+      await supabase.from("reputation_actions_audit").insert({
+        org_id: orgId,
+        user_id: userId,
+        action: "sync_reviews",
+        entity_type: "review",
+        entity_id: "00000000-0000-0000-0000-000000000000",
+        metadata: {
+          reviews_fetched: reviews.length,
+          reviews_upserted: upserted,
+          errors_count: errors.length,
+          platform_filter: platformFilter || "all",
+          meta,
+          summary,
+        },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        reviews_fetched: reviews.length,
+        reviews_upserted: upserted,
+        errors,
+        meta,
+        summary,
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  } catch (error) {
+    console.error("[reputation-review-sync] Error:", error);
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Internal server error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
+  }
+});
