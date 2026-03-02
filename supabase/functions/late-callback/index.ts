@@ -104,9 +104,10 @@ Deno.serve(async (req: Request) => {
     const error = url.searchParams.get("error");
 
     const lateAccountId = url.searchParams.get("accountId") || url.searchParams.get("account_id");
-    const returnPath = url.searchParams.get("return_path")
+    const rawReturnPath = url.searchParams.get("return_path")
       ? decodeURIComponent(url.searchParams.get("return_path")!)
       : null;
+    const returnPath = rawReturnPath ? rawReturnPath.split("?")[0] : null;
 
     const defaultRedirectPath = returnPath || "/marketing/social/accounts";
 
@@ -269,7 +270,7 @@ Deno.serve(async (req: Request) => {
           org_id: orgId,
           provider: "late",
           connected: true,
-          accounts_connected: JSON.stringify(connectedAccounts),
+          accounts_connected: connectedAccounts,
           last_error: null,
           updated_at: new Date().toISOString(),
         },
