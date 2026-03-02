@@ -4,6 +4,8 @@ type SessionListener = (event: 'expired' | 'restored') => void;
 const listeners = new Set<SessionListener>();
 let sessionHealthy = true;
 let refreshPromise: Promise<{ access_token: string; expires_at?: number } | null> | null = null;
+let lastRestoredAt = 0;
+const RESTORE_COOLDOWN_MS = 3000;
 
 let sessionReadyResolve: (() => void) | null = null;
 let sessionReadyPromise: Promise<void> | null = null;
@@ -21,8 +23,7 @@ if (isOAuthCallback()) {
 
   const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
     if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-      sessionHealthy = true;
-      listeners.forEach(l => l('restored'));
+      markSessionRestored();
       if (sessionReadyResolve) {
         sessionReadyResolve();
         sessionReadyResolve = null;
@@ -44,11 +45,13 @@ export function isSessionHealthy(): boolean {
 
 export function markSessionRestored(): void {
   sessionHealthy = true;
+  lastRestoredAt = Date.now();
   listeners.forEach(l => l('restored'));
 }
 
 function emitExpired(): void {
   if (!sessionHealthy) return;
+  if (Date.now() - lastRestoredAt < RESTORE_COOLDOWN_MS) return;
   sessionHealthy = false;
   listeners.forEach(l => l('expired'));
 }
@@ -69,8 +72,11 @@ async function forceRefresh(): Promise<{ access_token: string; expires_at?: numb
 const EXPIRY_BUFFER_MS = 120_000;
 
 export async function getFreshSession() {
-  const { data: { session } } = await supabase.auth.getSession();
+  let { data: { session } } = await supabase.auth.getSession();
+
   if (!session) {
+    const refreshed = await dedupedRefresh().catch(() => null);
+    if (refreshed) return refreshed;
     emitExpired();
     throw new Error('No active session. Please log in.');
   }
@@ -114,7 +120,7 @@ async function authenticatedFetch(
       emitExpired();
       throw new Error('Session expired. Please log out and log back in.');
     }
-    sessionHealthy = true;
+    markSessionRestored();
     const retryHeaders = buildHeaders(refreshed.access_token, !isFormData);
     const retryInit: RequestInit = { method, headers: retryHeaders };
     if (body) retryInit.body = body;
@@ -133,8 +139,7 @@ async function tryRecoverSession(): Promise<boolean> {
 
   const refreshed = await forceRefresh();
   if (refreshed?.access_token) {
-    sessionHealthy = true;
-    listeners.forEach(l => l('restored'));
+    markSessionRestored();
     return true;
   }
   return false;
