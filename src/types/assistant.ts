@@ -17,6 +17,7 @@ export interface AssistantProfile {
   elevenlabs_voice_name: string | null;
   speech_rate: number;
   output_volume: number;
+  auto_speak_chat: boolean;
   confirm_all_writes: boolean;
   system_prompt_override: string | null;
   created_at: string;

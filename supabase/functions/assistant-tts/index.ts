@@ -8,6 +8,27 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+function sanitizeForSpeech(raw: string): string {
+  let t = raw;
+  t = t.replace(/```[\s\S]*?```/g, "");
+  t = t.replace(/`([^`]+)`/g, "$1");
+  t = t.replace(/^#{1,6}\s+/gm, "");
+  t = t.replace(/(\*\*|__)(.*?)\1/g, "$2");
+  t = t.replace(/(\*|_)(.*?)\1/g, "$2");
+  t = t.replace(/~~(.*?)~~/g, "$1");
+  t = t.replace(/^\s*[-*+]\s+/gm, "");
+  t = t.replace(/^\s*\d+\.\s+/gm, "");
+  t = t.replace(/^\s*>\s?/gm, "");
+  t = t.replace(/^-{3,}$/gm, "");
+  t = t.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  t = t.replace(/https?:\/\/\S+/g, "");
+  t = t.replace(/\{[\s\S]*?\}/g, "");
+  t = t.replace(/\[[\s\S]*?\]/g, "");
+  t = t.replace(/\n{2,}/g, ". ");
+  t = t.replace(/\s{2,}/g, " ");
+  return t.trim();
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -37,6 +58,9 @@ Deno.serve(async (req: Request) => {
     const elevenLabsKey = Deno.env.get("ELEVENLABS_API_KEY");
     if (!elevenLabsKey) return jsonErr("ElevenLabs not configured", 500);
 
+    const sanitized = sanitizeForSpeech(text);
+    if (!sanitized) return jsonErr("No speakable content after sanitization", 400);
+
     const ttsRes = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voice_id}`,
       {
@@ -47,7 +71,7 @@ Deno.serve(async (req: Request) => {
           Accept: "audio/mpeg",
         },
         body: JSON.stringify({
-          text: text.slice(0, 5000),
+          text: sanitized.slice(0, 5000),
           model_id: "eleven_multilingual_v2",
           voice_settings: {
             stability: 0.5,

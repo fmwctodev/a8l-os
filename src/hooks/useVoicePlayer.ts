@@ -36,12 +36,16 @@ export function useVoicePlayer() {
     }
   }, []);
 
-  const play = useCallback((source: Blob | string, onEnd?: () => void) => {
+  const play = useCallback((source: Blob | string, onEnd?: () => void, volume?: number) => {
     cleanup();
     callbackRef.current = onEnd || null;
 
     const audio = new Audio();
     audioRef.current = audio;
+
+    if (volume !== undefined) {
+      audio.volume = Math.max(0, Math.min(1, volume));
+    }
 
     if (source instanceof Blob) {
       urlRef.current = URL.createObjectURL(source);

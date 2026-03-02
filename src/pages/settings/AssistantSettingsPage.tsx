@@ -178,22 +178,23 @@ function VoiceTab() {
   const { profile, refreshProfile } = useAssistant();
   const [saving, setSaving] = useState(false);
   const [speechRate, setSpeechRate] = useState(profile?.speech_rate || 1.0);
+  const [outputVolume, setOutputVolume] = useState(profile?.output_volume || 1.0);
 
-  const handleToggle = async (value: boolean) => {
+  const handleToggle = async (field: 'voice_enabled' | 'auto_speak_chat', value: boolean) => {
     if (!user) return;
     setSaving(true);
     try {
-      await updateProfile(user.id, { voice_enabled: value });
+      await updateProfile(user.id, { [field]: value });
       await refreshProfile();
     } catch { /* noop */ }
     setSaving(false);
   };
 
-  const handleSaveRate = async () => {
+  const handleSaveSliders = async () => {
     if (!user) return;
     setSaving(true);
     try {
-      await updateProfile(user.id, { speech_rate: speechRate });
+      await updateProfile(user.id, { speech_rate: speechRate, output_volume: outputVolume });
       await refreshProfile();
     } catch { /* noop */ }
     setSaving(false);
@@ -208,13 +209,23 @@ function VoiceTab() {
           label="Enable voice responses"
           description="Clara will speak responses aloud using ElevenLabs text-to-speech."
           checked={profile.voice_enabled}
-          onChange={handleToggle}
+          onChange={(v) => handleToggle('voice_enabled', v)}
           disabled={saving}
         />
       </SettingsCard>
 
       {profile.voice_enabled && (
         <>
+          <SettingsCard title="Auto-Speak">
+            <FullToggleRow
+              label="Auto-speak chat responses"
+              description="Clara will automatically read every text chat response aloud. You can also mute this from the chat input bar."
+              checked={profile.auto_speak_chat}
+              onChange={(v) => handleToggle('auto_speak_chat', v)}
+              disabled={saving}
+            />
+          </SettingsCard>
+
           <SettingsCard title="Voice Configuration">
             <div className="space-y-4">
               <div>
@@ -229,25 +240,47 @@ function VoiceTab() {
             </div>
           </SettingsCard>
 
-          <SettingsCard title="Speech Rate">
-            <div className="space-y-2">
-              <input
-                type="range"
-                min={0.5}
-                max={2.0}
-                step={0.1}
-                value={speechRate}
-                onChange={(e) => setSpeechRate(parseFloat(e.target.value))}
-                className="w-full accent-cyan-500"
-              />
-              <div className="flex justify-between text-[10px] text-slate-500">
-                <span>0.5x</span>
-                <span className="text-cyan-400 font-medium">{speechRate.toFixed(1)}x</span>
-                <span>2.0x</span>
+          <SettingsCard title="Speech Rate & Volume">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs text-slate-400">Speech Rate</label>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={2.0}
+                  step={0.1}
+                  value={speechRate}
+                  onChange={(e) => setSpeechRate(parseFloat(e.target.value))}
+                  className="w-full accent-cyan-500"
+                />
+                <div className="flex justify-between text-[10px] text-slate-500">
+                  <span>0.5x</span>
+                  <span className="text-cyan-400 font-medium">{speechRate.toFixed(1)}x</span>
+                  <span>2.0x</span>
+                </div>
               </div>
-              <div className="flex justify-end mt-1">
+
+              <div className="space-y-2">
+                <label className="text-xs text-slate-400">Output Volume</label>
+                <input
+                  type="range"
+                  min={0}
+                  max={1.0}
+                  step={0.05}
+                  value={outputVolume}
+                  onChange={(e) => setOutputVolume(parseFloat(e.target.value))}
+                  className="w-full accent-cyan-500"
+                />
+                <div className="flex justify-between text-[10px] text-slate-500">
+                  <span>Mute</span>
+                  <span className="text-cyan-400 font-medium">{Math.round(outputVolume * 100)}%</span>
+                  <span>Max</span>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
                 <button
-                  onClick={handleSaveRate}
+                  onClick={handleSaveSliders}
                   disabled={saving}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50"
                 >

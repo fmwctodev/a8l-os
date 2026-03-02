@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Loader2, ArrowDown } from 'lucide-react';
+import { Send, Loader2, ArrowDown, Volume2, VolumeX } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAssistant } from '../../../contexts/AssistantContext';
 import {
@@ -8,6 +8,9 @@ import {
   createThread,
   subscribeToMessages,
 } from '../../../services/assistantChat';
+import { textToSpeech } from '../../../services/assistantVoice';
+import { updateProfile } from '../../../services/assistantProfile';
+import { useVoicePlayer } from '../../../hooks/useVoicePlayer';
 import type { AssistantMessage } from '../../../types/assistant';
 import { ThreadSelector } from './ThreadSelector';
 import { MessageBubble } from './MessageBubble';
@@ -20,12 +23,17 @@ export function AssistantChatView() {
     pageContext,
     prefilledPrompt,
     clearPrefilledPrompt,
+    profile,
+    refreshProfile,
   } = useAssistant();
 
+  const player = useVoicePlayer();
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [togglingMute, setTogglingMute] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -103,6 +111,24 @@ export function AssistantChatView() {
         );
         return [...prev, ...newMsgs];
       });
+
+      if (
+        profile?.voice_enabled &&
+        profile?.auto_speak_chat &&
+        profile?.elevenlabs_voice_id &&
+        result.assistantMessage.content
+      ) {
+        setIsSpeaking(true);
+        textToSpeech(
+          result.assistantMessage.content,
+          profile.elevenlabs_voice_id,
+          profile.speech_rate
+        )
+          .then((blob) => {
+            player.play(blob, () => setIsSpeaking(false), profile.output_volume);
+          })
+          .catch(() => setIsSpeaking(false));
+      }
     } catch (err) {
       console.error('[Clara] Send failed:', err);
       const raw = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
@@ -179,7 +205,56 @@ export function AssistantChatView() {
       )}
 
       <div className="px-3 py-2 border-t border-slate-700/40">
+        {isSpeaking && (
+          <div className="flex items-center gap-2 mb-1.5 px-2">
+            <div className="flex gap-0.5 items-end">
+              {[0, 1, 2, 3].map((i) => (
+                <span
+                  key={i}
+                  className="w-0.5 bg-cyan-400 rounded-full animate-pulse"
+                  style={{
+                    height: `${8 + (i % 2) * 6}px`,
+                    animationDelay: `${i * 100}ms`,
+                  }}
+                />
+              ))}
+            </div>
+            <span className="text-[10px] text-cyan-400">Clara is speaking...</span>
+            <button
+              onClick={() => { player.stop(); setIsSpeaking(false); }}
+              className="ml-auto text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              Stop
+            </button>
+          </div>
+        )}
         <div className="flex items-end gap-2 bg-slate-800 rounded-xl px-3 py-2">
+          {profile?.voice_enabled && (
+            <button
+              onClick={async () => {
+                if (!user || togglingMute) return;
+                setTogglingMute(true);
+                try {
+                  await updateProfile(user.id, { auto_speak_chat: !profile.auto_speak_chat });
+                  await refreshProfile();
+                } catch { /* noop */ }
+                setTogglingMute(false);
+              }}
+              disabled={togglingMute}
+              className={`p-1 rounded-md transition-colors flex-shrink-0 ${
+                profile.auto_speak_chat
+                  ? 'text-cyan-400 hover:text-cyan-300'
+                  : 'text-slate-600 hover:text-slate-400'
+              }`}
+              title={profile.auto_speak_chat ? 'Auto-speak on (click to mute)' : 'Auto-speak off (click to unmute)'}
+            >
+              {profile.auto_speak_chat ? (
+                <Volume2 className="w-3.5 h-3.5" />
+              ) : (
+                <VolumeX className="w-3.5 h-3.5" />
+              )}
+            </button>
+          )}
           <textarea
             ref={inputRef}
             value={input}

@@ -17,7 +17,14 @@ export async function getOrCreateProfile(
   const { data, error } = await supabase
     .from('assistant_profiles')
     .upsert(
-      { user_id: userId, org_id: orgId },
+      {
+      user_id: userId,
+      org_id: orgId,
+      voice_enabled: true,
+      elevenlabs_voice_id: '56bWURjYFHyYyVf490Dp',
+      elevenlabs_voice_name: 'Clara Voice',
+      auto_speak_chat: true,
+    },
       { onConflict: 'user_id' }
     )
     .select('*')
@@ -42,7 +49,7 @@ export async function updateProfile(
   userId: string,
   updates: Partial<Pick<AssistantProfile,
     'enabled' | 'voice_enabled' | 'elevenlabs_voice_id' | 'elevenlabs_voice_name' |
-    'speech_rate' | 'output_volume' | 'confirm_all_writes' | 'system_prompt_override'
+    'speech_rate' | 'output_volume' | 'auto_speak_chat' | 'confirm_all_writes' | 'system_prompt_override'
   >>
 ): Promise<AssistantProfile> {
   const { data, error } = await supabase

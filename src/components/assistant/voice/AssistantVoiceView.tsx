@@ -71,7 +71,7 @@ export function AssistantVoiceView() {
           profile.speech_rate
         );
         if (!abortRef.current) {
-          player.play(audioBlob, () => setVoiceState('idle'));
+          player.play(audioBlob, () => setVoiceState('idle'), profile.output_volume);
         } else {
           setVoiceState('idle');
         }

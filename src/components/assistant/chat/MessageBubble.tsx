@@ -1,6 +1,10 @@
-import { User, Sparkles, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
+import { User, Sparkles, AlertTriangle, Volume2, Loader2 } from 'lucide-react';
 import type { AssistantMessage, ClaraToolCall, ClaraActionConfirmation, ClaraDraft } from '../../../types/assistant';
 import type { ITSRequest, ITSExecutionResult } from '../../../types/its';
+import { useAssistant } from '../../../contexts/AssistantContext';
+import { textToSpeech } from '../../../services/assistantVoice';
+import { useVoicePlayer } from '../../../hooks/useVoicePlayer';
 import { ToolReceiptCard } from './ToolReceiptCard';
 import { ActionConfirmationCard } from './ActionConfirmationCard';
 import { DraftPreviewCard } from './DraftPreviewCard';
@@ -31,6 +35,26 @@ export function MessageBubble({ message }: MessageBubbleProps) {
     });
   };
 
+  const { profile } = useAssistant();
+  const player = useVoicePlayer();
+  const [ttsLoading, setTtsLoading] = useState(false);
+
+  const canSpeak = !isUser && profile?.voice_enabled && profile?.elevenlabs_voice_id;
+
+  const handleSpeak = async () => {
+    if (!profile?.elevenlabs_voice_id || ttsLoading || player.isPlaying) return;
+    setTtsLoading(true);
+    try {
+      const blob = await textToSpeech(
+        message.content,
+        profile.elevenlabs_voice_id,
+        profile.speech_rate
+      );
+      player.play(blob, undefined, profile.output_volume);
+    } catch { /* noop */ }
+    setTtsLoading(false);
+  };
+
   if (isUser) {
     return (
       <div className="flex justify-end">
@@ -58,11 +82,29 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           <Sparkles className="w-3 h-3 text-white" />
         </div>
         <div className="space-y-2">
-          <div className="bg-slate-800 border border-slate-700/50 rounded-2xl rounded-tl-md px-3 py-2">
+          <div className="bg-slate-800 border border-slate-700/50 rounded-2xl rounded-tl-md px-3 py-2 group/bubble">
             <ClaraMarkdown content={message.content} />
-            <p className="text-[9px] text-slate-500 mt-1">
-              {formatTime(message.created_at)}
-            </p>
+            <div className="flex items-center gap-1.5 mt-1">
+              <p className="text-[9px] text-slate-500">
+                {formatTime(message.created_at)}
+              </p>
+              {canSpeak && (
+                <button
+                  onClick={handleSpeak}
+                  disabled={ttsLoading || player.isPlaying}
+                  className="opacity-0 group-hover/bubble:opacity-100 transition-opacity p-0.5 rounded text-slate-500 hover:text-cyan-400 disabled:opacity-50"
+                  title="Play aloud"
+                >
+                  {ttsLoading ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : player.isPlaying ? (
+                    <Volume2 className="w-3 h-3 text-cyan-400 animate-pulse" />
+                  ) : (
+                    <Volume2 className="w-3 h-3" />
+                  )}
+                </button>
+              )}
+            </div>
           </div>
 
           {(permissionDenied.length > 0 || integrationErrors.length > 0) && (
