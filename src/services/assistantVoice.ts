@@ -42,3 +42,50 @@ export async function textToSpeech(
 
   return response.blob();
 }
+
+export async function transcribeWake(audioBlob: Blob): Promise<{ text: string }> {
+  const formData = new FormData();
+  formData.append('audio', audioBlob, 'wake-segment.webm');
+
+  const response = await fetchEdge('assistant-stt-wake', {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    return { text: '' };
+  }
+
+  return response.json();
+}
+
+export async function transcribeFinal(audioBlob: Blob): Promise<{ text: string; confidence?: number }> {
+  const formData = new FormData();
+  formData.append('audio', audioBlob, 'command.webm');
+
+  const response = await fetchEdge('assistant-stt-final', {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error || 'Transcription failed');
+  }
+
+  return response.json();
+}
+
+export async function cancelTTS(messageId?: string): Promise<{ canceled: boolean }> {
+  const response = await fetchEdge('assistant-tts', {
+    method: 'POST',
+    path: '/cancel',
+    body: { message_id: messageId || null },
+  });
+
+  if (!response.ok) {
+    return { canceled: false };
+  }
+
+  return response.json();
+}

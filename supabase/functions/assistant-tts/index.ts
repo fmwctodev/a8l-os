@@ -29,26 +29,67 @@ function sanitizeForSpeech(raw: string): string {
   return t.trim();
 }
 
+async function authenticateUser(req: Request) {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) return null;
+
+  const anonClient = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+  const {
+    data: { user },
+    error,
+  } = await anonClient.auth.getUser(authHeader.replace("Bearer ", ""));
+  if (error || !user) return null;
+  return user;
+}
+
+async function handleCancel(req: Request): Promise<Response> {
+  const user = await authenticateUser(req);
+  if (!user) return jsonErr("Unauthorized", 401);
+
+  const { message_id } = await req.json();
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+
+  const { data: userData } = await supabase
+    .from("users")
+    .select("organization_id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (userData?.organization_id) {
+    await supabase.from("clara_voice_events").insert({
+      org_id: userData.organization_id,
+      user_id: user.id,
+      event_type: "tts_interrupted",
+      message_id: message_id || null,
+      metadata: { source: "barge_in" },
+    });
+  }
+
+  return jsonOk({ canceled: true });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return jsonErr("Unauthorized", 401);
+    const url = new URL(req.url);
+    if (url.pathname.endsWith("/cancel")) {
+      return await handleCancel(req);
     }
 
-    const anonClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
-    const { data: { user }, error: authErr } = await anonClient.auth.getUser(
-      authHeader.replace("Bearer ", "")
-    );
-    if (authErr || !user) return jsonErr("Unauthorized", 401);
+    const user = await authenticateUser(req);
+    if (!user) return jsonErr("Unauthorized", 401);
 
     const { text, voice_id, speech_rate } = await req.json();
 
@@ -110,6 +151,13 @@ Deno.serve(async (req: Request) => {
 function jsonErr(message: string, status: number): Response {
   return new Response(JSON.stringify({ error: message }), {
     status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function jsonOk(data: unknown): Response {
+  return new Response(JSON.stringify(data), {
+    status: 200,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }

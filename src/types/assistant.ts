@@ -7,6 +7,9 @@ export type ClaraMemoryType = 'preference' | 'communication_style' | 'decision' 
 export type ActionExecutionStatus = 'success' | 'failed' | 'running' | 'queued' | 'canceled';
 export type AssistantPanelTab = 'chat' | 'voice' | 'activity' | 'settings';
 
+export type ClaraVoiceMode = 'idle' | 'passive_listening' | 'active_listening' | 'processing' | 'speaking' | 'interrupted';
+export type ClaraVoiceEventType = 'wake_detected' | 'command_sent' | 'tts_started' | 'tts_finished' | 'tts_interrupted' | 'mic_denied';
+
 export interface AssistantProfile {
   id: string;
   user_id: string;
@@ -20,6 +23,9 @@ export interface AssistantProfile {
   auto_speak_chat: boolean;
   confirm_all_writes: boolean;
   system_prompt_override: string | null;
+  wake_word_enabled: boolean;
+  wake_word: string;
+  barge_in_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -163,6 +169,16 @@ export interface VoiceExchange {
   transcript: string;
   response: string;
   timestamp: string;
+}
+
+export interface ClaraVoiceEvent {
+  id: string;
+  org_id: string;
+  user_id: string;
+  event_type: ClaraVoiceEventType;
+  message_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
 }
 
 export type { ITSRequest, ITSExecutionResult, ITSAction, ITSActionResult };

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings, Volume2, Shield, Brain, ExternalLink, Loader2, Trash2 } from 'lucide-react';
+import { Settings, Volume2, Shield, Brain, ExternalLink, Loader2, Trash2, Mic } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAssistant } from '../../../contexts/AssistantContext';
 import { updateProfile } from '../../../services/assistantProfile';
@@ -21,7 +21,7 @@ export function AssistantSettingsView() {
   }
 
   const handleToggle = async (
-    field: 'enabled' | 'voice_enabled' | 'confirm_all_writes',
+    field: 'enabled' | 'voice_enabled' | 'confirm_all_writes' | 'wake_word_enabled' | 'barge_in_enabled',
     value: boolean
   ) => {
     setSaving(true);
@@ -78,6 +78,23 @@ export function AssistantSettingsView() {
             </p>
           </div>
         )}
+      </Section>
+
+      <Section icon={Mic} title="Voice Input">
+        <ToggleRow
+          label="Wake word"
+          description='Say "Clara" to activate voice without clicking'
+          checked={profile.wake_word_enabled}
+          onChange={(v) => handleToggle('wake_word_enabled', v)}
+          disabled={saving}
+        />
+        <ToggleRow
+          label="Barge-in interruption"
+          description="Speak while Clara is talking to interrupt"
+          checked={profile.barge_in_enabled}
+          onChange={(v) => handleToggle('barge_in_enabled', v)}
+          disabled={saving}
+        />
       </Section>
 
       <Section icon={Brain} title="Memory">

@@ -12,6 +12,7 @@ import {
   Database,
   Filter,
   ArrowUpDown,
+  Mic,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAssistant } from '../../contexts/AssistantContext';
@@ -180,7 +181,7 @@ function VoiceTab() {
   const [speechRate, setSpeechRate] = useState(profile?.speech_rate || 1.0);
   const [outputVolume, setOutputVolume] = useState(profile?.output_volume || 1.0);
 
-  const handleToggle = async (field: 'voice_enabled' | 'auto_speak_chat', value: boolean) => {
+  const handleToggle = async (field: 'voice_enabled' | 'auto_speak_chat' | 'wake_word_enabled' | 'barge_in_enabled', value: boolean) => {
     if (!user) return;
     setSaving(true);
     try {
@@ -288,6 +289,31 @@ function VoiceTab() {
                   Save
                 </button>
               </div>
+            </div>
+          </SettingsCard>
+
+          <SettingsCard title="Voice Input">
+            <div className="flex items-center gap-2 mb-3">
+              <Mic className="w-4 h-4 text-cyan-400" />
+              <p className="text-xs text-slate-500">
+                Configure how Clara listens for voice commands.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <FullToggleRow
+                label="Wake word detection"
+                description={'Say "Clara" to activate the voice assistant hands-free. Requires microphone to stay on while in the Voice tab.'}
+                checked={profile.wake_word_enabled}
+                onChange={(v) => handleToggle('wake_word_enabled', v)}
+                disabled={saving}
+              />
+              <FullToggleRow
+                label="Barge-in interruption"
+                description="Speak while Clara is talking to immediately interrupt and take over. Clara will stop speaking and start listening to you."
+                checked={profile.barge_in_enabled}
+                onChange={(v) => handleToggle('barge_in_enabled', v)}
+                disabled={saving}
+              />
             </div>
           </SettingsCard>
         </>
@@ -651,6 +677,22 @@ function SecurityTab() {
           <InfoRow label="TTS audio" value="Generated via ElevenLabs API, not stored" />
           <InfoRow label="Email/Calendar access" value="Uses your connected Google OAuth credentials" />
           <InfoRow label="Memory" value="Encrypted at rest in Supabase, per-user isolation" />
+        </div>
+      </SettingsCard>
+
+      <SettingsCard title="Passive Listening">
+        <div className="space-y-3">
+          <p className="text-xs text-slate-500">
+            When wake word detection is enabled and the microphone is active, Clara passively
+            monitors audio for the wake word "Clara". During passive listening:
+          </p>
+          <ul className="space-y-1.5 text-xs text-slate-500 list-disc list-inside">
+            <li>Audio is analyzed locally in your browser for voice activity</li>
+            <li>Short audio segments are only sent for transcription when speech is detected</li>
+            <li>No audio is stored -- segments are discarded after wake word checking</li>
+            <li>The microphone indicator in your browser will remain active</li>
+            <li>You can disable this any time by toggling the mic off or disabling wake word</li>
+          </ul>
         </div>
       </SettingsCard>
 

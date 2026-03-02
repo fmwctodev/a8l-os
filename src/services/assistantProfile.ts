@@ -24,6 +24,9 @@ export async function getOrCreateProfile(
       elevenlabs_voice_id: '56bWURjYFHyYyVf490Dp',
       elevenlabs_voice_name: 'Clara Voice',
       auto_speak_chat: true,
+      wake_word_enabled: true,
+      wake_word: 'clara',
+      barge_in_enabled: true,
     },
       { onConflict: 'user_id' }
     )
@@ -49,7 +52,8 @@ export async function updateProfile(
   userId: string,
   updates: Partial<Pick<AssistantProfile,
     'enabled' | 'voice_enabled' | 'elevenlabs_voice_id' | 'elevenlabs_voice_name' |
-    'speech_rate' | 'output_volume' | 'auto_speak_chat' | 'confirm_all_writes' | 'system_prompt_override'
+    'speech_rate' | 'output_volume' | 'auto_speak_chat' | 'confirm_all_writes' | 'system_prompt_override' |
+    'wake_word_enabled' | 'wake_word' | 'barge_in_enabled'
   >>
 ): Promise<AssistantProfile> {
   const { data, error } = await supabase

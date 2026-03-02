@@ -11,7 +11,7 @@ import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { getOrCreateProfile } from '../services/assistantProfile';
 import { createThread } from '../services/assistantChat';
-import type { AssistantProfile, AssistantPanelTab, ClaraPageContext, VoiceExchange } from '../types/assistant';
+import type { AssistantProfile, AssistantPanelTab, ClaraPageContext, ClaraVoiceMode, VoiceExchange } from '../types/assistant';
 
 interface AssistantContextValue {
   isPanelOpen: boolean;
@@ -31,6 +31,10 @@ interface AssistantContextValue {
   clearPrefilledPrompt: () => void;
   voiceActive: boolean;
   setVoiceActive: (active: boolean) => void;
+  voiceMode: ClaraVoiceMode;
+  setVoiceMode: (mode: ClaraVoiceMode) => void;
+  micEnabled: boolean;
+  setMicEnabled: (enabled: boolean) => void;
   voiceHistory: VoiceExchange[];
   addVoiceExchange: (transcript: string, response: string) => void;
   clearVoiceHistory: () => void;
@@ -85,7 +89,22 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [prefilledPrompt, setPrefilledPrompt] = useState<string | null>(null);
   const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceMode, setVoiceMode] = useState<ClaraVoiceMode>('idle');
+  const [micEnabled, setMicEnabledState] = useState(() => {
+    try {
+      return localStorage.getItem('clara_mic_enabled') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [voiceHistory, setVoiceHistory] = useState<VoiceExchange[]>([]);
+
+  const setMicEnabled = useCallback((enabled: boolean) => {
+    setMicEnabledState(enabled);
+    try {
+      localStorage.setItem('clara_mic_enabled', String(enabled));
+    } catch { /* noop */ }
+  }, []);
 
   const pageContext = useMemo(() => parsePageContext(location.pathname), [location.pathname]);
 
@@ -213,6 +232,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       clearPrefilledPrompt,
       voiceActive,
       setVoiceActive,
+      voiceMode,
+      setVoiceMode,
+      micEnabled,
+      setMicEnabled,
       voiceHistory,
       addVoiceExchange,
       clearVoiceHistory,
@@ -233,6 +256,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       prefilledPrompt,
       clearPrefilledPrompt,
       voiceActive,
+      voiceMode,
+      micEnabled,
+      setMicEnabled,
       voiceHistory,
       addVoiceExchange,
       clearVoiceHistory,
