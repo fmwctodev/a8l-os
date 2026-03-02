@@ -258,27 +258,6 @@ export async function initiateOAuthFlow(
       return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
     }
 
-    case 'facebook': {
-      const appId = import.meta.env.VITE_FACEBOOK_APP_ID;
-      if (!appId) throw new Error('Facebook OAuth not configured');
-
-      const scopes = [
-        'pages_read_engagement',
-        'pages_read_user_content',
-        'pages_manage_metadata',
-      ].join(',');
-
-      const params = new URLSearchParams({
-        client_id: appId,
-        redirect_uri: redirectUri,
-        response_type: 'code',
-        scope: scopes,
-        state,
-      });
-
-      return `https://www.facebook.com/v18.0/dialog/oauth?${params}`;
-    }
-
     case 'yelp':
       throw new Error('Yelp uses API key authentication, not OAuth');
 

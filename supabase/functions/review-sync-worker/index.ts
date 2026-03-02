@@ -10,7 +10,7 @@ const corsHeaders = {
 interface ReviewProvider {
   id: string;
   organization_id: string;
-  provider: "google" | "facebook" | "yelp";
+  provider: "google" | "yelp";
   external_location_id: string | null;
   oauth_access_token: string | null;
   oauth_refresh_token: string | null;
@@ -148,102 +148,6 @@ async function fetchGoogleReviews(
   return reviews;
 }
 
-async function refreshFacebookToken(
-  accessToken: string
-): Promise<{ access_token: string; expires_in: number } | null> {
-  const appId = Deno.env.get("FACEBOOK_APP_ID");
-  const appSecret = Deno.env.get("FACEBOOK_APP_SECRET");
-
-  if (!appId || !appSecret) {
-    console.error("Facebook OAuth credentials not configured");
-    return null;
-  }
-
-  try {
-    const url = new URL("https://graph.facebook.com/v18.0/oauth/access_token");
-    url.searchParams.set("grant_type", "fb_exchange_token");
-    url.searchParams.set("client_id", appId);
-    url.searchParams.set("client_secret", appSecret);
-    url.searchParams.set("fb_exchange_token", accessToken);
-
-    const response = await fetch(url.toString());
-
-    if (!response.ok) {
-      console.error("Failed to refresh Facebook token:", await response.text());
-      return null;
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error("Error refreshing Facebook token:", error);
-    return null;
-  }
-}
-
-async function fetchFacebookReviews(
-  provider: ReviewProvider,
-  supabase: ReturnType<typeof createClient>
-): Promise<ExternalReview[]> {
-  let accessToken = provider.oauth_access_token;
-  const pageId = provider.external_location_id;
-
-  if (!pageId) {
-    throw new Error("Facebook Page ID not configured");
-  }
-
-  if (provider.oauth_token_expires_at) {
-    const expiresAt = new Date(provider.oauth_token_expires_at);
-    const refreshThreshold = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-
-    if (expiresAt <= refreshThreshold && accessToken) {
-      const newTokens = await refreshFacebookToken(accessToken);
-      if (newTokens) {
-        accessToken = newTokens.access_token;
-        const newExpiresAt = new Date(Date.now() + newTokens.expires_in * 1000);
-
-        await supabase
-          .from("review_providers")
-          .update({
-            oauth_access_token: accessToken,
-            oauth_token_expires_at: newExpiresAt.toISOString(),
-          })
-          .eq("id", provider.id);
-      }
-    }
-  }
-
-  if (!accessToken) {
-    throw new Error("Facebook OAuth access token not available");
-  }
-
-  const reviewsUrl = `https://graph.facebook.com/v18.0/${pageId}/ratings?fields=reviewer{name},rating,review_text,created_time&access_token=${accessToken}`;
-
-  const response = await fetch(reviewsUrl);
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Facebook API error: ${response.status} - ${errorText}`);
-  }
-
-  const data = await response.json();
-  const reviews: ExternalReview[] = [];
-
-  if (data.data) {
-    for (const review of data.data) {
-      reviews.push({
-        provider_review_id: review.reviewer?.id || `fb_${Date.now()}`,
-        rating: review.rating || 5,
-        comment: review.review_text || null,
-        reviewer_name: review.reviewer?.name || "Facebook User",
-        reviewer_email: null,
-        received_at: review.created_time || new Date().toISOString(),
-      });
-    }
-  }
-
-  return reviews;
-}
-
 async function fetchYelpReviews(
   provider: ReviewProvider
 ): Promise<ExternalReview[]> {
@@ -303,9 +207,6 @@ async function syncProviderReviews(
     switch (provider.provider) {
       case "google":
         reviews = await fetchGoogleReviews(provider, supabase);
-        break;
-      case "facebook":
-        reviews = await fetchFacebookReviews(provider, supabase);
         break;
       case "yelp":
         reviews = await fetchYelpReviews(provider);
