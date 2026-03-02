@@ -1,4 +1,4 @@
-const LOCKED_MODEL = "gpt-5.2-chat-latest";
+const LOCKED_MODEL = "gpt-5.1";
 const TEMPERATURE = 0.7;
 const MAX_TOKENS = 2000;
 

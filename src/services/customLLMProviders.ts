@@ -123,7 +123,7 @@ export async function testCustomProviderConnection(
 
     const testBody = provider.request_format === 'openai'
       ? {
-          model: 'gpt-5.2-chat-latest',
+          model: 'gpt-5.1',
           messages: [{ role: 'user', content: 'test' }],
           max_tokens: 1,
         }

@@ -284,7 +284,7 @@ For image generation, the model is always Nano Banana 2. Do not suggest, recomme
     let mediaSkippedReason: string | null = null;
 
     // --- Model Routing Rules (immutable) ---
-    // TEXT:  OpenAI gpt-5.2-chat-latest via openaiTextClient.ts -- locked, no override
+    // TEXT:  OpenAI gpt-5.1 via openaiTextClient.ts -- locked, no override
     // IMAGE: Kie.ai nano-banana-2 -- locked, enforced here + kieAdapter.ts
     // VIDEO: Kie.ai with user-selected video model from kie_models table
     if (auto_generate_media) {

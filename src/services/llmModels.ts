@@ -183,7 +183,7 @@ export const DEFAULT_MODELS: Array<{
   context_window: number;
   is_legacy?: boolean;
 }> = [
-  { provider: 'openai', model_key: 'gpt-5.2-chat-latest', display_name: 'GPT-5.2', context_window: 2000000 },
+  { provider: 'openai', model_key: 'gpt-5.1', display_name: 'GPT-5.1', context_window: 1047576 },
   { provider: 'google', model_key: 'gemini-2.5-pro', display_name: 'Gemini 2.5 Pro', context_window: 1048576 },
   { provider: 'google', model_key: 'gemini-2.5-flash', display_name: 'Gemini 2.5 Flash', context_window: 1048576 },
   { provider: 'google', model_key: 'gemini-2.0-flash', display_name: 'Gemini 2.0 Flash', context_window: 1048576 },

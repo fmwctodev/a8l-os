@@ -340,6 +340,7 @@ async function fetchGoogleModels(apiKey: string): Promise<ProviderModel[]> {
 }
 
 function getOpenAIContextWindow(modelId: string): number {
+  if (modelId.startsWith("gpt-5.1")) return 1047576;
   if (modelId.startsWith("gpt-4.1")) return 1047576;
   if (modelId.startsWith("o4-mini")) return 200000;
   if (modelId.startsWith("o3")) return 200000;
@@ -359,6 +360,7 @@ function getOpenAICapabilities(modelId: string): Record<string, boolean> {
   };
 
   if (
+    modelId.startsWith("gpt-5.1") ||
     modelId.startsWith("gpt-4.1") ||
     modelId.includes("gpt-4o") ||
     modelId.includes("gpt-4-vision")
@@ -379,6 +381,9 @@ function getOpenAICapabilities(modelId: string): Record<string, boolean> {
 
 function formatOpenAIModelName(modelId: string): string {
   const mappings: Record<string, string> = {
+    "gpt-5.1": "GPT-5.1",
+    "gpt-5.1-mini": "GPT-5.1 Mini",
+    "gpt-5.1-nano": "GPT-5.1 Nano",
     "gpt-4.1-nano": "GPT-4.1 Nano",
     "gpt-4.1-mini": "GPT-4.1 Mini",
     "gpt-4.1": "GPT-4.1",
@@ -424,6 +429,9 @@ function formatGoogleModelName(modelId: string): string {
 
 function getModelSortScore(modelId: string, provider: string): number {
   if (provider === "openai") {
+    if (modelId.startsWith("gpt-5.1") && !modelId.includes("mini") && !modelId.includes("nano")) return 110;
+    if (modelId === "gpt-5.1-mini" || modelId.startsWith("gpt-5.1-mini-")) return 108;
+    if (modelId === "gpt-5.1-nano" || modelId.startsWith("gpt-5.1-nano-")) return 106;
     if (modelId.startsWith("gpt-4.1") && !modelId.includes("mini") && !modelId.includes("nano")) return 100;
     if (modelId === "gpt-4.1-mini" || modelId.startsWith("gpt-4.1-mini-")) return 95;
     if (modelId === "gpt-4.1-nano" || modelId.startsWith("gpt-4.1-nano-")) return 93;

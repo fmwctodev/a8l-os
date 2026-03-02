@@ -519,7 +519,7 @@ async function callLLM(
       "Authorization": `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "gpt-5.2-chat-latest",
+      model: "gpt-5.1",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },

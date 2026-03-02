@@ -78,7 +78,7 @@ async function generateWithOpenAI(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-5.2-chat-latest",
+      model: "gpt-5.1",
       messages: [
         {
           role: "system",
@@ -106,7 +106,7 @@ async function generateWithOpenAI(
   return {
     reply,
     tokens: data.usage?.total_tokens || 0,
-    model: "gpt-5.2-chat-latest",
+    model: "gpt-5.1",
   };
 }
 

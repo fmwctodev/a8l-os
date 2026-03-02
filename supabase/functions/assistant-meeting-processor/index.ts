@@ -147,7 +147,7 @@ async function resolveLLMConfig(
       if (p.provider === "openai" && p.api_key_encrypted) {
         return {
           provider: "openai",
-          model: "gpt-5.2-chat-latest",
+          model: "gpt-5.1",
           apiKey: p.api_key_encrypted,
           baseUrl: p.base_url || undefined,
         };
@@ -157,7 +157,7 @@ async function resolveLLMConfig(
 
   const openaiKey = Deno.env.get("OPENAI_API_KEY");
   if (openaiKey) {
-    return { provider: "openai", model: "gpt-5.2-chat-latest", apiKey: openaiKey };
+    return { provider: "openai", model: "gpt-5.1", apiKey: openaiKey };
   }
 
   throw new Error("No LLM provider configured");

@@ -204,7 +204,7 @@ Deno.serve(async (req: Request) => {
             "Authorization": `Bearer ${openaiKey}`,
           },
           body: JSON.stringify({
-            model: "gpt-5.2-chat-latest",
+            model: "gpt-5.1",
             max_tokens: 256,
             temperature: 0.7,
             messages: [{ role: "user", content: prompt }],
@@ -244,7 +244,7 @@ Deno.serve(async (req: Request) => {
             "Authorization": `Bearer ${openaiKey}`,
           },
           body: JSON.stringify({
-            model: "gpt-5.2-chat-latest",
+            model: "gpt-5.1",
             max_tokens: 1024,
             temperature: 0.7,
             messages: [{ role: "user", content: prompt }],

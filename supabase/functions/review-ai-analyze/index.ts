@@ -69,7 +69,7 @@ async function analyzeWithOpenAI(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-5.2-chat-latest",
+      model: "gpt-5.1",
       messages: [
         {
           role: "system",
@@ -102,7 +102,7 @@ async function analyzeWithOpenAI(
   const result = JSON.parse(jsonMatch[0]) as AIAnalysisResult;
   const tokens = data.usage?.total_tokens || 0;
 
-  return { result, tokens, model: "gpt-5.2-chat-latest" };
+  return { result, tokens, model: "gpt-5.1" };
 }
 
 async function analyzeReview(
