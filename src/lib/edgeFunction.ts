@@ -90,13 +90,26 @@ async function authenticatedFetch(
   return response;
 }
 
+async function tryRecoverSession(): Promise<boolean> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    sessionHealthy = true;
+    listeners.forEach(l => l('restored'));
+    return true;
+  }
+  return false;
+}
+
 export async function callEdgeFunction(
   slug: string,
   body: Record<string, unknown>,
   method: 'POST' | 'GET' = 'POST'
 ): Promise<Response> {
   if (!sessionHealthy) {
-    throw new Error('Session expired. Please log out and log back in.');
+    const recovered = await tryRecoverSession();
+    if (!recovered) {
+      throw new Error('Session expired. Please log out and log back in.');
+    }
   }
   const session = await getFreshSession();
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${slug}`;
@@ -113,7 +126,10 @@ interface FetchEdgeOptions {
 
 export async function fetchEdge(slug: string, options: FetchEdgeOptions = {}): Promise<Response> {
   if (!sessionHealthy) {
-    throw new Error('Session expired. Please log out and log back in.');
+    const recovered = await tryRecoverSession();
+    if (!recovered) {
+      throw new Error('Session expired. Please log out and log back in.');
+    }
   }
   const { body, method = 'POST', path = '', params } = options;
   const session = await getFreshSession();

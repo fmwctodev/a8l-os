@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Loader2, ArrowDown, Volume2, VolumeX } from 'lucide-react';
+import { Send, Loader2, ArrowDown, Volume2, VolumeX, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAssistant } from '../../../contexts/AssistantContext';
 import {
@@ -11,6 +11,7 @@ import {
 import { textToSpeech } from '../../../services/assistantVoice';
 import { updateProfile } from '../../../services/assistantProfile';
 import { useVoicePlayer } from '../../../hooks/useVoicePlayer';
+import { isSessionHealthy } from '../../../lib/edgeFunction';
 import type { AssistantMessage } from '../../../types/assistant';
 import { ThreadSelector } from './ThreadSelector';
 import { MessageBubble } from './MessageBubble';
@@ -34,6 +35,7 @@ export function AssistantChatView() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [togglingMute, setTogglingMute] = useState(false);
+  const [failedPrompt, setFailedPrompt] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -84,11 +86,12 @@ export function AssistantChatView() {
     setShowScrollBtn(scrollHeight - scrollTop - clientHeight > 80);
   };
 
-  const handleSend = async () => {
-    if (!input.trim() || sending || !user) return;
-    const text = input.trim();
-    setInput('');
+  const handleSend = async (retryText?: string) => {
+    const text = retryText || input.trim();
+    if (!text || sending || !user) return;
+    if (!retryText) setInput('');
     setSending(true);
+    setFailedPrompt(null);
 
     try {
       let threadId = activeThreadId;
@@ -136,6 +139,7 @@ export function AssistantChatView() {
       const msg = isAuthError
         ? 'Your session has expired. Please refresh the page or log out and back in.'
         : raw;
+      if (isAuthError) setFailedPrompt(text);
       setMessages((prev) => [
         ...prev,
         {
@@ -145,7 +149,7 @@ export function AssistantChatView() {
           content: msg,
           message_type: 'text',
           tool_calls: null,
-          metadata: null,
+          metadata: { is_auth_error: isAuthError },
           created_at: new Date().toISOString(),
         },
       ]);
@@ -180,7 +184,27 @@ export function AssistantChatView() {
         ) : messages.length === 0 ? (
           <EmptyState />
         ) : (
-          messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)
+          messages.map((msg) => (
+            <div key={msg.id}>
+              <MessageBubble message={msg} />
+              {msg.id.startsWith('error-') && (msg.metadata as Record<string, unknown>)?.is_auth_error && failedPrompt && (
+                <div className="flex items-center gap-2 mt-1.5 ml-8">
+                  <button
+                    onClick={() => {
+                      setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+                      handleSend(failedPrompt);
+                    }}
+                    disabled={sending || !isSessionHealthy()}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium text-cyan-400 bg-cyan-400/10 border border-cyan-400/20 rounded-full hover:bg-cyan-400/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <RefreshCw className="w-2.5 h-2.5" />
+                    Retry
+                  </button>
+                  <span className="text-[9px] text-slate-600">Session may have recovered</span>
+                </div>
+              )}
+            </div>
+          ))
         )}
 
         {sending && (

@@ -52,6 +52,20 @@ export function ReAuthModal() {
     }
   }, [email, password]);
 
+  useEffect(() => {
+    if (!visible || provider !== 'google') return;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && newSession) {
+        markSessionRestored();
+        setVisible(false);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [visible, provider]);
+
   const handleGoogleSignIn = useCallback(async () => {
     setLoading(true);
     setError('');

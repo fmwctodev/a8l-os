@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import type { UserWithDetails, PermissionKey, FeatureFlag } from '../types';
 import * as authService from '../services/auth';
 import { getFeatureFlags } from '../services/featureFlags';
+import { markSessionRestored, isSessionHealthy } from '../lib/edgeFunction';
 interface AuthContextValue {
   session: Session | null;
   user: UserWithDetails | null;
@@ -62,6 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession);
 
       if (newSession) {
+        if (!isSessionHealthy() && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+          markSessionRestored();
+        }
         setTimeout(() => {
           if (!isMounted) return;
           loadUser().finally(() => {
