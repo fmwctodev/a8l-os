@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, handleCors, jsonResponse, errorResponse } from "../_shared/cors.ts";
-import { extractUserContext, requireAuth, AuthError } from "../_shared/auth.ts";
+import { extractUserContext, extractUserContextById, isServiceRoleRequest, requireAuth, AuthError } from "../_shared/auth.ts";
 import type { UserContext } from "../_shared/types.ts";
 import { validateITSRequest, validateActionPayload, stripUnknownKeys } from "../_shared/its-validator.ts";
 import { applyConfirmationOverrides } from "../_shared/its-confirmation-rules.ts";
@@ -79,7 +79,24 @@ Deno.serve(async (req: Request) => {
       { auth: { autoRefreshToken: false, persistSession: false } }
     );
 
-    const userCtx = await extractUserContext(req, supabase);
+    const body = await req.json();
+    const { thread_id, content, context, action, execution_request_id, approved, action_ids, internal_user_id } = body as {
+      thread_id: string;
+      content?: string;
+      context?: PageContext;
+      action?: string;
+      execution_request_id?: string;
+      approved?: boolean;
+      action_ids?: string[];
+      internal_user_id?: string;
+    };
+
+    let userCtx;
+    if (internal_user_id && isServiceRoleRequest(req)) {
+      userCtx = await extractUserContextById(supabase, internal_user_id);
+    } else {
+      userCtx = await extractUserContext(req, supabase);
+    }
     const user = requireAuth(userCtx);
 
     const { data: userData } = await supabase
@@ -88,17 +105,6 @@ Deno.serve(async (req: Request) => {
       .eq("id", user.id)
       .maybeSingle();
     if (!userData) return errorResponse("NOT_FOUND", "User not found", 404);
-
-    const body = await req.json();
-    const { thread_id, content, context, action, execution_request_id, approved, action_ids } = body as {
-      thread_id: string;
-      content?: string;
-      context?: PageContext;
-      action?: string;
-      execution_request_id?: string;
-      approved?: boolean;
-      action_ids?: string[];
-    };
 
     if (action === "confirm") {
       return handleConfirmation(supabase, user, userData, thread_id, execution_request_id!, approved!, action_ids);

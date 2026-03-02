@@ -78,18 +78,20 @@ Deno.serve(async (req: Request) => {
 
     const context = contextStr ? JSON.parse(contextStr) : {};
 
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const chatUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/assistant-chat`;
     const chatRes = await fetch(chatUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: authHeader,
-        apikey: Deno.env.get("SUPABASE_ANON_KEY")!,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        apikey: serviceRoleKey,
       },
       body: JSON.stringify({
         thread_id: threadId,
         content: transcription,
         context,
+        internal_user_id: user.id,
       }),
     });
 
