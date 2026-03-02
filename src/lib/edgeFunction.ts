@@ -33,6 +33,11 @@ async function dedupedRefresh(): Promise<{ access_token: string; expires_at?: nu
   return refreshPromise;
 }
 
+async function forceRefresh(): Promise<{ access_token: string; expires_at?: number } | null> {
+  refreshPromise = null;
+  return dedupedRefresh();
+}
+
 const EXPIRY_BUFFER_MS = 120_000;
 
 export async function getFreshSession() {
@@ -46,7 +51,7 @@ export async function getFreshSession() {
     return session;
   }
 
-  const refreshed = await dedupedRefresh();
+  const refreshed = await forceRefresh();
   if (!refreshed) {
     emitExpired();
     throw new Error('Session expired. Please log out and log back in.');
@@ -76,15 +81,19 @@ async function authenticatedFetch(
   let response = await fetch(url, init);
 
   if (response.status === 401) {
-    const refreshed = await dedupedRefresh();
+    const refreshed = await forceRefresh();
     if (!refreshed) {
       emitExpired();
       throw new Error('Session expired. Please log out and log back in.');
     }
+    sessionHealthy = true;
     const retryHeaders = buildHeaders(refreshed.access_token, !isFormData);
     const retryInit: RequestInit = { method, headers: retryHeaders };
     if (body) retryInit.body = body;
     response = await fetch(url, retryInit);
+    if (response.status === 401) {
+      emitExpired();
+    }
   }
 
   return response;
@@ -92,7 +101,10 @@ async function authenticatedFetch(
 
 async function tryRecoverSession(): Promise<boolean> {
   const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
+  if (!session?.refresh_token) return false;
+
+  const refreshed = await forceRefresh();
+  if (refreshed?.access_token) {
     sessionHealthy = true;
     listeners.forEach(l => l('restored'));
     return true;
