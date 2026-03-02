@@ -21,6 +21,15 @@ const LATE_PLATFORM_TO_PROVIDER: Record<string, string> = {
   reddit: "reddit",
 };
 
+function stripTrailingSlash(url: string): string {
+  return url.replace(/\/+$/, "");
+}
+
+function buildRedirectUrl(base: string, path: string, params: Record<string, string>): string {
+  const qs = new URLSearchParams(params).toString();
+  return `${stripTrailingSlash(base)}${path}${qs ? `?${qs}` : ""}`;
+}
+
 function resolveAccountType(provider: string): string {
   switch (provider) {
     case "facebook": return "page";
@@ -105,14 +114,14 @@ Deno.serve(async (req: Request) => {
       console.error("[late-callback] OAuth error:", error);
       return new Response(null, {
         status: 302,
-        headers: { Location: `${appBaseUrl}${defaultRedirectPath}?error=${encodeURIComponent(error)}` },
+        headers: { Location: buildRedirectUrl(appBaseUrl, defaultRedirectPath, { error }) },
       });
     }
 
     if (!orgId || !userId || !provider) {
       return new Response(null, {
         status: 302,
-        headers: { Location: `${appBaseUrl}${defaultRedirectPath}?error=${encodeURIComponent("Missing required callback parameters")}` },
+        headers: { Location: buildRedirectUrl(appBaseUrl, defaultRedirectPath, { error: "Missing required callback parameters" }) },
       });
     }
 
@@ -151,7 +160,7 @@ Deno.serve(async (req: Request) => {
       console.error("[late-callback] No accounts found after OAuth for provider:", provider);
       return new Response(null, {
         status: 302,
-        headers: { Location: `${appBaseUrl}${defaultRedirectPath}?error=${encodeURIComponent("No accounts found after authorization. Please try again.")}` },
+        headers: { Location: buildRedirectUrl(appBaseUrl, defaultRedirectPath, { error: "No accounts found after authorization. Please try again." }) },
       });
     }
 
@@ -272,7 +281,7 @@ Deno.serve(async (req: Request) => {
 
     return new Response(null, {
       status: 302,
-      headers: { Location: `${appBaseUrl}${defaultRedirectPath}?late=success&count=${savedCount}` },
+      headers: { Location: buildRedirectUrl(appBaseUrl, defaultRedirectPath, { late: "success", count: String(savedCount), provider }) },
     });
   } catch (error) {
     console.error("[late-callback] Error:", error);
@@ -280,7 +289,7 @@ Deno.serve(async (req: Request) => {
     const fallbackPath = "/marketing/social/accounts";
     return new Response(null, {
       status: 302,
-      headers: { Location: `${appBaseUrl}${fallbackPath}?error=${encodeURIComponent("Connection failed unexpectedly")}` },
+      headers: { Location: buildRedirectUrl(appBaseUrl, fallbackPath, { error: "Connection failed unexpectedly" }) },
     });
   }
 });

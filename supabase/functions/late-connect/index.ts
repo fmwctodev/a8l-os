@@ -107,7 +107,7 @@ Deno.serve(async (req: Request) => {
     };
 
     const lateProfileId = Deno.env.get("LATE_PROFILE_ID") || "69a352613ecb689ae9742cc0";
-    const appBaseUrl = Deno.env.get("APP_BASE_URL") || "https://os.autom8ionlab.com";
+    const appBaseUrl = (Deno.env.get("APP_BASE_URL") || "https://os.autom8ionlab.com").replace(/\/+$/, "");
     const returnPath = body.return_path || "";
     let redirectUrl = `${supabaseUrl}/functions/v1/late-callback?org_id=${orgId}&user_id=${userData.id}&provider=${provider}&app_base_url=${encodeURIComponent(appBaseUrl)}`;
     if (returnPath) {

@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Send } from 'lucide-react';
 import { usePermission } from '../../hooks/usePermission';
+import { useToast } from '../../contexts/ToastContext';
 import { OverviewTab } from '../../components/reputation/OverviewTab';
 import { RequestsTab } from '../../components/reputation/RequestsTab';
 import { ReviewsInbox } from '../../components/reputation/ReviewsInbox';
@@ -12,9 +14,34 @@ type TabType = 'overview' | 'requests' | 'reviews' | 'settings';
 export function Reputation() {
   const canRequest = usePermission('reputation.request');
   const canManageProviders = usePermission('reputation.providers.manage');
+  const { showToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [showRequestModal, setShowRequestModal] = useState(false);
+
+  useEffect(() => {
+    const late = searchParams.get('late');
+    const error = searchParams.get('error');
+    const provider = searchParams.get('provider');
+
+    if (late === 'success') {
+      const count = searchParams.get('count') || '0';
+      const label = provider === 'google_business' ? 'Google Business Profile' : provider === 'facebook' ? 'Facebook' : 'Account';
+      showToast('success', `${label} connected`, `${count} account(s) synced successfully.`);
+      setActiveTab('settings');
+    } else if (error) {
+      const friendlyError = error === 'no_google_locations'
+        ? 'No Google Business locations found. Make sure your Google account manages at least one business location.'
+        : error;
+      showToast('warning', 'Connection issue', friendlyError);
+      setActiveTab('settings');
+    }
+
+    if (late || error) {
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   const tabs = [
     { id: 'overview' as const, label: 'Overview' },
