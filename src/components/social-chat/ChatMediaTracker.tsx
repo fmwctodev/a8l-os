@@ -23,7 +23,7 @@ interface TrackedJob extends MediaJobInfo {
 
 interface ChatMediaTrackerProps {
   jobs: MediaJobInfo[];
-  onAssetReady: (draftIndex: number, assets: MediaAsset[]) => void;
+  onAssetReady: (messageId: string, draftIndex: number, assets: MediaAsset[]) => void;
   onJobStatusChange?: (jobId: string, newStatus: string) => void;
   onRetry?: (job: MediaJobInfo) => void;
 }
@@ -73,8 +73,8 @@ export function ChatMediaTracker({ jobs, onAssetReady, onJobStatusChange, onRetr
 
           onJobStatusChangeRef.current?.(job.job_id, result.job.status);
 
-          if (result.job.status === 'success' && result.assets?.length > 0) {
-            onAssetReadyRef.current(updates[idx].draft_index, result.assets);
+          if (result.job.status === 'success' && result.assets?.length > 0 && updates[idx].message_id) {
+            onAssetReadyRef.current(updates[idx].message_id!, updates[idx].draft_index, result.assets);
           }
         }
       } catch {

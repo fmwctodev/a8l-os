@@ -18,7 +18,7 @@ interface ChatMessageListProps {
   isTyping: boolean;
   accounts: SocialAccount[];
   activeMediaJobs: MediaJobInfo[];
-  draftAssets: Record<number, MediaAsset[]>;
+  draftAssets: Record<string, MediaAsset[]>;
   publishStatuses: Record<string, { mode: PublishMode; scheduledAt?: string }>;
   onPublishDraft: (
     msgId: string,
@@ -30,7 +30,7 @@ interface ChatMessageListProps {
     mediaAssetIds: string[],
     scheduledAt?: string
   ) => void;
-  onMediaAssetReady: (draftIndex: number, assets: MediaAsset[]) => void;
+  onMediaAssetReady: (messageId: string, draftIndex: number, assets: MediaAsset[]) => void;
   onMediaJobStatusChange: (jobId: string, newStatus: string) => void;
   onSendPrompt: (prompt: string) => void;
 }
@@ -148,7 +148,7 @@ export function ChatMessageList({
                         key={idx}
                         draft={draft}
                         accounts={accounts}
-                        attachedAssets={draftAssets[idx] || []}
+                        attachedAssets={draftAssets[`${msg.id}-${idx}`] || []}
                         mediaGenerating={isGenerating}
                         mediaSkippedReason={!isGenerating && jobsForDraft.length === 0 ? mediaSkippedReason : undefined}
                         onPublish={(d, mode, acctIds, media, assetIds, scheduledAt) =>

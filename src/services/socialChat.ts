@@ -16,6 +16,7 @@ export interface MediaJobInfo {
   prompt: string;
   status: string;
   draft_index: number;
+  message_id?: string;
   preloadedAssets?: MediaAsset[];
 }
 
@@ -186,6 +187,67 @@ export async function sendMessage(
 
   if (aiError) throw aiError;
 
+  const enrichedMediaJobs = mediaJobs.map((j) => ({ ...j, message_id: aiMsg.id }));
+
+  const autoDraftIds: string[] = [];
+  if (drafts.length > 0) {
+    const { data: threadRow } = await supabase
+      .from('social_ai_threads')
+      .select('organization_id, user_id')
+      .eq('id', threadId)
+      .maybeSingle();
+
+    if (threadRow) {
+      for (let i = 0; i < drafts.length; i++) {
+        const d = drafts[i] as Record<string, unknown>;
+        const fullBody = [d.hook_text || d.hook, d.body, d.cta_text || d.cta]
+          .filter(Boolean)
+          .join('\n\n');
+
+        const { data: postRow } = await supabase
+          .from('social_posts')
+          .insert({
+            organization_id: threadRow.organization_id,
+            created_by: threadRow.user_id,
+            body: fullBody,
+            targets: [],
+            status: 'draft',
+            scheduled_timezone: 'UTC',
+            media: [],
+            media_asset_ids: [],
+            hook_text: (d.hook_text as string) || (d.hook as string) || null,
+            cta_text: (d.cta_text as string) || (d.cta as string) || null,
+            hashtags: (d.hashtags as string[]) || [],
+            visual_style_suggestion: (d.visual_style_suggestion as string) || null,
+            engagement_prediction: (d.engagement_prediction as number) || null,
+            thread_id: threadId,
+            ai_generated: true,
+          })
+          .select('id')
+          .maybeSingle();
+
+        autoDraftIds.push(postRow?.id || '');
+      }
+    }
+  }
+
+  if (autoDraftIds.length > 0) {
+    await supabase
+      .from('social_ai_messages')
+      .update({
+        metadata: {
+          ...(aiMsg.metadata as Record<string, unknown> || {}),
+          auto_draft_ids: autoDraftIds,
+        },
+      })
+      .eq('id', aiMsg.id);
+
+    aiMsg.metadata = {
+      ...(aiMsg.metadata as Record<string, unknown> || {}),
+      auto_draft_ids: autoDraftIds,
+    };
+  }
+
   const titleSnippet = content.slice(0, 60) + (content.length > 60 ? '...' : '');
   await supabase
     .from('social_ai_threads')
@@ -198,7 +260,7 @@ export async function sendMessage(
     .update({ updated_at: new Date().toISOString() })
     .eq('id', threadId);
 
-  return { userMessage: userMsg, aiMessage: aiMsg, mediaJobs, mediaSkippedReason: aiResponse.media_skipped_reason };
+  return { userMessage: userMsg, aiMessage: aiMsg, mediaJobs: enrichedMediaJobs, mediaSkippedReason: aiResponse.media_skipped_reason };
 }
 
 export async function archiveThread(threadId: string): Promise<void> {
@@ -239,10 +301,11 @@ export interface PublishDraftParams {
   media?: Array<{ url: string; type: string; thumbnail_url?: string }>;
   mediaAssetIds?: string[];
   threadId?: string;
+  existingPostId?: string;
 }
 
 export async function publishDraftFromChat(params: PublishDraftParams): Promise<string> {
-  const { orgId, userId, draft, accountIds, mode, scheduledAtUtc, media, mediaAssetIds, threadId } = params;
+  const { orgId, userId, draft, accountIds, mode, scheduledAtUtc, media, mediaAssetIds, threadId, existingPostId } = params;
 
   const fullBody = [draft.hook, draft.body, draft.cta]
     .filter(Boolean)
@@ -259,6 +322,28 @@ export async function publishDraftFromChat(params: PublishDraftParams): Promise<
     scheduleTime = scheduledAtUtc || null;
   } else {
     status = 'draft';
+  }
+
+  if (existingPostId) {
+    const { error } = await supabase
+      .from('social_posts')
+      .update({
+        body: fullBody,
+        targets: accountIds,
+        status,
+        scheduled_at_utc: scheduleTime,
+        media: media || [],
+        media_asset_ids: mediaAssetIds || [],
+        hook_text: draft.hook,
+        cta_text: draft.cta,
+        hashtags: draft.hashtags,
+        visual_style_suggestion: draft.visual_style_suggestion || null,
+        engagement_prediction: draft.engagement_prediction || null,
+      })
+      .eq('id', existingPostId);
+
+    if (error) throw error;
+    return existingPostId;
   }
 
   const { data, error } = await supabase
@@ -286,6 +371,20 @@ export async function publishDraftFromChat(params: PublishDraftParams): Promise<
 
   if (error) throw error;
   return data.id;
+}
+
+export async function updateDraftMedia(
+  postId: string,
+  media: Array<{ url: string; type: string; thumbnail_url?: string }>,
+  mediaAssetIds: string[]
+): Promise<void> {
+  const { error } = await supabase
+    .from('social_posts')
+    .update({ media, media_asset_ids: mediaAssetIds })
+    .eq('id', postId)
+    .eq('status', 'draft');
+
+  if (error) throw error;
 }
 
 export async function schedulePostFromDraft(

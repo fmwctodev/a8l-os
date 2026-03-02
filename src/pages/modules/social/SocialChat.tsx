@@ -15,6 +15,7 @@ import {
   archiveThread,
   deleteThread,
   publishDraftFromChat,
+  updateDraftMedia,
 } from '../../../services/socialChat';
 import { getAssetsByJobIds } from '../../../services/mediaGeneration';
 import { callEdgeFunction } from '../../../lib/edgeFunction';
@@ -45,7 +46,7 @@ export function SocialChat() {
     auto_generate_media: true,
   });
   const [activeMediaJobs, setActiveMediaJobs] = useState<MediaJobInfo[]>([]);
-  const [draftAssets, setDraftAssets] = useState<Record<number, MediaAsset[]>>({});
+  const [draftAssets, setDraftAssets] = useState<Record<string, MediaAsset[]>>({});
   const [publishStatuses, setPublishStatuses] = useState<
     Record<string, { mode: PublishMode; scheduledAt?: string }>
   >({});
@@ -95,7 +96,7 @@ export function SocialChat() {
         const meta = msg.metadata as Record<string, unknown> | null;
         const msgJobs = meta?.media_jobs as MediaJobInfo[] | undefined;
         if (msgJobs && msgJobs.length > 0) {
-          allJobInfos.push(...msgJobs);
+          allJobInfos.push(...msgJobs.map((j) => ({ ...j, message_id: msg.id })));
         }
       }
 
@@ -108,11 +109,12 @@ export function SocialChat() {
           preloadedAssets: assetMap[j.job_id] || [],
         }));
 
-        const restoredDraftAssets: Record<number, MediaAsset[]> = {};
+        const restoredDraftAssets: Record<string, MediaAsset[]> = {};
         for (const j of rehydratedJobs) {
           if (j.preloadedAssets && j.preloadedAssets.length > 0) {
-            const existing = restoredDraftAssets[j.draft_index] || [];
-            restoredDraftAssets[j.draft_index] = [...existing, ...j.preloadedAssets];
+            const key = `${j.message_id}-${j.draft_index}`;
+            const existing = restoredDraftAssets[key] || [];
+            restoredDraftAssets[key] = [...existing, ...j.preloadedAssets];
           }
         }
 
@@ -233,6 +235,11 @@ export function SocialChat() {
     ) => {
       if (!orgId || !userId) return;
       try {
+        const msg = messages.find((m) => m.id === msgId);
+        const meta = msg?.metadata as Record<string, unknown> | null;
+        const autoDraftIds = (meta?.auto_draft_ids as string[]) || [];
+        const existingPostId = autoDraftIds[draftIndex] || undefined;
+
         const postId = await publishDraftFromChat({
           orgId,
           userId,
@@ -250,6 +257,7 @@ export function SocialChat() {
           media,
           mediaAssetIds,
           threadId: activeThreadId || undefined,
+          existingPostId,
         });
 
         if (mode === 'post_now') {
@@ -269,21 +277,36 @@ export function SocialChat() {
           mode === 'post_now' ? 'Posted' : mode === 'schedule' ? 'Scheduled' : 'Saved as draft';
         showToast('success', label);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Failed to publish draft';
-        showToast('warning', msg);
+        const errMsg = err instanceof Error ? err.message : 'Failed to publish draft';
+        showToast('warning', errMsg);
       }
     },
-    [orgId, userId, activeThreadId, showToast]
+    [orgId, userId, activeThreadId, showToast, messages]
   );
 
   const handleMediaAssetReady = useCallback(
-    (draftIndex: number, assets: MediaAsset[]) => {
+    (messageId: string, draftIndex: number, assets: MediaAsset[]) => {
+      const key = `${messageId}-${draftIndex}`;
       setDraftAssets((prev) => ({
         ...prev,
-        [draftIndex]: [...(prev[draftIndex] || []), ...assets],
+        [key]: [...(prev[key] || []), ...assets],
       }));
+
+      const msg = messages.find((m) => m.id === messageId);
+      const meta = msg?.metadata as Record<string, unknown> | null;
+      const autoDraftIds = (meta?.auto_draft_ids as string[]) || [];
+      const postId = autoDraftIds[draftIndex];
+      if (postId) {
+        const media = assets.map((a) => ({
+          url: a.public_url,
+          type: a.media_type,
+          thumbnail_url: a.thumbnail_url || undefined,
+        }));
+        const assetIds = assets.map((a) => a.id);
+        updateDraftMedia(postId, media, assetIds).catch(() => {});
+      }
     },
-    []
+    [messages]
   );
 
   const handleMediaJobStatusChange = useCallback(
