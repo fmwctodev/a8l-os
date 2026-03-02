@@ -179,7 +179,7 @@ const DATA_SOURCE_SCHEMAS: DataSourceSchema[] = [
     description: "Customer reviews and ratings",
     fields: [
       { name: "id", type: "uuid", description: "Unique identifier" },
-      { name: "provider", type: "text", description: "Review platform (google, yelp, facebook)" },
+      { name: "provider", type: "text", description: "Review platform (google, facebook, internal)" },
       { name: "rating", type: "integer", description: "Star rating (1-5)" },
       { name: "sentiment", type: "text", description: "Sentiment (positive, negative, neutral)" },
       { name: "status", type: "text", description: "Status (pending, approved, hidden)" },

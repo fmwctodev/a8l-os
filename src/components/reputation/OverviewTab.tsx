@@ -34,7 +34,7 @@ export function OverviewTab({ onRequestReview }: OverviewTabProps) {
     avgRating: 0,
     totalReviews: 0,
     ratingBreakdown: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } as Record<number, number>,
-    reviewsByProvider: { google: 0, facebook: 0, yelp: 0, internal: 0 } as Record<string, number>,
+    reviewsByProvider: { google: 0, facebook: 0, internal: 0 } as Record<string, number>,
     invitesSent: 0,
     reviewsReceived: 0,
     previousReviewsReceived: 0,
@@ -89,7 +89,7 @@ export function OverviewTab({ onRequestReview }: OverviewTabProps) {
         avgRating: 0,
         totalReviews: 0,
         ratingBreakdown: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
-        reviewsByProvider: { google: 0, facebook: 0, yelp: 0, internal: 0 },
+        reviewsByProvider: { google: 0, facebook: 0, internal: 0 },
         invitesSent: 0,
         reviewsReceived: 0,
         previousReviewsReceived: 0,
@@ -601,15 +601,6 @@ export function OverviewTab({ onRequestReview }: OverviewTabProps) {
                       <div className="flex items-center gap-2">
                         <div className="w-5 h-5 rounded bg-blue-600 flex items-center justify-center text-white text-xs">f</div>
                         <span className="text-sm text-gray-700">Facebook</span>
-                      </div>
-                    </td>
-                    <td className="py-3 text-sm text-gray-500">--</td>
-                  </tr>
-                  <tr>
-                    <td className="py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 rounded bg-red-600 flex items-center justify-center text-white text-xs">Y</div>
-                        <span className="text-sm text-gray-700">Yelp</span>
                       </div>
                     </td>
                     <td className="py-3 text-sm text-gray-500">--</td>

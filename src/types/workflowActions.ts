@@ -422,7 +422,7 @@ export interface ManageSubscriptionConfig {
 }
 
 export interface SendReviewRequestConfig {
-  platform: 'google' | 'facebook' | 'yelp' | 'trustpilot' | 'custom';
+  platform: 'google' | 'facebook' | 'trustpilot' | 'custom';
   templateId?: string;
   channel: 'email' | 'sms' | 'both';
   customMessage?: string;

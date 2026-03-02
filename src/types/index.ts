@@ -2745,7 +2745,7 @@ export interface CreateRecurringProfileInput {
   auto_send?: boolean;
 }
 
-export type ReviewProvider = 'google' | 'facebook' | 'yelp' | 'internal';
+export type ReviewProvider = 'google' | 'facebook' | 'internal';
 export type ReviewProviderStatus = 'connected' | 'disconnected';
 export type ReviewRequestStatus = 'pending' | 'sent' | 'failed' | 'clicked' | 'completed';
 export type ReviewRequestSource = 'manual' | 'quickbooks' | 'workflow';
@@ -2778,7 +2778,7 @@ export interface ReviewRequest {
   organization_id: string;
   contact_id: string;
   public_slug: string;
-  provider_preference: 'smart' | 'google' | 'facebook' | 'yelp' | 'internal';
+  provider_preference: 'smart' | 'google' | 'facebook' | 'internal';
   channel: 'sms' | 'email';
   message_template: string;
   review_link_url: string;
@@ -2842,7 +2842,6 @@ export interface ReputationSettings {
   default_email_subject: string;
   google_review_url: string | null;
   facebook_review_url: string | null;
-  yelp_review_url: string | null;
   brand_name: string | null;
   brand_logo_url: string | null;
   brand_primary_color: string;
@@ -2933,10 +2932,8 @@ export interface ReputationCompetitor {
   business_name: string;
   google_place_id: string | null;
   facebook_page_id: string | null;
-  yelp_business_id: string | null;
   google_url: string | null;
   facebook_url: string | null;
-  yelp_url: string | null;
   last_sync_at: string | null;
   created_at: string;
   updated_at: string;
@@ -2975,7 +2972,7 @@ export interface CreateReviewRequestInput {
   contact_id: string;
   channel: 'sms' | 'email';
   message_template: string;
-  provider_preference?: 'smart' | 'google' | 'facebook' | 'yelp' | 'internal';
+  provider_preference?: 'smart' | 'google' | 'facebook' | 'internal';
   sent_by_source?: ReviewRequestSource;
 }
 

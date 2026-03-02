@@ -163,12 +163,6 @@ export function ReviewsTab({ onRequestReview, onAddReview }: ReviewsTabProps) {
             <span className="text-xs font-bold text-white">f</span>
           </div>
         );
-      case 'yelp':
-        return (
-          <div className="w-5 h-5 rounded bg-red-600 flex items-center justify-center">
-            <span className="text-xs font-bold text-white">Y</span>
-          </div>
-        );
       default:
         return (
           <div className="w-5 h-5 rounded bg-gray-500 flex items-center justify-center">
@@ -256,7 +250,6 @@ export function ReviewsTab({ onRequestReview, onAddReview }: ReviewsTabProps) {
             <option value="all">Sources</option>
             <option value="google">All Google pages</option>
             <option value="facebook">All Facebook pages</option>
-            <option value="yelp">All Yelp pages</option>
             <option value="internal">All manual pages</option>
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />

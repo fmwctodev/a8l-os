@@ -10,7 +10,7 @@ const corsHeaders = {
 interface ReviewProvider {
   id: string;
   organization_id: string;
-  provider: "google" | "yelp";
+  provider: "google";
   external_location_id: string | null;
   oauth_access_token: string | null;
   oauth_refresh_token: string | null;
@@ -148,54 +148,6 @@ async function fetchGoogleReviews(
   return reviews;
 }
 
-async function fetchYelpReviews(
-  provider: ReviewProvider
-): Promise<ExternalReview[]> {
-  const apiKey = Deno.env.get("YELP_API_KEY") ||
-    (provider.api_credentials as Record<string, string>)?.api_key;
-  const businessId = provider.external_location_id;
-
-  if (!apiKey) {
-    throw new Error("Yelp API key not configured");
-  }
-
-  if (!businessId) {
-    throw new Error("Yelp Business ID not configured");
-  }
-
-  const reviewsUrl = `https://api.yelp.com/v3/businesses/${businessId}/reviews?limit=50&sort_by=newest`;
-
-  const response = await fetch(reviewsUrl, {
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Yelp API error: ${response.status} - ${errorText}`);
-  }
-
-  const data = await response.json();
-  const reviews: ExternalReview[] = [];
-
-  if (data.reviews) {
-    for (const review of data.reviews) {
-      reviews.push({
-        provider_review_id: review.id,
-        rating: review.rating,
-        comment: review.text || null,
-        reviewer_name: review.user?.name || "Yelp User",
-        reviewer_email: null,
-        received_at: review.time_created || new Date().toISOString(),
-      });
-    }
-  }
-
-  return reviews;
-}
-
 async function syncProviderReviews(
   provider: ReviewProvider,
   supabase: ReturnType<typeof createClient>
@@ -207,9 +159,6 @@ async function syncProviderReviews(
     switch (provider.provider) {
       case "google":
         reviews = await fetchGoogleReviews(provider, supabase);
-        break;
-      case "yelp":
-        reviews = await fetchYelpReviews(provider);
         break;
       default:
         throw new Error(`Unknown provider: ${provider.provider}`);

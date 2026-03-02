@@ -35,7 +35,6 @@ import {
   getProviders,
   updateProvider,
   initiateOAuthFlow,
-  connectYelpWithApiKey,
   disconnectProvider,
   toggleSync,
   updateSyncInterval,
@@ -70,9 +69,6 @@ export function SettingsTab() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncingProvider, setSyncingProvider] = useState<string | null>(null);
-  const [showYelpModal, setShowYelpModal] = useState(false);
-  const [yelpBusinessId, setYelpBusinessId] = useState('');
-  const [yelpDisplayName, setYelpDisplayName] = useState('');
   const [expandedProvider, setExpandedProvider] = useState<string | null>(null);
   const [providerSyncHistory, setProviderSyncHistory] = useState<Record<string, Array<{
     id: string;
@@ -171,34 +167,6 @@ export function SettingsTab() {
     }
   }
 
-  async function handleConnectYelp() {
-    if (!user?.organization_id || !yelpBusinessId.trim()) return;
-    try {
-      setSaving(true);
-      const provider = await connectYelpWithApiKey(
-        user.organization_id,
-        yelpBusinessId.trim(),
-        yelpDisplayName.trim() || 'Yelp Business'
-      );
-      setProviders(prev => {
-        const existing = prev.findIndex(p => p.provider === 'yelp');
-        if (existing >= 0) {
-          const updated = [...prev];
-          updated[existing] = provider;
-          return updated;
-        }
-        return [...prev, provider];
-      });
-      setShowYelpModal(false);
-      setYelpBusinessId('');
-      setYelpDisplayName('');
-    } catch (error) {
-      console.error('Failed to connect Yelp:', error);
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function handleDisconnectProvider(providerId: string) {
     if (!confirm('Are you sure you want to disconnect this provider?')) return;
     try {
@@ -294,18 +262,6 @@ export function SettingsTab() {
       provider: providers.find(p => p.provider === 'facebook'),
       supportsOAuth: true,
     },
-    {
-      id: 'yelp',
-      name: 'Yelp',
-      icon: () => (
-        <div className="w-10 h-10 rounded-lg bg-red-600 flex items-center justify-center">
-          <span className="text-lg font-bold text-white">Y</span>
-        </div>
-      ),
-      description: 'Sync reviews from Yelp',
-      provider: providers.find(p => p.provider === 'yelp'),
-      supportsOAuth: false,
-    },
   ];
 
   if (loading) {
@@ -389,19 +345,12 @@ export function SettingsTab() {
                               <ChevronRight className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                             </button>
                           </>
-                        ) : platform.supportsOAuth ? (
+                        ) : (
                           <button
                             onClick={() => handleConnectOAuth(platform.id as 'google' | 'facebook')}
                             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
                           >
                             Connect with OAuth
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => setShowYelpModal(true)}
-                            className="px-4 py-2 border border-blue-600 text-blue-600 text-sm font-medium rounded-lg hover:bg-blue-50 transition-colors"
-                          >
-                            Connect
                           </button>
                         )}
                       </div>
@@ -853,19 +802,6 @@ export function SettingsTab() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Yelp Business URL
-                </label>
-                <input
-                  type="url"
-                  value={settings?.yelp_review_url || ''}
-                  onChange={(e) => handleSaveSettings({ yelp_review_url: e.target.value || null })}
-                  placeholder="https://yelp.com/biz/your-business"
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Smart Threshold (Stars)
                 </label>
                 <p className="text-sm text-gray-500 mb-2">
@@ -1054,61 +990,6 @@ export function SettingsTab() {
         )}
       </div>
 
-      {showYelpModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowYelpModal(false)} />
-          <div className="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Connect Yelp Business</h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Business ID
-                </label>
-                <input
-                  type="text"
-                  value={yelpBusinessId}
-                  onChange={(e) => setYelpBusinessId(e.target.value)}
-                  placeholder="your-business-name-city"
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Find this in your Yelp business URL: yelp.com/biz/<strong>your-business-id</strong>
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Display Name
-                </label>
-                <input
-                  type="text"
-                  value={yelpDisplayName}
-                  onChange={(e) => setYelpDisplayName(e.target.value)}
-                  placeholder="My Business on Yelp"
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => setShowYelpModal(false)}
-                className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConnectYelp}
-                disabled={!yelpBusinessId.trim() || saving}
-                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Connecting...' : 'Connect'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

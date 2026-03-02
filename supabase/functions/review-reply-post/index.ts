@@ -11,7 +11,7 @@ interface ReviewReplyJob {
   id: string;
   organization_id: string;
   review_id: string;
-  provider: "google" | "facebook" | "yelp";
+  provider: "google" | "facebook";
   reply_text: string;
   status: string;
   retry_count: number;
@@ -196,8 +196,6 @@ async function processReplyJob(
     case "facebook":
       result = await postFacebookReply(provider as ReviewProvider, review as Review, job.reply_text);
       break;
-    case "yelp":
-      return { success: false, error: "Yelp does not support programmatic review replies" };
     default:
       return { success: false, error: `Unknown provider: ${job.provider}` };
   }

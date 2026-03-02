@@ -258,38 +258,7 @@ export async function initiateOAuthFlow(
       return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
     }
 
-    case 'yelp':
-      throw new Error('Yelp uses API key authentication, not OAuth');
-
     default:
       throw new Error(`Unsupported provider: ${provider}`);
   }
-}
-
-export async function connectYelpWithApiKey(
-  orgId: string,
-  businessId: string,
-  displayName: string
-): Promise<ReviewProviderConfig> {
-  const { data, error } = await supabase
-    .from('review_providers')
-    .upsert(
-      {
-        organization_id: orgId,
-        provider: 'yelp',
-        display_name: displayName,
-        external_location_id: businessId,
-        status: 'connected',
-        sync_enabled: true,
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: 'organization_id,provider',
-      }
-    )
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data as ReviewProviderConfig;
 }

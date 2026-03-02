@@ -59,14 +59,12 @@ export function ReviewDetailModal({ review: initialReview, onClose, onUpdate }: 
   const providerLabels: Record<string, string> = {
     google: 'Google',
     facebook: 'Facebook',
-    yelp: 'Yelp',
     internal: 'Internal Feedback',
   };
 
   const providerColors: Record<string, string> = {
     google: 'bg-red-100 text-red-700',
     facebook: 'bg-blue-100 text-blue-700',
-    yelp: 'bg-red-100 text-red-800',
     internal: 'bg-gray-100 text-gray-700',
   };
 

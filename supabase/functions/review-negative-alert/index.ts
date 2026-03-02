@@ -7,6 +7,19 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+const ENCRYPTION_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!.slice(0, 32);
+
+async function decrypt(encryptedText: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(ENCRYPTION_KEY.padEnd(32, "0").slice(0, 32));
+  const key = await crypto.subtle.importKey("raw", keyData, { name: "AES-GCM" }, false, ["decrypt"]);
+  const combined = Uint8Array.from(atob(encryptedText), (c) => c.charCodeAt(0));
+  const iv = combined.slice(0, 12);
+  const data = combined.slice(12);
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+  return new TextDecoder().decode(decrypted);
+}
+
 interface Review {
   id: string;
   organization_id: string;
@@ -45,25 +58,70 @@ interface Contact {
   phone: string | null;
 }
 
+async function getDecryptedSendGridKey(
+  orgId: string,
+  supabase: ReturnType<typeof createClient>,
+  supabaseUrl: string,
+  serviceRoleKey: string
+): Promise<string | null> {
+  const { data: provider } = await supabase
+    .from("email_providers")
+    .select("api_key_encrypted, api_key_iv, status")
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (!provider || provider.status !== "connected") return null;
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      action: "decrypt",
+      encrypted: provider.api_key_encrypted,
+      iv: provider.api_key_iv,
+    }),
+  });
+
+  if (!response.ok) return null;
+  const data = await response.json();
+  return data.plaintext;
+}
+
 async function sendEmailNotification(
   recipients: User[],
   review: Review,
   contact: Contact | null,
   orgName: string,
-  supabaseUrl: string
+  supabase: ReturnType<typeof createClient>,
+  supabaseUrl: string,
+  serviceRoleKey: string
 ): Promise<void> {
-  const sendgridKey = Deno.env.get("SENDGRID_API_KEY");
+  const sendgridKey = await getDecryptedSendGridKey(review.organization_id, supabase, supabaseUrl, serviceRoleKey);
   if (!sendgridKey) {
-    console.log("SendGrid API key not configured, skipping email notification");
+    console.log("SendGrid not connected for org, skipping email notification");
     return;
   }
+
+  const { data: fromAddress } = await supabase
+    .from("email_from_addresses")
+    .select("email, display_name")
+    .eq("org_id", review.organization_id)
+    .eq("active", true)
+    .eq("is_default", true)
+    .maybeSingle();
+
+  const fromEmail = fromAddress?.email || "notifications@autom8ion.com";
+  const fromName = fromAddress?.display_name || orgName;
 
   const reviewLink = `${supabaseUrl.replace('.supabase.co', '')}/reputation?review=${review.id}`;
   const customerName = contact
     ? `${contact.first_name} ${contact.last_name}`
     : review.reviewer_name;
 
-  const ratingStars = "★".repeat(review.rating) + "☆".repeat(5 - review.rating);
+  const ratingStars = "\u2605".repeat(review.rating) + "\u2606".repeat(5 - review.rating);
 
   for (const recipient of recipients) {
     const emailContent = `
@@ -102,7 +160,7 @@ async function sendEmailNotification(
         },
         body: JSON.stringify({
           personalizations: [{ to: [{ email: recipient.email }] }],
-          from: { email: "notifications@autom8ion.com", name: orgName },
+          from: { email: fromEmail, name: fromName },
           subject: `[Action Required] Negative ${review.rating}-Star Review from ${customerName}`,
           content: [{ type: "text/html", value: emailContent }],
         }),
@@ -117,14 +175,52 @@ async function sendSmsNotification(
   recipients: User[],
   review: Review,
   contact: Contact | null,
-  orgName: string
+  orgName: string,
+  supabase: ReturnType<typeof createClient>
 ): Promise<void> {
-  const twilioSid = Deno.env.get("TWILIO_ACCOUNT_SID");
-  const twilioToken = Deno.env.get("TWILIO_AUTH_TOKEN");
-  const twilioPhone = Deno.env.get("TWILIO_PHONE_NUMBER");
+  const { data: connection } = await supabase
+    .from("twilio_connection")
+    .select("account_sid, auth_token_encrypted, status")
+    .eq("org_id", review.organization_id)
+    .maybeSingle();
 
-  if (!twilioSid || !twilioToken || !twilioPhone) {
-    console.log("Twilio credentials not configured, skipping SMS notification");
+  if (!connection || connection.status !== "connected") {
+    console.log("Twilio not connected for org, skipping SMS notification");
+    return;
+  }
+
+  let authToken: string;
+  try {
+    authToken = await decrypt(connection.auth_token_encrypted);
+  } catch {
+    console.error("Failed to decrypt Twilio auth token");
+    return;
+  }
+
+  const accountSid = connection.account_sid;
+
+  const { data: defaultNum } = await supabase
+    .from("twilio_numbers")
+    .select("phone_number")
+    .eq("org_id", review.organization_id)
+    .eq("is_default_sms", true)
+    .eq("status", "active")
+    .maybeSingle();
+
+  let fromNumber = defaultNum?.phone_number;
+  if (!fromNumber) {
+    const { data: anyNum } = await supabase
+      .from("twilio_numbers")
+      .select("phone_number")
+      .eq("org_id", review.organization_id)
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle();
+    fromNumber = anyNum?.phone_number;
+  }
+
+  if (!fromNumber) {
+    console.log("No active Twilio number found for org, skipping SMS notification");
     return;
   }
 
@@ -138,8 +234,8 @@ async function sendSmsNotification(
     if (!recipient.phone) continue;
 
     try {
-      const auth = btoa(`${twilioSid}:${twilioToken}`);
-      await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
+      const auth = btoa(`${accountSid}:${authToken}`);
+      await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
         method: "POST",
         headers: {
           Authorization: `Basic ${auth}`,
@@ -147,7 +243,7 @@ async function sendSmsNotification(
         },
         body: new URLSearchParams({
           To: recipient.phone,
-          From: twilioPhone,
+          From: fromNumber,
           Body: message,
         }),
       });
@@ -246,10 +342,9 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     if (req.method !== "POST") {
       return new Response(
@@ -379,13 +474,15 @@ Deno.serve(async (req: Request) => {
         review as Review,
         contact,
         orgName,
-        Deno.env.get("SUPABASE_URL")!
+        supabase,
+        supabaseUrl,
+        serviceRoleKey
       );
       notificationMethod = "email";
     }
 
     if (settings?.negative_review_notify_sms && recipients.length > 0) {
-      await sendSmsNotification(recipients, review as Review, contact, orgName);
+      await sendSmsNotification(recipients, review as Review, contact, orgName, supabase);
       notificationMethod = notificationMethod ? "both" : "sms";
     }
 

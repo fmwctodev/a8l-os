@@ -16,19 +16,6 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const webhookSecret = Deno.env.get("LATE_WEBHOOK_SECRET");
-
-    // Validate webhook signature if secret is configured
-    if (webhookSecret) {
-      const signature = req.headers.get("x-late-signature") || req.headers.get("x-webhook-signature");
-      if (!signature) {
-        console.warn("[late-webhook] Missing signature header — rejecting");
-        return new Response(
-          JSON.stringify({ success: false, error: "Missing webhook signature" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
