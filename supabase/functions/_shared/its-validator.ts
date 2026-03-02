@@ -25,6 +25,7 @@ export const ALLOWED_ACTION_TYPES = new Set([
   'query_projects',
   'query_proposals',
   'remember',
+  'store_memory',
 ]);
 
 const MODULE_MAP: Record<string, string> = {
@@ -49,6 +50,7 @@ const MODULE_MAP: Record<string, string> = {
   query_projects: 'projects',
   query_proposals: 'proposals',
   remember: 'memory',
+  store_memory: 'memory',
 };
 
 interface PayloadFieldDef {
@@ -182,6 +184,12 @@ const PAYLOAD_SCHEMAS: Record<string, Record<string, PayloadFieldDef>> = {
     key: { required: true, type: 'string' },
     value: { required: true, type: 'string' },
     category: { required: false, type: 'string' },
+  },
+  store_memory: {
+    memory_type: { required: true, type: 'string' },
+    title: { required: false, type: 'string' },
+    content: { required: true, type: 'string' },
+    importance_score: { required: false, type: 'number' },
   },
 };
 

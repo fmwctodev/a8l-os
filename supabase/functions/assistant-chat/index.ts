@@ -7,7 +7,8 @@ import { validateITSRequest, validateActionPayload, stripUnknownKeys } from "../
 import { applyConfirmationOverrides } from "../_shared/its-confirmation-rules.ts";
 import { validatePermissions } from "../_shared/its-permissions.ts";
 import { validateIntegrationState } from "../_shared/its-integration-check.ts";
-import { buildITSSystemPrompt } from "../_shared/its-system-prompt.ts";
+import { buildITSSystemPrompt, type SemanticMemory } from "../_shared/its-system-prompt.ts";
+import { retrieveRelevantMemories } from "../_shared/claraMemoryService.ts";
 import { resolveRefreshToken, refreshAccessToken } from "../_shared/google-oauth-helpers.ts";
 import {
   CLARA_MODEL,
@@ -123,11 +124,29 @@ Deno.serve(async (req: Request) => {
 
     const llmConfig = await resolveLLMConfig(supabase, userData.organization_id);
 
+    let semanticMemories: SemanticMemory[] = [];
+    if (content) {
+      try {
+        const retrieved = await retrieveRelevantMemories(
+          supabase, user.id, content, llmConfig.apiKey, 5
+        );
+        semanticMemories = retrieved.map((m) => ({
+          memory_type: m.memory_type,
+          title: m.title,
+          content: m.content,
+          importance_score: m.importance_score,
+        }));
+      } catch (e) {
+        console.error("[assistant-chat] Semantic memory retrieval failed:", e);
+      }
+    }
+
     const systemPrompt = buildITSSystemPrompt(
       { fullName: userData.name || userData.email, email: userData.email },
       profile,
       memories || [],
-      context || null
+      context || null,
+      semanticMemories
     );
 
     const conversationHistory = (prevMessages || []).map(
@@ -338,7 +357,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const executionResult = await executeActionPlan(
-      supabase, user, userData, thread_id, execRequestId, itsRequest, llmConfig.model, parsed
+      supabase, user, userData, thread_id, execRequestId, itsRequest, llmConfig.model, parsed, llmConfig
     );
 
     const allResults = [...executionResult.results, ...integrationErrors];
@@ -464,17 +483,17 @@ async function handleConfirmation(
     response_to_user: execReq.response_to_user,
   };
 
+  const confirmLlmConfig = await resolveLLMConfig(supabase, user.orgId);
   const result = await executeActionPlan(
-    supabase, user, userData, threadId, executionRequestId, itsRequest, execReq.model_used, null
+    supabase, user, userData, threadId, executionRequestId, itsRequest, execReq.model_used, null, confirmLlmConfig
   );
 
   let confirmResponse = "Actions approved and executed.";
   const confirmQueryResults = result.results.filter((r) => r.query_data !== undefined && r.status === "success");
   if (confirmQueryResults.length > 0) {
     try {
-      const llmConfig = await resolveLLMConfig(supabase, user.orgId);
       const summarized = await summarizeQueryResults(
-        llmConfig, confirmQueryResults, itsRequest, execReq.response_to_user || "", userData.name || userData.email
+        confirmLlmConfig, confirmQueryResults, itsRequest, execReq.response_to_user || "", userData.name || userData.email
       );
       if (summarized) confirmResponse = summarized;
     } catch { /* fallback to default message */ }
@@ -503,7 +522,8 @@ async function executeActionPlan(
   execRequestId: string,
   itsRequest: ITSRequest,
   modelUsed: string,
-  rawLlmOutput: unknown
+  rawLlmOutput: unknown,
+  llmConfig?: LLMConfig | null
 ): Promise<{ results: ITSActionResult[] }> {
   const sorted = topologicalSort(itsRequest.actions);
   const results: ITSActionResult[] = [];
@@ -545,7 +565,7 @@ async function executeActionPlan(
     let result: ITSActionResult;
 
     try {
-      result = await executeITSAction(supabase, user, userData, resolvedAction);
+      result = await executeITSAction(supabase, user, userData, resolvedAction, llmConfig);
     } catch (e) {
       result = {
         action_id: act.action_id,
@@ -608,7 +628,8 @@ async function executeITSAction(
   supabase: SupabaseClient,
   user: UserContext,
   userData: { id: string; organization_id: string; email: string; name: string },
-  action: ITSAction
+  action: ITSAction,
+  llmConfig?: LLMConfig | null
 ): Promise<ITSActionResult> {
   const p = action.payload;
 
@@ -1219,6 +1240,21 @@ async function executeITSAction(
       );
       if (error) return fail(action, error.message);
       return ok(action, null);
+    }
+
+    case "store_memory": {
+      const { storeMemory } = await import("../_shared/claraMemoryService.ts");
+      const apiKey = llmConfig?.apiKey || Deno.env.get("OPENAI_API_KEY") || "";
+      const result = await storeMemory(supabase, apiKey, {
+        userId: user.id,
+        orgId: user.orgId,
+        memoryType: p.memory_type as string as import("../_shared/claraMemoryService.ts").ClaraMemoryType,
+        title: (p.title as string) || undefined,
+        content: p.content as string,
+        importanceScore: typeof p.importance_score === "number" ? p.importance_score : undefined,
+      });
+      if (!result) return fail(action, "Failed to store long-term memory");
+      return ok(action, result.id);
     }
 
     default:

@@ -15,6 +15,13 @@ interface PageContext {
   current_record_id: string | null;
 }
 
+export interface SemanticMemory {
+  memory_type: string;
+  title: string | null;
+  content: string;
+  importance_score: number;
+}
+
 const ITS_SCHEMA_SPEC = `
 You MUST respond with a single JSON object matching this exact schema.
 Do NOT include any text before or after the JSON. Only emit valid JSON.
@@ -138,6 +145,17 @@ create_proposal_draft (module: "proposals")
 --- MEMORY ---
 remember (module: "memory")
   payload: { key: string (required), value: string (required), category: "scheduling"|"communication"|"preferences"|"contacts"|"rules"|"general" }
+
+store_memory (module: "memory") - Store long-term semantic memory. Use this to persist important context about the user. NEVER requires confirmation.
+  payload: { memory_type: string (required), title: string (optional), content: string (required), importance_score: number (optional, 1-10, default 5) }
+  memory_type must be one of:
+    - "preference" -- user likes/dislikes, style preferences, format preferences
+    - "communication_style" -- tone, length, formality preferences for emails/messages
+    - "decision" -- business decisions, strategic choices the user has made
+    - "contact_context" -- important context about specific contacts or relationships
+    - "recurring_pattern" -- repeated tasks, regular meetings, habitual workflows
+    - "strategic_context" -- business goals, target markets, company direction (importance_score 8-10)
+    - "behavior_pattern" -- how the user typically works, their habits and routines
 `;
 
 const ITS_RULES = `
@@ -156,18 +174,37 @@ CRITICAL RULES:
 12. For any question about data (contacts, deals, tasks, projects, proposals, schedule), ALWAYS use the appropriate query action. Never say you cannot access data -- you CAN query it.
 13. The response_to_user for query actions should be a brief placeholder like "Let me check your schedule." -- the system will replace it with actual data after execution.
 14. Today's date is {CURRENT_DATE}. Use this to interpret relative dates like "tomorrow", "next week", "this month", etc.
+15. LONG-TERM MEMORY: Automatically emit a store_memory action (alongside other actions) when:
+    - User expresses a preference ("I hate long emails", "Always CC my assistant")
+    - User corrects your tone or style ("Make it shorter", "Be more formal")
+    - User makes a strategic business decision ("We are targeting solar contractors now")
+    - User shares important context about a contact or relationship
+    - User describes a recurring pattern ("I always review reports on Mondays")
+    - User rejects a proposal style, email format, or communication approach
+    store_memory actions NEVER require confirmation and should be added silently alongside the main response.
+    Do NOT mention that you are storing memory in response_to_user.
 `;
 
 export function buildITSSystemPrompt(
   user: UserInfo,
   profile: Record<string, unknown> | null,
   memories: Memory[],
-  context: PageContext | null
+  context: PageContext | null,
+  semanticMemories?: SemanticMemory[]
 ): string {
   const memSection = memories.length > 0
     ? `\n\nUSER MEMORIES (use these to personalize responses):\n${memories
         .map((m) => `- [${m.category}] ${m.memory_key}: ${JSON.stringify(m.memory_value)}`)
         .join('\n')}`
+    : '';
+
+  const semanticSection = semanticMemories && semanticMemories.length > 0
+    ? `\n\nRELEVANT LONG-TERM MEMORY (contextually retrieved for this conversation):\n${semanticMemories
+        .map((m) => {
+          const label = m.title ? `${m.title}: ${m.content}` : m.content;
+          return `- (${m.memory_type}) ${label}`;
+        })
+        .join('\n')}\nUse this memory to improve accuracy and personalization. Do not mention memory internals to the user.`
     : '';
 
   const ctxSection = context
@@ -198,5 +235,5 @@ IMPORTANT: You have full read access to CRM data. When users ask about their sch
 ${ITS_SCHEMA_SPEC}
 
 ${rulesWithDate}
-${memSection}${ctxSection}${customPrompt}`;
+${memSection}${semanticSection}${ctxSection}${customPrompt}`;
 }

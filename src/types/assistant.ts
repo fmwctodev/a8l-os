@@ -3,6 +3,7 @@ import type { ITSRequest, ITSExecutionResult, ITSAction, ITSActionResult } from 
 export type AssistantMessageRole = 'user' | 'assistant' | 'system';
 export type AssistantMessageType = 'text' | 'tool_result' | 'action_confirmation' | 'draft_preview' | 'meeting_summary' | 'error' | 'voice_transcript' | 'execution_plan' | 'execution_result';
 export type MemoryCategory = 'scheduling' | 'communication' | 'preferences' | 'contacts' | 'rules' | 'general';
+export type ClaraMemoryType = 'preference' | 'communication_style' | 'decision' | 'contact_context' | 'recurring_pattern' | 'strategic_context' | 'behavior_pattern';
 export type ActionExecutionStatus = 'success' | 'failed' | 'running' | 'queued' | 'canceled';
 export type AssistantPanelTab = 'chat' | 'voice' | 'activity' | 'settings';
 
@@ -52,6 +53,19 @@ export interface AssistantUserMemory {
   memory_key: string;
   memory_value: unknown;
   category: MemoryCategory;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClaraMemory {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  memory_type: ClaraMemoryType;
+  title: string | null;
+  content: string;
+  importance_score: number;
+  last_accessed_at: string | null;
   created_at: string;
   updated_at: string;
 }

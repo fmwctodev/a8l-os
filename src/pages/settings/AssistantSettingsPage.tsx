@@ -9,17 +9,22 @@ import {
   Loader2,
   Trash2,
   Save,
+  Database,
+  Filter,
+  ArrowUpDown,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAssistant } from '../../contexts/AssistantContext';
 import { updateProfile } from '../../services/assistantProfile';
 import { getMemories, deleteMemory, clearAllMemories } from '../../services/assistantMemory';
-import type { AssistantUserMemory } from '../../types/assistant';
+import { getClaraMemories, deleteClaraMemory, clearAllClaraMemories } from '../../services/claraMemory';
+import type { AssistantUserMemory, ClaraMemory, ClaraMemoryType } from '../../types/assistant';
 
 const TABS = [
   { id: 'general', label: 'General', icon: Settings },
   { id: 'voice', label: 'Voice', icon: Volume2 },
   { id: 'memory', label: 'Memory', icon: Brain },
+  { id: 'long-term-memory', label: 'Long-Term Memory', icon: Database },
   { id: 'security', label: 'Security', icon: Shield },
 ];
 
@@ -86,6 +91,7 @@ export default function AssistantSettingsPage() {
       {activeTab === 'general' && <GeneralTab />}
       {activeTab === 'voice' && <VoiceTab />}
       {activeTab === 'memory' && <MemoryTab />}
+      {activeTab === 'long-term-memory' && <LongTermMemoryTab />}
       {activeTab === 'security' && <SecurityTab />}
     </div>
   );
@@ -366,6 +372,233 @@ function MemoryTab() {
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-400 hover:text-slate-300 transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Clear all memories
+              </button>
+            )}
+          </div>
+        )}
+      </SettingsCard>
+    </div>
+  );
+}
+
+const MEMORY_TYPE_LABELS: Record<ClaraMemoryType, string> = {
+  preference: 'Preference',
+  communication_style: 'Communication Style',
+  decision: 'Decision',
+  contact_context: 'Contact Context',
+  recurring_pattern: 'Recurring Pattern',
+  strategic_context: 'Strategic Context',
+  behavior_pattern: 'Behavior Pattern',
+};
+
+const MEMORY_TYPE_COLORS: Record<ClaraMemoryType, string> = {
+  preference: 'bg-sky-500/15 text-sky-400',
+  communication_style: 'bg-teal-500/15 text-teal-400',
+  decision: 'bg-amber-500/15 text-amber-400',
+  contact_context: 'bg-emerald-500/15 text-emerald-400',
+  recurring_pattern: 'bg-orange-500/15 text-orange-400',
+  strategic_context: 'bg-rose-500/15 text-rose-400',
+  behavior_pattern: 'bg-cyan-500/15 text-cyan-400',
+};
+
+const ALL_MEMORY_TYPES: ClaraMemoryType[] = [
+  'preference', 'communication_style', 'decision', 'contact_context',
+  'recurring_pattern', 'strategic_context', 'behavior_pattern',
+];
+
+function LongTermMemoryTab() {
+  const { user } = useAuth();
+  const [memories, setMemories] = useState<ClaraMemory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterType, setFilterType] = useState<ClaraMemoryType | 'all'>('all');
+  const [sortBy, setSortBy] = useState<'recent' | 'importance'>('importance');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [showFilter, setShowFilter] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
+    getClaraMemories(user.id)
+      .then(setMemories)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [user]);
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteClaraMemory(id);
+      setMemories((prev) => prev.filter((m) => m.id !== id));
+    } catch { /* noop */ }
+  };
+
+  const handleClearAll = async () => {
+    if (!user) return;
+    setClearing(true);
+    try {
+      await clearAllClaraMemories(user.id);
+      setMemories([]);
+      setShowClearConfirm(false);
+    } catch { /* noop */ }
+    setClearing(false);
+  };
+
+  const filtered = memories.filter(
+    (m) => filterType === 'all' || m.memory_type === filterType
+  );
+
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortBy === 'importance') return b.importance_score - a.importance_score;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-10">
+        <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <SettingsCard title={`Long-Term Memory (${memories.length})`}>
+        <p className="text-xs text-slate-500 mb-3">
+          Clara automatically builds long-term memories from your conversations to improve
+          personalization and accuracy over time. Strategic memories are preserved indefinitely;
+          others gradually fade if unused.
+        </p>
+
+        {memories.length > 0 && (
+          <div className="flex items-center gap-2 mb-3">
+            <div className="relative">
+              <button
+                onClick={() => setShowFilter(!showFilter)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-colors border ${
+                  filterType !== 'all'
+                    ? 'bg-cyan-600/10 border-cyan-500/30 text-cyan-400'
+                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                <Filter className="w-3 h-3" />
+                {filterType === 'all' ? 'All types' : MEMORY_TYPE_LABELS[filterType]}
+              </button>
+              {showFilter && (
+                <div className="absolute top-full left-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10 py-1">
+                  <button
+                    onClick={() => { setFilterType('all'); setShowFilter(false); }}
+                    className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
+                      filterType === 'all' ? 'text-cyan-400 bg-slate-700/50' : 'text-slate-400 hover:bg-slate-700/30'
+                    }`}
+                  >
+                    All types
+                  </button>
+                  {ALL_MEMORY_TYPES.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => { setFilterType(t); setShowFilter(false); }}
+                      className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
+                        filterType === t ? 'text-cyan-400 bg-slate-700/50' : 'text-slate-400 hover:bg-slate-700/30'
+                      }`}
+                    >
+                      {MEMORY_TYPE_LABELS[t]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setSortBy(sortBy === 'recent' ? 'importance' : 'recent')}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-400 hover:text-slate-300 transition-colors"
+            >
+              <ArrowUpDown className="w-3 h-3" />
+              {sortBy === 'importance' ? 'Most Important' : 'Most Recent'}
+            </button>
+          </div>
+        )}
+
+        {sorted.length === 0 ? (
+          <div className="text-center py-6">
+            <Database className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+            <p className="text-xs text-slate-500">
+              {memories.length === 0 ? 'No long-term memories yet' : 'No memories match this filter'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-1.5 max-h-[480px] overflow-y-auto">
+            {sorted.map((mem) => (
+              <div
+                key={mem.id}
+                className="flex items-start gap-3 px-3 py-2.5 bg-slate-800/50 rounded-lg group hover:bg-slate-800/80 transition-colors"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${MEMORY_TYPE_COLORS[mem.memory_type]}`}>
+                      {MEMORY_TYPE_LABELS[mem.memory_type]}
+                    </span>
+                    {mem.title && (
+                      <span className="text-xs text-slate-300 font-medium truncate">{mem.title}</span>
+                    )}
+                    <div className="flex items-center gap-0.5 ml-auto flex-shrink-0">
+                      {Array.from({ length: 10 }).map((_, i) => (
+                        <span
+                          key={i}
+                          className={`w-1 h-2.5 rounded-full ${
+                            i < mem.importance_score ? 'bg-cyan-500/70' : 'bg-slate-700/50'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">{mem.content}</p>
+                  <p className="text-[9px] text-slate-600 mt-1">
+                    {new Date(mem.created_at).toLocaleDateString('en-US', {
+                      month: 'short', day: 'numeric', year: 'numeric',
+                    })}
+                    {mem.last_accessed_at && (
+                      <> &middot; Last used {new Date(mem.last_accessed_at).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric',
+                      })}</>
+                    )}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleDelete(mem.id)}
+                  className="p-1 text-slate-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0 mt-0.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {memories.length > 0 && (
+          <div className="mt-4 pt-3 border-t border-slate-700/50">
+            {showClearConfirm ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleClearAll}
+                  disabled={clearing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600/20 border border-red-500/30 rounded-lg text-xs text-red-400 hover:bg-red-600/30 transition-colors disabled:opacity-50"
+                >
+                  {clearing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  Confirm clear all
+                </button>
+                <button
+                  onClick={() => setShowClearConfirm(false)}
+                  className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowClearConfirm(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-slate-400 hover:text-slate-300 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Clear all long-term memories
               </button>
             )}
           </div>
