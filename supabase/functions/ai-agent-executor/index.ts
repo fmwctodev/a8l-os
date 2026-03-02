@@ -753,7 +753,7 @@ Deno.serve(async (req: Request) => {
         },
         body: JSON.stringify({
           model: "gpt-5.1",
-          max_tokens: agent.max_tokens || 1024,
+          max_completion_tokens: agent.max_tokens || 1024,
           temperature: agent.temperature || 0.7,
           tools: openaiTools,
           messages: openaiMessages,

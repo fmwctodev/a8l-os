@@ -22,7 +22,7 @@ export async function generateText(
       model: LOCKED_MODEL,
       messages,
       temperature: TEMPERATURE,
-      max_tokens: MAX_TOKENS,
+      max_completion_tokens: MAX_TOKENS,
     }),
   });
 

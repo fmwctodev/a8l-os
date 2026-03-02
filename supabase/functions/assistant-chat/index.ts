@@ -1685,7 +1685,7 @@ async function callOpenAI(
   const body: Record<string, unknown> = {
     model: config.model,
     messages: openaiMessages,
-    max_tokens: 4096,
+    max_completion_tokens: 4096,
   };
   if (jsonMode) {
     body.response_format = { type: "json_object" };

@@ -281,7 +281,7 @@ Respond ONLY with the JSON array, no other text.`;
           },
         ],
         temperature: 0.8,
-        max_tokens: 3000,
+        max_completion_tokens: 3000,
       }),
     }
   );

@@ -205,7 +205,7 @@ Deno.serve(async (req: Request) => {
           },
           body: JSON.stringify({
             model: "gpt-5.1",
-            max_tokens: 256,
+            max_completion_tokens: 256,
             temperature: 0.7,
             messages: [{ role: "user", content: prompt }],
           }),
@@ -245,7 +245,7 @@ Deno.serve(async (req: Request) => {
           },
           body: JSON.stringify({
             model: "gpt-5.1",
-            max_tokens: 1024,
+            max_completion_tokens: 1024,
             temperature: 0.7,
             messages: [{ role: "user", content: prompt }],
           }),

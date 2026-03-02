@@ -221,7 +221,7 @@ async function generateWithLLM(
           { role: "user", content: userPrompt },
         ],
         temperature: 0.8,
-        max_tokens: 1000,
+        max_completion_tokens: 1000,
       }),
     });
 

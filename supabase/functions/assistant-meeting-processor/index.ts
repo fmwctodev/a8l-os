@@ -180,7 +180,7 @@ async function callLLM(
     },
     body: JSON.stringify({
       model: config.model,
-      max_tokens: 4096,
+      max_completion_tokens: 4096,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: transcript.slice(0, 100000) },

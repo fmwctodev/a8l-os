@@ -78,7 +78,7 @@ async function analyzeWithOpenAI(
         { role: "user", content: prompt },
       ],
       temperature: 0.3,
-      max_tokens: 1000,
+      max_completion_tokens: 1000,
     }),
   });
 
