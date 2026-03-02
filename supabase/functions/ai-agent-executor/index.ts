@@ -210,14 +210,14 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY");
+    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
 
     if (!supabaseUrl || !serviceRoleKey) {
       throw new Error("Missing Supabase environment variables");
     }
 
-    if (!anthropicApiKey) {
-      throw new Error("Missing ANTHROPIC_API_KEY environment variable");
+    if (!openaiApiKey) {
+      throw new Error("Missing OPENAI_API_KEY environment variable");
     }
 
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
@@ -721,6 +721,17 @@ Deno.serve(async (req: Request) => {
       }
     };
 
+    const openaiTools = tools.length > 0
+      ? tools.map((t) => ({
+          type: "function" as const,
+          function: {
+            name: t.name,
+            description: t.description,
+            parameters: t.input_schema,
+          },
+        }))
+      : undefined;
+
     let continueProcessing = true;
     let outputSummary = "";
 
@@ -729,52 +740,57 @@ Deno.serve(async (req: Request) => {
         throw new Error("Execution timeout exceeded");
       }
 
-      const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
+      const openaiMessages = [
+        { role: "system", content: agent.system_prompt },
+        ...llmMessages,
+      ];
+
+      const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": anthropicApiKey,
-          "anthropic-version": "2023-06-01",
+          Authorization: `Bearer ${openaiApiKey}`,
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "gpt-5.2-chat-latest",
           max_tokens: agent.max_tokens || 1024,
           temperature: agent.temperature || 0.7,
-          system: agent.system_prompt,
-          tools: tools.length > 0 ? tools : undefined,
-          messages: llmMessages,
+          tools: openaiTools,
+          messages: openaiMessages,
         }),
       });
 
-      if (!anthropicResponse.ok) {
-        const errorBody = await anthropicResponse.text();
-        throw new Error(`Anthropic API error: ${anthropicResponse.status} - ${errorBody}`);
+      if (!openaiResponse.ok) {
+        const errorBody = await openaiResponse.text();
+        throw new Error(`OpenAI API error: ${openaiResponse.status} - ${errorBody}`);
       }
 
-      const anthropicData = await anthropicResponse.json();
-      const stopReason = anthropicData.stop_reason;
-      const content = anthropicData.content;
+      const openaiData = await openaiResponse.json();
+      const choice = openaiData.choices?.[0];
+      const finishReason = choice?.finish_reason;
+      const message = choice?.message;
 
-      if (stopReason === "end_turn" || stopReason === "stop_sequence") {
-        const textContent = content.find((c: { type: string }) => c.type === "text");
-        outputSummary = textContent?.text || "";
+      if (finishReason === "stop" || !message?.tool_calls || message.tool_calls.length === 0) {
+        outputSummary = message?.content || "";
         continueProcessing = false;
-      } else if (stopReason === "tool_use") {
-        const toolUseBlocks = content.filter((c: { type: string }) => c.type === "tool_use");
+      } else if (finishReason === "tool_calls" || message?.tool_calls?.length > 0) {
+        llmMessages.push({ role: "assistant", content: message.content || null, tool_calls: message.tool_calls });
 
-        llmMessages.push({ role: "assistant", content });
-
-        const toolResultsContent: Array<{ type: string; tool_use_id: string; content: string }> = [];
-
-        for (const toolUse of toolUseBlocks) {
+        for (const toolCall of message.tool_calls) {
           toolCallsCount++;
-          const result = await executeToolCall(toolUse.name, toolUse.input as Record<string, unknown>);
-          toolResults.push({ name: toolUse.name, result });
+          const toolName = toolCall.function.name;
+          let toolInput: Record<string, unknown> = {};
+          try {
+            toolInput = JSON.parse(toolCall.function.arguments || "{}");
+          } catch { /* empty */ }
 
-          toolResultsContent.push({
-            type: "tool_result",
-            tool_use_id: toolUse.id,
+          const result = await executeToolCall(toolName, toolInput);
+          toolResults.push({ name: toolName, result });
+
+          llmMessages.push({
+            role: "tool",
             content: JSON.stringify(result),
+            tool_call_id: toolCall.id,
           });
 
           if (!result.success) {
@@ -782,8 +798,6 @@ Deno.serve(async (req: Request) => {
             break;
           }
         }
-
-        llmMessages.push({ role: "user", content: toolResultsContent });
       } else {
         continueProcessing = false;
       }

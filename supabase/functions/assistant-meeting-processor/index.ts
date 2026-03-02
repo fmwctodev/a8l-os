@@ -125,7 +125,7 @@ Only return valid JSON, no markdown.`;
 });
 
 interface LLMConfig {
-  provider: "anthropic" | "openai";
+  provider: "openai";
   model: string;
   apiKey: string;
   baseUrl?: string;
@@ -147,17 +147,7 @@ async function resolveLLMConfig(
       if (p.provider === "openai" && p.api_key_encrypted) {
         return {
           provider: "openai",
-          model: "gpt-4o-mini",
-          apiKey: p.api_key_encrypted,
-          baseUrl: p.base_url || undefined,
-        };
-      }
-    }
-    for (const p of providers) {
-      if (p.provider === "anthropic" && p.api_key_encrypted) {
-        return {
-          provider: "anthropic",
-          model: "claude-sonnet-4-20250514",
+          model: "gpt-5.2-chat-latest",
           apiKey: p.api_key_encrypted,
           baseUrl: p.base_url || undefined,
         };
@@ -167,12 +157,7 @@ async function resolveLLMConfig(
 
   const openaiKey = Deno.env.get("OPENAI_API_KEY");
   if (openaiKey) {
-    return { provider: "openai", model: "gpt-4o-mini", apiKey: openaiKey };
-  }
-
-  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (anthropicKey) {
-    return { provider: "anthropic", model: "claude-sonnet-4-20250514", apiKey: anthropicKey };
+    return { provider: "openai", model: "gpt-5.2-chat-latest", apiKey: openaiKey };
   }
 
   throw new Error("No LLM provider configured");
@@ -183,34 +168,6 @@ async function callLLM(
   systemPrompt: string,
   transcript: string
 ): Promise<string> {
-  if (config.provider === "anthropic") {
-    const url = config.baseUrl
-      ? `${config.baseUrl}/v1/messages`
-      : "https://api.anthropic.com/v1/messages";
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": config.apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: config.model,
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages: [{ role: "user", content: transcript.slice(0, 100000) }],
-      }),
-    });
-
-    if (!res.ok) throw new Error(`Anthropic error: ${res.status}`);
-    const data = await res.json();
-    return (data.content || [])
-      .filter((b: { type: string }) => b.type === "text")
-      .map((b: { text: string }) => b.text)
-      .join("");
-  }
-
   const url = config.baseUrl
     ? `${config.baseUrl}/v1/chat/completions`
     : "https://api.openai.com/v1/chat/completions";

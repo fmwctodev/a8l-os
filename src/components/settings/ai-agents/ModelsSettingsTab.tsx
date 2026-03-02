@@ -8,10 +8,8 @@ import { LLM_PROVIDER_LABELS } from '../../../types';
 
 const LEGACY_MODEL_KEYS = new Set([
   'gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo',
+  'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'o3', 'o3-pro', 'o4-mini',
   'o1', 'o1-mini', 'o1-preview',
-  'claude-3-7-sonnet-20250219',
-  'claude-3-5-sonnet-20241022', 'claude-3-5-haiku-20241022',
-  'claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307',
   'gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro',
 ]);
 
@@ -24,14 +22,8 @@ const PROVIDER_CONFIGS: Array<{
   {
     id: 'openai',
     name: 'OpenAI',
-    description: 'GPT-4.1, o3, o4-mini, and other OpenAI models',
+    description: 'GPT-5.2 and other OpenAI models',
     docsUrl: 'https://platform.openai.com/api-keys',
-  },
-  {
-    id: 'anthropic',
-    name: 'Anthropic',
-    description: 'Claude Opus 4.6, Sonnet 4.5, Haiku 4.5, and other Anthropic models',
-    docsUrl: 'https://console.anthropic.com/settings/keys',
   },
   {
     id: 'google',

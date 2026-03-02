@@ -69,7 +69,7 @@ async function analyzeWithOpenAI(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
+      model: "gpt-5.2-chat-latest",
       messages: [
         {
           role: "system",
@@ -102,97 +102,23 @@ async function analyzeWithOpenAI(
   const result = JSON.parse(jsonMatch[0]) as AIAnalysisResult;
   const tokens = data.usage?.total_tokens || 0;
 
-  return { result, tokens, model: "gpt-4o-mini" };
-}
-
-async function analyzeWithAnthropic(
-  review: Review,
-  apiKey: string
-): Promise<{ result: AIAnalysisResult; tokens: number; model: string }> {
-  const prompt = ANALYSIS_PROMPT
-    .replace("{rating}", String(review.rating))
-    .replace("{comment}", review.comment || "No text provided")
-    .replace("{reviewer_name}", review.reviewer_name);
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "Content-Type": "application/json",
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-3-haiku-20240307",
-      max_tokens: 1000,
-      messages: [{ role: "user", content: prompt }],
-      system: "You are an expert at analyzing customer reviews. Always respond with valid JSON only.",
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Anthropic API error: ${response.status} - ${error}`);
-  }
-
-  const data = await response.json();
-  const content = data.content?.[0]?.text;
-
-  if (!content) {
-    throw new Error("No content in Anthropic response");
-  }
-
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error("Could not parse JSON from Anthropic response");
-  }
-
-  const result = JSON.parse(jsonMatch[0]) as AIAnalysisResult;
-  const tokens = (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0);
-
-  return { result, tokens, model: "claude-3-haiku-20240307" };
+  return { result, tokens, model: "gpt-5.2-chat-latest" };
 }
 
 async function analyzeReview(
   review: Review,
-  provider: "openai" | "anthropic" | "both",
+  _provider: "openai" | "anthropic" | "both",
   supabase: ReturnType<typeof createClient>
 ): Promise<{ success: boolean; analysis_id?: string; error?: string }> {
   const openaiKey = Deno.env.get("OPENAI_API_KEY");
-  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
 
   let analysisResult: { result: AIAnalysisResult; tokens: number; model: string };
-  let usedProvider: "openai" | "anthropic";
 
   try {
-    if (provider === "openai" || (provider === "both" && openaiKey)) {
-      if (!openaiKey) throw new Error("OpenAI API key not configured");
-      analysisResult = await analyzeWithOpenAI(review, openaiKey);
-      usedProvider = "openai";
-    } else if (provider === "anthropic" || (provider === "both" && anthropicKey)) {
-      if (!anthropicKey) throw new Error("Anthropic API key not configured");
-      analysisResult = await analyzeWithAnthropic(review, anthropicKey);
-      usedProvider = "anthropic";
-    } else {
-      throw new Error("No AI provider API key configured");
-    }
+    if (!openaiKey) throw new Error("OpenAI API key not configured");
+    analysisResult = await analyzeWithOpenAI(review, openaiKey);
   } catch (error) {
-    if (provider === "both") {
-      try {
-        if (anthropicKey && usedProvider! !== "anthropic") {
-          analysisResult = await analyzeWithAnthropic(review, anthropicKey);
-          usedProvider = "anthropic";
-        } else if (openaiKey && usedProvider! !== "openai") {
-          analysisResult = await analyzeWithOpenAI(review, openaiKey);
-          usedProvider = "openai";
-        } else {
-          throw error;
-        }
-      } catch {
-        return { success: false, error: error instanceof Error ? error.message : String(error) };
-      }
-    } else {
-      return { success: false, error: error instanceof Error ? error.message : String(error) };
-    }
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 
   const { data: analysis, error: insertError } = await supabase
@@ -208,7 +134,7 @@ async function analyzeReview(
         summary: analysisResult!.result.summary,
         key_phrases: analysisResult!.result.key_phrases,
         suggested_reply: analysisResult!.result.suggested_reply,
-        ai_provider: usedProvider!,
+        ai_provider: "openai",
         model_used: analysisResult!.model,
         tokens_used: analysisResult!.tokens,
         analyzed_at: new Date().toISOString(),

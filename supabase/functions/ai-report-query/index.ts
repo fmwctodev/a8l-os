@@ -275,65 +275,32 @@ async function callLLM(
   let response: Response;
   let tokensUsed = 0;
 
-  if (provider === "openai") {
-    response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.1,
-        response_format: { type: "json_object" },
-      }),
-    });
+  response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.1,
+      response_format: { type: "json_object" },
+    }),
+  });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    tokensUsed = data.usage?.total_tokens || 0;
-    const content = data.choices[0].message.content;
-    return { plan: JSON.parse(content), tokensUsed };
-  } else if (provider === "anthropic") {
-    response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: model,
-        max_tokens: 2048,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Anthropic API error: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    tokensUsed = (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0);
-    const content = data.content[0].text;
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("Could not parse JSON from Anthropic response");
-    }
-    return { plan: JSON.parse(jsonMatch[0]), tokensUsed };
-  } else {
-    throw new Error(`Unsupported LLM provider: ${provider}`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
   }
+
+  const data = await response.json();
+  tokensUsed = data.usage?.total_tokens || 0;
+  const content = data.choices[0].message.content;
+  return { plan: JSON.parse(content), tokensUsed };
 }
 
 function getTimeRangeDates(
@@ -477,61 +444,29 @@ Return JSON:
   let response: Response;
   let tokensUsed = 0;
 
-  if (provider === "openai") {
-    response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.3,
-        response_format: { type: "json_object" },
-      }),
-    });
+  response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.3,
+      response_format: { type: "json_object" },
+    }),
+  });
 
-    if (!response.ok) {
-      return { answer: explanation, insights: [], tokensUsed: 0 };
-    }
-
-    const data = await response.json();
-    tokensUsed = data.usage?.total_tokens || 0;
-    const content = data.choices[0].message.content;
-    const parsed = JSON.parse(content);
-    return { answer: parsed.answer, insights: parsed.insights || [], tokensUsed };
-  } else if (provider === "anthropic") {
-    response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: model,
-        max_tokens: 1024,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      return { answer: explanation, insights: [], tokensUsed: 0 };
-    }
-
-    const data = await response.json();
-    tokensUsed = (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0);
-    const content = data.content[0].text;
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return { answer: parsed.answer, insights: parsed.insights || [], tokensUsed };
-    }
-    return { answer: explanation, insights: [], tokensUsed };
+  if (!response.ok) {
+    return { answer: explanation, insights: [], tokensUsed: 0 };
   }
 
-  return { answer: explanation, insights: [], tokensUsed: 0 };
+  const data = await response.json();
+  tokensUsed = data.usage?.total_tokens || 0;
+  const content = data.choices[0].message.content;
+  const parsed = JSON.parse(content);
+  return { answer: parsed.answer, insights: parsed.insights || [], tokensUsed };
 }
 
 Deno.serve(async (req: Request) => {

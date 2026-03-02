@@ -512,55 +512,28 @@ async function callLLM(
 ): Promise<string> {
   const apiKey = providerConfig.api_key_encrypted;
 
-  if (providerConfig.provider === "openai") {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.7,
-        max_tokens: 2000,
-      }),
-    });
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-5.2-chat-latest",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 2000,
+    }),
+  });
 
-    if (response.ok) {
-      const data = await response.json();
-      return data.choices?.[0]?.message?.content || "";
-    }
-    throw new Error("OpenAI API request failed");
+  if (response.ok) {
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || "";
   }
-
-  if (providerConfig.provider === "anthropic") {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-3-haiku-20240307",
-        max_tokens: 2000,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      return data.content?.[0]?.text || "";
-    }
-    throw new Error("Anthropic API request failed");
-  }
-
-  throw new Error(`Unsupported provider: ${providerConfig.provider}`);
+  throw new Error("OpenAI API request failed");
 }
 
 function buildQuickSuggestionPrompt(

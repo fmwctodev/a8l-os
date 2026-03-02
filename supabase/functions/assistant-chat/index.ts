@@ -52,7 +52,7 @@ const READ_ACTION_TYPES = new Set([
 ]);
 
 interface LLMConfig {
-  provider: "anthropic" | "openai";
+  provider: "openai";
   model: string;
   apiKey: string;
   baseUrl?: string;
@@ -1637,17 +1637,7 @@ async function resolveLLMConfig(
       if (p.provider === "openai" && p.api_key_encrypted) {
         return {
           provider: "openai",
-          model: "gpt-4o-mini",
-          apiKey: p.api_key_encrypted,
-          baseUrl: p.base_url || undefined,
-        };
-      }
-    }
-    for (const p of providers) {
-      if (p.provider === "anthropic" && p.api_key_encrypted) {
-        return {
-          provider: "anthropic",
-          model: "claude-sonnet-4-20250514",
+          model: "gpt-5.2-chat-latest",
           apiKey: p.api_key_encrypted,
           baseUrl: p.base_url || undefined,
         };
@@ -1657,12 +1647,7 @@ async function resolveLLMConfig(
 
   const openaiKey = Deno.env.get("OPENAI_API_KEY");
   if (openaiKey) {
-    return { provider: "openai", model: "gpt-4o-mini", apiKey: openaiKey };
-  }
-
-  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (anthropicKey) {
-    return { provider: "anthropic", model: "claude-sonnet-4-20250514", apiKey: anthropicKey };
+    return { provider: "openai", model: "gpt-5.2-chat-latest", apiKey: openaiKey };
   }
 
   throw new Error("No LLM provider configured");
@@ -1679,46 +1664,7 @@ async function callLLM(
   messages: { role: string; content: string }[],
   jsonMode = true
 ): Promise<LLMResult> {
-  if (config.provider === "anthropic") {
-    return callAnthropic(config, systemPrompt, messages);
-  }
   return callOpenAI(config, systemPrompt, messages, jsonMode);
-}
-
-async function callAnthropic(
-  config: LLMConfig,
-  systemPrompt: string,
-  messages: { role: string; content: string }[]
-): Promise<LLMResult> {
-  const url = config.baseUrl
-    ? `${config.baseUrl}/v1/messages`
-    : "https://api.anthropic.com/v1/messages";
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": config.apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: config.model,
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages,
-    }),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    return { text: "", error: `Anthropic API error ${res.status}: ${errText}` };
-  }
-
-  const data = await res.json();
-  const textBlocks = (data.content || []).filter(
-    (b: { type: string }) => b.type === "text"
-  );
-  return { text: textBlocks.map((b: { text: string }) => b.text).join("") };
 }
 
 async function callOpenAI(

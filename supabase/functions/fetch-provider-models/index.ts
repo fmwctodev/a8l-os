@@ -10,7 +10,7 @@ const corsHeaders = {
 interface RequestPayload {
   action: "fetch-models" | "sync-catalog";
   org_id: string;
-  provider: "openai" | "anthropic" | "google";
+  provider: "openai" | "google";
 }
 
 interface ProviderModel {
@@ -230,8 +230,6 @@ async function fetchModelsFromProvider(
   switch (provider) {
     case "openai":
       return await fetchOpenAIModels(apiKey, baseUrl);
-    case "anthropic":
-      return await fetchAnthropicModels(apiKey, baseUrl);
     case "google":
       return await fetchGoogleModels(apiKey);
     default:
@@ -292,67 +290,6 @@ async function fetchOpenAIModels(
   });
 
   return models;
-}
-
-async function fetchAnthropicModels(
-  apiKey: string,
-  _baseUrl: string | null
-): Promise<ProviderModel[]> {
-  const knownModels = [
-    { id: "claude-opus-4-6-20260101", name: "Claude Opus 4.6", context: 200000, legacy: false },
-    { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5", context: 200000, legacy: false },
-    { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5", context: 200000, legacy: false },
-    { id: "claude-opus-4-20250514", name: "Claude Opus 4", context: 200000, legacy: false },
-    { id: "claude-sonnet-4-20250514", name: "Claude Sonnet 4", context: 200000, legacy: false },
-    { id: "claude-3-7-sonnet-20250219", name: "Claude 3.7 Sonnet", context: 200000, legacy: true },
-    { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet", context: 200000, legacy: true },
-    { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku", context: 200000, legacy: true },
-    { id: "claude-3-opus-20240229", name: "Claude 3 Opus", context: 200000, legacy: true },
-    { id: "claude-3-haiku-20240307", name: "Claude 3 Haiku", context: 200000, legacy: true },
-  ];
-
-  const models: ProviderModel[] = [];
-
-  for (const model of knownModels) {
-    const isValid = await verifyAnthropicModel(apiKey, model.id);
-    if (isValid) {
-      models.push({
-        model_key: model.id,
-        display_name: model.name,
-        context_window: model.context,
-        capabilities: {
-          vision: true,
-          function_calling: true,
-          streaming: true,
-        },
-        is_deprecated: model.legacy,
-      });
-    }
-  }
-
-  return models;
-}
-
-async function verifyAnthropicModel(apiKey: string, modelId: string): Promise<boolean> {
-  try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: modelId,
-        max_tokens: 1,
-        messages: [{ role: "user", content: "." }],
-      }),
-    });
-
-    return response.ok || response.status === 429;
-  } catch {
-    return false;
-  }
 }
 
 async function fetchGoogleModels(apiKey: string): Promise<ProviderModel[]> {

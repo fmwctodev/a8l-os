@@ -519,57 +519,30 @@ async function callLLM(
   let response: Response;
   let responseText: string;
 
-  if (provider === "openai") {
-    response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.7,
-        response_format: { type: "json_object" },
-      }),
-    });
+  response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.7,
+      response_format: { type: "json_object" },
+    }),
+  });
 
-    if (!response.ok) {
-      const errBody = await response.text();
-      throw new Error(`OpenAI API error ${response.status}: ${errBody}`);
-    }
-
-    const data = await response.json();
-    responseText = data.choices[0].message.content;
-  } else if (provider === "anthropic") {
-    response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: model,
-        max_tokens: 4096,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      const errBody = await response.text();
-      throw new Error(`Anthropic API error ${response.status}: ${errBody}`);
-    }
-
-    const data = await response.json();
-    responseText = data.content[0].text;
-  } else {
-    throw new Error(`Unsupported LLM provider: ${provider}`);
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`OpenAI API error ${response.status}: ${errBody}`);
   }
+
+  const data = await response.json();
+  responseText = data.choices[0].message.content;
 
   try {
     const parsed = JSON.parse(responseText);

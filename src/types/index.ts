@@ -3079,7 +3079,7 @@ export interface DriveConnectionStatus {
   lastSyncAt: string | null;
 }
 
-export type LLMProviderType = 'openai' | 'anthropic' | 'google' | 'custom';
+export type LLMProviderType = 'openai' | 'google' | 'custom';
 
 export interface LLMProvider {
   id: string;
@@ -3735,7 +3735,6 @@ export const PROMPT_CATEGORY_LABELS: Record<PromptCategory, string> = {
 
 export const LLM_PROVIDER_LABELS: Record<LLMProviderType, string> = {
   openai: 'OpenAI',
-  anthropic: 'Anthropic',
   google: 'Google AI',
   custom: 'Custom'
 };
@@ -5143,7 +5142,7 @@ When communicating, ensure all messages reflect our brand voice. Be {{tone_adjec
 export type AIResponseTone = 'professional' | 'friendly' | 'casual' | 'formal' | 'empathetic';
 export type AIResponseLength = 'concise' | 'standard' | 'detailed';
 export type CustomLLMAuthMethod = 'bearer' | 'api_key_header' | 'custom';
-export type CustomLLMRequestFormat = 'openai' | 'anthropic' | 'custom';
+export type CustomLLMRequestFormat = 'openai' | 'custom';
 export type AIUsageLogStatus = 'success' | 'failed';
 export type AIVoiceTone = 'professional' | 'friendly' | 'casual' | 'warm' | 'authoritative';
 
@@ -5325,7 +5324,6 @@ export const CUSTOM_LLM_AUTH_METHOD_LABELS: Record<CustomLLMAuthMethod, string> 
 
 export const CUSTOM_LLM_REQUEST_FORMAT_LABELS: Record<CustomLLMRequestFormat, string> = {
   openai: 'OpenAI Compatible',
-  anthropic: 'Anthropic Compatible',
   custom: 'Custom Format'
 };
 

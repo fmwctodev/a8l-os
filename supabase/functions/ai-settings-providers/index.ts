@@ -82,8 +82,6 @@ async function testProviderConnection(provider: Provider): Promise<{ success: bo
     switch (providerType) {
       case "openai":
         return await testOpenAI(apiKey, baseUrl);
-      case "anthropic":
-        return await testAnthropic(apiKey, baseUrl);
       case "google":
         return await testGoogle(apiKey);
       default:
@@ -110,37 +108,6 @@ async function testOpenAI(apiKey: string, baseUrl: string | null): Promise<{ suc
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    return {
-      success: false,
-      error: errorData.error?.message || `API returned status ${response.status}`,
-    };
-  }
-
-  return { success: true };
-}
-
-async function testAnthropic(apiKey: string, baseUrl: string | null): Promise<{ success: boolean; error?: string }> {
-  const url = baseUrl ? `${baseUrl}/v1/messages` : "https://api.anthropic.com/v1/messages";
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "claude-3-haiku-20240307",
-      max_tokens: 1,
-      messages: [{ role: "user", content: "test" }],
-    }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    if (response.status === 401) {
-      return { success: false, error: "Invalid API key" };
-    }
     return {
       success: false,
       error: errorData.error?.message || `API returned status ${response.status}`,

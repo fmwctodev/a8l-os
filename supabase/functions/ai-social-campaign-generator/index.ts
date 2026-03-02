@@ -263,60 +263,32 @@ Respond ONLY with the JSON array, no other text.`;
 
   let responseText: string;
 
-  if (providerConfig.provider === "openai") {
-    const response = await fetch(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [
-            { role: "system", content: systemPrompt },
-            {
-              role: "user",
-              content: `Generate ${count} posts for the "${campaign.name}" campaign.`,
-            },
-          ],
-          temperature: 0.8,
-          max_tokens: 3000,
-        }),
-      }
-    );
-
-    if (!response.ok) throw new Error("OpenAI API request failed");
-    const data = await response.json();
-    responseText = data.choices?.[0]?.message?.content || "[]";
-  } else if (providerConfig.provider === "anthropic") {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetch(
+    "https://api.openai.com/v1/chat/completions",
+    {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "claude-3-haiku-20240307",
-        max_tokens: 3000,
-        system: systemPrompt,
+        model: "gpt-5.2-chat-latest",
         messages: [
+          { role: "system", content: systemPrompt },
           {
             role: "user",
             content: `Generate ${count} posts for the "${campaign.name}" campaign.`,
           },
         ],
+        temperature: 0.8,
+        max_tokens: 3000,
       }),
-    });
+    }
+  );
 
-    if (!response.ok) throw new Error("Anthropic API request failed");
-    const data = await response.json();
-    responseText = data.content?.[0]?.text || "[]";
-  } else {
-    return generateFallbackPosts(campaign, count);
-  }
+  if (!response.ok) throw new Error("OpenAI API request failed");
+  const data = await response.json();
+  responseText = data.choices?.[0]?.message?.content || "[]";
 
   try {
     const jsonMatch = responseText.match(/\[[\s\S]*\]/);

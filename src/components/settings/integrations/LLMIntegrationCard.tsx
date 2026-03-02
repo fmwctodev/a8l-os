@@ -23,13 +23,11 @@ interface LLMIntegrationCardProps {
 
 const providerIcons: Record<string, string> = {
   openai: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/OpenAI_Logo.svg/512px-OpenAI_Logo.svg.png',
-  anthropic: 'https://www.anthropic.com/images/icons/apple-touch-icon.png',
   google: 'https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg',
 };
 
 function getProviderFromKey(key: string): LLMProviderType | null {
   if (key === 'openai') return 'openai';
-  if (key === 'anthropic') return 'anthropic';
   if (key === 'google' || key === 'google_ai') return 'google';
   return null;
 }

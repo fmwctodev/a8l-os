@@ -182,13 +182,13 @@ Deno.serve(async (req: Request) => {
     const contactName = [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "there";
     const actionItems = (meeting.action_items || []) as { description: string; assignee?: string; due_date?: string }[];
     const keyPoints = (meeting.key_points || []) as string[];
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    const openaiKey = Deno.env.get("OPENAI_API_KEY");
 
     let aiDraftContent = "";
     let aiDraftSubject: string | null = null;
 
     if (channel === "sms") {
-      if (anthropicKey) {
+      if (openaiKey) {
         const prompt = buildSmsPrompt(
           contactName,
           meeting.meeting_title,
@@ -197,15 +197,14 @@ Deno.serve(async (req: Request) => {
           ai_instructions || null
         );
 
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-api-key": anthropicKey,
-            "anthropic-version": "2023-06-01",
+            "Authorization": `Bearer ${openaiKey}`,
           },
           body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
+            model: "gpt-5.2-chat-latest",
             max_tokens: 256,
             temperature: 0.7,
             messages: [{ role: "user", content: prompt }],
@@ -214,7 +213,7 @@ Deno.serve(async (req: Request) => {
 
         if (response.ok) {
           const result = await response.json();
-          aiDraftContent = result.content[0]?.text?.trim() || "";
+          aiDraftContent = result.choices?.[0]?.message?.content?.trim() || "";
         }
       }
 
@@ -222,7 +221,7 @@ Deno.serve(async (req: Request) => {
         aiDraftContent = generateMockSms(contactName, meeting.meeting_title);
       }
     } else {
-      if (anthropicKey) {
+      if (openaiKey) {
         const prompt = buildEmailPrompt(
           contactName,
           meeting.meeting_title,
@@ -238,15 +237,14 @@ Deno.serve(async (req: Request) => {
           ai_instructions || null
         );
 
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-api-key": anthropicKey,
-            "anthropic-version": "2023-06-01",
+            "Authorization": `Bearer ${openaiKey}`,
           },
           body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
+            model: "gpt-5.2-chat-latest",
             max_tokens: 1024,
             temperature: 0.7,
             messages: [{ role: "user", content: prompt }],
@@ -255,7 +253,7 @@ Deno.serve(async (req: Request) => {
 
         if (response.ok) {
           const result = await response.json();
-          const fullText = result.content[0]?.text?.trim() || "";
+          const fullText = result.choices?.[0]?.message?.content?.trim() || "";
           const subjectMatch = fullText.match(/^Subject:\s*(.+)/im);
           if (subjectMatch) {
             aiDraftSubject = subjectMatch[1].trim();

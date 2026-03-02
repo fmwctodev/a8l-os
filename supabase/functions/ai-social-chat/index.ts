@@ -221,7 +221,7 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
       .select("provider, api_key_encrypted, base_url")
       .eq("org_id", orgId)
       .eq("enabled", true)
-      .in("provider", ["openai", "anthropic"])
+      .in("provider", ["openai"])
       .order("created_at", { ascending: true });
 
     const providers = (llmProviders || []).filter(
@@ -246,23 +246,10 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
 
     for (const provider of providers) {
       try {
-        if (provider.provider === "anthropic") {
-          const url =
-            provider.base_url ||
-            "https://api.anthropic.com/v1/messages";
-          const model = "claude-sonnet-4-20250514";
-          assistantContent = await callAnthropic(
-            url,
-            provider.api_key_encrypted,
-            model,
-            messages
-          );
-          modelUsed = model;
-        } else {
-          const url =
+        const url =
             provider.base_url ||
             "https://api.openai.com/v1/chat/completions";
-          const model = "gpt-4o";
+          const model = "gpt-5.2-chat-latest";
           assistantContent = await callOpenAI(
             url,
             provider.api_key_encrypted,
@@ -270,7 +257,6 @@ Be creative and engaging. Adapt tone to each platform's audience.`;
             messages
           );
           modelUsed = model;
-        }
         break;
       } catch (providerErr) {
         lastError =
@@ -633,38 +619,3 @@ async function callOpenAI(
   return data.choices?.[0]?.message?.content || "";
 }
 
-async function callAnthropic(
-  apiUrl: string,
-  apiKey: string,
-  model: string,
-  messages: Array<{ role: string; content: string }>
-): Promise<string> {
-  const systemMsg = messages.find((m) => m.role === "system");
-  const chatMessages = messages
-    .filter((m) => m.role !== "system")
-    .map((m) => ({ role: m.role, content: m.content }));
-
-  const response = await fetch(apiUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 2000,
-      system: systemMsg?.content || "",
-      messages: chatMessages,
-    }),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error("[ai-social-chat] Anthropic error:", response.status, errText);
-    throw new Error(`AI generation failed (Anthropic ${response.status}): ${errText.slice(0, 200)}`);
-  }
-
-  const data = await response.json();
-  return data.content?.[0]?.text || "";
-}

@@ -78,7 +78,7 @@ async function generateWithOpenAI(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
+      model: "gpt-5.2-chat-latest",
       messages: [
         {
           role: "system",
@@ -106,45 +106,7 @@ async function generateWithOpenAI(
   return {
     reply,
     tokens: data.usage?.total_tokens || 0,
-    model: "gpt-4o-mini",
-  };
-}
-
-async function generateWithAnthropic(
-  prompt: string,
-  apiKey: string
-): Promise<{ reply: string; tokens: number; model: string }> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "Content-Type": "application/json",
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-3-haiku-20240307",
-      max_tokens: 500,
-      messages: [{ role: "user", content: prompt }],
-      system: "You are an expert at writing professional, empathetic responses to customer reviews. Your replies are always helpful, specific, and match the requested tone.",
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Anthropic API error: ${response.status} - ${error}`);
-  }
-
-  const data = await response.json();
-  const reply = data.content?.[0]?.text?.trim();
-
-  if (!reply) {
-    throw new Error("No content in Anthropic response");
-  }
-
-  return {
-    reply,
-    tokens: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0),
-    model: "claude-3-haiku-20240307",
+    model: "gpt-5.2-chat-latest",
   };
 }
 
@@ -211,55 +173,31 @@ Deno.serve(async (req: Request) => {
     );
 
     const openaiKey = Deno.env.get("OPENAI_API_KEY");
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+
+    if (!openaiKey) {
+      return new Response(
+        JSON.stringify({ error: "OpenAI API key not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     let result: { reply: string; tokens: number; model: string };
-    let usedProvider: string;
 
     try {
-      if (provider === "openai" || (provider === "both" && openaiKey)) {
-        if (!openaiKey) throw new Error("OpenAI API key not configured");
-        result = await generateWithOpenAI(prompt, openaiKey);
-        usedProvider = "openai";
-      } else if (provider === "anthropic" || (provider === "both" && anthropicKey)) {
-        if (!anthropicKey) throw new Error("Anthropic API key not configured");
-        result = await generateWithAnthropic(prompt, anthropicKey);
-        usedProvider = "anthropic";
-      } else {
-        throw new Error("No AI provider API key configured");
-      }
+      result = await generateWithOpenAI(prompt, openaiKey);
     } catch (error) {
-      if (provider === "both") {
-        try {
-          if (anthropicKey) {
-            result = await generateWithAnthropic(prompt, anthropicKey);
-            usedProvider = "anthropic";
-          } else if (openaiKey) {
-            result = await generateWithOpenAI(prompt, openaiKey);
-            usedProvider = "openai";
-          } else {
-            throw error;
-          }
-        } catch {
-          return new Response(
-            JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-      } else {
-        return new Response(
-          JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      return new Response(
+        JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     await supabase.from("ai_usage_logs").insert({
       organization_id: review.organization_id,
       feature: "review_reply",
-      provider: usedProvider!,
-      model: result!.model,
-      tokens_used: result!.tokens,
+      provider: "openai",
+      model: result.model,
+      tokens_used: result.tokens,
       metadata: {
         review_id,
         tone,
@@ -270,10 +208,10 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: true,
-        reply: result!.reply,
-        provider: usedProvider!,
-        model: result!.model,
-        tokens: result!.tokens,
+        reply: result.reply,
+        provider: "openai",
+        model: result.model,
+        tokens: result.tokens,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
