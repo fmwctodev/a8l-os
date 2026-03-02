@@ -4,12 +4,15 @@ import {
   generateTextToVideo,
   generateTextToImage,
 } from "../_shared/kieAdapter.ts";
+import { generateText } from "../_shared/openaiTextClient.ts";
 import { getRequiredAspectRatio } from "../_shared/platformAspectMatrix.ts";
 import {
   buildStructuredPrompt,
   buildLLMStyleContext,
 } from "../_shared/promptBuilder.ts";
 import type { StylePreset } from "../_shared/promptBuilder.ts";
+
+const BLOCKED_MODEL_FIELDS = ["model", "llm_model", "text_model", "model_key", "model_id"];
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -87,7 +90,16 @@ Deno.serve(async (req: Request) => {
 
     const orgId = userData.organization_id;
 
-    const body: ChatRequest = await req.json();
+    const rawBody = await req.json();
+
+    const hasBlockedField = BLOCKED_MODEL_FIELDS.some(
+      (f) => f in rawBody && f !== "video_model_id"
+    );
+    if (hasBlockedField) {
+      return json({ error: "Text model cannot be overridden." }, 400);
+    }
+
+    const body: ChatRequest = rawBody;
     const {
       thread_id,
       content,
@@ -239,37 +251,17 @@ For image generation, the model is always Nano Banana 2. Do not suggest, recomme
       });
     }
 
-    let assistantContent: string | null = null;
-    let modelUsed = "";
-    let lastError = "";
+    const provider = providers[0];
+    const apiUrl =
+      provider.base_url || "https://api.openai.com/v1/chat/completions";
 
-    for (const provider of providers) {
-      try {
-        const url =
-            provider.base_url ||
-            "https://api.openai.com/v1/chat/completions";
-          const model = "gpt-5.2-chat-latest";
-          assistantContent = await callOpenAI(
-            url,
-            provider.api_key_encrypted,
-            model,
-            messages
-          );
-          modelUsed = model;
-        break;
-      } catch (providerErr) {
-        lastError =
-          providerErr instanceof Error ? providerErr.message : String(providerErr);
-        console.warn(
-          `[ai-social-chat] Provider ${provider.provider} failed, trying next:`,
-          lastError
-        );
-      }
-    }
-
-    if (assistantContent === null) {
-      return json({ error: lastError || "All AI providers failed" }, 500);
-    }
+    const textResult = await generateText(
+      apiUrl,
+      provider.api_key_encrypted,
+      messages
+    );
+    const assistantContent = textResult.content;
+    const modelUsed = textResult.model;
 
     let drafts: DraftOutput[] = [];
     const draftMatch = assistantContent.match(
@@ -291,6 +283,10 @@ For image generation, the model is always Nano Banana 2. Do not suggest, recomme
     const mediaJobs: Record<string, unknown>[] = [];
     let mediaSkippedReason: string | null = null;
 
+    // --- Model Routing Rules (immutable) ---
+    // TEXT:  OpenAI gpt-5.2-chat-latest via openaiTextClient.ts -- locked, no override
+    // IMAGE: Kie.ai nano-banana-2 -- locked, enforced here + kieAdapter.ts
+    // VIDEO: Kie.ai with user-selected video model from kie_models table
     if (auto_generate_media) {
       const kieApiKey = Deno.env.get("KIE_API_KEY");
       const mediaDrafts = drafts.filter(
@@ -359,6 +355,20 @@ For image generation, the model is always Nano Banana 2. Do not suggest, recomme
             }
 
             if (!model) continue;
+
+            if (!isVideo && (model.model_key as string) !== "nano-banana-2") {
+              console.warn(
+                `[ai-social-chat] Image model override blocked: resolved "${model.model_key}", forcing nano-banana-2`
+              );
+              const { data: nb2Override } = await supabase
+                .from("kie_models")
+                .select("*")
+                .eq("model_key", "nano-banana-2")
+                .eq("enabled", true)
+                .maybeSingle();
+              if (!nb2Override) continue;
+              model = nb2Override;
+            }
 
             const effectiveAspect =
               aspect_ratio || getRequiredAspectRatio(draft.platform);
@@ -597,33 +607,4 @@ function buildGuidelinesSummary(
     : "";
 }
 
-async function callOpenAI(
-  apiUrl: string,
-  apiKey: string,
-  model: string,
-  messages: Array<{ role: string; content: string }>
-): Promise<string> {
-  const response = await fetch(apiUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.7,
-      max_tokens: 2000,
-    }),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    console.error("[ai-social-chat] OpenAI error:", response.status, errText);
-    throw new Error(`AI generation failed (OpenAI ${response.status}): ${errText.slice(0, 200)}`);
-  }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || "";
-}
 

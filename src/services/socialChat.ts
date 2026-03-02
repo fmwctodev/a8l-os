@@ -19,6 +19,11 @@ export interface MediaJobInfo {
   preloadedAssets?: MediaAsset[];
 }
 
+/**
+ * Media preferences for social chat. Text generation model (GPT-5.2) and image
+ * model (Nano Banana 2) are server-controlled and not configurable from the client.
+ * Only video model selection is user-facing.
+ */
 export interface MediaPreferences {
   video_model_id?: string;
   aspect_ratio?: string;
@@ -94,6 +99,11 @@ export async function createThread(
   return data;
 }
 
+/**
+ * Send a message to the social AI chat. The text model is locked server-side
+ * to GPT-5.2 and cannot be overridden from the request body. Do not add a
+ * text model parameter here -- the backend will reject it with a 400.
+ */
 export async function sendMessage(
   threadId: string,
   content: string,
