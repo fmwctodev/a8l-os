@@ -55,6 +55,33 @@ export async function getThreads(
   return data || [];
 }
 
+export async function getAllOrgThreads(
+  orgId: string
+): Promise<(SocialAIThread & { owner_name?: string })[]> {
+  const { data: threads, error } = await supabase
+    .from('social_ai_threads')
+    .select('*')
+    .eq('organization_id', orgId)
+    .eq('status', 'active')
+    .order('updated_at', { ascending: false });
+
+  if (error) throw error;
+  if (!threads || threads.length === 0) return [];
+
+  const userIds = [...new Set(threads.map((t) => t.user_id))];
+  const { data: users } = await supabase
+    .from('users')
+    .select('id, name')
+    .in('id', userIds);
+
+  const nameMap = new Map((users || []).map((u) => [u.id, u.name]));
+
+  return threads.map((t) => ({
+    ...t,
+    owner_name: nameMap.get(t.user_id) || undefined,
+  }));
+}
+
 export async function getThreadById(
   threadId: string
 ): Promise<SocialAIThread | null> {

@@ -9,6 +9,7 @@ import {
 } from '../../../components/social-chat';
 import {
   getThreads,
+  getAllOrgThreads,
   createThread,
   getThreadMessages,
   sendMessage,
@@ -31,7 +32,7 @@ import type { MediaPreferences, MediaJobInfo, PublishMode } from '../../../servi
 import type { MediaAsset } from '../../../services/mediaGeneration';
 
 export function SocialChat() {
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
   const { showToast } = useToast();
 
   const [threads, setThreads] = useState<SocialAIThread[]>([]);
@@ -76,7 +77,9 @@ export function SocialChat() {
     if (!orgId || !userId) return;
     try {
       setLoadingThreads(true);
-      const data = await getThreads(orgId, userId);
+      const data = isSuperAdmin
+        ? await getAllOrgThreads(orgId)
+        : await getThreads(orgId, userId);
       setThreads(data);
     } catch (err) {
       console.error('Failed to load threads:', err);
@@ -360,6 +363,8 @@ export function SocialChat() {
           onNewThread={handleNewThread}
           onArchiveThread={handleArchiveThread}
           onDeleteThread={handleDeleteThread}
+          showOwner={isSuperAdmin}
+          currentUserId={userId}
         />
       </div>
 

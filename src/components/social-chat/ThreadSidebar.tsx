@@ -11,13 +11,15 @@ import {
 import type { SocialAIThread } from '../../types';
 
 interface ThreadSidebarProps {
-  threads: SocialAIThread[];
+  threads: (SocialAIThread & { owner_name?: string })[];
   activeThreadId: string | null;
   loading: boolean;
   onSelectThread: (id: string) => void;
   onNewThread: () => void;
   onArchiveThread: (id: string) => void;
   onDeleteThread: (id: string) => void;
+  showOwner?: boolean;
+  currentUserId?: string;
 }
 
 export function ThreadSidebar({
@@ -28,14 +30,18 @@ export function ThreadSidebar({
   onNewThread,
   onArchiveThread,
   onDeleteThread,
+  showOwner = false,
+  currentUserId,
 }: ThreadSidebarProps) {
   const [search, setSearch] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   const filtered = search.trim()
-    ? threads.filter(t =>
-        t.title.toLowerCase().includes(search.toLowerCase())
-      )
+    ? threads.filter(t => {
+        const q = search.toLowerCase();
+        return t.title.toLowerCase().includes(q) ||
+          (showOwner && t.owner_name?.toLowerCase().includes(q));
+      })
     : threads;
 
   return (
@@ -95,8 +101,15 @@ export function ThreadSidebar({
                 }`}
               >
                 <div className="truncate font-medium">{thread.title}</div>
-                <div className="text-xs text-slate-500 mt-0.5">
-                  {formatRelativeTime(thread.updated_at || thread.created_at)}
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-xs text-slate-500">
+                    {formatRelativeTime(thread.updated_at || thread.created_at)}
+                  </span>
+                  {showOwner && thread.owner_name && thread.user_id !== currentUserId && (
+                    <span className="text-[10px] text-cyan-400/70 bg-cyan-400/10 px-1.5 py-px rounded-full truncate max-w-[100px]">
+                      {thread.owner_name}
+                    </span>
+                  )}
                 </div>
               </button>
 
