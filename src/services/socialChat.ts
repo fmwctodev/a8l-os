@@ -143,7 +143,7 @@ export async function sendMessage(
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `AI chat failed: ${response.status}`);
+      throw new Error(errorData.error || errorData.msg || `AI chat failed: ${response.status}`);
     }
 
     aiResponse = await response.json();
