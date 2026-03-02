@@ -104,14 +104,18 @@ export function useWakeWord(options: WakeWordOptions): WakeWordState {
     onSpeechEnd: handleSpeechEnd,
   });
 
+  const vadStart = vad.start;
+  const vadStop = vad.stop;
+  const vadSetMode = vad.setMode;
+
   useEffect(() => {
     if (enabled && stream && !isPaused) {
-      vad.setMode('passive');
-      vad.start(stream);
-      return () => vad.stop();
+      vadSetMode('passive');
+      vadStart(stream);
+      return () => vadStop();
     }
-    vad.stop();
-  }, [enabled, stream, isPaused, vad]);
+    vadStop();
+  }, [enabled, stream, isPaused, vadStart, vadStop, vadSetMode]);
 
   useEffect(() => {
     return () => {

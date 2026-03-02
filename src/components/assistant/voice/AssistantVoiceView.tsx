@@ -103,8 +103,9 @@ export function AssistantVoiceView() {
         return;
       }
 
-      setResponse(chatResult.response);
-      addVoiceExchange(text, chatResult.response);
+      const responseText = chatResult.chatResponse.response;
+      setResponse(responseText);
+      addVoiceExchange(text, responseText);
 
       if (profile?.voice_enabled && profile.elevenlabs_voice_id) {
         setVoiceMode('speaking');
@@ -116,7 +117,7 @@ export function AssistantVoiceView() {
         ttsAbortRef.current = controller;
 
         const ttsBlob = await textToSpeech(
-          chatResult.response,
+          responseText,
           profile.elevenlabs_voice_id,
           profile.speech_rate
         );

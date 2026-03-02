@@ -45,20 +45,24 @@ export function useBargeIn(options: BargeInOptions): BargeInState {
     onBargeIn: handleBargeIn,
   });
 
+  const vadStart = vad.start;
+  const vadStop = vad.stop;
+  const vadSetMode = vad.setMode;
+
   useEffect(() => {
     if (!enabled || !stream || !isSpeaking) {
-      vad.stop();
+      vadStop();
       return;
     }
 
     interruptedRef.current = false;
-    vad.setMode('speaking');
-    vad.start(stream);
+    vadSetMode('speaking');
+    vadStart(stream);
 
     return () => {
-      vad.stop();
+      vadStop();
     };
-  }, [enabled, stream, isSpeaking, vad]);
+  }, [enabled, stream, isSpeaking, vadStart, vadStop, vadSetMode]);
 
   return { isActive: enabled && isSpeaking, rmsLevel: vad.rmsLevel };
 }
