@@ -65,9 +65,13 @@ export function AssistantPanel() {
         })}
       </div>
 
-      <div className="flex-1 flex flex-col min-h-0">
-        {activeTab === 'chat' && <AssistantChatView />}
-        {activeTab === 'voice' && <AssistantVoiceView />}
+      <div className="flex-1 flex flex-col min-h-0 relative">
+        <div className={`flex-1 flex flex-col min-h-0 ${activeTab === 'chat' ? '' : 'hidden'}`}>
+          <AssistantChatView />
+        </div>
+        <div className={`flex-1 flex flex-col min-h-0 ${activeTab === 'voice' ? '' : 'hidden'}`}>
+          <AssistantVoiceView />
+        </div>
         {activeTab === 'activity' && <AssistantActivityView />}
         {activeTab === 'settings' && <AssistantSettingsView />}
       </div>

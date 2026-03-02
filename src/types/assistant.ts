@@ -158,4 +158,11 @@ export interface ClaraVoiceResponse {
   drafts: ClaraDraft[];
 }
 
+export interface VoiceExchange {
+  id: string;
+  transcript: string;
+  response: string;
+  timestamp: string;
+}
+
 export type { ITSRequest, ITSExecutionResult, ITSAction, ITSActionResult };

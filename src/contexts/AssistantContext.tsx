@@ -11,7 +11,7 @@ import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { getOrCreateProfile } from '../services/assistantProfile';
 import { createThread } from '../services/assistantChat';
-import type { AssistantProfile, AssistantPanelTab, ClaraPageContext } from '../types/assistant';
+import type { AssistantProfile, AssistantPanelTab, ClaraPageContext, VoiceExchange } from '../types/assistant';
 
 interface AssistantContextValue {
   isPanelOpen: boolean;
@@ -29,6 +29,11 @@ interface AssistantContextValue {
   refreshProfile: () => Promise<void>;
   prefilledPrompt: string | null;
   clearPrefilledPrompt: () => void;
+  voiceActive: boolean;
+  setVoiceActive: (active: boolean) => void;
+  voiceHistory: VoiceExchange[];
+  addVoiceExchange: (transcript: string, response: string) => void;
+  clearVoiceHistory: () => void;
 }
 
 const AssistantContext = createContext<AssistantContextValue | null>(null);
@@ -79,6 +84,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<AssistantProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [prefilledPrompt, setPrefilledPrompt] = useState<string | null>(null);
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceHistory, setVoiceHistory] = useState<VoiceExchange[]>([]);
 
   const pageContext = useMemo(() => parsePageContext(location.pathname), [location.pathname]);
 
@@ -149,12 +156,29 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const clearPrefilledPrompt = useCallback(() => setPrefilledPrompt(null), []);
 
+  const addVoiceExchange = useCallback((transcript: string, response: string) => {
+    setVoiceHistory((prev) => [
+      ...prev,
+      {
+        id: `ve-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        transcript,
+        response,
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+  }, []);
+
+  const clearVoiceHistory = useCallback(() => setVoiceHistory([]), []);
+
   const openWithContext = useCallback(
     async (module: string, recordId: string, prompt?: string) => {
       if (!user) return;
 
       setIsPanelOpen(true);
-      setActiveTab('chat');
+
+      if (!voiceActive) {
+        setActiveTab('chat');
+      }
 
       if (prompt) {
         setPrefilledPrompt(prompt);
@@ -167,7 +191,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         /* noop */
       }
     },
-    [user]
+    [user, voiceActive]
   );
 
   const value = useMemo<AssistantContextValue>(
@@ -187,6 +211,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       refreshProfile,
       prefilledPrompt,
       clearPrefilledPrompt,
+      voiceActive,
+      setVoiceActive,
+      voiceHistory,
+      addVoiceExchange,
+      clearVoiceHistory,
     }),
     [
       isPanelOpen,
@@ -203,6 +232,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       refreshProfile,
       prefilledPrompt,
       clearPrefilledPrompt,
+      voiceActive,
+      voiceHistory,
+      addVoiceExchange,
+      clearVoiceHistory,
     ]
   );
 

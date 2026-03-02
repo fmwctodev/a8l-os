@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
-import { Mic, MicOff, Square, Volume2 } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { Mic, MicOff, Square, Volume2, Trash2 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useAssistant } from '../../../contexts/AssistantContext';
 import { useVoiceRecorder } from '../../../hooks/useVoiceRecorder';
@@ -13,7 +13,16 @@ type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
 
 export function AssistantVoiceView() {
   const { user } = useAuth();
-  const { activeThreadId, setActiveThread, pageContext, profile } = useAssistant();
+  const {
+    activeThreadId,
+    setActiveThread,
+    pageContext,
+    profile,
+    setVoiceActive,
+    voiceHistory,
+    addVoiceExchange,
+    clearVoiceHistory,
+  } = useAssistant();
   const recorder = useVoiceRecorder();
   const player = useVoicePlayer();
 
@@ -22,6 +31,17 @@ export function AssistantVoiceView() {
   const [response, setResponse] = useState('');
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setVoiceActive(voiceState !== 'idle');
+  }, [voiceState, setVoiceActive]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [voiceHistory.length, transcript, response]);
 
   const handlePush = useCallback(async () => {
     if (voiceState !== 'idle' || !user) return;
@@ -62,6 +82,7 @@ export function AssistantVoiceView() {
 
       setTranscript(result.transcription);
       setResponse(result.response);
+      addVoiceExchange(result.transcription, result.response);
 
       if (profile?.voice_enabled && profile.elevenlabs_voice_id) {
         setVoiceState('speaking');
@@ -82,7 +103,7 @@ export function AssistantVoiceView() {
       setError(err instanceof Error ? err.message : 'Voice processing failed');
       setVoiceState('idle');
     }
-  }, [voiceState, user, recorder, activeThreadId, setActiveThread, pageContext, profile, player]);
+  }, [voiceState, user, recorder, activeThreadId, setActiveThread, pageContext, profile, player, addVoiceExchange]);
 
   const handleCancel = useCallback(() => {
     abortRef.current = true;
@@ -124,68 +145,109 @@ export function AssistantVoiceView() {
     speaking: 'Speaking...',
   };
 
+  const hasHistory = voiceHistory.length > 0;
+  const showCurrentExchange = (transcript || response) && voiceState !== 'idle';
+
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-4 min-h-0">
-      <div className="relative flex items-center justify-center mb-4">
-        <VoiceOrb state={voiceState} />
-
-        {voiceState === 'idle' && (
+    <div className="flex-1 flex flex-col min-h-0">
+      {hasHistory && (
+        <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-700/40">
+          <span className="text-[10px] text-slate-500 font-medium">
+            {voiceHistory.length} exchange{voiceHistory.length !== 1 ? 's' : ''}
+          </span>
           <button
-            onMouseDown={handlePush}
-            onMouseUp={handleRelease}
-            onTouchStart={handlePush}
-            onTouchEnd={handleRelease}
-            className="absolute inset-0 flex items-center justify-center cursor-pointer"
+            onClick={clearVoiceHistory}
+            className="flex items-center gap-1 text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
           >
-            <div className="w-16 h-16 rounded-full bg-cyan-600/20 border-2 border-cyan-500/40 flex items-center justify-center hover:bg-cyan-600/30 transition-colors">
-              <Mic className="w-6 h-6 text-cyan-400" />
-            </div>
+            <Trash2 className="w-3 h-3" />
+            Clear
           </button>
-        )}
+        </div>
+      )}
 
-        {voiceState === 'listening' && (
-          <button
-            onMouseUp={handleRelease}
-            onTouchEnd={handleRelease}
-            className="absolute inset-0 flex items-center justify-center cursor-pointer"
-          >
-            <div className="w-16 h-16 rounded-full bg-cyan-500/30 border-2 border-cyan-400 flex items-center justify-center animate-pulse">
-              <Mic className="w-6 h-6 text-white" />
+      <div
+        ref={scrollRef}
+        className={`overflow-y-auto px-3 scrollbar-thin ${hasHistory ? 'flex-1 py-3 space-y-3' : ''}`}
+      >
+        {voiceHistory.map((exchange) => (
+          <div key={exchange.id} className="space-y-1.5">
+            <div className="ml-auto max-w-[280px] px-3 py-2 bg-cyan-600/10 border border-cyan-500/20 rounded-lg">
+              <p className="text-[10px] text-cyan-400/70 font-medium mb-0.5">You</p>
+              <p className="text-xs text-slate-300">{exchange.transcript}</p>
             </div>
-          </button>
-        )}
+            <div className="mr-auto max-w-[280px] px-3 py-2 bg-slate-800 border border-slate-700/50 rounded-lg">
+              <p className="text-[10px] text-teal-400/70 font-medium mb-0.5">Clara</p>
+              <p className="text-xs text-slate-300 whitespace-pre-wrap">{exchange.response}</p>
+            </div>
+          </div>
+        ))}
 
-        {(voiceState === 'processing' || voiceState === 'speaking') && (
-          <button
-            onClick={handleCancel}
-            className="absolute inset-0 flex items-center justify-center cursor-pointer"
-          >
-            <div className="w-12 h-12 rounded-full bg-slate-700/60 border border-slate-600 flex items-center justify-center hover:bg-slate-700 transition-colors">
-              <Square className="w-4 h-4 text-slate-300" />
-            </div>
-          </button>
+        {showCurrentExchange && (
+          <div className="space-y-1.5">
+            {transcript && (
+              <div className="ml-auto max-w-[280px] px-3 py-2 bg-cyan-600/10 border border-cyan-500/20 rounded-lg">
+                <p className="text-[10px] text-cyan-400/70 font-medium mb-0.5">You</p>
+                <p className="text-xs text-slate-300">{transcript}</p>
+              </div>
+            )}
+            {response && (
+              <div className="mr-auto max-w-[280px] px-3 py-2 bg-slate-800 border border-slate-700/50 rounded-lg">
+                <p className="text-[10px] text-teal-400/70 font-medium mb-0.5">Clara</p>
+                <p className="text-xs text-slate-300 whitespace-pre-wrap">{response}</p>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
-      <p className="text-xs text-slate-400 font-medium mb-4">{stateLabels[voiceState]}</p>
+      <div className="flex flex-col items-center py-4 px-4 border-t border-slate-700/40 bg-slate-900/60">
+        <div className="relative flex items-center justify-center mb-3">
+          <VoiceOrb state={voiceState} />
 
-      {transcript && (
-        <div className="w-full max-w-[320px] mb-2 px-3 py-2 bg-cyan-600/10 border border-cyan-500/20 rounded-lg">
-          <p className="text-[10px] text-cyan-400 uppercase font-medium mb-0.5">You said</p>
-          <p className="text-xs text-slate-300">{transcript}</p>
+          {voiceState === 'idle' && (
+            <button
+              onMouseDown={handlePush}
+              onMouseUp={handleRelease}
+              onTouchStart={handlePush}
+              onTouchEnd={handleRelease}
+              className="absolute inset-0 flex items-center justify-center cursor-pointer"
+            >
+              <div className="w-16 h-16 rounded-full bg-cyan-600/20 border-2 border-cyan-500/40 flex items-center justify-center hover:bg-cyan-600/30 transition-colors">
+                <Mic className="w-6 h-6 text-cyan-400" />
+              </div>
+            </button>
+          )}
+
+          {voiceState === 'listening' && (
+            <button
+              onMouseUp={handleRelease}
+              onTouchEnd={handleRelease}
+              className="absolute inset-0 flex items-center justify-center cursor-pointer"
+            >
+              <div className="w-16 h-16 rounded-full bg-cyan-500/30 border-2 border-cyan-400 flex items-center justify-center animate-pulse">
+                <Mic className="w-6 h-6 text-white" />
+              </div>
+            </button>
+          )}
+
+          {(voiceState === 'processing' || voiceState === 'speaking') && (
+            <button
+              onClick={handleCancel}
+              className="absolute inset-0 flex items-center justify-center cursor-pointer"
+            >
+              <div className="w-12 h-12 rounded-full bg-slate-700/60 border border-slate-600 flex items-center justify-center hover:bg-slate-700 transition-colors">
+                <Square className="w-4 h-4 text-slate-300" />
+              </div>
+            </button>
+          )}
         </div>
-      )}
 
-      {response && (
-        <div className="w-full max-w-[320px] px-3 py-2 bg-slate-800 border border-slate-700/50 rounded-lg">
-          <p className="text-[10px] text-teal-400 uppercase font-medium mb-0.5">Clara</p>
-          <p className="text-xs text-slate-300 whitespace-pre-wrap">{response}</p>
-        </div>
-      )}
+        <p className="text-xs text-slate-400 font-medium">{stateLabels[voiceState]}</p>
 
-      {error && (
-        <p className="text-[10px] text-red-400 mt-2 text-center max-w-[280px]">{error}</p>
-      )}
+        {error && (
+          <p className="text-[10px] text-red-400 mt-2 text-center max-w-[280px]">{error}</p>
+        )}
+      </div>
     </div>
   );
 }
