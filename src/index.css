@@ -17,6 +17,24 @@
   animation: slide-in-right 0.3s ease-out;
 }
 
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #475569 transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #475569;
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b;
+}
+
 .proposal-content {
   color: #e2e8f0;
   line-height: 1.7;

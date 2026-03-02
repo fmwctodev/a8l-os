@@ -126,7 +126,7 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
       </button>
 
       {expanded && (
-        <div className="px-4 pb-3 space-y-3 max-h-64 overflow-y-auto custom-scrollbar">
+        <div className="px-4 pb-3 space-y-3 max-h-[28rem] overflow-y-auto custom-scrollbar">
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
               <input
@@ -201,7 +201,7 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
                 </button>
               </div>
 
-              <div className="max-h-40 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+              <div className="max-h-60 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
                 {models.map((model) => (
                   <button
                     key={model.id}
