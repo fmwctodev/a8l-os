@@ -142,7 +142,7 @@ Deno.serve(async (req: Request) => {
     const { data: guidelines } = await supabase
       .from("social_guidelines")
       .select(
-        "content_themes, image_style, writing_style, tone_preferences, words_to_avoid, hashtag_preferences, platform_tweaks, industry_positioning"
+        "content_themes, image_style, writing_style, tone_preferences, words_to_avoid, hashtag_preferences, platform_tweaks, industry_positioning, cta_rules, emoji_rules, visual_style_rules"
       )
       .eq("organization_id", orgId)
       .is("user_id", null)
@@ -179,6 +179,17 @@ Connected platforms: ${connectedPlatforms || "none yet"}
 ${guidelinesSummary}
 ${styleContext}
 
+IMPORTANT: If brand guidelines are provided above, you MUST strictly follow them for ALL content you create. Specifically:
+- Match the tone preferences (formality, friendliness, energy, confidence levels)
+- Never use any words listed in "Words to Avoid"
+- Follow the writing style and content theme directions exactly
+- Use only preferred hashtags when available; never use banned hashtags
+- Follow CTA rules for calls-to-action in every post
+- Respect the emoji usage frequency setting (none/minimal/moderate/heavy) and never use banned emojis
+- Apply visual style rules and image style guidelines to all visual_style_suggestion prompts
+- Follow platform-specific instructions when creating content for that platform
+- Reflect the industry positioning in the voice and framing of all content
+
 When the user asks you to create a post, respond with:
 1. A brief explanation of your strategy
 2. One or more draft posts as JSON in a code block tagged \`\`\`drafts
@@ -189,7 +200,7 @@ Each draft should be a JSON array of objects with these fields:
 - hook_text: an attention-grabbing opening line
 - cta_text: a call-to-action line
 - media_type: "image", "video", or "none"
-- visual_style_suggestion: a detailed prompt for generating the media (describe the visual in detail)
+- visual_style_suggestion: a detailed prompt for generating the media (describe the visual in detail, incorporating any image style and visual style rules from the guidelines)
 - style_preset: name of a style preset to use (optional)
 - hashtags: array of hashtag strings
 
@@ -387,7 +398,11 @@ For image generation, the model is always Nano Banana 2. Do not suggest, recomme
               ? formatBlocks(guidelines.image_style as Array<{ content: string }> | null)
               : "";
             if (imgStyleBlocks) {
-              enrichedPrompt = `${rawPrompt}\n\nImage style guidelines: ${imgStyleBlocks}`;
+              enrichedPrompt = `${enrichedPrompt}\n\nImage style guidelines: ${imgStyleBlocks}`;
+            }
+            const vsRules = guidelines?.visual_style_rules as string[] | null;
+            if (vsRules?.length) {
+              enrichedPrompt = `${enrichedPrompt}\n\nVisual style rules: ${vsRules.join(", ")}`;
             }
             const finalPrompt = buildStructuredPrompt(enrichedPrompt, draftPreset);
 
@@ -595,15 +610,61 @@ function buildGuidelinesSummary(
   const hashtags = g.hashtag_preferences as Record<string, unknown> | null;
   const positioning = g.industry_positioning as string | null;
   const tweaks = g.platform_tweaks as Record<string, unknown> | null;
+  const ctaRules = g.cta_rules as string[] | null;
+  const emojiRules = g.emoji_rules as Record<string, unknown> | null;
+  const visualStyleRules = g.visual_style_rules as string[] | null;
 
-  if (tone) sections.push(`Tone: ${JSON.stringify(tone)}`);
-  if (avoid?.length) sections.push(`Words to avoid: ${avoid.join(", ")}`);
-  if (hashtags) sections.push(`Hashtag prefs: ${JSON.stringify(hashtags)}`);
-  if (positioning) sections.push(`Industry: ${positioning}`);
-  if (tweaks) sections.push(`Platform tweaks: ${JSON.stringify(tweaks)}`);
+  if (tone) {
+    const labels: Record<string, [string, string]> = {
+      formality: ["Casual", "Formal"],
+      friendliness: ["Reserved", "Warm"],
+      energy: ["Calm", "Energetic"],
+      confidence: ["Humble", "Confident"],
+    };
+    const toneLines = Object.entries(tone)
+      .filter(([k]) => labels[k])
+      .map(([k, v]) => {
+        const [low, high] = labels[k];
+        return `  ${low} ←${v}→ ${high} (${v}/100)`;
+      });
+    if (toneLines.length > 0) {
+      sections.push(`Tone Preferences:\n${toneLines.join("\n")}`);
+    }
+  }
+  if (avoid?.length) sections.push(`Words to Avoid (NEVER use these): ${avoid.join(", ")}`);
+  if (hashtags) {
+    const preferred = (hashtags.preferred as string[]) || [];
+    const banned = (hashtags.banned as string[]) || [];
+    const parts: string[] = [];
+    if (preferred.length) parts.push(`Preferred: ${preferred.join(", ")}`);
+    if (banned.length) parts.push(`Banned (never use): ${banned.join(", ")}`);
+    if (parts.length) sections.push(`Hashtag Rules:\n${parts.join("\n")}`);
+  }
+  if (positioning) sections.push(`Industry Positioning:\n${positioning}`);
+  if (tweaks && Object.keys(tweaks).length > 0) {
+    const tweakLines = Object.entries(tweaks)
+      .filter(([, v]) => typeof v === "string" && (v as string).trim())
+      .map(([platform, instructions]) => `  ${platform}: ${instructions}`);
+    if (tweakLines.length > 0) {
+      sections.push(`Platform-Specific Instructions:\n${tweakLines.join("\n")}`);
+    }
+  }
+  if (ctaRules?.length) {
+    sections.push(`Call-to-Action Rules:\n${ctaRules.map((r) => `- ${r}`).join("\n")}`);
+  }
+  if (emojiRules) {
+    const freq = emojiRules.frequency as string || "minimal";
+    const banned = (emojiRules.banned as string[]) || [];
+    let emojiLine = `Emoji Usage: ${freq}`;
+    if (banned.length) emojiLine += ` | Banned emojis: ${banned.join(" ")}`;
+    sections.push(emojiLine);
+  }
+  if (visualStyleRules?.length) {
+    sections.push(`Visual Style Rules:\n${visualStyleRules.map((r) => `- ${r}`).join("\n")}`);
+  }
 
   return sections.length > 0
-    ? `\nGuidelines:\n${sections.join("\n\n")}`
+    ? `\n--- BRAND GUIDELINES (You MUST follow these when creating any content) ---\n${sections.join("\n\n")}\n--- END GUIDELINES ---`
     : "";
 }
 
