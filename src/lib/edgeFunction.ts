@@ -5,6 +5,34 @@ const listeners = new Set<SessionListener>();
 let sessionHealthy = true;
 let refreshPromise: Promise<{ access_token: string; expires_at?: number } | null> | null = null;
 
+let sessionReadyResolve: (() => void) | null = null;
+let sessionReadyPromise: Promise<void> | null = null;
+
+function isOAuthCallback(): boolean {
+  const hash = window.location.hash;
+  return hash.includes('access_token=') || hash.includes('refresh_token=') || hash.includes('error=');
+}
+
+if (isOAuthCallback()) {
+  sessionHealthy = false;
+  sessionReadyPromise = new Promise<void>((resolve) => {
+    sessionReadyResolve = resolve;
+  });
+
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      sessionHealthy = true;
+      listeners.forEach(l => l('restored'));
+      if (sessionReadyResolve) {
+        sessionReadyResolve();
+        sessionReadyResolve = null;
+        sessionReadyPromise = null;
+      }
+      subscription.unsubscribe();
+    }
+  });
+}
+
 export function onSessionEvent(listener: SessionListener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -117,6 +145,7 @@ export async function callEdgeFunction(
   body: Record<string, unknown>,
   method: 'POST' | 'GET' = 'POST'
 ): Promise<Response> {
+  if (sessionReadyPromise) await sessionReadyPromise;
   if (!sessionHealthy) {
     const recovered = await tryRecoverSession();
     if (!recovered) {
@@ -137,6 +166,7 @@ interface FetchEdgeOptions {
 }
 
 export async function fetchEdge(slug: string, options: FetchEdgeOptions = {}): Promise<Response> {
+  if (sessionReadyPromise) await sessionReadyPromise;
   if (!sessionHealthy) {
     const recovered = await tryRecoverSession();
     if (!recovered) {

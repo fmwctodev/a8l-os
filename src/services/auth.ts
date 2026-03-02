@@ -54,11 +54,11 @@ export async function getCurrentUser(): Promise<UserWithDetails | null> {
   } as UserWithDetails;
 }
 
-export async function signInWithGoogle() {
+export async function signInWithGoogle(redirectTo?: string) {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin,
+      redirectTo: redirectTo || window.location.href,
     },
   });
   if (error) throw error;

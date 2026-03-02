@@ -53,8 +53,6 @@ export function ReAuthModal() {
   }, [email, password]);
 
   useEffect(() => {
-    if (!visible || provider !== 'google') return;
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && newSession) {
         markSessionRestored();
@@ -64,13 +62,13 @@ export function ReAuthModal() {
     });
 
     return () => subscription.unsubscribe();
-  }, [visible, provider]);
+  }, []);
 
   const handleGoogleSignIn = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      await authService.signInWithGoogle();
+      await authService.signInWithGoogle(window.location.href);
     } catch {
       setError('Google sign-in failed. Please try again.');
       setLoading(false);
