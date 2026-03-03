@@ -259,25 +259,46 @@ Deno.serve(async (req: Request) => {
 
     const isReputationFlow = returnPath && returnPath.includes("reputation");
     if (isReputationFlow && (provider === "google_business" || provider === "facebook")) {
-      const connectedAccounts = accounts.map((a) => ({
+      const newAccounts = accounts.map((a) => ({
         id: (a._id as string) || (a.id as string) || "",
         name: (a.displayName as string) || (a.name as string) || "",
         platform: ((a.platform as string) || provider).toLowerCase(),
       }));
+
+      const { data: existing } = await supabase
+        .from("reputation_integration_status")
+        .select("accounts_connected")
+        .eq("org_id", orgId)
+        .eq("provider", "late")
+        .maybeSingle();
+
+      const existingAccounts: Array<{ id: string; name: string; platform: string }> =
+        Array.isArray(existing?.accounts_connected) ? existing.accounts_connected : [];
+
+      const merged = [...existingAccounts];
+      for (const acc of newAccounts) {
+        if (!acc.id) continue;
+        const idx = merged.findIndex((m) => m.id === acc.id);
+        if (idx >= 0) {
+          merged[idx] = acc;
+        } else {
+          merged.push(acc);
+        }
+      }
 
       await supabase.from("reputation_integration_status").upsert(
         {
           org_id: orgId,
           provider: "late",
           connected: true,
-          accounts_connected: connectedAccounts,
+          accounts_connected: merged,
           last_error: null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "org_id,provider" }
       );
 
-      console.log(`[late-callback] Updated reputation_integration_status for org ${orgId}`);
+      console.log(`[late-callback] Updated reputation_integration_status for org ${orgId}, total accounts: ${merged.length}`);
     }
 
     return new Response(null, {

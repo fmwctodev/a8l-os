@@ -409,6 +409,16 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    const { data: currentStatus } = await supabase
+      .from("reputation_integration_status")
+      .select("sync_success_count, sync_failure_count")
+      .eq("org_id", orgId)
+      .eq("provider", "late")
+      .maybeSingle();
+
+    const prevSuccess = currentStatus?.sync_success_count ?? 0;
+    const prevFailure = currentStatus?.sync_failure_count ?? 0;
+
     await supabase.from("reputation_integration_status").upsert(
       {
         org_id: orgId,
@@ -416,17 +426,8 @@ Deno.serve(async (req: Request) => {
         connected: true,
         last_sync_at: new Date().toISOString(),
         last_error: errors.length > 0 ? errors.join("; ") : null,
-        accounts_connected: meta?.accountsQueried
-          ? {
-              queried: meta.accountsQueried,
-              failed: meta.accountsFailed || 0,
-              failedAccounts: meta.failedAccounts || [],
-            }
-          : {},
-        sync_success_count:
-          errors.length === 0
-            ? supabase.rpc ? 1 : 1
-            : 0,
+        sync_success_count: errors.length === 0 ? prevSuccess + 1 : prevSuccess,
+        sync_failure_count: errors.length > 0 ? prevFailure + 1 : prevFailure,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "org_id,provider" }
