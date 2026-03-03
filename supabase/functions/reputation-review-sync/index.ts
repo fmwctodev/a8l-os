@@ -417,12 +417,12 @@ Deno.serve(async (req: Request) => {
         last_sync_at: new Date().toISOString(),
         last_error: errors.length > 0 ? errors.join("; ") : null,
         accounts_connected: meta?.accountsQueried
-          ? JSON.stringify({
+          ? {
               queried: meta.accountsQueried,
               failed: meta.accountsFailed || 0,
               failedAccounts: meta.failedAccounts || [],
-            })
-          : "{}",
+            }
+          : {},
         sync_success_count:
           errors.length === 0
             ? supabase.rpc ? 1 : 1

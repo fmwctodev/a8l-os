@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Plug, Sparkles, Clock, AlertTriangle, Bell, Link, MessageSquare, Mail,
-  QrCode, Ban, Check, Loader2, RefreshCw, Plus, Trash2,
+  QrCode, Ban, Loader2, Plus, Trash2,
   Shield, Users
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -15,6 +15,7 @@ import {
   getRoutingRules, createRoutingRule, deleteRoutingRule,
   type IntegrationStatus, type RoutingRule
 } from '../../services/reputationIntegration';
+import { IntegrationSection } from './IntegrationSection';
 
 type Section =
   | 'integration' | 'ai_settings' | 'sla_routing' | 'escalation'
@@ -203,107 +204,15 @@ export function ReputationSettingsTab() {
 
       <div className="lg:col-span-3 space-y-6">
         {section === 'integration' && (
-          <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Late.dev Integration</h3>
-              <p className="text-sm text-gray-500 mt-1">
-                Connect your review platforms through Late.dev to sync and manage reviews.
-              </p>
-            </div>
-
-            {integration?.connected ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <Check className="w-5 h-5 text-green-600" />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-green-800">Connected</p>
-                    {integration.last_sync_at && (
-                      <p className="text-xs text-green-600 mt-0.5">
-                        Last synced: {new Date(integration.last_sync_at).toLocaleString()}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={handleTestConnection}
-                      disabled={testing}
-                      className="px-3 py-1.5 border border-gray-300 text-gray-700 text-sm rounded-lg hover:bg-white transition-colors disabled:opacity-50"
-                    >
-                      {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    </button>
-                    <button
-                      onClick={handleDisconnect}
-                      className="px-3 py-1.5 border border-red-300 text-red-600 text-sm rounded-lg hover:bg-red-50 transition-colors"
-                    >
-                      Disconnect
-                    </button>
-                  </div>
-                </div>
-
-                {testResult !== null && (
-                  <div className={`p-3 rounded-lg text-sm ${
-                    testResult ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                  }`}>
-                    {testResult ? 'Connection test passed - sync successful' : 'Connection test failed - please reconnect'}
-                  </div>
-                )}
-
-                {integration.last_error && (
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
-                    Last error: {integration.last_error}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <span className="text-gray-500">Successful Syncs</span>
-                    <p className="text-lg font-semibold text-gray-900 mt-1">{integration.sync_success_count}</p>
-                  </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <span className="text-gray-500">Failed Syncs</span>
-                    <p className="text-lg font-semibold text-gray-900 mt-1">{integration.sync_failure_count}</p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
-                  <Plug className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-600 mb-4">
-                    Connect your review platforms to start syncing reviews
-                  </p>
-                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                    <button
-                      onClick={() => handleConnect('google_business')}
-                      disabled={connecting}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-800 font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 shadow-sm"
-                    >
-                      <div className="w-5 h-5 rounded bg-white border border-gray-200 flex items-center justify-center">
-                        <span className="text-xs font-bold text-red-500">G</span>
-                      </div>
-                      Connect Google Business
-                    </button>
-                    <button
-                      onClick={() => handleConnect('facebook')}
-                      disabled={connecting}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-white border border-gray-300 text-gray-800 font-medium rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 shadow-sm"
-                    >
-                      <div className="w-5 h-5 rounded bg-blue-600 flex items-center justify-center">
-                        <span className="text-xs font-bold text-white">f</span>
-                      </div>
-                      Connect Facebook
-                    </button>
-                  </div>
-                  {connecting && (
-                    <p className="text-xs text-gray-500 mt-3 flex items-center justify-center gap-1">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Redirecting to authorization...
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+          <IntegrationSection
+            integration={integration}
+            testing={testing}
+            testResult={testResult}
+            connecting={connecting}
+            onTestConnection={handleTestConnection}
+            onDisconnect={handleDisconnect}
+            onConnect={handleConnect}
+          />
         )}
 
         {section === 'ai_settings' && (

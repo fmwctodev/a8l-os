@@ -1,6 +1,12 @@
 import { supabase } from '../lib/supabase';
 import { callEdgeFunction, parseEdgeFunctionError } from '../lib/edgeFunction';
 
+export interface ConnectedAccount {
+  id: string;
+  name: string;
+  platform: string;
+}
+
 export interface IntegrationStatus {
   id: string;
   org_id: string;
@@ -8,7 +14,7 @@ export interface IntegrationStatus {
   connected: boolean;
   last_sync_at: string | null;
   last_error: string | null;
-  accounts_connected: string | null;
+  accounts_connected: ConnectedAccount[] | null;
   sync_success_count: number;
   sync_failure_count: number;
   created_at: string;
