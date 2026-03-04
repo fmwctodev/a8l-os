@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Inbox, Loader2 } from 'lucide-react';
+import { Inbox, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import type { ReputationReview } from '../../services/reputationReviews';
 import { getReviews, syncReviews } from '../../services/reputationReviews';
@@ -88,13 +88,21 @@ export function ReviewsInbox() {
     setPage(0);
   }, [filters]);
 
+  const [syncError, setSyncError] = useState<string | null>(null);
+
   async function handleSync() {
     setSyncing(true);
+    setSyncError(null);
     try {
-      await syncReviews();
+      const result = await syncReviews();
+      if (!result.success && result.error) {
+        setSyncError(result.error);
+      } else if (result.errors && result.errors.length > 0) {
+        setSyncError(result.errors.join('; '));
+      }
       await loadReviews();
     } catch (error) {
-      console.error('Sync failed:', error);
+      setSyncError(error instanceof Error ? error.message : 'Sync failed');
     } finally {
       setSyncing(false);
     }
@@ -105,6 +113,16 @@ export function ReviewsInbox() {
   }
 
   return (
+    <div className="space-y-3">
+      {syncError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-red-700">Sync failed</p>
+            <p className="text-xs text-red-600 mt-0.5">{syncError}</p>
+          </div>
+        </div>
+      )}
     <div className="flex h-[calc(100vh-220px)] bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className={`flex flex-col border-r border-gray-200 ${selectedReview ? 'w-[380px] hidden lg:flex' : 'flex-1'}`}>
         <div className="px-4 pt-4 pb-2">
@@ -191,6 +209,7 @@ export function ReviewsInbox() {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }

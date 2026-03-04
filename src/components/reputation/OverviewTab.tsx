@@ -6,7 +6,8 @@ import {
   ChevronDown,
   Loader2,
   Plug,
-  RefreshCw
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import type { ReviewRequest, ReputationSettings } from '../../types';
@@ -90,13 +91,21 @@ export function OverviewTab({ onRequestReview }: OverviewTabProps) {
     }
   }
 
+  const [syncError, setSyncError] = useState<string | null>(null);
+
   async function handleSync() {
     setSyncing(true);
+    setSyncError(null);
     try {
-      await syncReviews();
+      const result = await syncReviews();
+      if (!result.success && result.error) {
+        setSyncError(result.error);
+      } else if (result.errors && result.errors.length > 0) {
+        setSyncError(result.errors.join('; '));
+      }
       await loadData();
     } catch (error) {
-      console.error('Sync failed:', error);
+      setSyncError(error instanceof Error ? error.message : 'Sync failed');
     } finally {
       setSyncing(false);
     }
@@ -180,6 +189,26 @@ export function OverviewTab({ onRequestReview }: OverviewTabProps) {
           <div className="flex items-center gap-2 text-sm text-amber-700">
             <Plug className="w-5 h-5" />
             Connect your review platforms in Settings to start syncing Google and Facebook reviews.
+          </div>
+        </div>
+      )}
+
+      {syncError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-red-700">Sync failed</p>
+            <p className="text-xs text-red-600 mt-0.5">{syncError}</p>
+          </div>
+        </div>
+      )}
+
+      {!syncError && integration?.last_error && stats.totalReviews === 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-amber-700">Last sync had an error</p>
+            <p className="text-xs text-amber-600 mt-0.5">{integration.last_error}</p>
           </div>
         </div>
       )}

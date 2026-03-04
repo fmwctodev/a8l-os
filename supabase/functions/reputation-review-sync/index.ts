@@ -10,51 +10,65 @@ const corsHeaders = {
 
 const LATE_API_BASE = "https://getlate.dev/api/v1";
 
-interface LateReview {
-  id: string;
-  platform: string;
-  accountId: string;
-  accountUsername?: string;
+interface GBPReview {
+  reviewId?: string;
+  id?: string;
+  name?: string;
   reviewer?: {
-    id?: string | null;
-    name?: string;
-    profileImage?: string | null;
+    profilePhotoUrl?: string;
+    displayName?: string;
   };
-  rating: number;
-  text?: string;
-  created: string;
-  hasReply?: boolean;
-  reply?: {
-    id?: string;
+  starRating?: string | number;
+  comment?: string;
+  reviewText?: string;
+  createTime?: string;
+  updateTime?: string;
+  reviewReply?: {
+    comment?: string;
     text?: string;
-    created?: string;
-  } | null;
-  reviewUrl?: string | null;
+    updateTime?: string;
+  };
+  ownerReply?: {
+    comment?: string;
+    text?: string;
+    updateTime?: string;
+  };
 }
 
-interface LateListResponse {
-  status?: string;
-  data?: LateReview[];
-  pagination?: {
-    hasMore?: boolean;
-    nextCursor?: string | null;
+interface FacebookReview {
+  id?: string;
+  reviewId?: string;
+  recommendation_type?: string;
+  rating?: number;
+  review_text?: string;
+  reviewText?: string;
+  message?: string;
+  reviewer?: {
+    name?: string;
+    id?: string;
   };
-  meta?: {
-    accountsQueried?: number;
-    accountsFailed?: number;
-    failedAccounts?: Array<{
-      accountId?: string;
-      accountUsername?: string | null;
-      platform?: string;
-      error?: string;
-      retryAfter?: number | null;
-    }>;
-    lastUpdated?: string;
+  from?: {
+    name?: string;
+    id?: string;
   };
-  summary?: {
-    totalReviews?: number;
-    averageRating?: number | null;
-  };
+  created_time?: string;
+  createTime?: string;
+  has_rating?: boolean;
+}
+
+interface NormalizedReview {
+  externalId: string;
+  platform: string;
+  accountId: string;
+  reviewerName: string;
+  reviewerProfileImage: string | null;
+  rating: number;
+  text: string | null;
+  created: string;
+  hasReply: boolean;
+  replyText: string | null;
+  replyCreatedAt: string | null;
+  reviewUrl: string | null;
 }
 
 interface RoutingRule {
@@ -76,6 +90,25 @@ interface ReputationSettings {
   escalation_email: string | null;
 }
 
+const STAR_RATING_MAP: Record<string, number> = {
+  ONE: 1,
+  TWO: 2,
+  THREE: 3,
+  FOUR: 4,
+  FIVE: 5,
+};
+
+function parseStarRating(raw: string | number | undefined): number {
+  if (typeof raw === "number") return Math.min(5, Math.max(1, Math.round(raw)));
+  if (typeof raw === "string") {
+    const mapped = STAR_RATING_MAP[raw.toUpperCase()];
+    if (mapped) return mapped;
+    const parsed = parseInt(raw, 10);
+    if (!isNaN(parsed)) return Math.min(5, Math.max(1, parsed));
+  }
+  return 3;
+}
+
 function computeSlaBreached(
   reviewCreatedAt: string,
   rating: number,
@@ -92,7 +125,7 @@ function computeSlaBreached(
 
 function checkEscalation(
   rating: number,
-  text: string | undefined,
+  text: string | null,
   keywords: string[]
 ): boolean {
   if (rating <= 2) return true;
@@ -125,62 +158,137 @@ function matchRoutingRule(
   return null;
 }
 
-async function fetchAllReviews(
+async function fetchGBPReviews(
   lateApiKey: string,
-  profileId: string,
-  platform?: string,
+  accountId: string,
+  normalizedPlatform = "googlebusiness",
   maxPages = 10
-): Promise<{
-  reviews: LateReview[];
-  meta: LateListResponse["meta"];
-  summary: LateListResponse["summary"];
-  apiError?: string;
-}> {
-  const allReviews: LateReview[] = [];
-  let cursor: string | undefined;
-  let meta: LateListResponse["meta"];
-  let summary: LateListResponse["summary"];
+): Promise<{ reviews: NormalizedReview[]; error?: string }> {
+  const normalized: NormalizedReview[] = [];
+  let nextPageToken: string | undefined;
   let page = 0;
 
   while (page < maxPages) {
-    const params = new URLSearchParams({ limit: "50" });
-    if (profileId) params.set("profileId", profileId);
-    if (platform) params.set("platform", platform);
-    params.set("sortBy", "date");
-    params.set("sortOrder", "desc");
-    if (cursor) params.set("cursor", cursor);
+    const params = new URLSearchParams({ accountId });
+    if (nextPageToken) params.set("nextPageToken", nextPageToken);
 
-    const url = `${LATE_API_BASE}/inbox/reviews?${params.toString()}`;
-    console.log(`[reputation-review-sync] Fetching page ${page + 1}: ${url}`);
+    const url = `${LATE_API_BASE}/google-business-profile/list-google-business-reviews?${params}`;
+    console.log(`[reputation-review-sync] GBP page ${page + 1}: ${url}`);
 
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${lateApiKey}`,
-        Accept: "application/json",
-      },
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${lateApiKey}`, Accept: "application/json" },
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      const apiError = `Late.dev API error ${response.status}: ${errText.slice(0, 300)}`;
-      console.error(`[reputation-review-sync] ${apiError}`);
-      return { reviews: allReviews, meta, summary, apiError };
+    if (!res.ok) {
+      const errText = await res.text();
+      const msg = `Google Business API error ${res.status}: ${errText.slice(0, 300)}`;
+      console.error(`[reputation-review-sync] ${msg}`);
+      return { reviews: normalized, error: msg };
     }
 
-    const data: LateListResponse = await response.json();
-    meta = data.meta;
-    summary = data.summary;
+    const data = await res.json();
+    const reviews: GBPReview[] = data.reviews || data.data || [];
 
-    if (data.data && data.data.length > 0) {
-      allReviews.push(...data.data);
+    for (const r of reviews) {
+      const reviewId = r.reviewId || r.id || r.name || "";
+      const rating = parseStarRating(r.starRating);
+      const replyObj = r.reviewReply || r.ownerReply;
+      const replyText = replyObj?.comment || replyObj?.text || null;
+      const replyTime = replyObj?.updateTime || null;
+
+      normalized.push({
+        externalId: `gbp_${accountId}_${reviewId}`,
+        platform: normalizedPlatform,
+        accountId,
+        reviewerName: r.reviewer?.displayName || "Anonymous",
+        reviewerProfileImage: r.reviewer?.profilePhotoUrl || null,
+        rating,
+        text: r.comment || r.reviewText || null,
+        created: r.createTime || r.updateTime || new Date().toISOString(),
+        hasReply: !!replyText,
+        replyText,
+        replyCreatedAt: replyTime,
+        reviewUrl: null,
+      });
     }
 
-    if (!data.pagination?.hasMore || !data.pagination?.nextCursor) break;
-    cursor = data.pagination.nextCursor;
+    nextPageToken = data.nextPageToken;
+    if (!nextPageToken) break;
     page++;
   }
 
-  return { reviews: allReviews, meta, summary };
+  return { reviews: normalized };
+}
+
+async function fetchFacebookReviews(
+  lateApiKey: string,
+  accountId: string,
+  maxPages = 10
+): Promise<{ reviews: NormalizedReview[]; error?: string }> {
+  const normalized: NormalizedReview[] = [];
+  let nextPageToken: string | undefined;
+  let page = 0;
+
+  while (page < maxPages) {
+    const params = new URLSearchParams({ accountId });
+    if (nextPageToken) params.set("nextPageToken", nextPageToken);
+
+    const url = `${LATE_API_BASE}/google-business-profile/list-facebook-reviews?${params}`;
+    console.log(`[reputation-review-sync] Facebook page ${page + 1}: ${url}`);
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${lateApiKey}`, Accept: "application/json" },
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      const msg = `Facebook API error ${res.status}: ${errText.slice(0, 300)}`;
+      console.error(`[reputation-review-sync] ${msg}`);
+      return { reviews: normalized, error: msg };
+    }
+
+    const data = await res.json();
+    const reviews: FacebookReview[] = data.reviews || data.data || [];
+
+    for (const r of reviews) {
+      const reviewId = r.id || r.reviewId || "";
+      const reviewer = r.reviewer || r.from;
+      const text = r.review_text || r.reviewText || r.message || null;
+      const created = r.created_time || r.createTime || new Date().toISOString();
+
+      let rating = 3;
+      if (typeof r.rating === "number") {
+        rating = Math.min(5, Math.max(1, Math.round(r.rating)));
+      } else if (r.recommendation_type === "positive") {
+        rating = 5;
+      } else if (r.recommendation_type === "negative") {
+        rating = 1;
+      } else if (r.has_rating === false) {
+        rating = 3;
+      }
+
+      normalized.push({
+        externalId: `fb_${accountId}_${reviewId}`,
+        platform: "facebook",
+        accountId,
+        reviewerName: reviewer?.name || "Anonymous",
+        reviewerProfileImage: null,
+        rating,
+        text,
+        created,
+        hasReply: false,
+        replyText: null,
+        replyCreatedAt: null,
+        reviewUrl: null,
+      });
+    }
+
+    nextPageToken = data.nextPageToken || data.paging?.cursors?.after;
+    if (!nextPageToken) break;
+    page++;
+  }
+
+  return { reviews: normalized };
 }
 
 Deno.serve(async (req: Request) => {
@@ -192,16 +300,11 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const lateApiKey = Deno.env.get("LATE_API_KEY");
-    const lateProfileId =
-      Deno.env.get("LATE_PROFILE_ID") || "69a352613ecb689ae9742cc0";
 
     if (!lateApiKey) {
       return new Response(
         JSON.stringify({ error: "LATE_API_KEY not configured" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -209,10 +312,7 @@ Deno.serve(async (req: Request) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Missing authorization" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -236,15 +336,11 @@ Deno.serve(async (req: Request) => {
         Deno.env.get("SUPABASE_ANON_KEY")!,
         { auth: { autoRefreshToken: false, persistSession: false } }
       );
-      const { data: authData, error: authError } =
-        await anonClient.auth.getUser(token);
+      const { data: authData, error: authError } = await anonClient.auth.getUser(token);
       if (authError || !authData.user) {
         return new Response(
           JSON.stringify({ error: "Invalid or expired token" }),
-          {
-            status: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       userId = authData.user.id;
@@ -259,74 +355,38 @@ Deno.serve(async (req: Request) => {
     if (!orgId) {
       return new Response(
         JSON.stringify({ error: "Organization ID required" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const url = new URL(req.url);
-    const platformFilter = url.searchParams.get("platform") || undefined;
+    const urlParams = new URL(req.url).searchParams;
+    const platformFilter = urlParams.get("platform") || undefined;
 
-    console.log(
-      `[reputation-review-sync] Syncing reviews for org ${orgId}, platform: ${platformFilter || "all"}`
-    );
+    console.log(`[reputation-review-sync] Syncing org ${orgId}, platform: ${platformFilter || "all"}`);
 
-    const { reviews, meta, summary, apiError } = await fetchAllReviews(
-      lateApiKey,
-      lateProfileId,
-      platformFilter
-    );
+    const { data: connections } = await supabase
+      .from("late_connections")
+      .select("late_account_id, platform, account_name")
+      .eq("org_id", orgId)
+      .eq("status", "connected");
 
-    if (apiError) {
-      const { data: currentStatusErr } = await supabase
-        .from("reputation_integration_status")
-        .select("sync_failure_count")
-        .eq("org_id", orgId)
-        .eq("provider", "late")
-        .maybeSingle();
-
-      await supabase.from("reputation_integration_status").upsert(
-        {
-          org_id: orgId,
-          provider: "late",
-          last_error: apiError,
-          sync_failure_count: (currentStatusErr?.sync_failure_count ?? 0) + 1,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "org_id,provider" }
-      );
-
+    if (!connections || connections.length === 0) {
       return new Response(
-        JSON.stringify({ success: false, error: apiError }),
+        JSON.stringify({ success: false, error: "No connected accounts found. Please connect a Google Business or Facebook account first." }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(
-      `[reputation-review-sync] Fetched ${reviews.length} reviews from Late.dev`
-    );
-
     const { data: settings } = await supabase
       .from("reputation_settings")
-      .select(
-        "sla_hours_positive, sla_hours_negative, escalation_keywords, escalation_user_id, escalation_email"
-      )
+      .select("sla_hours_positive, sla_hours_negative, escalation_keywords, escalation_user_id, escalation_email")
       .eq("organization_id", orgId)
       .maybeSingle();
 
     const slaSettings: ReputationSettings = {
       sla_hours_positive: settings?.sla_hours_positive ?? 48,
       sla_hours_negative: settings?.sla_hours_negative ?? 12,
-      escalation_keywords: settings?.escalation_keywords ?? [
-        "refund",
-        "lawsuit",
-        "attorney",
-        "scam",
-        "lawyer",
-        "legal",
-      ],
+      escalation_keywords: settings?.escalation_keywords ?? ["refund", "lawsuit", "attorney", "scam", "lawyer", "legal"],
       escalation_user_id: settings?.escalation_user_id ?? null,
       escalation_email: settings?.escalation_email ?? null,
     };
@@ -336,54 +396,56 @@ Deno.serve(async (req: Request) => {
       .select("*")
       .eq("org_id", orgId);
 
+    const allReviews: NormalizedReview[] = [];
+    const syncErrors: string[] = [];
+
+    for (const conn of connections) {
+      const platform = conn.platform as string;
+
+      if (platformFilter && platform !== platformFilter) continue;
+
+      if (platform === "googlebusiness" || platform === "google_business") {
+        const { reviews, error } = await fetchGBPReviews(lateApiKey, conn.late_account_id, "googlebusiness");
+        if (error) syncErrors.push(`[${conn.account_name}] ${error}`);
+        allReviews.push(...reviews);
+      } else if (platform === "facebook") {
+        const { reviews, error } = await fetchFacebookReviews(lateApiKey, conn.late_account_id);
+        if (error) syncErrors.push(`[${conn.account_name}] ${error}`);
+        allReviews.push(...reviews);
+      }
+    }
+
+    console.log(`[reputation-review-sync] Fetched ${allReviews.length} reviews total`);
+
     let upserted = 0;
-    let errors: string[] = [];
 
-    for (const review of reviews) {
+    for (const review of allReviews) {
       try {
-        const hasReply = review.hasReply ?? false;
-        const slaBreached = computeSlaBreached(
-          review.created,
-          review.rating,
-          hasReply,
-          slaSettings
-        );
-        const escalated = checkEscalation(
-          review.rating,
-          review.text,
-          slaSettings.escalation_keywords
-        );
-
-        const matchedRule = matchRoutingRule(
-          (routingRules || []) as RoutingRule[],
-          review.platform,
-          review.rating
-        );
+        const slaBreached = computeSlaBreached(review.created, review.rating, review.hasReply, slaSettings);
+        const escalated = checkEscalation(review.rating, review.text, slaSettings.escalation_keywords);
+        const matchedRule = matchRoutingRule((routingRules || []) as RoutingRule[], review.platform, review.rating);
 
         const reviewRow = {
           org_id: orgId,
-          late_review_id: review.id,
+          late_review_id: review.externalId,
           platform: review.platform,
           account_id: review.accountId,
-          account_username: review.accountUsername || null,
-          reviewer_name: review.reviewer?.name || "Anonymous",
-          reviewer_profile_image: review.reviewer?.profileImage || null,
+          account_username: null,
+          reviewer_name: review.reviewerName,
+          reviewer_profile_image: review.reviewerProfileImage,
           rating: review.rating,
-          review_text: review.text || null,
+          review_text: review.text,
           review_created_at: review.created,
-          has_reply: hasReply,
-          reply_id: review.reply?.id || null,
-          reply_text: review.reply?.text || null,
-          reply_created_at: review.reply?.created || null,
-          review_url: review.reviewUrl || null,
+          has_reply: review.hasReply,
+          reply_id: null,
+          reply_text: review.replyText,
+          reply_created_at: review.replyCreatedAt,
+          review_url: review.reviewUrl,
           sla_breached: slaBreached,
           escalated,
           assigned_to_user_id: matchedRule?.assign_to_user_id || null,
-          priority: escalated
-            ? "urgent"
-            : matchedRule?.priority || "normal",
-          requires_approval:
-            matchedRule?.requires_manual_approval || false,
+          priority: escalated ? "urgent" : (matchedRule?.priority || "normal"),
+          requires_approval: matchedRule?.requires_manual_approval || false,
           last_synced_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
@@ -393,47 +455,43 @@ Deno.serve(async (req: Request) => {
           .upsert(reviewRow, { onConflict: "org_id,late_review_id" });
 
         if (upsertError) {
-          errors.push(
-            `Failed to upsert review ${review.id}: ${upsertError.message}`
-          );
+          syncErrors.push(`Failed to upsert ${review.externalId}: ${upsertError.message}`);
           continue;
         }
 
         upserted++;
 
-        if (review.reply && review.reply.text) {
-          const { data: existingReview } = await supabase
+        if (review.replyText) {
+          const { data: savedReview } = await supabase
             .from("reputation_reviews")
             .select("id")
             .eq("org_id", orgId)
-            .eq("late_review_id", review.id)
+            .eq("late_review_id", review.externalId)
             .maybeSingle();
 
-          if (existingReview) {
+          if (savedReview) {
             const { data: existingReply } = await supabase
               .from("reputation_review_replies")
               .select("id")
-              .eq("review_id", existingReview.id)
-              .eq("late_reply_id", review.reply.id || "")
+              .eq("review_id", savedReview.id)
+              .eq("source", "sync")
               .maybeSingle();
 
             if (!existingReply) {
               await supabase.from("reputation_review_replies").insert({
                 org_id: orgId,
-                review_id: existingReview.id,
-                late_reply_id: review.reply.id || null,
-                reply_text: review.reply.text,
-                reply_created_at: review.reply.created || null,
-                source: "late",
+                review_id: savedReview.id,
+                late_reply_id: null,
+                reply_text: review.replyText,
+                reply_created_at: review.replyCreatedAt,
+                source: "sync",
                 status: "published",
               });
             }
           }
         }
       } catch (err) {
-        errors.push(
-          `Error processing review ${review.id}: ${err instanceof Error ? err.message : String(err)}`
-        );
+        syncErrors.push(`Error processing ${review.externalId}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
@@ -446,6 +504,7 @@ Deno.serve(async (req: Request) => {
 
     const prevSuccess = currentStatus?.sync_success_count ?? 0;
     const prevFailure = currentStatus?.sync_failure_count ?? 0;
+    const overallSuccess = syncErrors.length === 0;
 
     await supabase.from("reputation_integration_status").upsert(
       {
@@ -453,9 +512,9 @@ Deno.serve(async (req: Request) => {
         provider: "late",
         connected: true,
         last_sync_at: new Date().toISOString(),
-        last_error: errors.length > 0 ? errors.join("; ") : null,
-        sync_success_count: errors.length === 0 ? prevSuccess + 1 : prevSuccess,
-        sync_failure_count: errors.length > 0 ? prevFailure + 1 : prevFailure,
+        last_error: syncErrors.length > 0 ? syncErrors.join("; ") : null,
+        sync_success_count: overallSuccess ? prevSuccess + 1 : prevSuccess,
+        sync_failure_count: overallSuccess ? prevFailure : prevFailure + 1,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "org_id,provider" }
@@ -469,12 +528,11 @@ Deno.serve(async (req: Request) => {
         entity_type: "review",
         entity_id: "00000000-0000-0000-0000-000000000000",
         metadata: {
-          reviews_fetched: reviews.length,
+          reviews_fetched: allReviews.length,
           reviews_upserted: upserted,
-          errors_count: errors.length,
+          errors_count: syncErrors.length,
           platform_filter: platformFilter || "all",
-          meta,
-          summary,
+          accounts_synced: connections.length,
         },
       });
     }
@@ -482,26 +540,17 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: true,
-        reviews_fetched: reviews.length,
+        reviews_fetched: allReviews.length,
         reviews_upserted: upserted,
-        errors,
-        meta,
-        summary,
+        errors: syncErrors,
       }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
     console.error("[reputation-review-sync] Error:", error);
     return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : "Internal server error",
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

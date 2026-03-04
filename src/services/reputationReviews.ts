@@ -102,7 +102,7 @@ export async function getReviewById(
 
 export async function syncReviews(
   platform?: string
-): Promise<{ reviews_fetched: number; reviews_upserted: number; errors: string[] }> {
+): Promise<{ success: boolean; reviews_fetched: number; reviews_upserted: number; errors: string[]; error?: string }> {
   const params: Record<string, unknown> = {};
   if (platform) params.platform = platform;
 
