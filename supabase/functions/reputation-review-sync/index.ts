@@ -134,6 +134,7 @@ async function fetchAllReviews(
   reviews: LateReview[];
   meta: LateListResponse["meta"];
   summary: LateListResponse["summary"];
+  apiError?: string;
 }> {
   const allReviews: LateReview[] = [];
   let cursor: string | undefined;
@@ -150,6 +151,8 @@ async function fetchAllReviews(
     if (cursor) params.set("cursor", cursor);
 
     const url = `${LATE_API_BASE}/inbox/reviews?${params.toString()}`;
+    console.log(`[reputation-review-sync] Fetching page ${page + 1}: ${url}`);
+
     const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${lateApiKey}`,
@@ -159,9 +162,9 @@ async function fetchAllReviews(
 
     if (!response.ok) {
       const errText = await response.text();
-      throw new Error(
-        `Late.dev API error ${response.status}: ${errText.slice(0, 500)}`
-      );
+      const apiError = `Late.dev API error ${response.status}: ${errText.slice(0, 300)}`;
+      console.error(`[reputation-review-sync] ${apiError}`);
+      return { reviews: allReviews, meta, summary, apiError };
     }
 
     const data: LateListResponse = await response.json();
@@ -270,11 +273,36 @@ Deno.serve(async (req: Request) => {
       `[reputation-review-sync] Syncing reviews for org ${orgId}, platform: ${platformFilter || "all"}`
     );
 
-    const { reviews, meta, summary } = await fetchAllReviews(
+    const { reviews, meta, summary, apiError } = await fetchAllReviews(
       lateApiKey,
       lateProfileId,
       platformFilter
     );
+
+    if (apiError) {
+      const { data: currentStatusErr } = await supabase
+        .from("reputation_integration_status")
+        .select("sync_failure_count")
+        .eq("org_id", orgId)
+        .eq("provider", "late")
+        .maybeSingle();
+
+      await supabase.from("reputation_integration_status").upsert(
+        {
+          org_id: orgId,
+          provider: "late",
+          last_error: apiError,
+          sync_failure_count: (currentStatusErr?.sync_failure_count ?? 0) + 1,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "org_id,provider" }
+      );
+
+      return new Response(
+        JSON.stringify({ success: false, error: apiError }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     console.log(
       `[reputation-review-sync] Fetched ${reviews.length} reviews from Late.dev`
