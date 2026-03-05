@@ -16,7 +16,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useDashboardData } from '../hooks/useDashboardData';
 import { useUserDashboardAnalytics } from '../hooks/useUserDashboardAnalytics';
-import { getGreeting, getDateRangePresets, type DateRange } from '../services/dashboard';
+import { getGreeting, type DateRange } from '../services/dashboard';
 import { usePermission } from '../hooks/usePermission';
 import {
   StatCard,
@@ -65,9 +65,20 @@ export function Dashboard() {
     exportToPDF,
   } = useUserDashboardAnalytics();
 
-  const dateRange = getDateRangePresets().find(
-    (p) => p.value === (timeRange === '7d' ? 7 : timeRange === '90d' ? 90 : 30)
-  ) || getDateRangePresets()[1];
+  const dateRange: DateRange = (() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endDate = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString();
+    if (timeRange === 'custom' && startDate && endDate) {
+      return { label: 'Custom', startDate, endDate };
+    }
+    const days = timeRange === '7d' ? 7 : timeRange === '90d' ? 90 : 30;
+    return {
+      label: `Last ${days} Days`,
+      startDate: new Date(today.getTime() - days * 24 * 60 * 60 * 1000).toISOString(),
+      endDate,
+    };
+  })();
 
   const {
     stats,

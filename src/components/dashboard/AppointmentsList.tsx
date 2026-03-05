@@ -56,9 +56,13 @@ export function AppointmentsList({ appointments, isLoading }: AppointmentsListPr
           <div className="space-y-1">
             {appointments.map((appointment) => {
               const { date, time } = formatAppointmentTime(appointment.start_at_utc);
-              const contactName = appointment.contact
+              const linkedName = appointment.contact
                 ? `${appointment.contact.first_name} ${appointment.contact.last_name}`.trim()
-                : 'Unknown';
+                : '';
+              const answerName = appointment.answers
+                ? (appointment.answers['name'] || appointment.answers['full_name'] || appointment.answers['your_name'] || '')
+                : '';
+              const contactName = linkedName || answerName || 'Guest';
 
               return (
                 <Link
@@ -72,7 +76,7 @@ export function AppointmentsList({ appointments, isLoading }: AppointmentsListPr
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-white truncate">
-                        {contactName || 'Unknown'}
+                        {contactName}
                       </span>
                       <Badge
                         variant={

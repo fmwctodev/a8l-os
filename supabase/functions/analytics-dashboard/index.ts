@@ -279,7 +279,7 @@ Deno.serve(async (req: Request) => {
     const { data: invoicedCurrentData } = await supabase
       .from("invoices")
       .select("total")
-      .eq("organization_id", user.orgId)
+      .eq("org_id", user.orgId)
       .gte("created_at", start.toISOString())
       .lte("created_at", end.toISOString());
 
@@ -288,7 +288,7 @@ Deno.serve(async (req: Request) => {
     const { data: invoicedPrevData } = await supabase
       .from("invoices")
       .select("total")
-      .eq("organization_id", user.orgId)
+      .eq("org_id", user.orgId)
       .gte("created_at", prevStart.toISOString())
       .lte("created_at", prevEnd.toISOString());
 
@@ -297,7 +297,7 @@ Deno.serve(async (req: Request) => {
     const { data: paidCurrentData } = await supabase
       .from("invoices")
       .select("total")
-      .eq("organization_id", user.orgId)
+      .eq("org_id", user.orgId)
       .eq("status", "paid")
       .gte("paid_at", start.toISOString())
       .lte("paid_at", end.toISOString());
@@ -307,7 +307,7 @@ Deno.serve(async (req: Request) => {
     const { data: paidPrevData } = await supabase
       .from("invoices")
       .select("total")
-      .eq("organization_id", user.orgId)
+      .eq("org_id", user.orgId)
       .eq("status", "paid")
       .gte("paid_at", prevStart.toISOString())
       .lte("paid_at", prevEnd.toISOString());
@@ -317,7 +317,7 @@ Deno.serve(async (req: Request) => {
     const { data: outstandingData } = await supabase
       .from("invoices")
       .select("total")
-      .eq("organization_id", user.orgId)
+      .eq("org_id", user.orgId)
       .in("status", ["sent", "viewed", "overdue"]);
 
     const outstanding = (outstandingData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);

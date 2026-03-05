@@ -43,22 +43,23 @@ export interface UpcomingAppointment {
   start_at_utc: string;
   end_at_utc: string;
   status: string;
-  contact_id: string;
+  contact_id: string | null;
   calendar_id: string;
   appointment_type_id: string;
+  answers: Record<string, string> | null;
   contact: {
     id: string;
     first_name: string;
     last_name: string;
-  };
+  } | null;
   calendar: {
     id: string;
     name: string;
-  };
+  } | null;
   appointment_type: {
     id: string;
     name: string;
-  };
+  } | null;
 }
 
 export interface SystemHealthStatus {
@@ -202,12 +203,12 @@ export async function getNextAppointments(
       contact_id,
       calendar_id,
       appointment_type_id,
-      contact:contacts!appointments_contact_id_fkey(id, first_name, last_name),
-      calendar:calendars!appointments_calendar_id_fkey(id, name),
-      appointment_type:appointment_types!appointments_appointment_type_id_fkey(id, name)
+      answers,
+      contact:contacts(id, first_name, last_name),
+      calendar:calendars(id, name),
+      appointment_type:appointment_types(id, name)
     `)
     .eq('org_id', organizationId)
-    .eq('assigned_user_id', userId)
     .gte('start_at_utc', now)
     .in('status', ['scheduled', 'confirmed'])
     .order('start_at_utc', { ascending: true })
