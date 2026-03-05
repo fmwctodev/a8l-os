@@ -105,6 +105,27 @@ export async function getMeetingTranscriptionsByContact(contactId: string): Prom
   return uniqueMeetings;
 }
 
+export async function getGoogleMeetRecordingsForOrg(
+  orgId: string,
+  search?: string
+): Promise<MeetingTranscription[]> {
+  let query = supabase
+    .from('meeting_transcriptions')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('meeting_source', 'google_meet')
+    .order('meeting_date', { ascending: false })
+    .limit(100);
+
+  if (search) {
+    query = query.ilike('meeting_title', `%${search}%`);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
 export async function createMeetingTranscription(
   transcription: {
     org_id: string;

@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getProposalById, linkMeetingToProposal, unlinkMeetingFromProposal } from '../../services/proposals';
-import { getMeetingTranscriptionsByContact } from '../../services/meetingTranscriptions';
+import { getMeetingTranscriptionsByContact, getGoogleMeetRecordingsForOrg } from '../../services/meetingTranscriptions';
+import { checkDriveConnectionStatus, syncMeetRecordings } from '../../services/googleMeet';
 import { parseFile, formatFileSize, ACCEPTED_TYPES, MAX_FILE_SIZE } from '../../utils/fileParser';
 import type { ParsedFile } from '../../utils/fileParser';
 import type { Proposal, MeetingTranscription, ProposalSectionType } from '../../types';
@@ -13,12 +14,10 @@ import {
   Loader2,
   Video,
   CheckCircle,
-  Circle,
   ChevronRight,
   Calendar,
   Clock,
   ExternalLink,
-  MessageSquare,
   ListChecks,
   User,
   Wand2,
@@ -27,6 +26,12 @@ import {
   X,
   FileUp,
   File,
+  RefreshCw,
+  Search,
+  Wifi,
+  WifiOff,
+  Mic,
+  Link2,
 } from 'lucide-react';
 
 type BuilderStep = 'meetings' | 'sections' | 'generate' | 'review';
@@ -46,6 +51,7 @@ export function ProposalBuilder() {
   const { user } = useAuth();
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [meetings, setMeetings] = useState<MeetingTranscription[]>([]);
+  const [googleMeetRecordings, setGoogleMeetRecordings] = useState<MeetingTranscription[]>([]);
   const [selectedMeetings, setSelectedMeetings] = useState<string[]>([]);
   const [selectedSections, setSelectedSections] = useState<ProposalSectionType[]>(['intro', 'scope', 'deliverables', 'pricing']);
   const [customInstructions, setCustomInstructions] = useState('');
@@ -59,6 +65,12 @@ export function ProposalBuilder() {
   const [isParsingFile, setIsParsingFile] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [driveConnected, setDriveConnected] = useState<boolean | null>(null);
+  const [loadingRecordings, setLoadingRecordings] = useState(false);
+  const [syncingRecordings, setSyncingRecordings] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [recordingSearch, setRecordingSearch] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -73,12 +85,16 @@ export function ProposalBuilder() {
       const proposalData = await getProposalById(id!);
       setProposal(proposalData);
 
+      const linkedMeetingIds = proposalData?.meeting_contexts?.map(mc => mc.meeting_transcription_id) || [];
+      setSelectedMeetings(linkedMeetingIds);
+
       if (proposalData?.contact_id) {
         const meetingsData = await getMeetingTranscriptionsByContact(proposalData.contact_id);
         setMeetings(meetingsData);
+      }
 
-        const linkedMeetingIds = proposalData.meeting_contexts?.map(mc => mc.meeting_transcription_id) || [];
-        setSelectedMeetings(linkedMeetingIds);
+      if (proposalData?.org_id) {
+        await loadGoogleMeetRecordings(proposalData.org_id);
       }
     } catch (err) {
       console.error('Failed to load data:', err);
@@ -86,6 +102,50 @@ export function ProposalBuilder() {
       setIsLoading(false);
     }
   };
+
+  const loadGoogleMeetRecordings = async (orgId: string, search?: string) => {
+    try {
+      setLoadingRecordings(true);
+      const [status, recordings] = await Promise.all([
+        checkDriveConnectionStatus(orgId),
+        getGoogleMeetRecordingsForOrg(orgId, search),
+      ]);
+      setDriveConnected(status.connected);
+      setGoogleMeetRecordings(recordings);
+    } catch (err) {
+      console.error('Failed to load Google Meet recordings:', err);
+      setDriveConnected(false);
+      setGoogleMeetRecordings([]);
+    } finally {
+      setLoadingRecordings(false);
+    }
+  };
+
+  const handleSyncRecordings = async () => {
+    if (!proposal?.org_id || !user?.id) return;
+    try {
+      setSyncingRecordings(true);
+      setSyncResult(null);
+      setSyncError(null);
+      const result = await syncMeetRecordings(proposal.org_id, user.id);
+      setSyncResult(result);
+      await loadGoogleMeetRecordings(proposal.org_id, recordingSearch);
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : 'Failed to sync recordings');
+    } finally {
+      setSyncingRecordings(false);
+    }
+  };
+
+  const handleRecordingSearch = useCallback(
+    (value: string) => {
+      setRecordingSearch(value);
+      if (proposal?.org_id) {
+        loadGoogleMeetRecordings(proposal.org_id, value);
+      }
+    },
+    [proposal?.org_id]
+  );
 
   const toggleMeeting = async (meetingId: string) => {
     if (!proposal) return;
@@ -219,11 +279,15 @@ export function ProposalBuilder() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   };
 
   const formatDuration = (minutes: number | null) => {
-    if (!minutes) return '-';
+    if (!minutes) return null;
     const hrs = Math.floor(minutes / 60);
     const mins = minutes % 60;
     return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
@@ -237,6 +301,12 @@ export function ProposalBuilder() {
   ];
 
   const currentStepIndex = steps.findIndex(s => s.key === currentStep);
+
+  const filteredGoogleMeetRecordings = googleMeetRecordings.filter(r =>
+    !meetings.some(m => m.id === r.id)
+  );
+
+  const totalSelected = selectedMeetings.length;
 
   if (isLoading) {
     return (
@@ -319,6 +389,7 @@ export function ProposalBuilder() {
                 </p>
               </div>
 
+              {/* Upload Documents */}
               <div className="space-y-2">
                 <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider flex items-center gap-2">
                   <Upload className="w-4 h-4" />
@@ -408,102 +479,179 @@ export function ProposalBuilder() {
                 </div>
               )}
 
+              {/* Divider */}
+              <div className="flex items-center gap-4 py-2">
+                <div className="flex-1 h-px bg-slate-700" />
+                <span className="text-xs text-slate-500 uppercase tracking-wider">And / Or</span>
+                <div className="flex-1 h-px bg-slate-700" />
+              </div>
+
+              {/* Contact-linked meetings */}
               {meetings.length > 0 && (
                 <>
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                      <Link2 className="w-4 h-4" />
+                      Contact Meetings
+                    </h3>
+                    <p className="text-xs text-slate-500">Meetings linked to this contact</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {meetings.map((meeting) => (
+                      <MeetingCard
+                        key={meeting.id}
+                        meeting={meeting}
+                        selected={selectedMeetings.includes(meeting.id)}
+                        onToggle={() => toggleMeeting(meeting.id)}
+                        formatDate={formatDate}
+                        formatDuration={formatDuration}
+                      />
+                    ))}
+                  </div>
+
                   <div className="flex items-center gap-4 py-2">
                     <div className="flex-1 h-px bg-slate-700" />
                     <span className="text-xs text-slate-500 uppercase tracking-wider">And / Or</span>
                     <div className="flex-1 h-px bg-slate-700" />
                   </div>
-
-                  <div className="space-y-2">
-                    <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                      <Video className="w-4 h-4" />
-                      Meeting Context
-                    </h3>
-                  </div>
-
-                  <div className="space-y-3">
-                    {meetings.map((meeting) => (
-                      <button
-                        key={meeting.id}
-                        onClick={() => toggleMeeting(meeting.id)}
-                        className={`w-full p-4 rounded-lg border transition-colors text-left ${
-                          selectedMeetings.includes(meeting.id)
-                            ? 'border-cyan-500 bg-cyan-500/10'
-                            : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
-                        }`}
-                      >
-                        <div className="flex items-start gap-4">
-                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                            selectedMeetings.includes(meeting.id)
-                              ? 'border-cyan-500 bg-cyan-500'
-                              : 'border-slate-600'
-                          }`}>
-                            {selectedMeetings.includes(meeting.id) && (
-                              <CheckCircle className="w-4 h-4 text-white" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="font-medium text-white">{meeting.meeting_title}</h3>
-                              {meeting.recording_url && (
-                                <a
-                                  href={meeting.recording_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded"
-                                >
-                                  <Video className="w-3 h-3" />
-                                  Recording
-                                  <ExternalLink className="w-3 h-3" />
-                                </a>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-4 text-sm text-slate-400 mb-3">
-                              <span className="flex items-center gap-1">
-                                <Calendar className="w-4 h-4" />
-                                {formatDate(meeting.meeting_date)}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <Clock className="w-4 h-4" />
-                                {formatDuration(meeting.duration_minutes)}
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <User className="w-4 h-4" />
-                                {meeting.participants.length} participants
-                              </span>
-                            </div>
-                            {meeting.summary && (
-                              <p className="text-sm text-slate-300 line-clamp-2 mb-2">{meeting.summary}</p>
-                            )}
-                            {meeting.key_points && meeting.key_points.length > 0 && (
-                              <div className="flex flex-wrap gap-2">
-                                {meeting.key_points.slice(0, 3).map((point, i) => (
-                                  <span
-                                    key={i}
-                                    className="text-xs bg-slate-700 text-slate-300 px-2 py-1 rounded"
-                                  >
-                                    {point.length > 50 ? point.substring(0, 50) + '...' : point}
-                                  </span>
-                                ))}
-                                {meeting.key_points.length > 3 && (
-                                  <span className="text-xs text-slate-500">
-                                    +{meeting.key_points.length - 3} more
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
                 </>
               )}
 
-              {meetings.length === 0 && uploadedFiles.length === 0 && (
+              {/* Google Meet Recordings Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                      <Video className="w-4 h-4 text-emerald-400" />
+                      Google Meet Recordings
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Select past recorded meetings to use as context for generating this proposal
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {driveConnected !== null && (
+                      <span className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium ${
+                        driveConnected
+                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+                          : 'bg-slate-700 text-slate-400 border border-slate-600'
+                      }`}>
+                        {driveConnected ? (
+                          <><Wifi className="w-3 h-3" /> Connected</>
+                        ) : (
+                          <><WifiOff className="w-3 h-3" /> Not connected</>
+                        )}
+                      </span>
+                    )}
+                    {driveConnected && (
+                      <button
+                        onClick={handleSyncRecordings}
+                        disabled={syncingRecordings}
+                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 hover:text-white rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {syncingRecordings ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        )}
+                        {syncingRecordings ? 'Syncing...' : 'Sync from Drive'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {syncResult && (
+                  <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-lg">
+                    <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                    <p className="text-emerald-300 text-sm">
+                      Sync complete — {syncResult.imported} new recording{syncResult.imported !== 1 ? 's' : ''} imported
+                      {syncResult.skipped > 0 && `, ${syncResult.skipped} already up to date`}
+                    </p>
+                  </div>
+                )}
+
+                {syncError && (
+                  <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/25 rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                    <p className="text-red-300 text-sm">{syncError}</p>
+                  </div>
+                )}
+
+                {!driveConnected && driveConnected !== null && (
+                  <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-6 text-center">
+                    <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-slate-700/60 flex items-center justify-center">
+                      <WifiOff className="w-6 h-6 text-slate-400" />
+                    </div>
+                    <p className="text-white font-medium mb-1">Google Drive Not Connected</p>
+                    <p className="text-slate-400 text-sm mb-4">
+                      Connect Google Drive to access your Meet recordings, summaries, and action items.
+                    </p>
+                    <Link
+                      to="/settings/integrations"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Connect in Integrations
+                    </Link>
+                  </div>
+                )}
+
+                {driveConnected && (
+                  <>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                      <input
+                        type="text"
+                        value={recordingSearch}
+                        onChange={(e) => handleRecordingSearch(e.target.value)}
+                        placeholder="Search recordings..."
+                        className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500/60"
+                      />
+                    </div>
+
+                    {loadingRecordings ? (
+                      <div className="flex items-center justify-center py-10">
+                        <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
+                        <span className="ml-2 text-sm text-slate-400">Loading recordings...</span>
+                      </div>
+                    ) : filteredGoogleMeetRecordings.length === 0 ? (
+                      <div className="text-center py-10 rounded-xl border border-slate-700/50 bg-slate-800/30">
+                        <Mic className="w-8 h-8 text-slate-600 mx-auto mb-3" />
+                        <p className="text-slate-400 text-sm font-medium">No recordings found</p>
+                        <p className="text-slate-500 text-xs mt-1">
+                          {recordingSearch
+                            ? 'Try a different search term'
+                            : 'Use "Sync from Drive" to import your latest Meet recordings'}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
+                        {filteredGoogleMeetRecordings.map((recording) => (
+                          <MeetingCard
+                            key={recording.id}
+                            meeting={recording}
+                            selected={selectedMeetings.includes(recording.id)}
+                            onToggle={() => toggleMeeting(recording.id)}
+                            formatDate={formatDate}
+                            formatDuration={formatDuration}
+                            badge="Google Meet"
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {driveConnected === null && (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-5 h-5 text-slate-500 animate-spin mr-2" />
+                    <span className="text-sm text-slate-500">Checking Drive connection...</span>
+                  </div>
+                )}
+              </div>
+
+              {meetings.length === 0 && uploadedFiles.length === 0 && filteredGoogleMeetRecordings.length === 0 && driveConnected === false && (
                 <div className="text-center py-6 bg-slate-800/30 rounded-lg border border-slate-700/50">
                   <p className="text-sm text-slate-500">
                     Upload documents above, or continue without context to generate a basic proposal.
@@ -511,14 +659,21 @@ export function ProposalBuilder() {
                 </div>
               )}
 
-              <div className="flex justify-end pt-4">
-                <button
-                  onClick={() => setCurrentStep('sections')}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors"
-                >
-                  Continue
-                  <ChevronRight className="w-4 h-4" />
-                </button>
+              <div className="flex items-center justify-between pt-4">
+                {totalSelected > 0 && (
+                  <span className="text-sm text-slate-400">
+                    <span className="text-cyan-400 font-medium">{totalSelected}</span> meeting{totalSelected !== 1 ? 's' : ''} selected
+                  </span>
+                )}
+                <div className={totalSelected > 0 ? '' : 'ml-auto'}>
+                  <button
+                    onClick={() => setCurrentStep('sections')}
+                    className="flex items-center gap-2 px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors"
+                  >
+                    Continue
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -597,10 +752,10 @@ export function ProposalBuilder() {
                     <h3 className="text-sm font-medium text-slate-300 mb-3">Context Sources</h3>
                     <div className="space-y-1">
                       {selectedMeetings.length > 0 && (
-                        <p className="text-white">{selectedMeetings.length} meeting(s)</p>
+                        <p className="text-white">{selectedMeetings.length} meeting{selectedMeetings.length !== 1 ? 's' : ''}</p>
                       )}
                       {uploadedFiles.length > 0 && (
-                        <p className="text-white">{uploadedFiles.length} document(s)</p>
+                        <p className="text-white">{uploadedFiles.length} document{uploadedFiles.length !== 1 ? 's' : ''}</p>
                       )}
                       {selectedMeetings.length === 0 && uploadedFiles.length === 0 && (
                         <p className="text-slate-500">None</p>
@@ -731,5 +886,109 @@ export function ProposalBuilder() {
         </div>
       </div>
     </div>
+  );
+}
+
+interface MeetingCardProps {
+  meeting: MeetingTranscription;
+  selected: boolean;
+  onToggle: () => void;
+  formatDate: (d: string) => string;
+  formatDuration: (m: number | null) => string | null;
+  badge?: string;
+}
+
+function MeetingCard({ meeting, selected, onToggle, formatDate, formatDuration, badge }: MeetingCardProps) {
+  const duration = formatDuration(meeting.duration_minutes);
+  const hasContent = meeting.summary || (meeting.key_points && meeting.key_points.length > 0);
+
+  return (
+    <button
+      onClick={onToggle}
+      className={`w-full p-4 rounded-lg border transition-all text-left group ${
+        selected
+          ? 'border-cyan-500 bg-cyan-500/10 shadow-[0_0_0_1px_rgba(6,182,212,0.2)]'
+          : 'border-slate-700 bg-slate-800/50 hover:border-slate-600 hover:bg-slate-800/70'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${
+          selected ? 'border-cyan-500 bg-cyan-500' : 'border-slate-600 group-hover:border-slate-500'
+        }`}>
+          {selected && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            <h3 className="font-medium text-white text-sm leading-snug">{meeting.meeting_title}</h3>
+            {badge && (
+              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-medium">
+                <Video className="w-2.5 h-2.5" />
+                {badge}
+              </span>
+            )}
+            {!hasContent && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/25 font-medium">
+                No summary yet
+              </span>
+            )}
+            {meeting.recording_url && (
+              <a
+                href={meeting.recording_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20 transition-colors"
+              >
+                <Video className="w-2.5 h-2.5" />
+                Recording
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3 text-xs text-slate-400 mb-2">
+            <span className="flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5" />
+              {formatDate(meeting.meeting_date)}
+            </span>
+            {duration && (
+              <span className="flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" />
+                {duration}
+              </span>
+            )}
+            {meeting.participants && meeting.participants.length > 0 && (
+              <span className="flex items-center gap-1">
+                <User className="w-3.5 h-3.5" />
+                {meeting.participants.length} participant{meeting.participants.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+
+          {meeting.summary && (
+            <p className="text-xs text-slate-300 line-clamp-2 mb-2 leading-relaxed">{meeting.summary}</p>
+          )}
+
+          {meeting.key_points && meeting.key_points.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {meeting.key_points.slice(0, 3).map((point, i) => (
+                <span
+                  key={i}
+                  className="text-[10px] bg-slate-700/80 text-slate-300 px-2 py-0.5 rounded-full"
+                >
+                  {point.length > 45 ? point.substring(0, 45) + '…' : point}
+                </span>
+              ))}
+              {meeting.key_points.length > 3 && (
+                <span className="text-[10px] text-slate-500 px-1">
+                  +{meeting.key_points.length - 3} more
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </button>
   );
 }
