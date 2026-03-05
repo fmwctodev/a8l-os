@@ -1,19 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import {
-  Loader2,
-  ChevronUp,
-  ChevronDown,
-  Calendar as CalendarIcon,
-  Clock,
-  User as UserIcon,
-  SlidersHorizontal,
-  MoreVertical,
-  Eye,
-  Edit3,
-  XCircle,
-  Plus,
-} from 'lucide-react';
+import { Loader2, ChevronUp, ChevronDown, Calendar as CalendarIcon, Clock, User as UserIcon, SlidersHorizontal, MoreVertical, Eye, CreditCard as Edit3, XCircle, Plus } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getVisibleAppointments, updateAppointment, cancelAppointment } from '../../../services/appointments';
 import { getCalendars } from '../../../services/calendars';
@@ -84,15 +71,14 @@ export function AppointmentListView() {
     if (!currentUser?.organization_id) return;
 
     try {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const now = new Date();
       const ninetyDaysFromNow = new Date();
       ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90);
 
       const filters = {
         calendarIds: selectedCalendarIds.length > 0 ? selectedCalendarIds : undefined,
         userIds: selectedUserIds.length > 0 ? selectedUserIds : undefined,
-        startDate: thirtyDaysAgo.toISOString(),
+        startDate: now.toISOString(),
         endDate: ninetyDaysFromNow.toISOString(),
       };
 
