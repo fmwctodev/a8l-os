@@ -11,23 +11,7 @@ import { getDepartments } from '../../services/departments';
 import { getUsers } from '../../services/users';
 import { getMeetingTranscriptionsByContact } from '../../services/meetingTranscriptions';
 import type { Contact, ContactNote, ContactTask, Tag, CustomField, ContactCustomFieldValue, Department, User, MeetingTranscription } from '../../types';
-import {
-  ArrowLeft,
-  Loader2,
-  AlertCircle,
-  Mail,
-  Phone,
-  Building2,
-  MapPin,
-  Calendar,
-  User as UserIcon,
-  Edit2,
-  Trash2,
-  Archive,
-  RotateCcw,
-  MoreVertical,
-  Clock,
-} from 'lucide-react';
+import { ArrowLeft, Loader2, AlertCircle, Mail, Phone, Building2, MapPin, Calendar, User as UserIcon, CreditCard as Edit2, Trash2, Archive, RotateCcw, MoreVertical, Clock } from 'lucide-react';
 import { ContactModal } from '../../components/contacts/ContactModal';
 import { ContactOverviewTab } from '../../components/contacts/ContactOverviewTab';
 import { ContactNotesTab } from '../../components/contacts/ContactNotesTab';
