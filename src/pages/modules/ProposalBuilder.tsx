@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getProposalById, linkMeetingToProposal, unlinkMeetingFromProposal } from '../../services/proposals';
+import { callEdgeFunction } from '../../lib/edgeFunction';
 import { getMeetingTranscriptionsByContact, getGoogleMeetRecordingsForOrg } from '../../services/meetingTranscriptions';
 import { checkDriveConnectionStatus, syncMeetRecordings } from '../../services/googleMeet';
 import { parseFile, formatFileSize, ACCEPTED_TYPES, MAX_FILE_SIZE } from '../../utils/fileParser';
@@ -238,31 +239,21 @@ export function ProposalBuilder() {
       setIsGenerating(true);
       setGenerationError(null);
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/proposal-ai-generate`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
-          body: JSON.stringify({
-            proposal_id: proposal.id,
-            contact_id: proposal.contact_id,
-            opportunity_id: proposal.opportunity_id,
-            meeting_ids: selectedMeetings,
-            template_id: proposal.template_id,
-            custom_instructions: customInstructions || undefined,
-            sections_to_generate: selectedSections,
-            include_contact_history: includeContactHistory,
-            include_opportunity_data: includeOpportunityData,
-            user_id: user.id,
-            uploaded_documents: uploadedFiles.length > 0
-              ? uploadedFiles.map((f) => ({ name: f.name, text: f.text }))
-              : undefined,
-          }),
-        }
-      );
+      const response = await callEdgeFunction('proposal-ai-generate', {
+        proposal_id: proposal.id,
+        contact_id: proposal.contact_id,
+        opportunity_id: proposal.opportunity_id,
+        meeting_ids: selectedMeetings,
+        template_id: proposal.template_id,
+        custom_instructions: customInstructions || undefined,
+        sections_to_generate: selectedSections,
+        include_contact_history: includeContactHistory,
+        include_opportunity_data: includeOpportunityData,
+        user_id: user.id,
+        uploaded_documents: uploadedFiles.length > 0
+          ? uploadedFiles.map((f) => ({ name: f.name, text: f.text }))
+          : undefined,
+      });
 
       if (!response.ok) {
         const errorData = await response.json();
