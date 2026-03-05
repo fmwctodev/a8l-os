@@ -1,4 +1,4 @@
-import { Check, Loader2, RefreshCw, Plug } from 'lucide-react';
+import { Check, Loader2, RefreshCw, Plug, RotateCcw } from 'lucide-react';
 import type { IntegrationStatus, ConnectedAccount } from '../../services/reputationIntegration';
 
 interface ProviderDef {
@@ -44,6 +44,7 @@ interface IntegrationSectionProps {
   testing: boolean;
   testResult: boolean | null;
   connecting: boolean;
+  canReconnect: boolean;
   onTestConnection: () => void;
   onDisconnect: () => void;
   onConnect: (provider: 'google_business' | 'facebook') => void;
@@ -54,6 +55,7 @@ export function IntegrationSection({
   testing,
   testResult,
   connecting,
+  canReconnect,
   onTestConnection,
   onDisconnect,
   onConnect,
@@ -98,6 +100,21 @@ export function IntegrationSection({
                       <Check className="w-3 h-3" />
                       Connected
                     </span>
+                    {canReconnect && (
+                      <button
+                        onClick={() => onConnect(provider.key)}
+                        disabled={connecting}
+                        title="Re-authorize this account"
+                        className="flex items-center gap-1.5 px-2.5 py-1 border border-amber-300 text-amber-700 bg-amber-50 text-xs font-medium rounded-full hover:bg-amber-100 transition-colors disabled:opacity-50"
+                      >
+                        {connecting ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <RotateCcw className="w-3 h-3" />
+                        )}
+                        Reconnect
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <button

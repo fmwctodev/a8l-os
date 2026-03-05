@@ -209,6 +209,7 @@ export function ReputationSettingsTab() {
             testing={testing}
             testResult={testResult}
             connecting={connecting}
+            canReconnect={['SuperAdmin', 'Admin'].includes(user?.role?.name || '')}
             onTestConnection={handleTestConnection}
             onDisconnect={handleDisconnect}
             onConnect={handleConnect}
