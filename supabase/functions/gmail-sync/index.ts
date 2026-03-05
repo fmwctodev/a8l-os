@@ -66,13 +66,13 @@ Deno.serve(async (req: Request) => {
 
     await supabase
       .from("gmail_sync_state")
-      .update({
+      .upsert({
+        organization_id: orgId,
+        user_id: userId,
         sync_status: "syncing",
         error_message: null,
         updated_at: new Date().toISOString(),
-      })
-      .eq("organization_id", orgId)
-      .eq("user_id", userId);
+      }, { onConflict: "organization_id,user_id" });
 
     const { data: tokenData } = await supabase
       .from("gmail_oauth_tokens")
@@ -166,16 +166,16 @@ Deno.serve(async (req: Request) => {
     const now = new Date().toISOString();
     await supabase
       .from("gmail_sync_state")
-      .update({
+      .upsert({
+        organization_id: orgId,
+        user_id: userId,
         sync_status: "idle",
         last_full_sync_at: now,
         last_incremental_sync_at: now,
         history_id: historyId,
         error_message: null,
         updated_at: now,
-      })
-      .eq("organization_id", orgId)
-      .eq("user_id", userId);
+      }, { onConflict: "organization_id,user_id" });
 
     await supabase
       .from("user_connected_accounts")
@@ -211,13 +211,13 @@ Deno.serve(async (req: Request) => {
         });
         await supabase
           .from("gmail_sync_state")
-          .update({
+          .upsert({
+            organization_id: orgId,
+            user_id: userId,
             sync_status: "error",
             error_message: (error as Error).message,
             updated_at: new Date().toISOString(),
-          })
-          .eq("organization_id", orgId)
-          .eq("user_id", userId);
+          }, { onConflict: "organization_id,user_id" });
       } catch {
         // best-effort error logging
       }

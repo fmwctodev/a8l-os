@@ -175,9 +175,7 @@ async function runFullSync(
 
   await supabase
     .from("gmail_sync_state")
-    .update({ sync_status: "syncing", error_message: null, updated_at: new Date().toISOString() })
-    .eq("organization_id", orgId)
-    .eq("user_id", userId);
+    .upsert({ organization_id: orgId, user_id: userId, sync_status: "syncing", error_message: null, updated_at: new Date().toISOString() }, { onConflict: "organization_id,user_id" });
 
   const accessToken = await getAccessToken(
     supabase,
@@ -236,16 +234,16 @@ async function runFullSync(
   const now = new Date().toISOString();
   await supabase
     .from("gmail_sync_state")
-    .update({
+    .upsert({
+      organization_id: orgId,
+      user_id: userId,
       sync_status: "idle",
       last_full_sync_at: now,
       last_incremental_sync_at: now,
       history_id: historyId,
       error_message: null,
       updated_at: now,
-    })
-    .eq("organization_id", orgId)
-    .eq("user_id", userId);
+    }, { onConflict: "organization_id,user_id" });
 
   await supabase
     .from("user_connected_accounts")
@@ -357,15 +355,15 @@ async function runIncrementalSync(
   const now = new Date().toISOString();
   await supabase
     .from("gmail_sync_state")
-    .update({
+    .upsert({
+      organization_id: orgId,
+      user_id: userId,
       history_id: latestHistoryId,
       last_incremental_sync_at: now,
       sync_status: "idle",
       error_message: null,
       updated_at: now,
-    })
-    .eq("organization_id", orgId)
-    .eq("user_id", userId);
+    }, { onConflict: "organization_id,user_id" });
 
   await supabase
     .from("user_connected_accounts")
