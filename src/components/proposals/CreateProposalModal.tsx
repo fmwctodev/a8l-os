@@ -36,7 +36,6 @@ export function CreateProposalModal({
   const [selectedTemplate, setSelectedTemplate] = useState<ProposalTemplate | null>(null);
   const [title, setTitle] = useState('');
   const [validUntil, setValidUntil] = useState('');
-  const [useAI, setUseAI] = useState(true);
 
   useEffect(() => {
     if (!user?.organization_id) return;
@@ -131,11 +130,7 @@ export function CreateProposalModal({
         template_id: selectedTemplate?.id || null,
       });
 
-      if (useAI) {
-        navigate(`/proposals/${proposal.id}/build`);
-      } else {
-        navigate(`/proposals/${proposal.id}`);
-      }
+      navigate(`/proposals/${proposal.id}/build`);
 
       onCreated();
     } catch (err) {
@@ -343,20 +338,6 @@ export function CreateProposalModal({
                       )}
                     </button>
                   ))}
-                  <button
-                    onClick={() => setSelectedTemplate(null)}
-                    className={`p-4 rounded-lg border text-left transition-colors ${
-                      selectedTemplate === null
-                        ? 'border-cyan-500 bg-cyan-500/10'
-                        : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <FileText className="w-4 h-4 text-slate-400" />
-                      <span className="text-white font-medium text-sm">Blank</span>
-                    </div>
-                    <p className="text-xs text-slate-400">Start from scratch</p>
-                  </button>
                 </div>
               </div>
 
@@ -374,25 +355,6 @@ export function CreateProposalModal({
                 />
               </div>
 
-              <div className="p-4 rounded-lg border border-cyan-500/30 bg-cyan-500/5">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={useAI}
-                    onChange={(e) => setUseAI(e.target.checked)}
-                    className="w-5 h-5 rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500/50"
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-cyan-400" />
-                      <span className="text-white font-medium">Use AI to generate content</span>
-                    </div>
-                    <p className="text-sm text-slate-400 mt-1">
-                      Open the AI-powered builder to generate proposal content from meeting notes and contact history
-                    </p>
-                  </div>
-                </label>
-              </div>
             </div>
           )}
         </div>
@@ -412,12 +374,10 @@ export function CreateProposalModal({
             >
               {isSubmitting ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
-              ) : useAI ? (
-                <Sparkles className="w-4 h-4" />
               ) : (
-                <FileText className="w-4 h-4" />
+                <Sparkles className="w-4 h-4" />
               )}
-              {useAI ? 'Continue to Builder' : 'Create Proposal'}
+              Continue to Builder
             </button>
           )}
         </div>
