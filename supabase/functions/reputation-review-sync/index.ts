@@ -133,17 +133,23 @@ function normalizeInboxReview(r: InboxReview, accountId: string): NormalizedRevi
   const platform = r.platform || "unknown";
 
   let rating = 3;
-  if (r.rating !== undefined) {
-    rating = parseStarRating(r.rating);
-  } else if (r.starRating !== undefined) {
-    rating = parseStarRating(r.starRating);
+  const isFacebook = (r.platform || "").toLowerCase() === "facebook";
+
+  if (isFacebook && r.recommendation_type !== undefined) {
+    rating = r.recommendation_type === "positive" ? 5 : r.recommendation_type === "negative" ? 1 : 3;
+  } else if (isFacebook && r.has_rating === false) {
+    rating = r.recommendation_type === "positive" ? 5 : r.recommendation_type === "negative" ? 1 : 3;
   } else if (r.recommendation_type === "positive") {
     rating = 5;
   } else if (r.recommendation_type === "negative") {
     rating = 1;
-  } else if (r.has_rating === false) {
-    rating = 3;
+  } else if (r.rating !== undefined) {
+    rating = parseStarRating(r.rating);
+  } else if (r.starRating !== undefined) {
+    rating = parseStarRating(r.starRating);
   }
+
+  console.log(`[reputation-review-sync] rating fields: platform=${r.platform}, recommendation_type=${r.recommendation_type}, has_rating=${r.has_rating}, raw_rating=${r.rating}, resolved_rating=${rating}`);
 
   const reviewerName =
     r.reviewer?.name ||
