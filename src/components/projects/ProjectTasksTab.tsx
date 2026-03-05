@@ -9,8 +9,6 @@ import {
   X,
   Loader2,
   ChevronRight,
-  LayoutGrid,
-  List,
 } from 'lucide-react';
 import type { ProjectTask, User } from '../../types';
 import { getTasksByProject, createTask, updateTask, completeTask } from '../../services/projectTasks';
@@ -49,7 +47,6 @@ const PRIORITY_DOTS: Record<string, string> = {
 export function ProjectTasksTab({ projectId, orgId, users, canManageTasks, currentUserId }: Props) {
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [showAddForm, setShowAddForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [newTask, setNewTask] = useState({
@@ -121,7 +118,6 @@ export function ProjectTasksTab({ projectId, orgId, users, canManageTasks, curre
   }
 
   const rootTasks = tasks.filter((t) => !t.parent_task_id);
-  const boardColumns = ['todo', 'in_progress', 'in_review', 'completed'];
 
   if (loading) {
     return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-500" /></div>;
@@ -130,21 +126,7 @@ export function ProjectTasksTab({ projectId, orgId, users, canManageTasks, curre
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setViewMode('board')}
-            className={`p-2 rounded-lg ${viewMode === 'board' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setViewMode('list')}
-            className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}
-          >
-            <List className="w-4 h-4" />
-          </button>
-          <span className="text-sm text-slate-400 ml-2">{tasks.length} task{tasks.length !== 1 ? 's' : ''}</span>
-        </div>
+        <span className="text-sm text-slate-400">{tasks.length} task{tasks.length !== 1 ? 's' : ''}</span>
         {canManageTasks && (
           <button
             onClick={() => setShowAddForm(true)}
@@ -206,105 +188,25 @@ export function ProjectTasksTab({ projectId, orgId, users, canManageTasks, curre
         </form>
       )}
 
-      {viewMode === 'board' ? (
-        <div className="grid grid-cols-4 gap-4">
-          {boardColumns.map((col) => {
-            const colTasks = rootTasks.filter((t) => t.status === col);
-            return (
-              <div key={col} className="space-y-2">
-                <div className="flex items-center gap-2 px-2 pb-2">
-                  <div className={`w-2.5 h-2.5 rounded-full ${STATUS_COLORS[col]}`} />
-                  <span className="text-xs font-medium text-slate-400">{STATUS_LABELS[col]}</span>
-                  <span className="text-xs text-slate-600">{colTasks.length}</span>
-                </div>
-                {colTasks.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    allTasks={tasks}
-                    canManage={canManageTasks}
-                    onComplete={handleComplete}
-                    onStatusChange={handleStatusChange}
-                  />
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="space-y-1">
-          {rootTasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              allTasks={tasks}
-              canManage={canManageTasks}
-              onComplete={handleComplete}
-              onStatusChange={handleStatusChange}
-            />
-          ))}
-          {rootTasks.length === 0 && (
-            <div className="text-center py-12 text-slate-500 text-sm">No tasks yet</div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TaskCard({
-  task,
-  allTasks,
-  canManage,
-  onComplete,
-  onStatusChange,
-}: {
-  task: ProjectTask;
-  allTasks: ProjectTask[];
-  canManage: boolean;
-  onComplete: (id: string) => void;
-  onStatusChange: (id: string, status: string) => void;
-}) {
-  const today = new Date().toISOString().split('T')[0];
-  const overdue = task.due_date && task.due_date < today && task.status !== 'completed' && task.status !== 'cancelled';
-  const dep = task.depends_on_task_id ? allTasks.find((t) => t.id === task.depends_on_task_id) : null;
-  const isBlocked = dep && dep.status !== 'completed';
-
-  return (
-    <div className={`bg-slate-800/80 border border-slate-700 rounded-lg p-3 space-y-2 ${overdue ? 'border-l-2 border-l-red-500' : ''}`}>
-      <div className="flex items-start gap-2">
-        {canManage && task.status !== 'completed' ? (
-          <button onClick={() => onComplete(task.id)} className="mt-0.5 text-slate-500 hover:text-emerald-400">
-            <Circle className="w-4 h-4" />
-          </button>
-        ) : task.status === 'completed' ? (
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5" />
-        ) : null}
-        <span className={`text-sm flex-1 ${task.status === 'completed' ? 'text-slate-500 line-through' : 'text-white'}`}>
-          {task.title}
-        </span>
-        <div className={`w-2 h-2 rounded-full ${PRIORITY_DOTS[task.priority]}`} />
-      </div>
-      <div className="flex items-center gap-2 flex-wrap">
-        {task.assigned_user && (
-          <span className="text-[10px] text-slate-500">{task.assigned_user.name}</span>
-        )}
-        {task.due_date && (
-          <span className={`text-[10px] flex items-center gap-0.5 ${overdue ? 'text-red-400' : 'text-slate-500'}`}>
-            <Clock className="w-3 h-3" />
-            {new Date(task.due_date).toLocaleDateString()}
-          </span>
-        )}
-        {isBlocked && (
-          <span className="text-[10px] text-amber-400 flex items-center gap-0.5">
-            <AlertTriangle className="w-3 h-3" />
-            Blocked
-          </span>
+      <div className="space-y-1">
+        {rootTasks.map((task) => (
+          <TaskRow
+            key={task.id}
+            task={task}
+            allTasks={tasks}
+            canManage={canManageTasks}
+            onComplete={handleComplete}
+            onStatusChange={handleStatusChange}
+          />
+        ))}
+        {rootTasks.length === 0 && (
+          <div className="text-center py-12 text-slate-500 text-sm">No tasks yet</div>
         )}
       </div>
     </div>
   );
 }
+
 
 function TaskRow({
   task,
