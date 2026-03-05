@@ -569,14 +569,14 @@ export function ProposalBuilder() {
                   </div>
                 )}
 
-                {!driveConnected && driveConnected !== null && (
+                  {!driveConnected && driveConnected !== null && filteredGoogleMeetRecordings.length === 0 && (
                   <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-6 text-center">
                     <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-slate-700/60 flex items-center justify-center">
                       <WifiOff className="w-6 h-6 text-slate-400" />
                     </div>
                     <p className="text-white font-medium mb-1">Google Drive Not Connected</p>
                     <p className="text-slate-400 text-sm mb-4">
-                      Connect Google Drive to access your Meet recordings, summaries, and action items.
+                      Connect Google Drive to sync new Meet recordings, summaries, and action items.
                     </p>
                     <Link
                       to="/settings/integrations"
@@ -588,7 +588,12 @@ export function ProposalBuilder() {
                   </div>
                 )}
 
-                {driveConnected && (
+                {loadingRecordings ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-5 h-5 text-slate-500 animate-spin mr-2" />
+                    <span className="text-sm text-slate-500">Loading recordings...</span>
+                  </div>
+                ) : filteredGoogleMeetRecordings.length > 0 ? (
                   <>
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -600,39 +605,31 @@ export function ProposalBuilder() {
                         className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500/60"
                       />
                     </div>
-
-                    {loadingRecordings ? (
-                      <div className="flex items-center justify-center py-10">
-                        <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
-                        <span className="ml-2 text-sm text-slate-400">Loading recordings...</span>
-                      </div>
-                    ) : filteredGoogleMeetRecordings.length === 0 ? (
-                      <div className="text-center py-10 rounded-xl border border-slate-700/50 bg-slate-800/30">
-                        <Mic className="w-8 h-8 text-slate-600 mx-auto mb-3" />
-                        <p className="text-slate-400 text-sm font-medium">No recordings found</p>
-                        <p className="text-slate-500 text-xs mt-1">
-                          {recordingSearch
-                            ? 'Try a different search term'
-                            : 'Use "Sync from Drive" to import your latest Meet recordings'}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
-                        {filteredGoogleMeetRecordings.map((recording) => (
-                          <MeetingCard
-                            key={recording.id}
-                            meeting={recording}
-                            selected={selectedMeetings.includes(recording.id)}
-                            onToggle={() => toggleMeeting(recording.id)}
-                            formatDate={formatDate}
-                            formatDuration={formatDuration}
-                            badge="Google Meet"
-                          />
-                        ))}
-                      </div>
-                    )}
+                    <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
+                      {filteredGoogleMeetRecordings.map((recording) => (
+                        <MeetingCard
+                          key={recording.id}
+                          meeting={recording}
+                          selected={selectedMeetings.includes(recording.id)}
+                          onToggle={() => toggleMeeting(recording.id)}
+                          formatDate={formatDate}
+                          formatDuration={formatDuration}
+                          badge="Google Meet"
+                        />
+                      ))}
+                    </div>
                   </>
-                )}
+                ) : driveConnected && !loadingRecordings ? (
+                  <div className="text-center py-10 rounded-xl border border-slate-700/50 bg-slate-800/30">
+                    <Mic className="w-8 h-8 text-slate-600 mx-auto mb-3" />
+                    <p className="text-slate-400 text-sm font-medium">No recordings found</p>
+                    <p className="text-slate-500 text-xs mt-1">
+                      {recordingSearch
+                        ? 'Try a different search term'
+                        : 'Use "Sync from Drive" to import your latest Meet recordings'}
+                    </p>
+                  </div>
+                ) : null}
 
                 {driveConnected === null && (
                   <div className="flex items-center justify-center py-8">
