@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Check,
   X,
   Search,
-  ExternalLink,
   Calendar,
   RefreshCw,
   Clock,
+  Link2,
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
@@ -17,11 +16,17 @@ import {
   type TeamConnectionItem,
 } from '../../../services/googleCalendarConnections';
 import { getSyncStatus } from '../../../services/googleCalendarEvents';
+import {
+  initiateUnifiedGoogleOAuth,
+  openUnifiedGoogleOAuthPopup,
+} from '../../../services/googleOAuthUnified';
+import { useToast } from '../../../contexts/ToastContext';
 
 export function ConnectionsTab() {
-  const { user, hasPermission } = useAuth();
-  const navigate = useNavigate();
+  const { user, isSuperAdmin } = useAuth();
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
   const [connection, setConnection] = useState<GoogleConnection | null>(null);
   const [teamConnections, setTeamConnections] = useState<TeamConnectionItem[]>([]);
   const [teamSearch, setTeamSearch] = useState('');
@@ -31,14 +36,12 @@ export function ConnectionsTab() {
     pendingJobs: number;
   } | null>(null);
 
-  const isAdmin = hasPermission('calendars.manage_all');
-
   useEffect(() => {
     async function load() {
       try {
         const [conn] = await Promise.all([
           getGoogleConnection().catch(() => ({ connected: false }) as GoogleConnection),
-          ...(isAdmin ? [loadTeamConnections()] : []),
+          ...(isSuperAdmin ? [loadTeamConnections()] : []),
         ]);
         setConnection(conn);
         if (user?.id) {
@@ -51,7 +54,30 @@ export function ConnectionsTab() {
       }
     }
     load();
-  }, [user, isAdmin]);
+  }, [user, isSuperAdmin]);
+
+  async function handleConnect() {
+    setConnecting(true);
+    try {
+      const authUrl = await initiateUnifiedGoogleOAuth();
+      const result = await openUnifiedGoogleOAuthPopup(authUrl);
+      if (result.success) {
+        showToast('Google Calendar connected successfully', 'success');
+        const conn = await getGoogleConnection().catch(() => ({ connected: false }) as GoogleConnection);
+        setConnection(conn);
+        if (user?.id) {
+          getSyncStatus(user.id).then(setSyncStatus).catch(() => {});
+        }
+      } else {
+        showToast(result.error || 'Failed to connect Google Calendar', 'error');
+      }
+    } catch (error) {
+      console.error('Failed to connect:', error);
+      showToast('Failed to connect Google Calendar', 'error');
+    } finally {
+      setConnecting(false);
+    }
+  }
 
   async function loadTeamConnections() {
     try {
@@ -99,15 +125,22 @@ export function ConnectionsTab() {
               </div>
             )}
             <p className="text-slate-500 text-sm mt-1">
-              Manage your Google Calendar connection in your profile settings.
+              {connection?.connected
+                ? 'Your Google Calendar is connected and syncing.'
+                : 'Connect your Google Calendar to enable two-way sync.'}
             </p>
           </div>
           <button
-            onClick={() => navigate('/settings/profile?tab=connected-accounts')}
-            className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors flex items-center gap-2 text-sm font-medium whitespace-nowrap"
+            onClick={handleConnect}
+            disabled={connecting}
+            className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors flex items-center gap-2 text-sm font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <ExternalLink className="w-4 h-4" />
-            Go to My Profile
+            {connecting ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Link2 className="w-4 h-4" />
+            )}
+            {connecting ? 'Connecting...' : connection?.connected ? 'Reconnect' : 'Connect'}
           </button>
         </div>
 
@@ -155,7 +188,7 @@ export function ConnectionsTab() {
         )}
       </div>
 
-      {isAdmin && (
+      {isSuperAdmin && (
         <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-medium text-white">Team Connections</h3>
