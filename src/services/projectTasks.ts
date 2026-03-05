@@ -5,8 +5,7 @@ import { logProjectActivity } from './projectActivityLog';
 const TASK_SELECT = `
   *,
   assigned_user:users!project_tasks_assigned_user_id_fkey(*),
-  created_by_user:users!project_tasks_created_by_fkey(*),
-  dependency:project_tasks!project_tasks_depends_on_task_id_fkey(id, title, status)
+  created_by_user:users!project_tasks_created_by_fkey(*)
 `;
 
 export async function getTasksByProject(projectId: string): Promise<ProjectTask[]> {
