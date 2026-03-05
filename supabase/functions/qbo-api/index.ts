@@ -220,6 +220,32 @@ async function createQBOItem(
   return response.Item;
 }
 
+async function listQBOItems(
+  accessToken: string,
+  realmId: string
+): Promise<Array<{ Id: string; Name: string; Description?: string; UnitPrice?: number; Type: string; Active: boolean }>> {
+  const allItems: Array<{ Id: string; Name: string; Description?: string; UnitPrice?: number; Type: string; Active: boolean }> = [];
+  let startPosition = 1;
+  const maxResults = 1000;
+
+  while (true) {
+    const query = `SELECT * FROM Item WHERE Active = true STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
+    const response = await qboRequest(
+      accessToken,
+      realmId,
+      `/query?query=${encodeURIComponent(query)}`
+    ) as { QueryResponse: { Item?: Array<{ Id: string; Name: string; Description?: string; UnitPrice?: number; Type: string; Active: boolean }> } };
+
+    const batch = response.QueryResponse.Item || [];
+    allItems.push(...batch);
+
+    if (batch.length < maxResults) break;
+    startPosition += maxResults;
+  }
+
+  return allItems;
+}
+
 async function findOrCreateItem(
   accessToken: string,
   realmId: string,
@@ -654,6 +680,11 @@ Deno.serve(async (req: Request) => {
           connection.realm_id,
           userData.organization_id
         );
+        break;
+      }
+
+      case "list_items": {
+        result = await listQBOItems(accessToken, connection.realm_id);
         break;
       }
 

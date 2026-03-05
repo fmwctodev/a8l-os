@@ -57,3 +57,16 @@ export async function voidQBOInvoice(invoiceId: string, syncToken: string): Prom
 export async function syncQBOInvoices(): Promise<{ synced: number; updated: number; total: number }> {
   return callQboApi('sync_invoices');
 }
+
+export interface QBOItem {
+  Id: string;
+  Name: string;
+  Description?: string;
+  UnitPrice?: number;
+  Type: string;
+  Active: boolean;
+}
+
+export async function getQBOItems(): Promise<QBOItem[]> {
+  return callQboApi('list_items');
+}

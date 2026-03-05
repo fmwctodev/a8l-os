@@ -4,6 +4,8 @@ import { createInvoice } from '../../services/invoices';
 import { getProducts } from '../../services/products';
 import { getContacts, createContact } from '../../services/contacts';
 import { getOpportunities } from '../../services/opportunities';
+import { getQBOItems, type QBOItem } from '../../services/qboApi';
+import { isQBOConnected } from '../../services/qboAuth';
 import type { Contact, Product, Opportunity, CreateInvoiceLineItem, DiscountType } from '../../types';
 import { X, Loader2, FileText, Plus, Trash2, Search, User as UserIcon, ArrowLeft } from 'lucide-react';
 
@@ -27,6 +29,9 @@ export function CreateInvoiceModal({
   const { user } = useAuth();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [qboItems, setQboItems] = useState<QBOItem[]>([]);
+  const [qboConnected, setQboConnected] = useState(false);
+  const [qboItemsLoading, setQboItemsLoading] = useState(false);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -74,14 +79,28 @@ export function CreateInvoiceModal({
   const loadData = async () => {
     if (!user) return;
     try {
-      const [contactData, productData, oppData] = await Promise.all([
+      const [contactData, productData, oppData, qboStatus] = await Promise.all([
         getContacts(user.organization_id),
         getProducts({ active: true }),
         getOpportunities({ status: ['open'] }),
+        isQBOConnected(),
       ]);
       setContacts(contactData);
       setProducts(productData);
       setOpportunities(oppData.data || []);
+      setQboConnected(qboStatus);
+
+      if (qboStatus) {
+        setQboItemsLoading(true);
+        try {
+          const items = await getQBOItems();
+          setQboItems(items);
+        } catch (err) {
+          console.error('Failed to load QBO items:', err);
+        } finally {
+          setQboItemsLoading(false);
+        }
+      }
     } catch (err) {
       console.error('Failed to load data:', err);
     } finally {
@@ -121,6 +140,30 @@ export function CreateInvoiceModal({
         unit_price: product.price_amount,
       },
     ]);
+  };
+
+  const addQBOItemToLineItems = (item: QBOItem) => {
+    setLineItems([
+      ...lineItems.filter((li) => li.description || li.unit_price > 0),
+      {
+        id: crypto.randomUUID(),
+        description: item.Name,
+        quantity: 1,
+        unit_price: item.UnitPrice ?? 0,
+      },
+    ]);
+  };
+
+  const handleProductSelect = (value: string) => {
+    if (!value) return;
+    if (value.startsWith('qbo:')) {
+      const qboId = value.slice(4);
+      const item = qboItems.find((i) => i.Id === qboId);
+      if (item) addQBOItemToLineItems(item);
+    } else {
+      const product = products.find((p) => p.id === value);
+      if (product) addProductToLineItems(product);
+    }
   };
 
   const calculateSubtotal = () => {
@@ -483,20 +526,33 @@ export function CreateInvoiceModal({
               <div className="flex items-center gap-2">
                 <select
                   onChange={(e) => {
-                    const product = products.find((p) => p.id === e.target.value);
-                    if (product) {
-                      addProductToLineItems(product);
-                      e.target.value = '';
-                    }
+                    handleProductSelect(e.target.value);
+                    e.target.value = '';
                   }}
-                  className="px-3 py-1.5 text-sm rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  disabled={qboItemsLoading}
+                  className="px-3 py-1.5 text-sm rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 disabled:opacity-60"
                 >
-                  <option value="">Add from products...</option>
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.name} - {formatCurrency(product.price_amount)}
-                    </option>
-                  ))}
+                  <option value="">
+                    {qboItemsLoading ? 'Loading products...' : 'Add from products...'}
+                  </option>
+                  {products.length > 0 && (
+                    <optgroup label="Local Products">
+                      {products.map((product) => (
+                        <option key={product.id} value={product.id}>
+                          {product.name} - {formatCurrency(product.price_amount)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {qboConnected && qboItems.length > 0 && (
+                    <optgroup label="QuickBooks Products">
+                      {qboItems.map((item) => (
+                        <option key={item.Id} value={`qbo:${item.Id}`}>
+                          {item.Name}{item.UnitPrice != null ? ` - ${formatCurrency(item.UnitPrice)}` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
                 <button
                   type="button"
