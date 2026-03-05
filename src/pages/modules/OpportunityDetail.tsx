@@ -1,30 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import {
-  ArrowLeft,
-  DollarSign,
-  User,
-  Calendar,
-  Tag,
-  Edit2,
-  Trophy,
-  XCircle,
-  RotateCcw,
-  Clock,
-  MessageSquare,
-  CheckSquare,
-  FileText,
-  ExternalLink,
-  Plus,
-  Trash2,
-  CreditCard,
-  Send,
-  Copy,
-  MoreVertical,
-  Link as LinkIcon,
-  FolderKanban,
-  Lock,
-} from 'lucide-react';
+import { ArrowLeft, DollarSign, User, Calendar, Tag, CreditCard as Edit2, Trophy, XCircle, RotateCcw, Clock, MessageSquare, CheckSquare, FileText, ExternalLink, Plus, Trash2, CreditCard, Send, Copy, MoreVertical, Link as LinkIcon, FolderKanban, Lock } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermission } from '../../hooks/usePermission';
 import type {
