@@ -14,7 +14,13 @@ interface InboxReview {
   id?: string;
   reviewId?: string;
   accountId?: string;
+  accountUsername?: string;
   platform?: string;
+  reviewer?: {
+    id?: string | null;
+    name?: string;
+    profileImage?: string | null;
+  };
   reviewerName?: string;
   reviewerDisplayName?: string;
   reviewerProfileImage?: string;
@@ -27,13 +33,17 @@ interface InboxReview {
   message?: string;
   recommendation_type?: string;
   has_rating?: boolean;
+  created?: string;
   createdAt?: string;
   createTime?: string;
   created_time?: string;
   updatedAt?: string;
+  hasReply?: boolean;
   reply?: {
+    id?: string;
     text?: string;
     comment?: string;
+    created?: string;
     createdAt?: string;
     updateTime?: string;
   } | null;
@@ -122,11 +132,13 @@ function normalizeInboxReview(r: InboxReview, accountId: string): NormalizedRevi
   }
 
   const reviewerName =
+    r.reviewer?.name ||
     r.reviewerName ||
     r.reviewerDisplayName ||
     "Anonymous";
 
   const reviewerProfileImage =
+    r.reviewer?.profileImage ||
     r.reviewerProfileImage ||
     r.reviewerPhotoUrl ||
     null;
@@ -134,6 +146,7 @@ function normalizeInboxReview(r: InboxReview, accountId: string): NormalizedRevi
   const text = r.text || r.reviewText || r.comment || r.message || null;
 
   const created =
+    r.created ||
     r.createdAt ||
     r.createTime ||
     r.created_time ||
@@ -150,7 +163,7 @@ function normalizeInboxReview(r: InboxReview, accountId: string): NormalizedRevi
     : null;
 
   const replyCreatedAt = replyObj
-    ? (replyObj.createdAt || (replyObj as Record<string, string>).updateTime || null)
+    ? (replyObj.created || replyObj.createdAt || (replyObj as Record<string, string>).updateTime || null)
     : null;
 
   const reviewUrl = r.reviewUrl || r.url || null;
@@ -168,7 +181,7 @@ function normalizeInboxReview(r: InboxReview, accountId: string): NormalizedRevi
     rating,
     text,
     created,
-    hasReply: !!replyText,
+    hasReply: r.hasReply ?? !!replyText,
     replyText,
     replyCreatedAt,
     reviewUrl,
@@ -203,13 +216,13 @@ async function fetchInboxReviews(
     }
 
     const data = await res.json();
-    const reviews: InboxReview[] = data.reviews || data.items || data.data || [];
+    const reviews: InboxReview[] = data.data || data.reviews || data.items || [];
 
     for (const r of reviews) {
       normalized.push(normalizeInboxReview(r, accountId));
     }
 
-    cursor = data.nextCursor || data.cursor || data.nextPageToken;
+    cursor = data.pagination?.nextCursor || data.nextCursor || data.cursor || data.nextPageToken;
     if (!cursor || reviews.length === 0) break;
     page++;
   }
