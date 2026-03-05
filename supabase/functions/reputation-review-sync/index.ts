@@ -19,12 +19,26 @@ interface InboxReview {
   reviewer?: {
     id?: string | null;
     name?: string;
+    displayName?: string;
     profileImage?: string | null;
+  };
+  author?: {
+    id?: string | null;
+    name?: string;
+    displayName?: string;
+    profilePhoto?: string | null;
+    profileImage?: string | null;
+  };
+  from?: {
+    id?: string | null;
+    name?: string;
   };
   reviewerName?: string;
   reviewerDisplayName?: string;
   reviewerProfileImage?: string;
   reviewerPhotoUrl?: string;
+  author_name?: string;
+  name?: string;
   rating?: number | string;
   starRating?: string;
   text?: string;
@@ -133,12 +147,22 @@ function normalizeInboxReview(r: InboxReview, accountId: string): NormalizedRevi
 
   const reviewerName =
     r.reviewer?.name ||
+    r.reviewer?.displayName ||
+    r.author?.name ||
+    r.author?.displayName ||
+    r.from?.name ||
     r.reviewerName ||
     r.reviewerDisplayName ||
+    r.author_name ||
+    r.name ||
     "Anonymous";
+
+  console.log(`[reputation-review-sync] reviewer fields: reviewer=${JSON.stringify(r.reviewer)}, author=${JSON.stringify(r.author)}, from=${JSON.stringify(r.from)}, reviewerName=${r.reviewerName}, name=${r.name}, resolved=${reviewerName}`);
 
   const reviewerProfileImage =
     r.reviewer?.profileImage ||
+    r.author?.profileImage ||
+    r.author?.profilePhoto ||
     r.reviewerProfileImage ||
     r.reviewerPhotoUrl ||
     null;
