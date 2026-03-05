@@ -61,15 +61,17 @@ export function ConnectionsTab() {
     try {
       const authUrl = await initiateUnifiedGoogleOAuth();
       const result = await openUnifiedGoogleOAuthPopup(authUrl);
-      if (result.success) {
+
+      const conn = await getGoogleConnection().catch(() => ({ connected: false }) as GoogleConnection);
+      setConnection(conn);
+
+      if (result.success || conn.connected) {
         showToast('Google Calendar connected successfully', 'success');
-        const conn = await getGoogleConnection().catch(() => ({ connected: false }) as GoogleConnection);
-        setConnection(conn);
         if (user?.id) {
           getSyncStatus(user.id).then(setSyncStatus).catch(() => {});
         }
-      } else {
-        showToast(result.error || 'Failed to connect Google Calendar', 'error');
+      } else if (result.error && result.error !== 'Popup closed') {
+        showToast(result.error, 'error');
       }
     } catch (error) {
       console.error('Failed to connect:', error);

@@ -58,23 +58,35 @@ export function openUnifiedGoogleOAuthPopup(authUrl: string): Promise<{ success:
       `width=${width},height=${height},left=${left},top=${top}`
     );
 
+    let resolved = false;
+    let checkClosed: ReturnType<typeof setInterval>;
+
+    const safeResolve = (value: { success: boolean; email?: string; error?: string }) => {
+      if (!resolved) {
+        resolved = true;
+        clearInterval(checkClosed);
+        window.removeEventListener('message', handleMessage);
+        resolve(value);
+      }
+    };
+
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'google-oauth-success') {
-        window.removeEventListener('message', handleMessage);
-        resolve({ success: true, email: event.data.email });
+        safeResolve({ success: true, email: event.data.email });
       } else if (event.data?.type === 'google-oauth-error') {
-        window.removeEventListener('message', handleMessage);
-        resolve({ success: false, error: event.data.error });
+        safeResolve({ success: false, error: event.data.error });
       }
     };
 
     window.addEventListener('message', handleMessage);
 
-    const checkClosed = setInterval(() => {
-      if (popup?.closed) {
-        clearInterval(checkClosed);
-        window.removeEventListener('message', handleMessage);
-        resolve({ success: false, error: 'Popup closed' });
+    checkClosed = setInterval(() => {
+      try {
+        if (popup?.closed) {
+          safeResolve({ success: false, error: 'Popup closed' });
+        }
+      } catch {
+        safeResolve({ success: false, error: 'Popup closed' });
       }
     }, 500);
   });
