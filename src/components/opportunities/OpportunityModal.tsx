@@ -571,13 +571,23 @@ export function OpportunityModal({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm text-slate-400 mb-1">Source</label>
-              <input
-                type="text"
+              <select
                 value={formData.source}
                 onChange={(e) => setFormData(prev => ({ ...prev, source: e.target.value }))}
-                placeholder="e.g., Website, Referral"
                 className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white"
-              />
+              >
+                <option value="">Select source...</option>
+                <option value="cold_call">Cold Call</option>
+                <option value="cold_email">Cold Email</option>
+                <option value="google">Google</option>
+                <option value="google_ads">Google Ads</option>
+                <option value="import">Import</option>
+                <option value="linkedin">Linkedin</option>
+                <option value="manual">Manual Entry</option>
+                <option value="meta">Meta</option>
+                <option value="meta_ads">Meta Ads</option>
+                <option value="website">Website</option>
+              </select>
             </div>
 
             <div>
