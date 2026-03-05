@@ -343,7 +343,7 @@ export function Opportunities() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full min-w-0 flex flex-col">
       <div className="flex-none p-4 border-b border-slate-700">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -504,7 +504,7 @@ export function Opportunities() {
       {stats && <PipelineSummaryStrip stats={stats} isVisible={showTotals} />}
 
       {viewMode === 'board' && boardData && (
-        <div className="flex-1 overflow-x-auto p-4">
+        <div className="flex-1 min-h-0 overflow-x-auto p-4">
           <div className="flex gap-4 h-full min-w-max">
             {boardData.stages.map(stage => {
               const stageValue = stage.opportunities.reduce(

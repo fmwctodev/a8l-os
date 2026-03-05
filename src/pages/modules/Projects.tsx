@@ -156,7 +156,7 @@ export function Projects() {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full min-w-0 flex flex-col">
       <div className="flex-none px-6 py-4 space-y-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -218,7 +218,7 @@ export function Projects() {
         )}
       </div>
 
-      <div className="flex-1 overflow-x-auto px-6 pb-6">
+      <div className="flex-1 min-h-0 overflow-x-auto px-6 pb-6">
         <div className="flex gap-4 h-full min-w-max">
           {boardData?.stages.map((stage) => {
             const stageTotal = stage.projects.reduce((s, p) => s + Number(p.budget_amount || 0), 0);
