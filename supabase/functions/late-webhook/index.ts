@@ -206,6 +206,96 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    if (
+      eventType === "message.received" ||
+      eventType === "message_received" ||
+      eventType === "dm.received"
+    ) {
+      const lateAccountId =
+        (payload.accountId as string) ||
+        (data.accountId as string) ||
+        (data.account_id as string) ||
+        "";
+
+      const orgId = (() => {
+        const search = async () => {
+          if (!lateAccountId) return null;
+          const { data: conn } = await supabase
+            .from("late_connections")
+            .select("org_id")
+            .eq("late_account_id", lateAccountId)
+            .maybeSingle();
+          return conn?.org_id || null;
+        };
+        return search();
+      })();
+
+      const resolvedOrgId = await orgId;
+
+      if (resolvedOrgId) {
+        const syncUrl = `${supabaseUrl}/functions/v1/late-inbox-messages-sync`;
+        fetch(syncUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${supabaseServiceKey}`,
+          },
+          body: JSON.stringify({ org_id: resolvedOrgId, account_id: lateAccountId }),
+        }).catch((err) => console.error("[late-webhook] DM sync trigger error:", err));
+        console.log("[late-webhook] Triggered DM sync for org:", resolvedOrgId);
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, action: "dm_sync_triggered" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (
+      eventType === "comment.received" ||
+      eventType === "comment_received" ||
+      eventType === "post.comment"
+    ) {
+      const lateAccountId =
+        (payload.accountId as string) ||
+        (data.accountId as string) ||
+        (data.account_id as string) ||
+        "";
+
+      const orgId = (() => {
+        const search = async () => {
+          if (!lateAccountId) return null;
+          const { data: conn } = await supabase
+            .from("late_connections")
+            .select("org_id")
+            .eq("late_account_id", lateAccountId)
+            .maybeSingle();
+          return conn?.org_id || null;
+        };
+        return search();
+      })();
+
+      const resolvedOrgId = await orgId;
+
+      if (resolvedOrgId) {
+        const syncUrl = `${supabaseUrl}/functions/v1/late-inbox-comments-sync`;
+        fetch(syncUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${supabaseServiceKey}`,
+          },
+          body: JSON.stringify({ org_id: resolvedOrgId, account_id: lateAccountId }),
+        }).catch((err) => console.error("[late-webhook] Comments sync trigger error:", err));
+        console.log("[late-webhook] Triggered comments sync for org:", resolvedOrgId);
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, action: "comments_sync_triggered" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     console.log(`[late-webhook] Unhandled event: ${eventType}`);
     return new Response(
       JSON.stringify({ success: true, action: "ignored", event: eventType }),

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Phone, Mail, PhoneCall, MessageCircle, Search } from 'lucide-react';
+import { X, Phone, Mail, PhoneCall, MessageCircle, Share2, Search } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getUsers } from '../../services/users';
 import { getDepartments } from '../../services/departments';
@@ -16,6 +16,7 @@ const CHANNELS: { value: MessageChannel; label: string; icon: React.ReactNode }[
   { value: 'email', label: 'Email', icon: <Mail size={14} /> },
   { value: 'voice', label: 'Voice', icon: <PhoneCall size={14} /> },
   { value: 'webchat', label: 'Webchat', icon: <MessageCircle size={14} /> },
+  { value: 'social_dm', label: 'Social DMs', icon: <Share2 size={14} /> },
 ];
 
 const STATUSES: { value: ConversationStatus; label: string; color: string }[] = [

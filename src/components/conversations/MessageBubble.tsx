@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Phone, Mail, PhoneCall, MessageCircle, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal, Paperclip, Download, FileText, Image, File, ChevronDown, ChevronUp, StickyNote, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { Phone, Mail, PhoneCall, MessageCircle, Share2, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal, Paperclip, Download, FileText, Image, File, ChevronDown, ChevronUp, StickyNote, ExternalLink, RefreshCw, X } from 'lucide-react';
 import { trashGmailMessage, archiveGmailMessage, downloadAttachment, listMessageAttachments } from '../../services/gmailApi';
 import { retrySms } from '../../services/sendSms';
 import type { Message, MessageChannel, MessageStatus } from '../../types';
@@ -525,6 +525,8 @@ function ChannelIndicator({ channel, isOutbound }: { channel: MessageChannel; is
       return <PhoneCall className={iconClass} />;
     case 'webchat':
       return <MessageCircle className={iconClass} />;
+    case 'social_dm':
+      return <Share2 className={iconClass} />;
     default:
       return null;
   }

@@ -392,7 +392,7 @@ export interface ContactTimelineEvent {
   user?: User | null;
 }
 
-export type MessageChannel = 'sms' | 'email' | 'voice' | 'webchat';
+export type MessageChannel = 'sms' | 'email' | 'voice' | 'webchat' | 'social_dm';
 export type MessageDirection = 'inbound' | 'outbound' | 'system';
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'failed' | 'read';
 export type ConversationStatus = 'open' | 'pending' | 'closed';
@@ -409,6 +409,8 @@ export interface Conversation {
   unread_count: number;
   created_at: string;
   updated_at: string;
+  late_conversation_id?: string | null;
+  late_dm_platform?: string | null;
   contact?: Contact;
   assigned_user?: User | null;
   department?: Department | null;
@@ -5807,4 +5809,54 @@ export interface ProfitabilitySummary {
   overallMargin: number;
   outstanding: number;
   projectCount: number;
+}
+
+export interface SocialPostCommentPost {
+  id: string;
+  organization_id: string;
+  late_post_id: string;
+  late_account_id: string;
+  platform: string;
+  post_body_preview: string | null;
+  platform_post_url: string | null;
+  comment_count: number;
+  last_comment_at: string | null;
+  created_at: string;
+  updated_at: string;
+  comments?: SocialPostComment[];
+}
+
+export interface SocialPostComment {
+  id: string;
+  organization_id: string;
+  comment_post_id: string | null;
+  late_comment_id: string;
+  late_post_id: string;
+  late_account_id: string;
+  platform: string;
+  author_id: string | null;
+  author_name: string | null;
+  author_handle: string | null;
+  author_avatar_url: string | null;
+  text: string | null;
+  like_count: number;
+  reply_count: number;
+  is_reply: boolean;
+  parent_comment_id: string | null;
+  hidden: boolean;
+  has_private_reply: boolean;
+  actioned_at: string | null;
+  actioned_by: string | null;
+  synced_at: string;
+  comment_created_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SocialCommentFilters {
+  platform?: string;
+  lateAccountId?: string;
+  search?: string;
+  startDate?: string;
+  endDate?: string;
 }

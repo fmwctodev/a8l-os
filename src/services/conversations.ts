@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { callEdgeFunction } from '../lib/edgeFunction';
 import type { Conversation, ConversationFilters, ConversationStatus, MessageChannel } from '../types';
 
 export async function getConversations(
@@ -285,4 +286,22 @@ export async function getConversationChannels(conversationId: string): Promise<M
 
   const channels = new Set(data?.map(m => m.channel as MessageChannel) || []);
   return Array.from(channels);
+}
+
+export async function syncSocialDMs(orgId: string): Promise<{
+  conversations_synced: number;
+  messages_synced: number;
+  accounts_processed: number;
+  errors: string[];
+}> {
+  const result = await callEdgeFunction('late-inbox-messages-sync', {
+    method: 'POST',
+    body: { org_id: orgId },
+  });
+  return result as {
+    conversations_synced: number;
+    messages_synced: number;
+    accounts_processed: number;
+    errors: string[];
+  };
 }

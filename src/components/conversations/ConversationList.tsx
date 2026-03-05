@@ -337,7 +337,11 @@ function ConversationListItem({ conversation, isSelected, onClick, bulkMode, isC
             </div>
 
             <div className="flex items-center gap-2">
-              <ChannelIcon channel={conversation.last_message?.channel as MessageChannel} size="sm" />
+              <ChannelIcon
+                channel={conversation.last_message?.channel as MessageChannel}
+                size="sm"
+                platform={conversation.late_dm_platform}
+              />
               <p className={`text-sm truncate flex-1 ${hasUnread ? 'text-slate-200 font-medium' : 'text-slate-400'}`}>
                 {truncatedPreview}
               </p>

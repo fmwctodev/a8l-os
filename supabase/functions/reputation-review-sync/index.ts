@@ -10,50 +10,45 @@ const corsHeaders = {
 
 const LATE_API_BASE = "https://getlate.dev/api/v1";
 
-interface GBPReview {
-  reviewId?: string;
+interface InboxReview {
   id?: string;
-  name?: string;
-  reviewer?: {
-    profilePhotoUrl?: string;
-    displayName?: string;
-  };
-  starRating?: string | number;
-  comment?: string;
+  reviewId?: string;
+  accountId?: string;
+  platform?: string;
+  reviewerName?: string;
+  reviewerDisplayName?: string;
+  reviewerProfileImage?: string;
+  reviewerPhotoUrl?: string;
+  rating?: number | string;
+  starRating?: string;
+  text?: string;
   reviewText?: string;
+  comment?: string;
+  message?: string;
+  recommendation_type?: string;
+  has_rating?: boolean;
+  createdAt?: string;
   createTime?: string;
-  updateTime?: string;
+  created_time?: string;
+  updatedAt?: string;
+  reply?: {
+    text?: string;
+    comment?: string;
+    createdAt?: string;
+    updateTime?: string;
+  } | null;
   reviewReply?: {
     comment?: string;
     text?: string;
     updateTime?: string;
-  };
+  } | null;
   ownerReply?: {
     comment?: string;
     text?: string;
     updateTime?: string;
-  };
-}
-
-interface FacebookReview {
-  id?: string;
-  reviewId?: string;
-  recommendation_type?: string;
-  rating?: number;
-  review_text?: string;
-  reviewText?: string;
-  message?: string;
-  reviewer?: {
-    name?: string;
-    id?: string;
-  };
-  from?: {
-    name?: string;
-    id?: string;
-  };
-  created_time?: string;
-  createTime?: string;
-  has_rating?: boolean;
+  } | null;
+  reviewUrl?: string;
+  url?: string;
 }
 
 interface NormalizedReview {
@@ -109,6 +104,119 @@ function parseStarRating(raw: string | number | undefined): number {
   return 3;
 }
 
+function normalizeInboxReview(r: InboxReview, accountId: string): NormalizedReview {
+  const reviewId = r.id || r.reviewId || "";
+  const platform = r.platform || "unknown";
+
+  let rating = 3;
+  if (r.rating !== undefined) {
+    rating = parseStarRating(r.rating);
+  } else if (r.starRating !== undefined) {
+    rating = parseStarRating(r.starRating);
+  } else if (r.recommendation_type === "positive") {
+    rating = 5;
+  } else if (r.recommendation_type === "negative") {
+    rating = 1;
+  } else if (r.has_rating === false) {
+    rating = 3;
+  }
+
+  const reviewerName =
+    r.reviewerName ||
+    r.reviewerDisplayName ||
+    "Anonymous";
+
+  const reviewerProfileImage =
+    r.reviewerProfileImage ||
+    r.reviewerPhotoUrl ||
+    null;
+
+  const text = r.text || r.reviewText || r.comment || r.message || null;
+
+  const created =
+    r.createdAt ||
+    r.createTime ||
+    r.created_time ||
+    new Date().toISOString();
+
+  const replyObj =
+    r.reply ||
+    r.reviewReply ||
+    r.ownerReply ||
+    null;
+
+  const replyText = replyObj
+    ? (replyObj.text || (replyObj as Record<string, string>).comment || null)
+    : null;
+
+  const replyCreatedAt = replyObj
+    ? (replyObj.createdAt || (replyObj as Record<string, string>).updateTime || null)
+    : null;
+
+  const reviewUrl = r.reviewUrl || r.url || null;
+
+  const platformKey = platform === "googlebusiness" || platform === "google_business"
+    ? "googlebusiness"
+    : platform;
+
+  return {
+    externalId: `${platformKey}_${accountId}_${reviewId}`,
+    platform: platformKey,
+    accountId,
+    reviewerName,
+    reviewerProfileImage,
+    rating,
+    text,
+    created,
+    hasReply: !!replyText,
+    replyText,
+    replyCreatedAt,
+    reviewUrl,
+  };
+}
+
+async function fetchInboxReviews(
+  lateApiKey: string,
+  accountId: string,
+  maxPages = 10
+): Promise<{ reviews: NormalizedReview[]; error?: string }> {
+  const normalized: NormalizedReview[] = [];
+  let cursor: string | undefined;
+  let page = 0;
+
+  while (page < maxPages) {
+    const params = new URLSearchParams({ accountId });
+    if (cursor) params.set("cursor", cursor);
+
+    const url = `${LATE_API_BASE}/reviews/list-inbox-reviews?${params}`;
+    console.log(`[reputation-review-sync] Inbox reviews page ${page + 1}: accountId=${accountId}`);
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${lateApiKey}`, Accept: "application/json" },
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      const msg = `Inbox reviews API error ${res.status}: ${errText.slice(0, 300)}`;
+      console.error(`[reputation-review-sync] ${msg}`);
+      return { reviews: normalized, error: msg };
+    }
+
+    const data = await res.json();
+    const reviews: InboxReview[] = data.reviews || data.items || data.data || [];
+
+    for (const r of reviews) {
+      normalized.push(normalizeInboxReview(r, accountId));
+    }
+
+    cursor = data.nextCursor || data.cursor || data.nextPageToken;
+    if (!cursor || reviews.length === 0) break;
+    page++;
+  }
+
+  return { reviews: normalized };
+}
+
 function computeSlaBreached(
   reviewCreatedAt: string,
   rating: number,
@@ -156,139 +264,6 @@ function matchRoutingRule(
     return rule;
   }
   return null;
-}
-
-async function fetchGBPReviews(
-  lateApiKey: string,
-  accountId: string,
-  normalizedPlatform = "googlebusiness",
-  maxPages = 10
-): Promise<{ reviews: NormalizedReview[]; error?: string }> {
-  const normalized: NormalizedReview[] = [];
-  let nextPageToken: string | undefined;
-  let page = 0;
-
-  while (page < maxPages) {
-    const params = new URLSearchParams({ accountId });
-    if (nextPageToken) params.set("nextPageToken", nextPageToken);
-
-    const url = `${LATE_API_BASE}/google-business-profile/list-google-business-reviews?${params}`;
-    console.log(`[reputation-review-sync] GBP page ${page + 1}: ${url}`);
-
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${lateApiKey}`, Accept: "application/json" },
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      const msg = `Google Business API error ${res.status}: ${errText.slice(0, 300)}`;
-      console.error(`[reputation-review-sync] ${msg}`);
-      return { reviews: normalized, error: msg };
-    }
-
-    const data = await res.json();
-    const reviews: GBPReview[] = data.reviews || data.data || [];
-
-    for (const r of reviews) {
-      const reviewId = r.reviewId || r.id || r.name || "";
-      const rating = parseStarRating(r.starRating);
-      const replyObj = r.reviewReply || r.ownerReply;
-      const replyText = replyObj?.comment || replyObj?.text || null;
-      const replyTime = replyObj?.updateTime || null;
-
-      normalized.push({
-        externalId: `gbp_${accountId}_${reviewId}`,
-        platform: normalizedPlatform,
-        accountId,
-        reviewerName: r.reviewer?.displayName || "Anonymous",
-        reviewerProfileImage: r.reviewer?.profilePhotoUrl || null,
-        rating,
-        text: r.comment || r.reviewText || null,
-        created: r.createTime || r.updateTime || new Date().toISOString(),
-        hasReply: !!replyText,
-        replyText,
-        replyCreatedAt: replyTime,
-        reviewUrl: null,
-      });
-    }
-
-    nextPageToken = data.nextPageToken;
-    if (!nextPageToken) break;
-    page++;
-  }
-
-  return { reviews: normalized };
-}
-
-async function fetchFacebookReviews(
-  lateApiKey: string,
-  accountId: string,
-  maxPages = 10
-): Promise<{ reviews: NormalizedReview[]; error?: string }> {
-  const normalized: NormalizedReview[] = [];
-  let nextPageToken: string | undefined;
-  let page = 0;
-
-  while (page < maxPages) {
-    const params = new URLSearchParams({ accountId });
-    if (nextPageToken) params.set("nextPageToken", nextPageToken);
-
-    const url = `${LATE_API_BASE}/google-business-profile/list-facebook-reviews?${params}`;
-    console.log(`[reputation-review-sync] Facebook page ${page + 1}: ${url}`);
-
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${lateApiKey}`, Accept: "application/json" },
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      const msg = `Facebook API error ${res.status}: ${errText.slice(0, 300)}`;
-      console.error(`[reputation-review-sync] ${msg}`);
-      return { reviews: normalized, error: msg };
-    }
-
-    const data = await res.json();
-    const reviews: FacebookReview[] = data.reviews || data.data || [];
-
-    for (const r of reviews) {
-      const reviewId = r.id || r.reviewId || "";
-      const reviewer = r.reviewer || r.from;
-      const text = r.review_text || r.reviewText || r.message || null;
-      const created = r.created_time || r.createTime || new Date().toISOString();
-
-      let rating = 3;
-      if (typeof r.rating === "number") {
-        rating = Math.min(5, Math.max(1, Math.round(r.rating)));
-      } else if (r.recommendation_type === "positive") {
-        rating = 5;
-      } else if (r.recommendation_type === "negative") {
-        rating = 1;
-      } else if (r.has_rating === false) {
-        rating = 3;
-      }
-
-      normalized.push({
-        externalId: `fb_${accountId}_${reviewId}`,
-        platform: "facebook",
-        accountId,
-        reviewerName: reviewer?.name || "Anonymous",
-        reviewerProfileImage: null,
-        rating,
-        text,
-        created,
-        hasReply: false,
-        replyText: null,
-        replyCreatedAt: null,
-        reviewUrl: null,
-      });
-    }
-
-    nextPageToken = data.nextPageToken || data.paging?.cursors?.after;
-    if (!nextPageToken) break;
-    page++;
-  }
-
-  return { reviews: normalized };
 }
 
 Deno.serve(async (req: Request) => {
@@ -401,18 +376,11 @@ Deno.serve(async (req: Request) => {
 
     for (const conn of connections) {
       const platform = conn.platform as string;
-
       if (platformFilter && platform !== platformFilter) continue;
 
-      if (platform === "googlebusiness" || platform === "google_business") {
-        const { reviews, error } = await fetchGBPReviews(lateApiKey, conn.late_account_id, "googlebusiness");
-        if (error) syncErrors.push(`[${conn.account_name}] ${error}`);
-        allReviews.push(...reviews);
-      } else if (platform === "facebook") {
-        const { reviews, error } = await fetchFacebookReviews(lateApiKey, conn.late_account_id);
-        if (error) syncErrors.push(`[${conn.account_name}] ${error}`);
-        allReviews.push(...reviews);
-      }
+      const { reviews, error } = await fetchInboxReviews(lateApiKey, conn.late_account_id);
+      if (error) syncErrors.push(`[${conn.account_name}] ${error}`);
+      allReviews.push(...reviews);
     }
 
     console.log(`[reputation-review-sync] Fetched ${allReviews.length} reviews total`);

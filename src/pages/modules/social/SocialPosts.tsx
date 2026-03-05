@@ -1,33 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  Plus,
-  Calendar,
-  FileText,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  Send,
-  Loader2,
-  Search,
-  Facebook,
-  Instagram,
-  Linkedin,
-  Youtube,
-  MapPin,
-  Music2,
-  MessageSquare,
-  MoreVertical,
-  Copy,
-  Trash2,
-  Edit3,
-  Eye,
-  Zap,
-} from 'lucide-react';
+import { Plus, Calendar, FileText, Clock, CheckCircle, AlertCircle, Send, Loader2, Search, Facebook, Instagram, Linkedin, Youtube, MapPin, Music2, MessageSquare, MoreVertical, Copy, Trash2, CreditCard as Edit3, Eye, Zap, MessageCircle } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getSocialPosts, deleteSocialPost, duplicatePost } from '../../../services/socialPosts';
 import { getSocialAccounts, getProviderColor } from '../../../services/socialAccounts';
 import { callEdgeFunction, parseEdgeFunctionError } from '../../../lib/edgeFunction';
+import { SocialCommentsTab } from '../../../components/social-planner';
 import type { SocialPost, SocialPostStatus, SocialAccount, SocialProvider } from '../../../types';
 
 const PROVIDER_ICONS: Record<SocialProvider, React.ElementType> = {
@@ -48,9 +26,12 @@ const STATUS_TABS: { value: SocialPostStatus | 'all'; label: string }[] = [
   { value: 'failed', label: 'Failed' },
 ];
 
+type TopTab = 'posts' | 'comments';
+
 export function SocialPosts() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [topTab, setTopTab] = useState<TopTab>('posts');
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -163,6 +144,37 @@ export function SocialPosts() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => setTopTab('posts')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+            topTab === 'posts'
+              ? 'bg-slate-700 text-white'
+              : 'text-slate-400 hover:text-slate-300'
+          }`}
+        >
+          <FileText className="w-4 h-4" />
+          Posts
+        </button>
+        <button
+          onClick={() => setTopTab('comments')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+            topTab === 'comments'
+              ? 'bg-slate-700 text-white'
+              : 'text-slate-400 hover:text-slate-300'
+          }`}
+        >
+          <MessageCircle className="w-4 h-4" />
+          Comments
+        </button>
+      </div>
+
+      {topTab === 'comments' && user?.organization_id && (
+        <SocialCommentsTab orgId={user.organization_id} />
+      )}
+
+      {topTab === 'posts' && (
+      <>
       <div className="flex items-center gap-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -365,6 +377,8 @@ export function SocialPosts() {
             );
           })}
         </div>
+      )}
+      </>
       )}
     </div>
   );
