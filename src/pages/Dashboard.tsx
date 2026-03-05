@@ -29,6 +29,7 @@ import {
   CreateOpportunityDrawer,
   CreateInvoiceDrawer,
   BookAppointmentDrawer,
+  AIReportInsights,
 } from '../components/dashboard';
 import { TimeRangeSelector, ExportButton } from '../components/analytics';
 import { SystemDashboard } from './SystemDashboard';
@@ -339,6 +340,8 @@ export function Dashboard() {
           />
         </div>
       </div>
+
+      <AIReportInsights />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <QueuePanel

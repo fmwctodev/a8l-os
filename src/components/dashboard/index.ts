@@ -15,3 +15,4 @@ export { CreateOpportunityDrawer } from './CreateOpportunityDrawer';
 export { CreateInvoiceDrawer } from './CreateInvoiceDrawer';
 export { BookAppointmentDrawer } from './BookAppointmentDrawer';
 export { RunAgentDrawer } from './RunAgentDrawer';
+export { AIReportInsights } from './AIReportInsights';

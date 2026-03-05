@@ -6,225 +6,158 @@ import {
   ChevronDown,
   ArrowLeft,
   Clock,
-  Trash2,
-  Save,
-  BarChart3,
-  Table,
-  LineChart,
-  PieChart,
   Loader2,
   ChevronRight,
-  X,
-  Database,
-  Info,
+  FileText,
+  Trash2,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
 import {
-  askQuestion,
-  getQueryHistory,
-  deleteQuery,
-  saveQueryAsReport,
-  exampleQueries,
-  defaultTimeRange,
-  defaultDataScope,
-} from '../../services/aiReporting';
-import { getDataSourceLabel, dataSourceConfigs, timeRangePresets } from '../../config/reportingFields';
-import type {
-  AIReportQuery,
-  AIQueryDataScope,
-  ReportTimeRange,
-  AIQueryResponse,
-  ReportVisibility,
-} from '../../types';
-
-interface ConversationMessage {
-  id: string;
-  type: 'user' | 'ai';
-  content: string;
-  timestamp: Date;
-  queryId?: string;
-  response?: AIQueryResponse;
-  isLoading?: boolean;
-}
-
-const chartIcons: Record<string, React.ReactNode> = {
-  table: <Table className="w-4 h-4" />,
-  bar: <BarChart3 className="w-4 h-4" />,
-  line: <LineChart className="w-4 h-4" />,
-  pie: <PieChart className="w-4 h-4" />,
-};
+  generateReport,
+  getAIReports,
+  pollReportStatus,
+  SUGGESTED_PROMPTS,
+  TIMEFRAME_OPTIONS,
+  SCOPE_OPTIONS,
+} from '../../services/aiReports';
+import type { AIReport, ReportScope, ChatMessage } from '../../types/aiReports';
 
 export function AIReporting() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { showToast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const [query, setQuery] = useState('');
-  const [dataScope, setDataScope] = useState<AIQueryDataScope>(defaultDataScope);
-  const [timeRange, setTimeRange] = useState<ReportTimeRange>(defaultTimeRange);
-  const [isLoading, setIsLoading] = useState(false);
+  const [prompt, setPrompt] = useState('');
+  const [scope, setScope] = useState<ReportScope>('my');
+  const [timeframe, setTimeframe] = useState('last_30_days');
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  const [messages, setMessages] = useState<ConversationMessage[]>([]);
-  const [history, setHistory] = useState<AIReportQuery[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [recentReports, setRecentReports] = useState<AIReport[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
-
-  const [showSaveModal, setShowSaveModal] = useState(false);
-  const [saveQueryId, setSaveQueryId] = useState<string | null>(null);
-  const [saveReportName, setSaveReportName] = useState('');
-  const [saveVisibility, setSaveVisibility] = useState<ReportVisibility>('private');
-  const [isSaving, setIsSaving] = useState(false);
+  const [parentReportId, setParentReportId] = useState<string | null>(null);
 
   const userRole = user?.role?.name || '';
-  const canAccessDepartment = ['Super Admin', 'Admin', 'Manager'].includes(userRole);
-  const canAccessOrganization = ['Super Admin', 'Admin'].includes(userRole);
+  const availableScopes = SCOPE_OPTIONS.filter(
+    (opt) =>
+      !opt.minRole ||
+      (opt.minRole === 'Manager' && ['Super Admin', 'Admin', 'Manager'].includes(userRole)) ||
+      (opt.minRole === 'Admin' && ['Super Admin', 'Admin'].includes(userRole))
+  );
 
   useEffect(() => {
-    if (user?.organization_id) {
-      loadHistory();
-    }
+    if (user?.organization_id) loadRecentReports();
   }, [user?.organization_id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const loadHistory = async () => {
+  const loadRecentReports = async () => {
     try {
       setIsLoadingHistory(true);
-      const data = await getQueryHistory(user!.organization_id, user!.id, { limit: 20 });
-      setHistory(data);
-    } catch (err) {
-      console.error('Failed to load history:', err);
+      const data = await getAIReports(user!.organization_id, { status: 'complete' });
+      setRecentReports(data.slice(0, 20));
+    } catch {
+      // ignore
     } finally {
       setIsLoadingHistory(false);
     }
   };
 
   const handleSubmit = async () => {
-    if (!query.trim() || isLoading || !user) return;
+    if (!prompt.trim() || isGenerating || !user) return;
 
-    const userMessage: ConversationMessage = {
+    const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       type: 'user',
-      content: query,
+      content: prompt.trim(),
       timestamp: new Date(),
     };
 
-    const loadingMessage: ConversationMessage = {
+    const loadingMsg: ChatMessage = {
       id: crypto.randomUUID(),
       type: 'ai',
-      content: '',
+      content: 'Generating your report...',
       timestamp: new Date(),
       isLoading: true,
     };
 
-    setMessages((prev) => [...prev, userMessage, loadingMessage]);
-    setQuery('');
-    setIsLoading(true);
+    setMessages((prev) => [...prev, userMsg, loadingMsg]);
+    const currentPrompt = prompt.trim();
+    setPrompt('');
+    setIsGenerating(true);
 
     try {
-      const response = await askQuestion(user.organization_id, user.id, {
-        query_text: query,
-        data_scope: dataScope,
-        time_range: timeRange,
+      const result = await generateReport(user.organization_id, user.id, {
+        prompt: currentPrompt,
+        scope,
+        timeframe: { type: 'preset', preset: timeframe },
+        parent_report_id: parentReportId || undefined,
       });
 
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === loadingMessage.id
-            ? {
-                ...msg,
-                content: response.answer,
-                isLoading: false,
-                queryId: response.query_id,
-                response,
-              }
-            : msg
-        )
-      );
+      if (!result.success) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === loadingMsg.id
+              ? { ...m, content: result.error || 'Report generation failed', isLoading: false, type: 'system' as const }
+              : m
+          )
+        );
+        return;
+      }
 
-      loadHistory();
+      const completed = await pollReportStatus(result.report_id);
+
+      if (completed.status === 'complete') {
+        setParentReportId(completed.id);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === loadingMsg.id
+              ? {
+                  ...m,
+                  content: completed.result_json?.executive_summary || 'Report generated successfully.',
+                  isLoading: false,
+                  reportId: completed.id,
+                  report: completed,
+                }
+              : m
+          )
+        );
+        loadRecentReports();
+      } else {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === loadingMsg.id
+              ? { ...m, content: completed.error_message || 'Report generation failed', isLoading: false, type: 'system' as const }
+              : m
+          )
+        );
+      }
     } catch (err) {
       setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === loadingMessage.id
-            ? {
-                ...msg,
-                content: err instanceof Error ? err.message : 'Failed to process your question',
-                isLoading: false,
-              }
-            : msg
+        prev.map((m) =>
+          m.id === loadingMsg.id
+            ? { ...m, content: err instanceof Error ? err.message : 'Something went wrong', isLoading: false, type: 'system' as const }
+            : m
         )
       );
     } finally {
-      setIsLoading(false);
+      setIsGenerating(false);
     }
   };
 
-  const handleHistoryClick = (historyItem: AIReportQuery) => {
-    const userMessage: ConversationMessage = {
-      id: crypto.randomUUID(),
-      type: 'user',
-      content: historyItem.query_text,
-      timestamp: new Date(historyItem.created_at),
-    };
-
-    const aiMessage: ConversationMessage = {
-      id: crypto.randomUUID(),
-      type: 'ai',
-      content: historyItem.response_text || '',
-      timestamp: new Date(historyItem.created_at),
-      queryId: historyItem.id,
-      response: historyItem.response_data as unknown as AIQueryResponse,
-    };
-
-    setMessages([userMessage, aiMessage]);
+  const handleHistoryClick = (report: AIReport) => {
+    setParentReportId(report.id);
+    navigate(`/reporting/${report.id}`);
   };
 
-  const handleDeleteHistory = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await deleteQuery(id);
-      setHistory((prev) => prev.filter((h) => h.id !== id));
-    } catch (err) {
-      console.error('Failed to delete:', err);
-    }
-  };
-
-  const handleOpenSaveModal = (queryId: string) => {
-    setSaveQueryId(queryId);
-    setSaveReportName('');
-    setSaveVisibility('private');
-    setShowSaveModal(true);
-  };
-
-  const handleSaveAsReport = async () => {
-    if (!saveQueryId || !saveReportName.trim() || !user) return;
-
-    setIsSaving(true);
-    try {
-      const { reportId } = await saveQueryAsReport(
-        saveQueryId,
-        user.organization_id,
-        user.id,
-        saveReportName,
-        saveVisibility,
-        user.department_id
-      );
-      setShowSaveModal(false);
-      navigate(`/reporting/${reportId}`);
-    } catch (err) {
-      console.error('Failed to save report:', err);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const formatTimestamp = (date: Date) => {
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const handleNewConversation = () => {
+    setMessages([]);
+    setParentReportId(null);
+    setPrompt('');
   };
 
   const formatHistoryDate = (dateString: string) => {
@@ -233,18 +166,18 @@ export function AIReporting() {
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
 
-    if (date.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (date.toDateString() === yesterday.toDateString()) {
-      return 'Yesterday';
-    }
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
+
+  const formatTimestamp = (date: Date) =>
+    date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
   return (
     <div className="min-h-screen bg-slate-900 flex">
       <div className="w-72 bg-slate-800 border-r border-slate-700 flex flex-col">
-        <div className="p-4 border-b border-slate-700">
+        <div className="p-4 border-b border-slate-700 space-y-3">
           <button
             onClick={() => navigate('/reporting')}
             className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
@@ -252,11 +185,18 @@ export function AIReporting() {
             <ArrowLeft className="w-4 h-4" />
             Back to Reports
           </button>
+          <button
+            onClick={handleNewConversation}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            <Sparkles className="w-4 h-4" />
+            New Report
+          </button>
         </div>
 
         <div className="p-4 border-b border-slate-700">
-          <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
-            Recent Queries
+          <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+            Recent Reports
           </h3>
         </div>
 
@@ -265,37 +205,26 @@ export function AIReporting() {
             <div className="p-4 text-center">
               <Loader2 className="w-5 h-5 text-slate-500 animate-spin mx-auto" />
             </div>
-          ) : history.length === 0 ? (
+          ) : recentReports.length === 0 ? (
             <div className="p-4 text-center text-slate-500 text-sm">
-              No queries yet. Start asking questions!
+              No reports yet
             </div>
           ) : (
             <div className="space-y-1 p-2">
-              {history.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => handleHistoryClick(item)}
-                  className="group p-3 rounded-lg hover:bg-slate-700/50 cursor-pointer transition-colors"
+              {recentReports.map((report) => (
+                <button
+                  key={report.id}
+                  onClick={() => handleHistoryClick(report)}
+                  className="w-full group p-3 rounded-lg hover:bg-slate-700/50 text-left transition-colors"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm text-slate-300 line-clamp-2">{item.query_text}</p>
-                    <button
-                      onClick={(e) => handleDeleteHistory(item.id, e)}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 transition-all"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  <p className="text-sm text-slate-300 line-clamp-2 group-hover:text-white transition-colors">
+                    {report.report_name}
+                  </p>
                   <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
                     <Clock className="w-3 h-3" />
-                    {formatHistoryDate(item.created_at)}
-                    {item.saved_as_report_id && (
-                      <span className="px-1.5 py-0.5 bg-cyan-500/20 text-cyan-400 rounded">
-                        Saved
-                      </span>
-                    )}
+                    {formatHistoryDate(report.created_at)}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -310,20 +239,20 @@ export function AIReporting() {
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center mx-auto mb-6">
                   <Sparkles className="w-8 h-8 text-white" />
                 </div>
-                <h1 className="text-3xl font-bold text-white mb-3">AI Data Assistant</h1>
+                <h1 className="text-3xl font-bold text-white mb-3">AI Report Generator</h1>
                 <p className="text-slate-400 text-lg">
-                  Ask questions about your data in plain English
+                  Describe what you want to analyze and AI will build a full report
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                {exampleQueries.map((example, index) => (
+                {SUGGESTED_PROMPTS.map((example, index) => (
                   <button
                     key={index}
-                    onClick={() => setQuery(example)}
+                    onClick={() => setPrompt(example)}
                     className="p-4 text-left bg-slate-800 border border-slate-700 rounded-xl hover:border-cyan-500/50 hover:bg-slate-700/50 transition-all group"
                   >
-                    <p className="text-slate-300 group-hover:text-white transition-colors">
+                    <p className="text-slate-300 group-hover:text-white transition-colors text-sm">
                       {example}
                     </p>
                     <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 mt-2 transition-colors" />
@@ -342,13 +271,15 @@ export function AIReporting() {
                     className={`max-w-[85%] ${
                       message.type === 'user'
                         ? 'bg-slate-700 rounded-2xl rounded-br-md'
+                        : message.type === 'system'
+                        ? 'bg-red-500/10 border border-red-500/20 rounded-2xl rounded-bl-md'
                         : 'bg-slate-800 border border-slate-700 rounded-2xl rounded-bl-md'
                     } p-4`}
                   >
                     {message.type === 'ai' && (
                       <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-700">
                         <Sparkles className="w-4 h-4 text-cyan-400" />
-                        <span className="text-sm font-medium text-cyan-400">AI Assistant</span>
+                        <span className="text-sm font-medium text-cyan-400">AI Report</span>
                         <span className="text-xs text-slate-500">{formatTimestamp(message.timestamp)}</span>
                       </div>
                     )}
@@ -356,74 +287,30 @@ export function AIReporting() {
                     {message.isLoading ? (
                       <div className="flex items-center gap-3 py-2">
                         <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />
-                        <span className="text-slate-400">Analyzing your data...</span>
+                        <span className="text-slate-400">Building your report...</span>
                       </div>
                     ) : (
                       <>
-                        <p className="text-white leading-relaxed whitespace-pre-wrap">
+                        <p className="text-white leading-relaxed whitespace-pre-wrap text-sm">
                           {message.content}
                         </p>
 
-                        {message.type === 'ai' && message.response && (
-                          <>
-                            {message.response.explanation && (
-                              <div className="mt-4 p-3 bg-slate-900/50 rounded-lg">
-                                <div className="flex items-center gap-2 text-xs text-slate-400 mb-2">
-                                  <Info className="w-3.5 h-3.5" />
-                                  How we calculated this
-                                </div>
-                                <p className="text-sm text-slate-300">
-                                  {message.response.explanation}
-                                </p>
-                              </div>
-                            )}
-
-                            {message.response.data_sources_used &&
-                              message.response.data_sources_used.length > 0 && (
-                                <div className="mt-4 flex items-center gap-2 flex-wrap">
-                                  <Database className="w-4 h-4 text-slate-500" />
-                                  <span className="text-xs text-slate-500">Data from:</span>
-                                  {message.response.data_sources_used.map((source) => (
-                                    <span
-                                      key={source}
-                                      className="px-2 py-0.5 bg-slate-700 rounded text-xs text-slate-300"
-                                    >
-                                      {getDataSourceLabel(source)}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-
-                            {message.response.chart_type && message.response.chart_data && (
-                              <div className="mt-4 p-3 bg-slate-900/50 rounded-lg">
-                                <div className="flex items-center gap-2 text-sm text-slate-300 mb-2">
-                                  {chartIcons[message.response.chart_type]}
-                                  <span className="capitalize">
-                                    {message.response.chart_type} visualization available
-                                  </span>
-                                </div>
-                                <p className="text-xs text-slate-500">
-                                  {message.response.table_rows?.length || 0} rows of data
-                                </p>
-                              </div>
-                            )}
-
-                            <div className="mt-4 pt-4 border-t border-slate-700 flex items-center gap-3">
-                              {message.queryId && (
-                                <button
-                                  onClick={() => handleOpenSaveModal(message.queryId!)}
-                                  className="flex items-center gap-2 px-3 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-colors text-sm"
-                                >
-                                  <Save className="w-4 h-4" />
-                                  Save as Report
-                                </button>
-                              )}
+                        {message.type === 'ai' && message.reportId && (
+                          <div className="mt-4 pt-4 border-t border-slate-700 flex items-center gap-3">
+                            <button
+                              onClick={() => navigate(`/reporting/${message.reportId}`)}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-colors text-sm"
+                            >
+                              <FileText className="w-4 h-4" />
+                              View Full Report
+                            </button>
+                            {message.report?.result_json?.kpis && message.report.result_json.kpis.length > 0 && (
                               <span className="text-xs text-slate-500">
-                                {message.response.execution_time_ms}ms |{' '}
-                                {message.response.tokens_used} tokens
+                                {message.report.result_json.kpis.length} KPIs |{' '}
+                                {message.report.result_json.charts?.length || 0} charts
                               </span>
-                            </div>
-                          </>
+                            )}
+                          </div>
                         )}
 
                         {message.type === 'user' && (
@@ -443,18 +330,29 @@ export function AIReporting() {
 
         <div className="border-t border-slate-700 bg-slate-800/50 backdrop-blur p-4">
           <div className="max-w-3xl mx-auto">
+            {parentReportId && (
+              <div className="flex items-center gap-2 mb-2 text-xs text-slate-500">
+                <span>Following up on previous report</span>
+                <button
+                  onClick={handleNewConversation}
+                  className="text-cyan-400 hover:text-cyan-300 transition-colors"
+                >
+                  Start fresh
+                </button>
+              </div>
+            )}
             <div className="flex gap-3">
               <div className="flex-1 relative">
                 <textarea
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
                       handleSubmit();
                     }
                   }}
-                  placeholder="Ask a question about your data..."
+                  placeholder={parentReportId ? 'Ask a follow-up question or request changes...' : 'Describe the report you want to generate...'}
                   rows={1}
                   className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none"
                 />
@@ -463,26 +361,28 @@ export function AIReporting() {
               <div className="flex items-center gap-2">
                 <div className="relative">
                   <select
-                    value={dataScope}
-                    onChange={(e) => setDataScope(e.target.value as AIQueryDataScope)}
+                    value={scope}
+                    onChange={(e) => setScope(e.target.value as ReportScope)}
                     className="appearance-none h-full px-3 pr-8 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer"
                   >
-                    <option value="my_data">My Data</option>
-                    {canAccessDepartment && <option value="department">Department</option>}
-                    {canAccessOrganization && <option value="organization">Organization</option>}
+                    {availableScopes.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
                   </select>
                   <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                 </div>
 
                 <div className="relative">
                   <select
-                    value={timeRange.preset || 'last_30_days'}
-                    onChange={(e) => setTimeRange({ type: 'preset', preset: e.target.value })}
+                    value={timeframe}
+                    onChange={(e) => setTimeframe(e.target.value)}
                     className="appearance-none h-full px-3 pr-8 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer"
                   >
-                    {timeRangePresets.map((preset) => (
-                      <option key={preset.value} value={preset.value}>
-                        {preset.label}
+                    {TIMEFRAME_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
                       </option>
                     ))}
                   </select>
@@ -491,10 +391,10 @@ export function AIReporting() {
 
                 <button
                   onClick={handleSubmit}
-                  disabled={!query.trim() || isLoading}
+                  disabled={!prompt.trim() || isGenerating}
                   className="p-3 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-xl hover:from-cyan-600 hover:to-teal-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isLoading ? (
+                  {isGenerating ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : (
                     <Send className="w-5 h-5" />
@@ -509,107 +409,6 @@ export function AIReporting() {
           </div>
         </div>
       </div>
-
-      <div className="w-72 bg-slate-800 border-l border-slate-700 p-4">
-        <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">
-          Query Context
-        </h3>
-
-        <div className="space-y-4">
-          <div className="p-3 bg-slate-900/50 rounded-lg">
-            <div className="text-xs text-slate-500 mb-1">Data Scope</div>
-            <div className="text-sm text-white">
-              {dataScope === 'my_data'
-                ? 'My Data Only'
-                : dataScope === 'department'
-                ? 'My Department'
-                : 'Entire Organization'}
-            </div>
-          </div>
-
-          <div className="p-3 bg-slate-900/50 rounded-lg">
-            <div className="text-xs text-slate-500 mb-1">Time Range</div>
-            <div className="text-sm text-white">
-              {timeRangePresets.find((p) => p.value === timeRange.preset)?.label || 'Last 30 Days'}
-            </div>
-          </div>
-
-          <div className="p-3 bg-slate-900/50 rounded-lg">
-            <div className="text-xs text-slate-500 mb-2">Available Data</div>
-            <div className="space-y-1.5">
-              {Object.entries(dataSourceConfigs).map(([key, config]) => (
-                <div key={key} className="flex items-center gap-2 text-xs">
-                  <div className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                  <span className="text-slate-300">{config.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {showSaveModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-white">Save as Report</h2>
-              <button
-                onClick={() => setShowSaveModal(false)}
-                className="p-1 text-slate-400 hover:text-white transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Report Name
-                </label>
-                <input
-                  type="text"
-                  value={saveReportName}
-                  onChange={(e) => setSaveReportName(e.target.value)}
-                  placeholder="My AI Report"
-                  className="w-full px-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Visibility
-                </label>
-                <select
-                  value={saveVisibility}
-                  onChange={(e) => setSaveVisibility(e.target.value as ReportVisibility)}
-                  className="w-full px-4 py-2.5 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                >
-                  <option value="private">Private - Only you can view</option>
-                  <option value="department">Department - Team members can view</option>
-                  <option value="organization">Organization - Everyone can view</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => setShowSaveModal(false)}
-                className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveAsReport}
-                disabled={!saveReportName.trim() || isSaving}
-                className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-lg hover:from-cyan-600 hover:to-teal-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                Save Report
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

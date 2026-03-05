@@ -68,7 +68,6 @@ import { MediaStorage } from './pages/modules/MediaStorage';
 import { Reputation } from './pages/modules/Reputation';
 import { Reporting } from './pages/modules/Reporting';
 import { AIReporting } from './pages/modules/AIReporting';
-import { ReportBuilder } from './pages/modules/ReportBuilder';
 import { ReportView } from './pages/modules/ReportView';
 import { AuditLogsPage } from './pages/admin/AuditLogs';
 import { SettingsLayout } from './layouts/SettingsLayout';
@@ -472,26 +471,10 @@ function App() {
                 }
               />
               <Route
-                path="/reporting/new"
-                element={
-                  <ProtectedRoute permission="reporting.manage" featureFlag="reporting">
-                    <ReportBuilder />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
                 path="/reporting/:id"
                 element={
                   <ProtectedRoute permission="reporting.view" featureFlag="reporting">
                     <ReportView />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/reporting/:id/edit"
-                element={
-                  <ProtectedRoute permission="reporting.manage" featureFlag="reporting">
-                    <ReportBuilder />
                   </ProtectedRoute>
                 }
               />
