@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Plus,
   Search,
@@ -37,6 +37,8 @@ export function CalendarsTab() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletingCalendar, setDeletingCalendar] = useState<CalendarType | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
+  const menuButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const userRole = user?.role?.name;
   const canToggleStatus = userRole === 'SuperAdmin' || userRole === 'Admin';
@@ -311,19 +313,38 @@ export function CalendarsTab() {
                       <div className="flex justify-end">
                         <div className="relative">
                           <button
-                            onClick={() => setActiveMenu(activeMenu === calendar.id ? null : calendar.id)}
+                            ref={(el) => { menuButtonRefs.current[calendar.id] = el; }}
+                            onClick={() => {
+                              if (activeMenu === calendar.id) {
+                                setActiveMenu(null);
+                                setMenuPosition(null);
+                              } else {
+                                const btn = menuButtonRefs.current[calendar.id];
+                                if (btn) {
+                                  const rect = btn.getBoundingClientRect();
+                                  setMenuPosition({
+                                    top: rect.bottom + window.scrollY + 4,
+                                    right: window.innerWidth - rect.right,
+                                  });
+                                }
+                                setActiveMenu(calendar.id);
+                              }
+                            }}
                             className="p-1 text-slate-400 hover:text-white rounded"
                           >
                             <MoreVertical className="w-4 h-4" />
                           </button>
 
-                          {activeMenu === calendar.id && (
+                          {activeMenu === calendar.id && menuPosition && (
                             <>
                               <div
                                 className="fixed inset-0 z-40"
-                                onClick={() => setActiveMenu(null)}
+                                onClick={() => { setActiveMenu(null); setMenuPosition(null); }}
                               />
-                              <div className="absolute right-0 mt-1 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 py-1">
+                              <div
+                                className="fixed w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 py-1"
+                                style={{ top: menuPosition.top, right: menuPosition.right }}
+                              >
                                 {canManage && (
                                   <button
                                     onClick={() => handleEditCalendar(calendar)}
