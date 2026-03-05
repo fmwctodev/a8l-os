@@ -214,7 +214,7 @@ async function fetchInboxReviews(
   let page = 0;
 
   while (page < maxPages) {
-    const params = new URLSearchParams({ accountId, platform: apiPlatform });
+    const params = new URLSearchParams({ accountId });
     if (cursor) params.set("cursor", cursor);
 
     const url = `${LATE_API_BASE}/v1/inbox/reviews?${params}`;
@@ -232,10 +232,19 @@ async function fetchInboxReviews(
     }
 
     const data = await res.json();
+    console.log(`[reputation-review-sync] API response keys: ${Object.keys(data).join(', ')}, summary: ${JSON.stringify(data.summary)}, meta: ${JSON.stringify(data.meta)}`);
+
     const reviews: InboxReview[] = data.data || data.reviews || data.items || [];
 
     if (data.meta?.failedAccounts?.length) {
-      console.warn(`[reputation-review-sync] Failed accounts in response: ${JSON.stringify(data.meta.failedAccounts)}`);
+      const failedMsg = data.meta.failedAccounts
+        .map((f: { accountId?: string; platform?: string; error?: string; code?: string }) =>
+          `${f.platform}/${f.accountId}: ${f.error || f.code || 'unknown error'}`)
+        .join('; ');
+      console.warn(`[reputation-review-sync] Failed accounts: ${failedMsg}`);
+      if (reviews.length === 0) {
+        return { reviews: normalized, error: `Account fetch failed: ${failedMsg}` };
+      }
     }
 
     for (const r of reviews) {
