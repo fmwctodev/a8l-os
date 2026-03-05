@@ -305,14 +305,13 @@ function buildStyles(accentColor: string): string {
     }
     .page {
       width: 210mm;
-      min-height: 297mm;
-      padding: 40px 50px;
+      padding: 40px 50px 60px;
       background: #0b1120;
-      page-break-after: always;
+      page-break-before: always;
       position: relative;
     }
-    .page:last-child {
-      page-break-after: auto;
+    .page:first-child {
+      page-break-before: auto;
     }
 
     /* Cover */
@@ -446,39 +445,41 @@ function buildStyles(accentColor: string): string {
     .section-body {
       background: #1e293b;
       border-radius: 12px;
-      padding: 28px 32px;
+      padding: 24px 28px;
       color: #cbd5e1;
       font-size: 14px;
-      line-height: 1.7;
+      line-height: 1.65;
+      break-inside: avoid-page;
     }
     .section-body h2,
     .section-body h3 {
       color: #f1f5f9;
       font-weight: 700;
-      margin-top: 24px;
-      margin-bottom: 10px;
+      margin-top: 18px;
+      margin-bottom: 8px;
     }
     .section-body h2 { font-size: 18px; }
     .section-body h3 { font-size: 16px; }
     .section-body h2:first-child,
     .section-body h3:first-child { margin-top: 0; }
     .section-body p {
-      margin-bottom: 14px;
+      margin-bottom: 10px;
     }
     .section-body ul,
     .section-body ol {
       list-style: none;
       padding: 0;
-      margin: 10px 0 18px 0;
+      margin: 8px 0 12px 0;
     }
     .section-body li {
       display: flex;
       align-items: flex-start;
       gap: 12px;
-      padding: 8px 0;
+      padding: 6px 0;
       border-bottom: 1px solid rgba(51,65,85,0.4);
       font-size: 14px;
       color: #cbd5e1;
+      break-inside: avoid;
     }
     .section-body li:last-child {
       border-bottom: none;
@@ -578,8 +579,6 @@ function buildStyles(accentColor: string): string {
 
     /* Acceptance */
     .acceptance-page {
-      display: flex;
-      flex-direction: column;
       padding-top: 60px;
     }
     .acceptance-title {
@@ -639,8 +638,9 @@ function buildStyles(accentColor: string): string {
     }
     .acceptance-footer {
       text-align: center;
-      margin-top: auto;
-      padding-top: 40px;
+      margin-top: 32px;
+      padding-top: 24px;
+      border-top: 1px solid #1e293b;
       color: #64748b;
       font-size: 13px;
     }
@@ -678,11 +678,11 @@ function buildStyles(accentColor: string): string {
         background: #0b1120;
       }
       .page {
-        page-break-after: always;
+        page-break-before: always;
         margin: 0;
       }
-      .page:last-child {
-        page-break-after: auto;
+      .page:first-child {
+        page-break-before: auto;
       }
     }
   `;
