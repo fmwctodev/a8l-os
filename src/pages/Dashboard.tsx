@@ -260,35 +260,10 @@ export function Dashboard() {
           isLoading={isLoading}
         />
         <StatCard
-          title="Invoiced Revenue"
+          title="Total Paid"
           value={
-            analytics?.revenue.invoicedInPeriod
-              ? formatCurrency(analytics.revenue.invoicedInPeriod.current)
-              : '--'
-          }
-          delta={analytics?.revenue.invoicedInPeriod.deltaPercent}
-          deltaType={
-            analytics?.revenue.invoicedInPeriod.trend === 'up'
-              ? 'positive'
-              : analytics?.revenue.invoicedInPeriod.trend === 'down'
-              ? 'negative'
-              : 'neutral'
-          }
-          sublabel={
-            analytics?.revenue.outstanding
-              ? `${formatCurrency(analytics.revenue.outstanding)} outstanding`
-              : undefined
-          }
-          icon={Receipt}
-          accentColor="emerald"
-          onClick={() => navigate('/payments')}
-          isLoading={isLoading}
-        />
-        <StatCard
-          title="Collected Revenue"
-          value={
-            analytics?.revenue.paidInPeriod
-              ? formatCurrency(analytics.revenue.paidInPeriod.current)
+            analytics?.revenue.totalPaid != null
+              ? formatCurrency(analytics.revenue.totalPaid)
               : '--'
           }
           delta={analytics?.revenue.paidInPeriod.deltaPercent}
@@ -299,9 +274,26 @@ export function Dashboard() {
               ? 'negative'
               : 'neutral'
           }
-          sublabel="Paid invoices this period"
+          sublabel={
+            analytics?.revenue.paidInPeriod
+              ? `${formatCurrency(analytics.revenue.paidInPeriod.current)} collected this period`
+              : 'All paid invoices'
+          }
+          icon={Receipt}
+          accentColor="emerald"
+          onClick={() => navigate('/payments')}
+          isLoading={isLoading}
+        />
+        <StatCard
+          title="Outstanding"
+          value={
+            analytics?.revenue.outstanding != null
+              ? formatCurrency(analytics.revenue.outstanding)
+              : '--'
+          }
+          sublabel="Unpaid invoices"
           icon={DollarSign}
-          accentColor="blue"
+          accentColor="amber"
           onClick={() => navigate('/payments')}
           isLoading={isLoading}
         />

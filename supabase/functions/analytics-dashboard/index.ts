@@ -322,6 +322,14 @@ Deno.serve(async (req: Request) => {
 
     const outstanding = (outstandingData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);
 
+    const { data: totalPaidData } = await supabase
+      .from("invoices")
+      .select("total")
+      .eq("org_id", user.orgId)
+      .eq("status", "paid");
+
+    const totalPaid = (totalPaidData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);
+
     return successResponse({
       contacts: {
         total: totalContacts || 0,
@@ -346,6 +354,7 @@ Deno.serve(async (req: Request) => {
         invoicedInPeriod: calculateDelta(invoicedCurrent, invoicedPrev),
         paidInPeriod: calculateDelta(paidCurrent, paidPrev),
         outstanding,
+        totalPaid,
       },
       timeRange: {
         start: start.toISOString(),

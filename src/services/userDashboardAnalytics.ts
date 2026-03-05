@@ -46,6 +46,7 @@ export interface RevenueMetrics {
   invoicedInPeriod: DeltaResult;
   paidInPeriod: DeltaResult;
   outstanding: number;
+  totalPaid?: number;
 }
 
 export interface DashboardAnalytics {
