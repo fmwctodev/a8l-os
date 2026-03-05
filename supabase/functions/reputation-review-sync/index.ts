@@ -8,7 +8,7 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const LATE_API_BASE = "https://getlate.dev/api/v1";
+const LATE_API_BASE = "https://getlate.dev/api";
 
 interface InboxReview {
   id?: string;
@@ -188,7 +188,7 @@ async function fetchInboxReviews(
     const params = new URLSearchParams({ accountId });
     if (cursor) params.set("cursor", cursor);
 
-    const url = `${LATE_API_BASE}/reviews/list-inbox-reviews?${params}`;
+    const url = `${LATE_API_BASE}/v1/inbox/reviews?${params}`;
     console.log(`[reputation-review-sync] Inbox reviews page ${page + 1}: accountId=${accountId}`);
 
     const res = await fetch(url, {

@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const LATE_API_BASE = "https://getlate.dev/api/v1";
+const LATE_API_BASE = "https://getlate.dev/api";
 const DM_PLATFORMS = ["facebook", "instagram", "linkedin"];
 
 interface LateConversation {
@@ -51,7 +51,7 @@ async function fetchConversations(
     const params = new URLSearchParams({ accountId });
     if (cursor) params.set("cursor", cursor);
 
-    const url = `${LATE_API_BASE}/messages/list-inbox-conversations?${params}`;
+    const url = `${LATE_API_BASE}/v1/inbox/conversations?${params}`;
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${lateApiKey}`, Accept: "application/json" },
     });
@@ -87,7 +87,7 @@ async function fetchMessages(
     const params = new URLSearchParams({ conversationId: lateConversationId, accountId });
     if (cursor) params.set("cursor", cursor);
 
-    const url = `${LATE_API_BASE}/messages/get-inbox-conversation-messages?${params}`;
+    const url = `${LATE_API_BASE}/v1/inbox/conversations/${encodeURIComponent(lateConversationId)}/messages?${new URLSearchParams({ accountId })}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${lateApiKey}`, Accept: "application/json" },
     });

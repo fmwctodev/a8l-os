@@ -8,7 +8,7 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const LATE_API_BASE = "https://getlate.dev/api/v1";
+const LATE_API_BASE = "https://getlate.dev/api";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -152,7 +152,7 @@ Deno.serve(async (req: Request) => {
     );
 
     const lateResponse = await fetch(
-      `${LATE_API_BASE}/inbox/reviews/${encodeURIComponent(lateReviewId)}/reply`,
+      `${LATE_API_BASE}/v1/inbox/reviews/${encodeURIComponent(lateReviewId)}/reply`,
       {
         method: "DELETE",
         headers: {

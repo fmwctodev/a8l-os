@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const LATE_API_BASE = "https://getlate.dev/api/v1";
+const LATE_API_BASE = "https://getlate.dev/api";
 const COMMENT_PLATFORMS = ["facebook", "instagram", "linkedin"];
 
 interface LateInboxPost {
@@ -58,7 +58,7 @@ async function fetchInboxPosts(
     const params = new URLSearchParams({ accountId });
     if (cursor) params.set("cursor", cursor);
 
-    const url = `${LATE_API_BASE}/comments/list-inbox-comments?${params}`;
+    const url = `${LATE_API_BASE}/v1/inbox/comments?${params}`;
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${lateApiKey}`, Accept: "application/json" },
     });
@@ -94,7 +94,7 @@ async function fetchPostComments(
     const params = new URLSearchParams({ postId: latePostId, accountId });
     if (cursor) params.set("cursor", cursor);
 
-    const url = `${LATE_API_BASE}/comments/get-inbox-post-comments?${params}`;
+    const url = `${LATE_API_BASE}/v1/inbox/comments/${encodeURIComponent(latePostId)}?${new URLSearchParams({ accountId })}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${lateApiKey}`, Accept: "application/json" },
     });
