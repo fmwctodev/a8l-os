@@ -77,11 +77,26 @@ export async function getContactPaymentSummary(contactId: string): Promise<Conta
 
   const { data: payments } = await supabase
     .from('payments')
-    .select('id, amount')
+    .select('id, amount, invoice_id')
     .eq('contact_id', contactId);
 
   const totalInvoiced = invoices?.reduce((sum, inv) => sum + (inv.total || 0), 0) || 0;
-  const totalPaid = payments?.reduce((sum, pmt) => sum + (pmt.amount || 0), 0) || 0;
+
+  const paymentsByInvoice = new Map<string, number>();
+  for (const pmt of payments || []) {
+    const current = paymentsByInvoice.get(pmt.invoice_id) || 0;
+    paymentsByInvoice.set(pmt.invoice_id, current + (pmt.amount || 0));
+  }
+
+  let totalPaid = 0;
+  for (const inv of invoices || []) {
+    const paymentTotal = paymentsByInvoice.get(inv.id);
+    if (paymentTotal != null && paymentTotal > 0) {
+      totalPaid += paymentTotal;
+    } else if (inv.status === 'paid') {
+      totalPaid += inv.total || 0;
+    }
+  }
 
   return {
     totalInvoiced,

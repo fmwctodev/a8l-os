@@ -300,7 +300,7 @@ async function handlePaymentEvent(
       }
 
       await supabase.from("payment_events").insert({
-        org_id: orgId,
+        organization_id: orgId,
         invoice_id: invoice.id,
         event_type: isPaid ? 'paid' : 'partial_payment',
         amount: line.Amount,
@@ -313,7 +313,7 @@ async function handlePaymentEvent(
       });
 
       await supabase.from("event_outbox").insert({
-        organization_id: orgId,
+        org_id: orgId,
         event_type: isPaid ? 'invoice_paid' : 'invoice_partial_payment',
         contact_id: invoice.contact_id,
         entity_type: 'payment',

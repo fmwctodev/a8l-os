@@ -454,7 +454,7 @@ async function syncInvoicesFromQBO(
   for (const qboInv of qboInvoices) {
     const { data: existing } = await supabase
       .from("invoices")
-      .select("id, status")
+      .select("id, status, contact_id, total")
       .eq("org_id", orgId)
       .eq("qbo_invoice_id", qboInv.Id)
       .maybeSingle();
@@ -468,6 +468,30 @@ async function syncInvoicesFromQBO(
         if (status === "paid") updates.paid_at = new Date().toISOString();
       }
       await supabase.from("invoices").update(updates).eq("id", existing.id);
+
+      const amountPaidInQBO = qboInv.TotalAmt - qboInv.Balance;
+      if (amountPaidInQBO > 0 && existing.contact_id) {
+        const { data: existingPayments } = await supabase
+          .from("payments")
+          .select("amount")
+          .eq("invoice_id", existing.id);
+
+        const currentPaymentTotal = (existingPayments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
+        const deficit = amountPaidInQBO - currentPaymentTotal;
+
+        if (deficit > 0.005) {
+          await supabase.from("payments").insert({
+            org_id: orgId,
+            contact_id: existing.contact_id,
+            invoice_id: existing.id,
+            amount: Math.round(deficit * 100) / 100,
+            currency: "USD",
+            payment_method: "other",
+            received_at: qboInv.MetaData?.LastUpdatedTime || new Date().toISOString(),
+          });
+        }
+      }
+
       updated++;
       continue;
     }
@@ -568,6 +592,19 @@ async function syncInvoicesFromQBO(
       }));
 
       await supabase.from("invoice_line_items").insert(lineInserts);
+    }
+
+    const newInvAmountPaid = qboInv.TotalAmt - qboInv.Balance;
+    if (newInvAmountPaid > 0.005 && contactId) {
+      await supabase.from("payments").insert({
+        org_id: orgId,
+        contact_id: contactId,
+        invoice_id: invoice.id,
+        amount: Math.round(newInvAmountPaid * 100) / 100,
+        currency: "USD",
+        payment_method: "other",
+        received_at: qboInv.MetaData?.LastUpdatedTime || new Date().toISOString(),
+      });
     }
 
     synced++;
