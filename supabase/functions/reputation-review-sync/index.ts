@@ -188,21 +188,37 @@ function normalizeInboxReview(r: InboxReview, accountId: string): NormalizedRevi
   };
 }
 
+const REVIEW_SUPPORTED_PLATFORMS = new Set(["facebook", "googlebusiness"]);
+
+const DB_PLATFORM_TO_API_PLATFORM: Record<string, string> = {
+  google_business: "googlebusiness",
+  googlebusiness: "googlebusiness",
+  facebook: "facebook",
+};
+
 async function fetchInboxReviews(
   lateApiKey: string,
   accountId: string,
+  dbPlatform: string,
   maxPages = 10
 ): Promise<{ reviews: NormalizedReview[]; error?: string }> {
+  const apiPlatform = DB_PLATFORM_TO_API_PLATFORM[dbPlatform] || dbPlatform;
+
+  if (!REVIEW_SUPPORTED_PLATFORMS.has(apiPlatform)) {
+    console.log(`[reputation-review-sync] Skipping ${dbPlatform} — not a review-supported platform`);
+    return { reviews: [] };
+  }
+
   const normalized: NormalizedReview[] = [];
   let cursor: string | undefined;
   let page = 0;
 
   while (page < maxPages) {
-    const params = new URLSearchParams({ accountId });
+    const params = new URLSearchParams({ accountId, platform: apiPlatform });
     if (cursor) params.set("cursor", cursor);
 
     const url = `${LATE_API_BASE}/v1/inbox/reviews?${params}`;
-    console.log(`[reputation-review-sync] Inbox reviews page ${page + 1}: accountId=${accountId}`);
+    console.log(`[reputation-review-sync] Inbox reviews page ${page + 1}: accountId=${accountId} platform=${apiPlatform}`);
 
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${lateApiKey}`, Accept: "application/json" },
@@ -210,13 +226,17 @@ async function fetchInboxReviews(
 
     if (!res.ok) {
       const errText = await res.text();
-      const msg = `Inbox reviews API error ${res.status}: ${errText.slice(0, 300)}`;
+      const msg = `Inbox reviews API error ${res.status} for ${apiPlatform}/${accountId}: ${errText.slice(0, 300)}`;
       console.error(`[reputation-review-sync] ${msg}`);
       return { reviews: normalized, error: msg };
     }
 
     const data = await res.json();
     const reviews: InboxReview[] = data.data || data.reviews || data.items || [];
+
+    if (data.meta?.failedAccounts?.length) {
+      console.warn(`[reputation-review-sync] Failed accounts in response: ${JSON.stringify(data.meta.failedAccounts)}`);
+    }
 
     for (const r of reviews) {
       normalized.push(normalizeInboxReview(r, accountId));
@@ -391,7 +411,7 @@ Deno.serve(async (req: Request) => {
       const platform = conn.platform as string;
       if (platformFilter && platform !== platformFilter) continue;
 
-      const { reviews, error } = await fetchInboxReviews(lateApiKey, conn.late_account_id);
+      const { reviews, error } = await fetchInboxReviews(lateApiKey, conn.late_account_id, platform);
       if (error) syncErrors.push(`[${conn.account_name}] ${error}`);
       allReviews.push(...reviews);
     }
