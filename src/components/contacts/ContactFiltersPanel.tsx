@@ -75,13 +75,16 @@ export function ContactFiltersPanel({
           className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-sm"
         >
           <option value="">All Sources</option>
-          <option value="manual">Manual Entry</option>
+          <option value="cold_call">Cold Call</option>
+          <option value="cold_email">Cold Email</option>
+          <option value="google">Google</option>
+          <option value="google_ads">Google Ads</option>
           <option value="import">Import</option>
+          <option value="linkedin">Linkedin</option>
+          <option value="manual">Manual Entry</option>
+          <option value="meta">Meta</option>
+          <option value="meta_ads">Meta Ads</option>
           <option value="website">Website</option>
-          <option value="referral">Referral</option>
-          <option value="social">Social Media</option>
-          <option value="advertisement">Advertisement</option>
-          <option value="other">Other</option>
         </select>
       </div>
 
