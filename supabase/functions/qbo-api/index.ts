@@ -57,6 +57,13 @@ async function findConnection(
   };
 }
 
+class QBOTokenExpiredError extends Error {
+  constructor() {
+    super("QBO token expired and could not be refreshed. Please reconnect QuickBooks.");
+    this.name = "QBOTokenExpiredError";
+  }
+}
+
 async function getValidAccessToken(
   supabase: ReturnType<typeof createClient>,
   connection: QBOConnection
@@ -72,6 +79,10 @@ async function getValidAccessToken(
   const qboClientId = Deno.env.get("QBO_CLIENT_ID");
   const qboClientSecret = Deno.env.get("QBO_CLIENT_SECRET");
 
+  if (!qboClientId || !qboClientSecret) {
+    throw new QBOTokenExpiredError();
+  }
+
   const basicAuth = btoa(`${qboClientId}:${qboClientSecret}`);
   const tokenResponse = await fetch(QBO_TOKEN_ENDPOINT, {
     method: "POST",
@@ -83,7 +94,7 @@ async function getValidAccessToken(
   });
 
   if (!tokenResponse.ok) {
-    throw new Error("Failed to refresh QBO token");
+    throw new QBOTokenExpiredError();
   }
 
   const tokens = await tokenResponse.json();
@@ -706,6 +717,12 @@ Deno.serve(async (req: Request) => {
     );
   } catch (error) {
     console.error("QBO API error:", error);
+    if (error instanceof QBOTokenExpiredError) {
+      return new Response(
+        JSON.stringify({ error: "QBO_TOKEN_EXPIRED", message: error.message }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     return new Response(
       JSON.stringify({ error: error.message || "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

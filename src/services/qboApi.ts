@@ -1,11 +1,21 @@
 import { callEdgeFunction } from '../lib/edgeFunction';
 import type { Contact, Product, CreateInvoiceLineItem } from '../types';
 
+export class QBOTokenExpiredError extends Error {
+  constructor(message?: string) {
+    super(message || 'QuickBooks session expired. Please reconnect QuickBooks in Settings.');
+    this.name = 'QBOTokenExpiredError';
+  }
+}
+
 const callQboApi = async (action: string, payload: Record<string, unknown> = {}) => {
   const response = await callEdgeFunction('qbo-api', { action, ...payload });
 
   if (!response.ok) {
     const error = await response.json();
+    if (error.error === 'QBO_TOKEN_EXPIRED') {
+      throw new QBOTokenExpiredError(error.message);
+    }
     throw new Error(error.error || 'QBO API request failed');
   }
 

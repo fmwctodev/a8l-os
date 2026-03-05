@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getInvoices, getInvoiceStats, sendInvoice, voidInvoice } from '../../services/invoices';
 import { getProducts, toggleProductActive } from '../../services/products';
 import { getQBOConnectionStatus } from '../../services/qboAuth';
-import { syncQBOInvoices } from '../../services/qboApi';
+import { syncQBOInvoices, QBOTokenExpiredError } from '../../services/qboApi';
 import type { Invoice, Product, InvoiceStats, InvoiceStatus, BillingType } from '../../types';
 import {
   CreditCard,
@@ -114,7 +114,11 @@ export function Payments() {
             await loadData();
           }
         } catch (syncErr) {
-          console.error('Failed to sync QBO invoices:', syncErr);
+          if (syncErr instanceof QBOTokenExpiredError) {
+            setQboConnected(false);
+          } else {
+            console.error('Failed to sync QBO invoices:', syncErr);
+          }
         } finally {
           setIsSyncing(false);
           setTimeout(() => setSyncResult(null), 5000);

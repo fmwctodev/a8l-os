@@ -4,7 +4,7 @@ import { createInvoice } from '../../services/invoices';
 import { getProducts } from '../../services/products';
 import { getContacts, createContact } from '../../services/contacts';
 import { getOpportunities } from '../../services/opportunities';
-import { getQBOItems, type QBOItem } from '../../services/qboApi';
+import { getQBOItems, QBOTokenExpiredError, type QBOItem } from '../../services/qboApi';
 import { isQBOConnected } from '../../services/qboAuth';
 import type { Contact, Product, Opportunity, CreateInvoiceLineItem, DiscountType } from '../../types';
 import { X, Loader2, FileText, Plus, Trash2, Search, User as UserIcon, ArrowLeft } from 'lucide-react';
@@ -96,7 +96,11 @@ export function CreateInvoiceModal({
           const items = await getQBOItems();
           setQboItems(items);
         } catch (err) {
-          console.error('Failed to load QBO items:', err);
+          if (err instanceof QBOTokenExpiredError) {
+            setQboConnected(false);
+          } else {
+            console.error('Failed to load QBO items:', err);
+          }
         } finally {
           setQboItemsLoading(false);
         }
