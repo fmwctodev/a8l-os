@@ -5,17 +5,7 @@ import { createProposal, getProposalTemplates } from '../../services/proposals';
 import { getContacts } from '../../services/contacts';
 import { getOpportunitiesByContact } from '../../services/opportunities';
 import type { Contact, Opportunity, ProposalTemplate } from '../../types';
-import {
-  X,
-  FileText,
-  User,
-  Loader2,
-  Search,
-  ChevronRight,
-  Sparkles,
-  Layout,
-  Plus,
-} from 'lucide-react';
+import { X, FileText, User, Loader2, Search, ChevronRight, Sparkles, LayoutGrid as Layout, Plus } from 'lucide-react';
 import { InlineCreateContactForm } from '../shared/InlineCreateContactForm';
 
 interface CreateProposalModalProps {
