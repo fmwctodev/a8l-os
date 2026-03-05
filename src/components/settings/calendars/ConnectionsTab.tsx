@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Check,
   X,
@@ -25,6 +26,7 @@ import { useToast } from '../../../contexts/ToastContext';
 export function ConnectionsTab() {
   const { user, isSuperAdmin } = useAuth();
   const { showToast } = useToast();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [connection, setConnection] = useState<GoogleConnection | null>(null);
@@ -133,7 +135,7 @@ export function ConnectionsTab() {
             </p>
           </div>
           <button
-            onClick={handleConnect}
+            onClick={connection?.connected ? () => navigate('/settings/profile?tab=connected-accounts') : handleConnect}
             disabled={connecting}
             className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors flex items-center gap-2 text-sm font-medium whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
           >
