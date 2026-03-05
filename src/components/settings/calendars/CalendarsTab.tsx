@@ -1,19 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import {
-  Plus,
-  Search,
-  User,
-  Users,
-  MoreVertical,
-  Edit2,
-  Copy,
-  Trash2,
-  ToggleLeft,
-  ToggleRight,
-  Calendar,
-  Check,
-  X,
-} from 'lucide-react';
+import { Plus, Search, User, Users, MoreVertical, CreditCard as Edit2, Copy, Trash2, ToggleLeft, ToggleRight, Calendar, Check, X } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getCalendars, enableCalendar, disableCalendar } from '../../../services/calendars';
 import { getDepartments } from '../../../services/departments';
