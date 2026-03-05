@@ -195,24 +195,6 @@ export async function deleteCalendar(id: string, currentUser: User): Promise<voi
     .eq('id', id)
     .maybeSingle();
 
-  const childTables = [
-    'appointments',
-    'appointment_types',
-    'availability_rules',
-    'availability_date_overrides',
-    'blocked_slots',
-    'calendar_events',
-    'calendar_tasks',
-    'calendar_members',
-  ] as const;
-
-  for (const table of childTables) {
-    const { error } = await supabase.from(table).delete().eq('calendar_id', id);
-    if (error) {
-      console.warn(`Failed to delete from ${table}:`, error.message);
-    }
-  }
-
   const { error } = await supabase.from('calendars').delete().eq('id', id);
   if (error) throw error;
 

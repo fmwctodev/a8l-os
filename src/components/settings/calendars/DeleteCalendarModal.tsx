@@ -18,14 +18,13 @@ export function DeleteCalendarModal({
   calendar,
 }: DeleteCalendarModalProps) {
   const { user } = useAuth();
-  const [confirmName, setConfirmName] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
 
   if (!open || !calendar) return null;
 
   const handleDelete = async () => {
-    if (!user || confirmName !== calendar.name) return;
+    if (!user) return;
 
     setError('');
     setDeleting(true);
@@ -39,8 +38,6 @@ export function DeleteCalendarModal({
       setDeleting(false);
     }
   };
-
-  const isConfirmValid = confirmName === calendar.name;
 
   return (
     <>
@@ -72,45 +69,32 @@ export function DeleteCalendarModal({
               </div>
             )}
 
-            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-              <p className="text-red-400 text-sm font-medium mb-2">
-                This action cannot be undone. This will permanently delete:
-              </p>
-              <ul className="text-red-400/80 text-sm space-y-1 list-disc list-inside">
-                <li>The calendar "{calendar.name}"</li>
-                <li>All appointment types ({calendar.appointment_types?.length || 0})</li>
-                <li>All scheduled and past appointments</li>
-                <li>All availability rules</li>
-              </ul>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Type <span className="text-white font-bold">{calendar.name}</span> to confirm
-              </label>
-              <input
-                type="text"
-                value={confirmName}
-                onChange={(e) => setConfirmName(e.target.value)}
-                placeholder="Enter calendar name"
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
-              />
-            </div>
+            <p className="text-slate-300">
+              Are you sure you want to delete the calendar{' '}
+              <span className="text-white font-semibold">"{calendar.name}"</span>?
+            </p>
+            <p className="text-slate-400 text-sm">
+              This action cannot be undone.
+            </p>
           </div>
 
           <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
+              disabled={deleting}
+              className="px-4 py-2 text-slate-300 hover:text-white transition-colors disabled:opacity-50"
             >
-              Cancel
+              No, Cancel
             </button>
             <button
               onClick={handleDelete}
-              disabled={!isConfirmValid || deleting}
-              className="px-4 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={deleting}
+              className="px-4 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
-              {deleting ? 'Deleting...' : 'Delete Calendar'}
+              {deleting && (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              )}
+              {deleting ? 'Deleting...' : 'Yes, Delete'}
             </button>
           </div>
         </div>
