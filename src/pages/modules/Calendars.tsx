@@ -8,7 +8,10 @@ type CalendarTab = 'calendar' | 'list';
 export function Calendars() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = (searchParams.get('tab') as CalendarTab) || 'calendar';
+  const initialAppointmentId = searchParams.get('appointmentId') || undefined;
+  const initialTab = initialAppointmentId
+    ? 'list'
+    : (searchParams.get('tab') as CalendarTab) || 'calendar';
   const [activeTab, setActiveTab] = useState<CalendarTab>(initialTab);
 
   const handleTabChange = (tab: CalendarTab) => {
@@ -61,7 +64,7 @@ export function Calendars() {
 
       <div className="flex-1 bg-slate-900 rounded-xl border border-slate-800 overflow-hidden">
         {activeTab === 'calendar' && <UnifiedCalendarView />}
-        {activeTab === 'list' && <AppointmentListView />}
+        {activeTab === 'list' && <AppointmentListView initialAppointmentId={initialAppointmentId} />}
       </div>
     </div>
   );

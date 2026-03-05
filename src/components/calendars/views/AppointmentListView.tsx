@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Loader2, ChevronUp, ChevronDown, Calendar as CalendarIcon, Clock, User as UserIcon, SlidersHorizontal, MoreVertical, Eye, CreditCard as Edit3, XCircle, Plus } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -17,8 +17,13 @@ type SortDirection = 'asc' | 'desc';
 
 const PAGE_SIZE = 20;
 
-export function AppointmentListView() {
+interface AppointmentListViewProps {
+  initialAppointmentId?: string;
+}
+
+export function AppointmentListView({ initialAppointmentId }: AppointmentListViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const didAutoOpen = useRef(false);
   const { user: currentUser, hasPermission } = useAuth();
 
   const initialCalendarIds = searchParams.get('calendars')?.split(',').filter(Boolean) || [];
@@ -111,6 +116,15 @@ export function AppointmentListView() {
     }
     setSearchParams(params, { replace: true });
   }, [selectedCalendarIds, setSearchParams]);
+
+  useEffect(() => {
+    if (!initialAppointmentId || didAutoOpen.current || appointments.length === 0) return;
+    const match = appointments.find((a) => a.id === initialAppointmentId);
+    if (match) {
+      didAutoOpen.current = true;
+      setSelectedAppointment(match);
+    }
+  }, [initialAppointmentId, appointments]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {

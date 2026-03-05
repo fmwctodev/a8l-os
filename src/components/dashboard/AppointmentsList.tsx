@@ -67,7 +67,7 @@ export function AppointmentsList({ appointments, isLoading }: AppointmentsListPr
               return (
                 <Link
                   key={appointment.id}
-                  to={`/calendars/${appointment.calendar_id}`}
+                  to={`/calendars?tab=list&appointmentId=${appointment.id}`}
                   className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-700/50 transition-colors"
                 >
                   <div className="p-2 rounded-lg bg-cyan-500/10">
