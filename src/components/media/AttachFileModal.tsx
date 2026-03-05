@@ -130,7 +130,7 @@ export default function AttachFileModal({
     setCheckingConnection(true);
     try {
       const status = await getConnectionStatus(user.id);
-      setDriveConnected(status.connected && !status.tokenExpired);
+      setDriveConnected(status.connected);
     } catch {
       setDriveConnected(false);
     } finally {
