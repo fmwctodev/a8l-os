@@ -35,7 +35,7 @@ import { RecurringProfilesTab } from '../../components/payments/RecurringProfile
 import { PaymentReportsTab } from '../../components/payments/PaymentReportsTab';
 import { InvoiceTemplatesTab } from '../../components/payments/InvoiceTemplatesTab';
 import { InvoiceBulkActionsBar } from '../../components/payments/InvoiceBulkActionsBar';
-import { BarChart3, Layout } from 'lucide-react';
+import { BarChart3, LayoutGrid as Layout } from 'lucide-react';
 
 type TabType = 'invoices' | 'products' | 'recurring' | 'templates' | 'reports';
 
