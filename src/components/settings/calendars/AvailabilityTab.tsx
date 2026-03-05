@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react';
-import { CalendarDays, Plus, Trash2, Copy, Clock, X, Check } from 'lucide-react';
+import { CalendarDays, Plus, Trash2, Copy, Clock, X, Check, Users, User } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getCalendars } from '../../../services/calendars';
 import {
   getAvailabilityRule,
   upsertAvailabilityRule,
-  addDateOverride,
-  removeDateOverride,
   getDefaultSchedule,
   getCommonTimezones,
 } from '../../../services/availabilityRules';
@@ -42,10 +40,16 @@ function formatTime(time: string): string {
   return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
 }
 
+interface MemberScheduleSelector {
+  userId: string | null;
+  name: string;
+}
+
 export function AvailabilityTab() {
   const { user } = useAuth();
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [rule, setRule] = useState<AvailabilityRule | null>(null);
@@ -55,6 +59,7 @@ export function AvailabilityTab() {
   const [showAddOverride, setShowAddOverride] = useState(false);
   const [newOverride, setNewOverride] = useState({ date: '', available: false, ranges: [] as TimeRange[] });
   const [hasChanges, setHasChanges] = useState(false);
+  const [memberRuleStatus, setMemberRuleStatus] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     loadCalendars();
@@ -62,7 +67,18 @@ export function AvailabilityTab() {
 
   useEffect(() => {
     if (selectedCalendarId) {
-      loadAvailability();
+      const calendar = calendars.find((c) => c.id === selectedCalendarId);
+      const isTeam = calendar?.type === 'team';
+      if (!isTeam) {
+        setSelectedMemberId(null);
+      }
+      loadAvailability(selectedCalendarId, isTeam ? selectedMemberId : null);
+    }
+  }, [selectedCalendarId, selectedMemberId]);
+
+  useEffect(() => {
+    if (selectedCalendarId) {
+      checkMemberRuleStatuses();
     }
   }, [selectedCalendarId]);
 
@@ -84,11 +100,21 @@ export function AvailabilityTab() {
     }
   };
 
-  const loadAvailability = async () => {
-    if (!selectedCalendarId) return;
+  const checkMemberRuleStatuses = async () => {
+    const calendar = calendars.find((c) => c.id === selectedCalendarId);
+    if (!calendar?.members?.length) return;
 
+    const statuses: Record<string, boolean> = {};
+    for (const member of calendar.members) {
+      const r = await getAvailabilityRule(selectedCalendarId, member.user_id);
+      statuses[member.user_id] = !!r;
+    }
+    setMemberRuleStatus(statuses);
+  };
+
+  const loadAvailability = async (calendarId: string, userId: string | null) => {
     try {
-      const ruleData = await getAvailabilityRule(selectedCalendarId, null);
+      const ruleData = await getAvailabilityRule(calendarId, userId);
       if (ruleData) {
         setRule(ruleData);
         setTimezone(ruleData.timezone);
@@ -191,12 +217,16 @@ export function AvailabilityTab() {
     try {
       await upsertAvailabilityRule(user.organization_id, {
         calendar_id: selectedCalendarId,
-        user_id: null,
+        user_id: selectedMemberId || null,
         timezone,
         rules: schedule,
         overrides,
       });
       setHasChanges(false);
+
+      if (selectedMemberId) {
+        setMemberRuleStatus((prev) => ({ ...prev, [selectedMemberId]: true }));
+      }
     } catch (error) {
       console.error('Failed to save availability:', error);
     } finally {
@@ -227,14 +257,36 @@ export function AvailabilityTab() {
   }
 
   const selectedCalendar = calendars.find((c) => c.id === selectedCalendarId);
+  const isTeamCalendar = selectedCalendar?.type === 'team';
+  const isCollective = selectedCalendar?.settings?.assignment_mode === 'collective';
+  const members = selectedCalendar?.members || [];
+
+  const memberScheduleOptions: MemberScheduleSelector[] = [
+    { userId: null, name: isCollective ? 'Default (fallback schedule)' : 'Calendar Schedule' },
+    ...members.map((m) => ({
+      userId: m.user_id,
+      name: m.user?.name || `Member ${m.user_id.slice(0, 6)}`,
+    })),
+  ];
+
+  const scheduleSectionTitle = selectedMemberId
+    ? `${memberScheduleOptions.find((o) => o.userId === selectedMemberId)?.name || 'Member'} Schedule`
+    : isTeamCalendar
+    ? isCollective
+      ? 'Default Schedule (fallback if no individual schedule set)'
+      : 'Team Schedule'
+    : 'Weekly Schedule';
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <select
             value={selectedCalendarId}
-            onChange={(e) => setSelectedCalendarId(e.target.value)}
+            onChange={(e) => {
+              setSelectedCalendarId(e.target.value);
+              setSelectedMemberId(null);
+            }}
             className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
           >
             {calendars.map((cal) => (
@@ -245,8 +297,12 @@ export function AvailabilityTab() {
           </select>
 
           {selectedCalendar && (
-            <span className="text-sm text-slate-400">
-              {selectedCalendar.type === 'user' ? 'User Calendar' : 'Team Calendar'}
+            <span className="text-sm text-slate-400 flex items-center gap-1">
+              {selectedCalendar.type === 'user' ? (
+                <><User className="w-3.5 h-3.5" /> User Calendar</>
+              ) : (
+                <><Users className="w-3.5 h-3.5" /> Team Calendar{isCollective ? ' · Collective' : ''}</>
+              )}
             </span>
           )}
         </div>
@@ -272,11 +328,71 @@ export function AvailabilityTab() {
         )}
       </div>
 
+      {isTeamCalendar && members.length > 0 && (
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Users className="w-4 h-4 text-slate-400" />
+            <h3 className="text-sm font-medium text-white">
+              {isCollective ? 'Per-Member Schedules' : 'Member Schedules'}
+            </h3>
+            {isCollective && (
+              <span className="text-xs text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-full ml-auto">
+                Availability is intersected — all must be free
+              </span>
+            )}
+          </div>
+
+          <p className="text-xs text-slate-400 mb-3">
+            {isCollective
+              ? 'Set individual schedules for each member. A booking slot only appears when every active member is available.'
+              : 'Optionally set per-member schedules. Members without individual schedules use the team calendar schedule.'}
+          </p>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedMemberId(null)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
+                selectedMemberId === null
+                  ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
+                  : 'bg-slate-700 border-slate-600 text-slate-300 hover:border-slate-500'
+              }`}
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              {isCollective ? 'Default' : 'Team Default'}
+            </button>
+
+            {members.map((member) => {
+              const hasRule = memberRuleStatus[member.user_id];
+              const isSelected = selectedMemberId === member.user_id;
+              return (
+                <button
+                  key={member.user_id}
+                  onClick={() => setSelectedMemberId(member.user_id)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
+                    isSelected
+                      ? 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
+                      : 'bg-slate-700 border-slate-600 text-slate-300 hover:border-slate-500'
+                  }`}
+                >
+                  <div className="w-5 h-5 rounded-full bg-slate-500 flex items-center justify-center text-xs text-white shrink-0">
+                    {(member.user?.name || 'U').charAt(0).toUpperCase()}
+                  </div>
+                  <span>{member.user?.name || 'Member'}</span>
+                  {hasRule && !isSelected && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-white font-medium">Weekly Schedule</h3>
+              <h3 className="text-white font-medium">{scheduleSectionTitle}</h3>
               <div className="flex items-center gap-3">
                 <select
                   value={timezone}
@@ -431,6 +547,18 @@ export function AvailabilityTab() {
               </div>
             )}
           </div>
+
+          {!hasChanges && (
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-4">
+              <p className="text-xs text-slate-500">
+                {isTeamCalendar && isCollective
+                  ? 'For collective calendars, set individual schedules per member. Slots appear only when all active members are free simultaneously.'
+                  : isTeamCalendar
+                  ? 'Members without individual schedules inherit this team schedule.'
+                  : 'Changes are applied immediately after saving.'}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

@@ -685,7 +685,7 @@ export type CalendarType = 'user' | 'team';
 export type LocationType = 'phone' | 'google_meet' | 'zoom' | 'in_person' | 'custom';
 export type AppointmentStatus = 'scheduled' | 'canceled' | 'completed' | 'no_show';
 export type AppointmentSource = 'booking' | 'manual';
-export type AssignmentMode = 'round_robin' | 'priority';
+export type AssignmentMode = 'round_robin' | 'priority' | 'collective';
 export type SyncStatus = 'synced' | 'pending' | 'failed';
 
 export interface CalendarSettings {

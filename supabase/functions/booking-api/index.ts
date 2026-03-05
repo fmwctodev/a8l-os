@@ -167,7 +167,7 @@ async function handleGetCalendarInfo(
 
   const { data: calendar } = await supabase
     .from("calendars")
-    .select("id, name, slug, org_id")
+    .select("id, name, slug, org_id, settings, members:calendar_members(user_id, active)")
     .eq("slug", calendarSlug)
     .maybeSingle();
 
@@ -199,12 +199,41 @@ async function handleGetCalendarInfo(
     );
   }
 
+  const settings = calendar.settings as { assignment_mode?: string } | null;
+  const isCollective = settings?.assignment_mode === "collective";
+
+  let collectiveMembers: Array<{ name: string; initials: string }> = [];
+
+  if (isCollective) {
+    const members = (calendar.members as Array<{ user_id: string; active: boolean }>) || [];
+    const activeMembers = members.filter((m) => m.active);
+
+    if (activeMembers.length > 0) {
+      const { data: users } = await supabase
+        .from("users")
+        .select("id, name")
+        .in("id", activeMembers.map((m) => m.user_id));
+
+      collectiveMembers = (users || []).map((u) => ({
+        name: u.name || "Team Member",
+        initials: (u.name || "TM")
+          .split(" ")
+          .map((n: string) => n[0])
+          .join("")
+          .toUpperCase()
+          .slice(0, 2),
+      }));
+    }
+  }
+
   return new Response(
     JSON.stringify({
       calendar: {
         id: calendar.id,
         name: calendar.name,
         slug: calendar.slug,
+        is_collective: isCollective,
+        collective_members: isCollective ? collectiveMembers : undefined,
       },
       appointment_type: {
         id: appointmentType.id,
@@ -289,6 +318,9 @@ async function handleGetAvailability(
 
   const busyBlocks = await getBusyBlocks(supabase, calendar, startDate, endDate);
 
+  const settings = calendar.settings as { assignment_mode?: string } | null;
+  const isCollective = settings?.assignment_mode === "collective";
+
   const slots = generateSlots(
     startDate,
     endDate,
@@ -296,7 +328,8 @@ async function handleGetAvailability(
     rules,
     appointmentType,
     eligibleUserIds,
-    busyBlocks
+    busyBlocks,
+    isCollective
   );
 
   return new Response(
@@ -353,7 +386,8 @@ function generateSlots(
   rules: Array<Record<string, unknown>>,
   appointmentType: Record<string, unknown>,
   eligibleUserIds: string[],
-  busyBlocks: Array<{ userId: string; start: Date; end: Date }>
+  busyBlocks: Array<{ userId: string; start: Date; end: Date }>,
+  isCollective: boolean
 ): AvailabilitySlot[] {
   const slots: AvailabilitySlot[] = [];
   const startDateObj = new Date(startDate);
@@ -363,6 +397,9 @@ function generateSlots(
     now.getTime() + (appointmentType.min_notice_minutes as number) * 60 * 1000
   );
 
+  const calendarLevelRule = rules.find((r) => r.user_id === null) || rules[0];
+  if (!calendarLevelRule) return slots;
+
   for (
     let date = new Date(startDateObj);
     date <= endDateObj;
@@ -371,10 +408,7 @@ function generateSlots(
     const dateStr = date.toISOString().split("T")[0];
     const dayOfWeek = DAYS_OF_WEEK[date.getDay()];
 
-    const calendarRule = rules.find((r) => r.user_id === null) || rules[0];
-    if (!calendarRule) continue;
-
-    const dayRanges = getDayRanges(calendarRule, dateStr, dayOfWeek);
+    const dayRanges = getDayRanges(calendarLevelRule, dateStr, dayOfWeek);
     if (dayRanges.length === 0) continue;
 
     for (const range of dayRanges) {
@@ -393,15 +427,27 @@ function generateSlots(
           continue;
         }
 
+        const bufferBefore = (appointmentType.buffer_before_minutes as number) * 60 * 1000;
+        const bufferAfter = (appointmentType.buffer_after_minutes as number) * 60 * 1000;
+        const bufferedStart = new Date(current.getTime() - bufferBefore);
+        const bufferedEnd = new Date(slotEnd.getTime() + bufferAfter);
+
         const availableUserIds: string[] = [];
 
         for (const userId of eligibleUserIds) {
-          const userBusyBlocks = busyBlocks.filter((b) => b.userId === userId);
-          const bufferBefore = (appointmentType.buffer_before_minutes as number) * 60 * 1000;
-          const bufferAfter = (appointmentType.buffer_after_minutes as number) * 60 * 1000;
-          const bufferedStart = new Date(current.getTime() - bufferBefore);
-          const bufferedEnd = new Date(slotEnd.getTime() + bufferAfter);
+          const userRule = rules.find((r) => r.user_id === userId);
+          const effectiveRule = userRule || calendarLevelRule;
+          const memberDayRanges = getDayRanges(effectiveRule, dateStr, dayOfWeek);
 
+          const withinMemberSchedule = memberDayRanges.some((mr) => {
+            const mStart = parseTimeToDate(date, mr.start);
+            const mEnd = parseTimeToDate(date, mr.end);
+            return current >= mStart && slotEnd <= mEnd;
+          });
+
+          if (!withinMemberSchedule) continue;
+
+          const userBusyBlocks = busyBlocks.filter((b) => b.userId === userId);
           const hasConflict = userBusyBlocks.some(
             (b) => bufferedStart < b.end && bufferedEnd > b.start
           );
@@ -411,12 +457,22 @@ function generateSlots(
           }
         }
 
-        if (availableUserIds.length > 0) {
-          slots.push({
-            start: current.toISOString(),
-            end: slotEnd.toISOString(),
-            eligible_user_ids: availableUserIds,
-          });
+        if (isCollective) {
+          if (availableUserIds.length === eligibleUserIds.length && eligibleUserIds.length > 0) {
+            slots.push({
+              start: current.toISOString(),
+              end: slotEnd.toISOString(),
+              eligible_user_ids: availableUserIds,
+            });
+          }
+        } else {
+          if (availableUserIds.length > 0) {
+            slots.push({
+              start: current.toISOString(),
+              end: slotEnd.toISOString(),
+              eligible_user_ids: availableUserIds,
+            });
+          }
         }
 
         current = new Date(current.getTime() + intervalMs);
@@ -658,6 +714,10 @@ async function assignUser(
   }
 
   const settings = calendar.settings as { assignment_mode: string; last_assigned_index: number };
+
+  if (settings.assignment_mode === "collective") {
+    return activeMembers[0].user_id;
+  }
 
   if (settings.assignment_mode === "priority") {
     const sorted = [...activeMembers].sort((a, b) => b.priority - a.priority);

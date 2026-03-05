@@ -15,10 +15,17 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 
+interface CollectiveMember {
+  name: string;
+  initials: string;
+}
+
 interface CalendarInfo {
   id: string;
   name: string;
   slug: string;
+  is_collective?: boolean;
+  collective_members?: CollectiveMember[];
 }
 
 interface AppointmentTypeInfo {
@@ -363,6 +370,21 @@ END:VCALENDAR`;
                 {getLocationText()}
               </span>
             </div>
+            {calendarInfo.is_collective && calendarInfo.collective_members && calendarInfo.collective_members.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-800">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">Meeting with</p>
+                <div className="flex flex-wrap gap-3">
+                  {calendarInfo.collective_members.map((member, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-xs font-bold text-white">
+                        {member.initials}
+                      </div>
+                      <span className="text-sm text-slate-300">{member.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {step === 'date' && (

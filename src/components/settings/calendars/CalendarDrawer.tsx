@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, User, Users, Plus, Trash2 } from 'lucide-react';
+import { X, User, Users, Plus, Trash2, RefreshCw, Star, LayoutGrid } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
   createCalendar,
@@ -20,6 +20,27 @@ interface CalendarDrawerProps {
   users: UserType[];
 }
 
+const ASSIGNMENT_MODES: { value: AssignmentMode; label: string; description: string; icon: typeof RefreshCw }[] = [
+  {
+    value: 'round_robin',
+    label: 'Round Robin',
+    description: 'Appointments rotate evenly across team members by weight',
+    icon: RefreshCw,
+  },
+  {
+    value: 'priority',
+    label: 'Priority',
+    description: 'Always assigned to the highest priority available member',
+    icon: Star,
+  },
+  {
+    value: 'collective',
+    label: 'Collective',
+    description: 'All members must be free — everyone meets with the visitor together',
+    icon: LayoutGrid,
+  },
+];
+
 export function CalendarDrawer({
   open,
   onClose,
@@ -30,6 +51,12 @@ export function CalendarDrawer({
 }: CalendarDrawerProps) {
   const { user } = useAuth();
   const isEditing = !!calendar;
+
+  const userRole = user?.role?.name;
+  const canManageTeamCalendars =
+    userRole === 'SuperAdmin' ||
+    userRole === 'Admin' ||
+    user?.permissions?.includes('calendars.manage_all');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -61,7 +88,7 @@ export function CalendarDrawer({
         setFormData({
           name: '',
           slug: '',
-          type: 'user',
+          type: canManageTeamCalendars ? 'user' : 'user',
           department_id: '',
           owner_user_id: user?.id || '',
           assignment_mode: 'round_robin',
@@ -211,6 +238,8 @@ export function CalendarDrawer({
       !members.find((m) => m.user_id === u.id)
   );
 
+  const isCollective = formData.assignment_mode === 'collective';
+
   if (!open) return null;
 
   return (
@@ -273,11 +302,11 @@ export function CalendarDrawer({
                 <label className="block text-sm font-medium text-slate-300 mb-3">
                   Calendar Type
                 </label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className={`grid gap-3 ${canManageTeamCalendars ? 'grid-cols-2' : 'grid-cols-1'}`}>
                   <button
                     type="button"
                     onClick={() =>
-                      setFormData({ ...formData, type: 'user', owner_user_id: user?.id || '' })
+                      setFormData({ ...formData, type: 'user', owner_user_id: user?.id || '', assignment_mode: 'round_robin' })
                     }
                     className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${
                       formData.type === 'user'
@@ -302,33 +331,35 @@ export function CalendarDrawer({
                     </span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setFormData({ ...formData, type: 'team', owner_user_id: '' })
-                    }
-                    className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${
-                      formData.type === 'team'
-                        ? 'border-cyan-500 bg-cyan-500/10'
-                        : 'border-slate-700 bg-slate-800 hover:border-slate-600'
-                    }`}
-                  >
-                    <Users
-                      className={`w-6 h-6 ${
-                        formData.type === 'team' ? 'text-cyan-400' : 'text-slate-400'
-                      }`}
-                    />
-                    <span
-                      className={`font-medium ${
-                        formData.type === 'team' ? 'text-cyan-400' : 'text-slate-300'
+                  {canManageTeamCalendars && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormData({ ...formData, type: 'team', owner_user_id: '' })
+                      }
+                      className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${
+                        formData.type === 'team'
+                          ? 'border-cyan-500 bg-cyan-500/10'
+                          : 'border-slate-700 bg-slate-800 hover:border-slate-600'
                       }`}
                     >
-                      Team Calendar
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      Round-robin assignment
-                    </span>
-                  </button>
+                      <Users
+                        className={`w-6 h-6 ${
+                          formData.type === 'team' ? 'text-cyan-400' : 'text-slate-400'
+                        }`}
+                      />
+                      <span
+                        className={`font-medium ${
+                          formData.type === 'team' ? 'text-cyan-400' : 'text-slate-300'
+                        }`}
+                      >
+                        Team Calendar
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        Multi-member routing
+                      </span>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -358,52 +389,87 @@ export function CalendarDrawer({
                 <label className="block text-sm font-medium text-slate-300 mb-2">
                   Owner
                 </label>
-                <select
-                  value={formData.owner_user_id}
-                  onChange={(e) =>
-                    setFormData({ ...formData, owner_user_id: e.target.value })
-                  }
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  required
-                  disabled={isEditing}
-                >
-                  <option value="">Select Owner</option>
-                  {users
-                    .filter((u) => u.status === 'active')
-                    .map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name}
-                      </option>
-                    ))}
-                </select>
+                {isEditing ? (
+                  <div className="px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-400 text-sm">
+                    {users.find((u) => u.id === formData.owner_user_id)?.name || 'Unknown'}
+                    <span className="ml-2 text-xs text-slate-500">(cannot be changed)</span>
+                  </div>
+                ) : (
+                  <select
+                    value={formData.owner_user_id}
+                    onChange={(e) =>
+                      setFormData({ ...formData, owner_user_id: e.target.value })
+                    }
+                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    required
+                  >
+                    <option value="">Select Owner</option>
+                    {users
+                      .filter((u) => u.status === 'active')
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                        </option>
+                      ))}
+                  </select>
+                )}
               </div>
             )}
 
             {formData.type === 'team' && (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                  <label className="block text-sm font-medium text-slate-300 mb-3">
                     Assignment Mode
                   </label>
-                  <select
-                    value={formData.assignment_mode}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        assignment_mode: e.target.value as AssignmentMode,
-                      })
-                    }
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  >
-                    <option value="round_robin">Round Robin</option>
-                    <option value="priority">Priority Based</option>
-                  </select>
+                  <div className="space-y-2">
+                    {ASSIGNMENT_MODES.map((mode) => {
+                      const Icon = mode.icon;
+                      const isSelected = formData.assignment_mode === mode.value;
+                      return (
+                        <button
+                          key={mode.value}
+                          type="button"
+                          onClick={() =>
+                            setFormData({
+                              ...formData,
+                              assignment_mode: mode.value,
+                            })
+                          }
+                          className={`w-full p-3 rounded-lg border-2 transition-all flex items-start gap-3 text-left ${
+                            isSelected
+                              ? 'border-cyan-500 bg-cyan-500/10'
+                              : 'border-slate-700 bg-slate-800 hover:border-slate-600'
+                          }`}
+                        >
+                          <Icon
+                            className={`w-5 h-5 mt-0.5 shrink-0 ${
+                              isSelected ? 'text-cyan-400' : 'text-slate-400'
+                            }`}
+                          />
+                          <div>
+                            <p className={`font-medium text-sm ${isSelected ? 'text-cyan-400' : 'text-slate-300'}`}>
+                              {mode.label}
+                            </p>
+                            <p className="text-xs text-slate-500 mt-0.5">{mode.description}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-3">
-                    Team Members
-                  </label>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-medium text-slate-300">
+                      Team Members
+                    </label>
+                    {isCollective && (
+                      <span className="text-xs text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-full">
+                        All must be free for a slot to appear
+                      </span>
+                    )}
+                  </div>
 
                   <div className="flex gap-2 mb-3">
                     <select
@@ -429,80 +495,92 @@ export function CalendarDrawer({
                   </div>
 
                   {members.length > 0 ? (
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       {members.map((member) => (
                         <div
                           key={member.id}
                           className="p-3 bg-slate-800 rounded-lg border border-slate-700"
                         >
-                          <div className="flex items-center justify-between mb-3">
-                            <span className="text-white font-medium">
-                              {member.user?.name || 'Unknown User'}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveMember(member.id)}
-                              className="p-1 text-slate-400 hover:text-red-400"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-xs text-slate-400 mb-1">
-                                Weight (1-10)
-                              </label>
-                              <input
-                                type="number"
-                                min="1"
-                                max="10"
-                                value={member.weight}
-                                onChange={(e) =>
-                                  handleUpdateMember(member.id, {
-                                    weight: parseInt(e.target.value) || 1,
-                                  })
-                                }
-                                className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                              />
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-7 h-7 rounded-full bg-slate-600 flex items-center justify-center text-xs font-medium text-white">
+                                {(member.user?.name || 'U').charAt(0).toUpperCase()}
+                              </div>
+                              <span className="text-white font-medium text-sm">
+                                {member.user?.name || 'Unknown User'}
+                              </span>
                             </div>
-                            <div>
-                              <label className="block text-xs text-slate-400 mb-1">
-                                Priority (1-10)
+                            <div className="flex items-center gap-3">
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={member.active}
+                                  onChange={(e) =>
+                                    handleUpdateMember(member.id, {
+                                      active: e.target.checked,
+                                    })
+                                  }
+                                  className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500"
+                                />
+                                <span className="text-xs text-slate-400">Active</span>
                               </label>
-                              <input
-                                type="number"
-                                min="1"
-                                max="10"
-                                value={member.priority}
-                                onChange={(e) =>
-                                  handleUpdateMember(member.id, {
-                                    priority: parseInt(e.target.value) || 5,
-                                  })
-                                }
-                                className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                              />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMember(member.id)}
+                                className="p-1 text-slate-500 hover:text-red-400 transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </div>
 
-                          <label className="flex items-center gap-2 mt-3 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={member.active}
-                              onChange={(e) =>
-                                handleUpdateMember(member.id, {
-                                  active: e.target.checked,
-                                })
-                              }
-                              className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500"
-                            />
-                            <span className="text-sm text-slate-300">Active</span>
-                          </label>
+                          {!isCollective && (
+                            <div className="grid grid-cols-2 gap-3 mt-3">
+                              {formData.assignment_mode === 'round_robin' && (
+                                <div>
+                                  <label className="block text-xs text-slate-400 mb-1">
+                                    Weight (1–10)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="10"
+                                    value={member.weight}
+                                    onChange={(e) =>
+                                      handleUpdateMember(member.id, {
+                                        weight: parseInt(e.target.value) || 1,
+                                      })
+                                    }
+                                    className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                                  />
+                                </div>
+                              )}
+                              {formData.assignment_mode === 'priority' && (
+                                <div>
+                                  <label className="block text-xs text-slate-400 mb-1">
+                                    Priority (1–10)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="10"
+                                    value={member.priority}
+                                    onChange={(e) =>
+                                      handleUpdateMember(member.id, {
+                                        priority: parseInt(e.target.value) || 5,
+                                      })
+                                    }
+                                    className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-4 text-slate-500 text-sm">
+                    <div className="text-center py-6 border border-dashed border-slate-700 rounded-lg text-slate-500 text-sm">
                       No team members added yet
                     </div>
                   )}

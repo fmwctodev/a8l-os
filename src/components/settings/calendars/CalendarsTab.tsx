@@ -256,15 +256,24 @@ export function CalendarsTab() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex px-2 py-1 rounded text-xs font-medium ${
-                          calendar.type === 'user'
-                            ? 'bg-blue-500/20 text-blue-400'
-                            : 'bg-emerald-500/20 text-emerald-400'
-                        }`}
-                      >
-                        {calendar.type === 'user' ? 'User' : 'Team'}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span
+                          className={`inline-flex px-2 py-1 rounded text-xs font-medium w-fit ${
+                            calendar.type === 'user'
+                              ? 'bg-blue-500/20 text-blue-400'
+                              : 'bg-emerald-500/20 text-emerald-400'
+                          }`}
+                        >
+                          {calendar.type === 'user' ? 'User' : 'Team'}
+                        </span>
+                        {calendar.type === 'team' && calendar.settings?.assignment_mode && (
+                          <span className="inline-flex px-1.5 py-0.5 rounded text-xs font-medium w-fit bg-slate-700 text-slate-400">
+                            {calendar.settings.assignment_mode === 'round_robin' ? 'Round Robin' :
+                             calendar.settings.assignment_mode === 'priority' ? 'Priority' :
+                             calendar.settings.assignment_mode === 'collective' ? 'Collective' : ''}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-slate-300">
                       {calendar.department?.name || '-'}
