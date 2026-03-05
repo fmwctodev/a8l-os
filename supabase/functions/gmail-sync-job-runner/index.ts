@@ -184,38 +184,45 @@ async function runFullSync(
     tokenData as GmailTokenRecord
   );
 
-  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-  const query = `after:${Math.floor(threeDaysAgo.getTime() / 1000)}`;
+  const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+  const query = `after:${Math.floor(oneYearAgo.getTime() / 1000)}`;
 
-  const listResponse = await fetch(
-    `${GMAIL_API_URL}/users/me/messages?q=${encodeURIComponent(query)}&maxResults=100`,
-    { headers: { Authorization: `Bearer ${accessToken}` } }
-  );
+  let nextPageToken: string | undefined;
 
-  if (!listResponse.ok) throw new Error("Failed to fetch messages list");
+  do {
+    let listUrl = `${GMAIL_API_URL}/users/me/messages?q=${encodeURIComponent(query)}&maxResults=500`;
+    if (nextPageToken) listUrl += `&pageToken=${nextPageToken}`;
 
-  const listData = await listResponse.json();
-  const messageRefs = listData.messages || [];
+    const listResponse = await fetch(listUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
 
-  for (const ref of messageRefs) {
-    const { data: existing } = await supabase
-      .from("messages")
-      .select("id")
-      .eq("external_id", ref.id)
-      .maybeSingle();
+    if (!listResponse.ok) throw new Error("Failed to fetch messages list");
 
-    if (existing) continue;
+    const listData = await listResponse.json();
+    const messageRefs: Array<{ id: string }> = listData.messages || [];
+    nextPageToken = listData.nextPageToken;
 
-    const msgRes = await fetch(
-      `${GMAIL_API_URL}/users/me/messages/${ref.id}`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
+    for (const ref of messageRefs) {
+      const { data: existing } = await supabase
+        .from("messages")
+        .select("id")
+        .eq("external_id", ref.id)
+        .maybeSingle();
 
-    if (!msgRes.ok) continue;
+      if (existing) continue;
 
-    const msgData = await msgRes.json();
-    await processGmailMessage(supabase, msgData, orgId, userId, tokenData.email, "full_sync_job");
-  }
+      const msgRes = await fetch(
+        `${GMAIL_API_URL}/users/me/messages/${ref.id}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+
+      if (!msgRes.ok) continue;
+
+      const msgData = await msgRes.json();
+      await processGmailMessage(supabase, msgData, orgId, userId, tokenData.email, "full_sync_job");
+    }
+  } while (nextPageToken);
 
   const profileRes = await fetch(`${GMAIL_API_URL}/users/me/profile`, {
     headers: { Authorization: `Bearer ${accessToken}` },

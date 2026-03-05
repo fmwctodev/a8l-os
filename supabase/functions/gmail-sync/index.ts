@@ -93,59 +93,66 @@ Deno.serve(async (req: Request) => {
       tokenData as GmailTokenRecord
     );
 
-    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-    const query = `after:${Math.floor(threeDaysAgo.getTime() / 1000)}`;
-
-    const listResponse = await fetch(
-      `${GMAIL_API_URL}/users/me/messages?q=${encodeURIComponent(query)}&maxResults=100`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-
-    if (!listResponse.ok) {
-      throw new Error("Failed to fetch messages list");
-    }
-
-    const listData = await listResponse.json();
-    const messageRefs = listData.messages || [];
+    const daysBack = (reqBody.days_back as number) || 365;
+    const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
+    const query = `after:${Math.floor(since.getTime() / 1000)}`;
 
     let processedCount = 0;
     let skippedCount = 0;
+    let nextPageToken: string | undefined;
 
-    for (const ref of messageRefs) {
-      const { data: existingMessage } = await supabase
-        .from("messages")
-        .select("id")
-        .eq("external_id", ref.id)
-        .maybeSingle();
+    do {
+      let listUrl = `${GMAIL_API_URL}/users/me/messages?q=${encodeURIComponent(query)}&maxResults=500`;
+      if (nextPageToken) listUrl += `&pageToken=${nextPageToken}`;
 
-      if (existingMessage) {
-        skippedCount++;
-        continue;
+      const listResponse = await fetch(listUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (!listResponse.ok) {
+        throw new Error("Failed to fetch messages list");
       }
 
-      const msgResponse = await fetch(
-        `${GMAIL_API_URL}/users/me/messages/${ref.id}`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
+      const listData = await listResponse.json();
+      const messageRefs: Array<{ id: string }> = listData.messages || [];
+      nextPageToken = listData.nextPageToken;
 
-      if (!msgResponse.ok) continue;
+      for (const ref of messageRefs) {
+        const { data: existingMessage } = await supabase
+          .from("messages")
+          .select("id")
+          .eq("external_id", ref.id)
+          .maybeSingle();
 
-      const msgData = await msgResponse.json();
-      const result = await processGmailMessage(
-        supabase,
-        msgData,
-        orgId,
-        userId,
-        tokenData.email,
-        "initial_sync"
-      );
+        if (existingMessage) {
+          skippedCount++;
+          continue;
+        }
 
-      if (result.processed) {
-        processedCount++;
-      } else {
-        skippedCount++;
+        const msgResponse = await fetch(
+          `${GMAIL_API_URL}/users/me/messages/${ref.id}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+
+        if (!msgResponse.ok) continue;
+
+        const msgData = await msgResponse.json();
+        const result = await processGmailMessage(
+          supabase,
+          msgData,
+          orgId,
+          userId,
+          tokenData.email,
+          "initial_sync"
+        );
+
+        if (result.processed) {
+          processedCount++;
+        } else {
+          skippedCount++;
+        }
       }
-    }
+    } while (nextPageToken);
 
     const profileRes = await fetch(`${GMAIL_API_URL}/users/me/profile`, {
       headers: { Authorization: `Bearer ${accessToken}` },
