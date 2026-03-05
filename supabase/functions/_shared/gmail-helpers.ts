@@ -402,8 +402,7 @@ export async function processGmailMessage(
 
   if (!contactEmail) return { processed: false };
 
-  let contact = null;
-  const { data: existingContact } = await supabase
+  const { data: contact } = await supabase
     .from("contacts")
     .select("id, department_id, first_name, last_name")
     .eq("organization_id", orgId)
@@ -411,31 +410,7 @@ export async function processGmailMessage(
     .eq("status", "active")
     .maybeSingle();
 
-  if (existingContact) {
-    contact = existingContact;
-  } else {
-    const contactName = isInbound ? parsed.fromName : "";
-    const nameParts = contactName.trim().split(/\s+/);
-    const firstName = nameParts[0] || contactEmail.split("@")[0];
-    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
-
-    const { data: newContact } = await supabase
-      .from("contacts")
-      .insert({
-        organization_id: orgId,
-        email: contactEmail.toLowerCase(),
-        first_name: firstName,
-        last_name: lastName,
-        status: "active",
-        source: "gmail_sync",
-        created_by_user_id: userId,
-      })
-      .select("id, department_id, first_name, last_name")
-      .single();
-
-    if (!newContact) return { processed: false };
-    contact = newContact;
-  }
+  if (!contact) return { processed: false };
 
   let conversation = null;
   const { data: existingConv } = await supabase
