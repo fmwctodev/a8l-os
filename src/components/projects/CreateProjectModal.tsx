@@ -46,11 +46,11 @@ export function CreateProjectModal({ onClose, onCreated, defaultContactId, defau
     try {
       const [pipelineData, contactData, userData] = await Promise.all([
         getProjectPipelines(user.organization_id),
-        getContacts(user.organization_id, {}, 1, 100),
+        getContacts(user.organization_id),
         getUsers(),
       ]);
       setPipelines(pipelineData);
-      setContacts(contactData.data);
+      setContacts(contactData);
       setUsers(userData);
 
       if (pipelineData.length > 0) {
