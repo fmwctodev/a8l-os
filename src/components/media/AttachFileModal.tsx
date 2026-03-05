@@ -16,10 +16,11 @@ import {
   Loader2,
 } from 'lucide-react';
 import type { FileAttachmentEntityType } from '../../types';
-import type { GoogleDriveFileInfo } from '../../services/googleDrive';
+import type { GoogleDriveFileInfo, SharedDriveInfo } from '../../services/googleDrive';
 import {
   listDriveFilesViaApi,
   listSharedWithMeViaApi,
+  listSharedDrives,
   searchDriveFilesViaApi,
   getConnectionStatus,
   formatFileSize,
@@ -39,7 +40,7 @@ interface AttachFileModalProps {
   onAttached: () => void;
 }
 
-type TabId = 'my-drive' | 'shared';
+type TabId = 'my-drive' | 'shared' | 'shared-drives';
 
 interface BreadcrumbItem {
   id: string;
@@ -94,6 +95,11 @@ export default function AttachFileModal({
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
   const [driveConnected, setDriveConnected] = useState<boolean | null>(null);
   const [checkingConnection, setCheckingConnection] = useState(true);
+
+  const [sharedDrives, setSharedDrives] = useState<SharedDriveInfo[]>([]);
+  const [loadingSharedDrives, setLoadingSharedDrives] = useState(false);
+  const [selectedSharedDrive, setSelectedSharedDrive] = useState<SharedDriveInfo | null>(null);
+
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
@@ -105,13 +111,19 @@ export default function AttachFileModal({
       setDebouncedSearch('');
       setBreadcrumbs([]);
       setActiveTab('my-drive');
+      setSelectedSharedDrive(null);
+      setSharedDrives([]);
       checkConnection();
     }
   }, [isOpen]);
 
   useEffect(() => {
     if (driveConnected && isOpen) {
-      loadFiles();
+      if (activeTab === 'shared-drives' && !selectedSharedDrive) {
+        loadSharedDrivesList();
+      } else {
+        loadFiles();
+      }
     }
   }, [activeTab, debouncedSearch, driveConnected, isOpen]);
 
@@ -138,6 +150,20 @@ export default function AttachFileModal({
     }
   };
 
+  const loadSharedDrivesList = async () => {
+    setLoadingSharedDrives(true);
+    setError(null);
+    try {
+      const drives = await listSharedDrives();
+      setSharedDrives(drives);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load shared drives';
+      setError(msg);
+    } finally {
+      setLoadingSharedDrives(false);
+    }
+  };
+
   const loadFiles = async () => {
     setLoading(true);
     setError(null);
@@ -156,7 +182,14 @@ export default function AttachFileModal({
         const result = await listDriveFilesViaApi(folderId);
         setFiles(result.files);
         setNextPageToken(result.nextPageToken);
-      } else {
+      } else if (activeTab === 'shared-drives' && selectedSharedDrive) {
+        const folderId = breadcrumbs.length > 0
+          ? breadcrumbs[breadcrumbs.length - 1].id
+          : selectedSharedDrive.id;
+        const result = await listDriveFilesViaApi(folderId, undefined, selectedSharedDrive.id);
+        setFiles(result.files);
+        setNextPageToken(result.nextPageToken);
+      } else if (activeTab === 'shared') {
         const result = await listSharedWithMeViaApi();
         setFiles(result.files);
         setNextPageToken(result.nextPageToken);
@@ -179,6 +212,11 @@ export default function AttachFileModal({
           ? breadcrumbs[breadcrumbs.length - 1].id
           : 'root';
         result = await listDriveFilesViaApi(folderId, nextPageToken);
+      } else if (activeTab === 'shared-drives' && selectedSharedDrive) {
+        const folderId = breadcrumbs.length > 0
+          ? breadcrumbs[breadcrumbs.length - 1].id
+          : selectedSharedDrive.id;
+        result = await listDriveFilesViaApi(folderId, nextPageToken, selectedSharedDrive.id);
       } else {
         result = await listSharedWithMeViaApi(nextPageToken);
       }
@@ -207,11 +245,36 @@ export default function AttachFileModal({
     setDebouncedSearch('');
   }, []);
 
+  const handleSelectSharedDrive = (drive: SharedDriveInfo) => {
+    setSelectedSharedDrive(drive);
+    setBreadcrumbs([]);
+    setSearch('');
+    setDebouncedSearch('');
+  };
+
+  const handleBackToSharedDrivesList = () => {
+    setSelectedSharedDrive(null);
+    setBreadcrumbs([]);
+    setSearch('');
+    setDebouncedSearch('');
+    loadSharedDrivesList();
+  };
+
   useEffect(() => {
     if (driveConnected && isOpen && !debouncedSearch) {
-      loadFiles();
+      if (activeTab === 'shared-drives' && selectedSharedDrive) {
+        loadFiles();
+      } else if (activeTab !== 'shared-drives') {
+        loadFiles();
+      }
     }
   }, [breadcrumbs]);
+
+  useEffect(() => {
+    if (driveConnected && isOpen && activeTab === 'shared-drives' && selectedSharedDrive) {
+      loadFiles();
+    }
+  }, [selectedSharedDrive]);
 
   const toggleFile = (file: GoogleDriveFileInfo) => {
     if (isFolder(file.mimeType)) {
@@ -260,12 +323,15 @@ export default function AttachFileModal({
     setBreadcrumbs([]);
     setSearch('');
     setDebouncedSearch('');
+    setSelectedSharedDrive(null);
+    setSharedDrives([]);
   };
 
   if (!isOpen) return null;
 
   const isSearching = debouncedSearch.length > 0;
   const displayFiles = files.filter((f) => !isSearching || !isFolder(f.mimeType));
+  const showingSharedDrivesList = activeTab === 'shared-drives' && !selectedSharedDrive && !isSearching;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -335,6 +401,17 @@ export default function AttachFileModal({
                       My Drive
                     </button>
                     <button
+                      onClick={() => handleTabChange('shared-drives')}
+                      className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                        activeTab === 'shared-drives'
+                          ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                          : 'text-gray-400 hover:bg-gray-800 border border-transparent'
+                      }`}
+                    >
+                      <Users className="w-4 h-4" />
+                      Shared Drives
+                    </button>
+                    <button
                       onClick={() => handleTabChange('shared')}
                       className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
                         activeTab === 'shared'
@@ -342,7 +419,7 @@ export default function AttachFileModal({
                           : 'text-gray-400 hover:bg-gray-800 border border-transparent'
                       }`}
                     >
-                      <Users className="w-4 h-4" />
+                      <Folder className="w-4 h-4" />
                       Shared Files
                     </button>
                   </div>
@@ -387,6 +464,45 @@ export default function AttachFileModal({
                   </div>
                 )}
 
+                {!isSearching && activeTab === 'shared-drives' && selectedSharedDrive && (
+                  <div className="flex items-center gap-1 mb-3 text-sm overflow-x-auto">
+                    <button
+                      onClick={handleBackToSharedDrivesList}
+                      className="flex-shrink-0 px-1.5 py-0.5 rounded transition-colors text-gray-500 hover:text-gray-300"
+                    >
+                      Shared Drives
+                    </button>
+                    <ChevronRight className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" />
+                    <button
+                      onClick={() => navigateToBreadcrumb(-1)}
+                      className={`flex-shrink-0 px-1.5 py-0.5 rounded transition-colors truncate max-w-[140px] ${
+                        breadcrumbs.length === 0
+                          ? 'text-gray-300 font-medium'
+                          : 'text-gray-500 hover:text-gray-300'
+                      }`}
+                      title={selectedSharedDrive.name}
+                    >
+                      {selectedSharedDrive.name}
+                    </button>
+                    {breadcrumbs.map((crumb, i) => (
+                      <div key={crumb.id} className="flex items-center gap-1 flex-shrink-0">
+                        <ChevronRight className="w-3.5 h-3.5 text-gray-600" />
+                        <button
+                          onClick={() => navigateToBreadcrumb(i)}
+                          className={`px-1.5 py-0.5 rounded transition-colors truncate max-w-[140px] ${
+                            i === breadcrumbs.length - 1
+                              ? 'text-gray-300 font-medium'
+                              : 'text-gray-500 hover:text-gray-300'
+                          }`}
+                          title={crumb.name}
+                        >
+                          {crumb.name}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {error && (
                   <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 text-red-400">
                     <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -395,7 +511,39 @@ export default function AttachFileModal({
                 )}
 
                 <div className="border border-gray-700/50 rounded-lg max-h-80 overflow-y-auto bg-gray-800/50">
-                  {loading ? (
+                  {showingSharedDrivesList ? (
+                    loadingSharedDrives ? (
+                      <div className="p-10 text-center">
+                        <Loader2 className="w-6 h-6 text-blue-400 animate-spin mx-auto" />
+                        <p className="text-sm text-gray-500 mt-3">Loading shared drives...</p>
+                      </div>
+                    ) : sharedDrives.length === 0 ? (
+                      <div className="p-10 text-center">
+                        <Users className="w-10 h-10 mx-auto text-gray-600 mb-2" />
+                        <p className="text-gray-400 font-medium">No shared drives found</p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          You don't have access to any shared drives
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-gray-700/40">
+                        {sharedDrives.map((drive) => (
+                          <div
+                            key={drive.id}
+                            onClick={() => handleSelectSharedDrive(drive)}
+                            className="flex items-center gap-3 px-3.5 py-2.5 cursor-pointer hover:bg-gray-700/40 transition-colors"
+                          >
+                            <Users className="w-5 h-5 flex-shrink-0 text-blue-400" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-gray-200 truncate">{drive.name}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">Shared Drive</p>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-gray-600 flex-shrink-0" />
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  ) : loading ? (
                     <div className="p-10 text-center">
                       <Loader2 className="w-6 h-6 text-blue-400 animate-spin mx-auto" />
                       <p className="text-sm text-gray-500 mt-3">Loading files...</p>
@@ -411,7 +559,9 @@ export default function AttachFileModal({
                           ? 'Try a different search term'
                           : activeTab === 'my-drive'
                             ? 'This folder is empty'
-                            : 'No files have been shared with you'
+                            : activeTab === 'shared-drives'
+                              ? 'This drive is empty'
+                              : 'No files have been shared with you'
                         }
                       </p>
                     </div>
