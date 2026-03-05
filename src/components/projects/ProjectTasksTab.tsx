@@ -38,6 +38,14 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-red-500',
 };
 
+const STATUS_BG_HEX: Record<string, string> = {
+  todo: '#475569',
+  in_progress: '#06b6d4',
+  in_review: '#f59e0b',
+  completed: '#10b981',
+  cancelled: '#ef4444',
+};
+
 const PRIORITY_DOTS: Record<string, string> = {
   low: 'bg-slate-500',
   medium: 'bg-blue-500',
@@ -308,9 +316,17 @@ function TaskRow({
       ) : (
         <span className="w-20 shrink-0" />
       )}
-      <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${STATUS_COLORS[task.status]} text-white`}>
-        {STATUS_LABELS[task.status]}
-      </span>
+      <select
+        value={task.status}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => { e.stopPropagation(); onStatusChange(task.id, e.target.value); }}
+        className="text-[10px] px-1.5 py-0.5 rounded shrink-0 text-white border-0 outline-none cursor-pointer appearance-none font-medium"
+        style={{ backgroundColor: STATUS_BG_HEX[task.status] }}
+      >
+        {Object.entries(STATUS_LABELS).map(([val, label]) => (
+          <option key={val} value={val} style={{ backgroundColor: '#1e293b' }}>{label}</option>
+        ))}
+      </select>
       <Pencil className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 shrink-0 transition-colors" />
     </div>
   );
