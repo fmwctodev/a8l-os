@@ -26,8 +26,6 @@ import {
   Archive,
   RotateCcw,
   MoreVertical,
-  Plus,
-  X,
   Clock,
 } from 'lucide-react';
 import { ContactModal } from '../../components/contacts/ContactModal';
@@ -38,10 +36,8 @@ import { ContactPaymentsTab } from '../../components/contacts/ContactPaymentsTab
 import ContactFilesTab from '../../components/contacts/ContactFilesTab';
 import { ContactMeetingsTab } from '../../components/contacts/ContactMeetingsTab';
 import { ScoreWidget } from '../../components/scoring/ScoreWidget';
-import { ContactQuickActions } from '../../components/contacts/ContactQuickActions';
 import { VirtualizedTimeline } from '../../components/contacts/VirtualizedTimeline';
 import { LeadScoreBadge } from '../../components/contacts/LeadScoreBadge';
-import { AskClaraButton } from '../../components/assistant/AskClaraButton';
 import { getAttachmentCount } from '../../services/fileAttachments';
 
 type TabType = 'overview' | 'notes' | 'tasks' | 'timeline' | 'meetings' | 'payments' | 'files';
@@ -470,19 +466,6 @@ export function ContactDetail() {
             </div>
           </div>
 
-          {contact.status === 'active' && (
-            <ContactQuickActions
-              contact={contact}
-              onRefresh={loadContact}
-              canSendMessage={canSendMessage && conversationsEnabled}
-              canCall={!!contact.phone}
-              canCreateOpportunity={canCreateOpportunity && opportunitiesEnabled}
-              canBookAppointment={canBookAppointment && calendarsEnabled}
-              canCreateInvoice={canCreateInvoice && paymentsEnabled}
-              canRequestReview={canRequestReview && reputationEnabled}
-            />
-          )}
-
           {scoringEnabled && (
             <ScoreWidget
               entityType="contact"
@@ -490,61 +473,6 @@ export function ContactDetail() {
               canAdjust={canAdjustScore}
             />
           )}
-
-          <AskClaraButton
-            module="contacts"
-            recordId={contact.id}
-            prompt={`Tell me about contact ${contact.first_name} ${contact.last_name}`}
-            label="Ask Clara about this contact"
-            size="md"
-          />
-
-          <div className="bg-slate-900 rounded-xl border border-slate-800 p-4">
-            <h3 className="text-sm font-medium text-slate-300 mb-3">Tags</h3>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {contact.tags?.map((tag) => (
-                <span
-                  key={tag.id}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium group"
-                  style={{
-                    backgroundColor: `${tag.color}20`,
-                    color: tag.color,
-                  }}
-                >
-                  {tag.name}
-                  {canEdit && (
-                    <button
-                      onClick={() => handleRemoveTag(tag.id)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </span>
-              ))}
-              {(!contact.tags || contact.tags.length === 0) && (
-                <span className="text-sm text-slate-500">No tags</span>
-              )}
-            </div>
-            {canEdit && availableTags.length > 0 && (
-              <div className="flex flex-wrap gap-1 pt-2 border-t border-slate-800">
-                {availableTags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    onClick={() => handleAddTag(tag.id)}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium opacity-50 hover:opacity-100 transition-opacity"
-                    style={{
-                      backgroundColor: `${tag.color}20`,
-                      color: tag.color,
-                    }}
-                  >
-                    <Plus className="w-3 h-3" />
-                    {tag.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         <div className="lg:col-span-2">
@@ -578,6 +506,10 @@ export function ContactDetail() {
                   contact={contact}
                   customFields={customFields}
                   customFieldValues={customFieldValues}
+                  availableTags={availableTags}
+                  canEdit={canEdit}
+                  onAddTag={handleAddTag}
+                  onRemoveTag={handleRemoveTag}
                 />
               )}
               {activeTab === 'notes' && (
