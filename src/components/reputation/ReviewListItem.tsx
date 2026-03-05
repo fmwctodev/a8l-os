@@ -1,4 +1,4 @@
-import { Star, Clock, AlertTriangle, MessageSquare } from 'lucide-react';
+import { Star, Clock, AlertTriangle, MessageSquare, UserRound } from 'lucide-react';
 import type { ReputationReview } from '../../services/reputationReviews';
 
 interface Props {
@@ -33,9 +33,21 @@ function getAvatarColor(name: string): string {
   return colors[index];
 }
 
+const ANONYMOUS_NAMES = new Set(['facebook user', 'anonymous', 'google user', 'unknown user']);
+
+function isAnonymous(name: string | null): boolean {
+  if (!name) return true;
+  return ANONYMOUS_NAMES.has(name.toLowerCase().trim());
+}
+
+function getDisplayName(name: string | null): string {
+  if (isAnonymous(name)) return 'Private Reviewer';
+  return name!;
+}
+
 function getInitials(name: string | null): string {
-  if (!name) return '?';
-  return name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  if (isAnonymous(name)) return '';
+  return name!.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
 }
 
 function timeAgo(dateStr: string): string {
@@ -60,17 +72,19 @@ export function ReviewListItem({ review, selected, onClick }: Props) {
       }`}
     >
       <div className="flex items-start gap-3">
-        <div className={`w-9 h-9 rounded-full ${getAvatarColor(review.reviewer_name || '')} flex items-center justify-center text-white text-xs font-semibold flex-shrink-0`}>
+        <div className={`w-9 h-9 rounded-full ${isAnonymous(review.reviewer_name) ? 'bg-gray-200' : getAvatarColor(review.reviewer_name || '')} flex items-center justify-center text-white text-xs font-semibold flex-shrink-0`}>
           {review.reviewer_profile_image ? (
             <img src={review.reviewer_profile_image} alt="" className="w-9 h-9 rounded-full object-cover" />
+          ) : isAnonymous(review.reviewer_name) ? (
+            <UserRound className="w-4 h-4 text-gray-400" />
           ) : (
             getInitials(review.reviewer_name)
           )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-0.5">
-            <span className="text-sm font-medium text-gray-900 truncate">
-              {review.reviewer_name || 'Anonymous'}
+            <span className={`text-sm font-medium truncate ${isAnonymous(review.reviewer_name) ? 'text-gray-400 italic' : 'text-gray-900'}`}>
+              {getDisplayName(review.reviewer_name)}
             </span>
             <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
               {timeAgo(review.review_created_at)}

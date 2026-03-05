@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Star, Send, Wand2, Trash2, ExternalLink, Clock, AlertTriangle,
-  Loader2, Copy, Check, X
+  Loader2, Copy, Check, X, UserRound
 } from 'lucide-react';
 import type { ReputationReview, ReputationAIDraft } from '../../services/reputationReviews';
 import {
@@ -24,6 +24,18 @@ const toneLabels: Record<string, { label: string; color: string }> = {
   friendly: { label: 'Friendly', color: 'bg-sky-100 text-sky-700' },
   fix_it: { label: 'Problem-Solving', color: 'bg-amber-100 text-amber-700' },
 };
+
+const ANONYMOUS_NAMES = new Set(['facebook user', 'anonymous', 'google user', 'unknown user']);
+
+function isAnonymous(name: string | null): boolean {
+  if (!name) return true;
+  return ANONYMOUS_NAMES.has(name.toLowerCase().trim());
+}
+
+function getDisplayName(name: string | null): string {
+  if (isAnonymous(name)) return 'Private Reviewer';
+  return name!;
+}
 
 export function ReviewDetailPanel({ review, onUpdate, onClose }: Props) {
   const [replyText, setReplyText] = useState('');
@@ -123,15 +135,17 @@ export function ReviewDetailPanel({ review, onUpdate, onClose }: Props) {
             <div className="w-11 h-11 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
               {review.reviewer_profile_image ? (
                 <img src={review.reviewer_profile_image} alt="" className="w-11 h-11 rounded-full object-cover" />
+              ) : isAnonymous(review.reviewer_name) ? (
+                <UserRound className="w-5 h-5 text-gray-400" />
               ) : (
                 <span className="text-sm font-semibold text-gray-500">
-                  {(review.reviewer_name || '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                  {(review.reviewer_name || '').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                 </span>
               )}
             </div>
             <div>
-              <div className="font-medium text-gray-900 text-sm">
-                {review.reviewer_name || 'Anonymous'}
+              <div className={`font-medium text-sm ${isAnonymous(review.reviewer_name) ? 'text-gray-400 italic' : 'text-gray-900'}`}>
+                {getDisplayName(review.reviewer_name)}
               </div>
               <div className="flex items-center gap-1 mt-0.5">
                 {[1, 2, 3, 4, 5].map((s) => (
