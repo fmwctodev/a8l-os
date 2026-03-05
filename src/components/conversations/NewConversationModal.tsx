@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X, Search, MessageSquarePlus, Loader2, ArrowLeft,
-  MessageSquare, Mail, Phone, Paperclip, Send, AlertCircle
+  MessageSquare, Mail, Phone, Paperclip, Send, AlertCircle, Plus
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getContacts } from '../../services/contacts';
+import { InlineCreateContactForm } from '../shared/InlineCreateContactForm';
 import { findOrCreateConversation } from '../../services/conversations';
 import { createMessage } from '../../services/messages';
 import { getNumbers, TwilioNumber } from '../../services/phoneNumbers';
@@ -29,6 +30,7 @@ export function NewConversationModal({ onClose, onSelectContact }: NewConversati
   const [filteredContacts, setFilteredContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [showNewContactForm, setShowNewContactForm] = useState(false);
 
   const [channel, setChannel] = useState<Channel | null>(null);
   const [twilioNumbers, setTwilioNumbers] = useState<TwilioNumber[]>([]);
@@ -205,48 +207,83 @@ export function NewConversationModal({ onClose, onSelectContact }: NewConversati
 
         {step === 'contact' ? (
           <>
-            <div className="px-5 py-3 border-b border-slate-700 flex-shrink-0">
-              <div className="relative">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search contacts by name, email, phone, or company..."
-                  className="w-full pl-9 pr-4 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  autoFocus
+            {showNewContactForm && user ? (
+              <div className="flex-1 overflow-y-auto p-5">
+                <InlineCreateContactForm
+                  orgId={user.organization_id}
+                  currentUser={user}
+                  initialFirstName={searchQuery}
+                  onCreated={(contact) => {
+                    setContacts((prev) => [contact, ...prev]);
+                    setFilteredContacts((prev) => [contact, ...prev]);
+                    setShowNewContactForm(false);
+                    handleContactSelect(contact);
+                  }}
+                  onCancel={() => setShowNewContactForm(false)}
                 />
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="px-5 py-3 border-b border-slate-700 flex-shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        placeholder="Search contacts by name, email, phone, or company..."
+                        className="w-full pl-9 pr-4 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                        autoFocus
+                      />
+                    </div>
+                    <button
+                      onClick={() => setShowNewContactForm(true)}
+                      className="flex items-center gap-1.5 px-3 py-2.5 bg-slate-900 border border-slate-600 rounded-lg text-cyan-400 hover:bg-slate-700 text-sm whitespace-nowrap transition-colors"
+                    >
+                      <Plus size={15} />
+                      New
+                    </button>
+                  </div>
+                </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
-              {loading ? (
-                <div className="flex items-center justify-center py-16">
-                  <Loader2 className="w-7 h-7 text-cyan-400 animate-spin" />
+                <div className="flex-1 overflow-y-auto p-4">
+                  {loading ? (
+                    <div className="flex items-center justify-center py-16">
+                      <Loader2 className="w-7 h-7 text-cyan-400 animate-spin" />
+                    </div>
+                  ) : filteredContacts.length === 0 ? (
+                    <div className="text-center py-16">
+                      <MessageSquarePlus className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+                      <p className="text-slate-400 text-sm mb-4">
+                        {contacts.length === 0
+                          ? 'No contacts found.'
+                          : 'No contacts match your search.'}
+                      </p>
+                      <button
+                        onClick={() => setShowNewContactForm(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg text-sm hover:bg-cyan-700 transition-colors mx-auto"
+                      >
+                        <Plus size={15} />
+                        Create New Contact
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {filteredContacts.map(contact => (
+                        <ContactItem key={contact.id} contact={contact} onSelect={handleContactSelect} />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ) : filteredContacts.length === 0 ? (
-                <div className="text-center py-16">
-                  <MessageSquarePlus className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-                  <p className="text-slate-400 text-sm">
-                    {contacts.length === 0
-                      ? 'No contacts found. Create a contact first to start a conversation.'
-                      : 'No contacts match your search.'}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {filteredContacts.map(contact => (
-                    <ContactItem key={contact.id} contact={contact} onSelect={handleContactSelect} />
-                  ))}
-                </div>
-              )}
-            </div>
 
-            <div className="px-5 py-3 border-t border-slate-700 flex justify-end flex-shrink-0">
-              <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">
-                Cancel
-              </button>
-            </div>
+                <div className="px-5 py-3 border-t border-slate-700 flex justify-end flex-shrink-0">
+                  <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
           </>
         ) : (
           <ComposeStep

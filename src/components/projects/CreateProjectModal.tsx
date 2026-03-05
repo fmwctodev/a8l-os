@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { X, FolderKanban, Loader2 } from 'lucide-react';
+import { X, FolderKanban, Loader2, Plus, Search, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import type { ProjectPipeline, ProjectStage, Contact, User } from '../../types';
 import { getProjectPipelines } from '../../services/projectPipelines';
 import { createProject } from '../../services/projects';
 import { getContacts } from '../../services/contacts';
 import { getUsers } from '../../services/users';
+import { InlineCreateContactForm } from '../shared/InlineCreateContactForm';
 
 interface Props {
   onClose: () => void;
@@ -23,6 +24,8 @@ export function CreateProjectModal({ onClose, onCreated, defaultContactId, defau
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contactSearch, setContactSearch] = useState('');
+  const [showNewContactForm, setShowNewContactForm] = useState(false);
+  const [showContactDropdown, setShowContactDropdown] = useState(false);
 
   const [form, setForm] = useState({
     name: '',
@@ -154,26 +157,136 @@ export function CreateProjectModal({ onClose, onCreated, defaultContactId, defau
 
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">Contact *</label>
-            {!defaultContactId && (
-              <input
-                type="text"
-                value={contactSearch}
-                onChange={(e) => setContactSearch(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 mb-2"
-                placeholder="Search contacts..."
+
+            {defaultContactId ? (
+              (() => {
+                const c = contacts.find((x) => x.id === defaultContactId);
+                return (
+                  <div className="flex items-center gap-3 p-3 bg-slate-900 border border-slate-600 rounded-lg">
+                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
+                      <UserIcon className="w-4 h-4 text-slate-400" />
+                    </div>
+                    <div>
+                      <p className="text-white text-sm">{c?.name || 'Selected contact'}</p>
+                      {c?.email && <p className="text-xs text-slate-400">{c.email}</p>}
+                    </div>
+                  </div>
+                );
+              })()
+            ) : showNewContactForm && user ? (
+              <InlineCreateContactForm
+                orgId={user.organization_id}
+                currentUser={user}
+                initialFirstName={contactSearch}
+                onCreated={(contact) => {
+                  setContacts((prev) => [contact, ...prev]);
+                  setForm((prev) => ({ ...prev, contact_id: contact.id }));
+                  setShowNewContactForm(false);
+                  setContactSearch('');
+                }}
+                onCancel={() => setShowNewContactForm(false)}
               />
+            ) : (
+              <div className="relative">
+                {form.contact_id ? (
+                  (() => {
+                    const selected = contacts.find((c) => c.id === form.contact_id);
+                    return (
+                      <div className="flex items-center justify-between p-3 bg-slate-900 border border-slate-600 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
+                            <UserIcon className="w-4 h-4 text-slate-400" />
+                          </div>
+                          <div>
+                            <p className="text-white text-sm">{selected?.name || 'Contact'}</p>
+                            {selected?.email && <p className="text-xs text-slate-400">{selected.email}</p>}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setForm((prev) => ({ ...prev, contact_id: '' }))}
+                          className="text-sm text-cyan-400 hover:text-cyan-300"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input
+                          type="text"
+                          value={contactSearch}
+                          onChange={(e) => { setContactSearch(e.target.value); setShowContactDropdown(true); }}
+                          onFocus={() => setShowContactDropdown(true)}
+                          className="w-full bg-slate-900 border border-slate-600 rounded-lg pl-10 pr-4 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                          placeholder="Search contacts..."
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { setShowNewContactForm(true); setShowContactDropdown(false); }}
+                        className="flex items-center gap-1 px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-cyan-400 hover:bg-slate-700 text-sm transition-colors whitespace-nowrap"
+                      >
+                        <Plus className="w-4 h-4" />
+                        New
+                      </button>
+                    </div>
+                    {showContactDropdown && (
+                      <div className="absolute z-10 left-0 right-0 mt-0.5 bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                        {filteredContacts.length === 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => { setShowNewContactForm(true); setShowContactDropdown(false); }}
+                            className="w-full px-4 py-3 text-left hover:bg-slate-700 flex items-center gap-3 transition-colors"
+                          >
+                            <div className="w-7 h-7 rounded-full bg-cyan-600/20 flex items-center justify-center">
+                              <Plus className="w-3.5 h-3.5 text-cyan-400" />
+                            </div>
+                            <div>
+                              <p className="text-cyan-400 text-sm font-medium">Create new contact</p>
+                              {contactSearch && <p className="text-xs text-slate-400">Add "{contactSearch}"</p>}
+                            </div>
+                          </button>
+                        ) : (
+                          <>
+                            {filteredContacts.slice(0, 10).map((c) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => { setForm((prev) => ({ ...prev, contact_id: c.id })); setShowContactDropdown(false); setContactSearch(''); }}
+                                className="w-full px-4 py-2.5 text-left hover:bg-slate-700 flex items-center gap-3 transition-colors"
+                              >
+                                <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center flex-shrink-0">
+                                  <UserIcon className="w-3.5 h-3.5 text-slate-400" />
+                                </div>
+                                <div>
+                                  <p className="text-white text-sm">{c.name}</p>
+                                  {c.email && <p className="text-xs text-slate-400">{c.email}</p>}
+                                </div>
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => { setShowNewContactForm(true); setShowContactDropdown(false); }}
+                              className="w-full px-4 py-3 text-left hover:bg-slate-700 flex items-center gap-3 border-t border-slate-700 transition-colors"
+                            >
+                              <div className="w-7 h-7 rounded-full bg-cyan-600/20 flex items-center justify-center">
+                                <Plus className="w-3.5 h-3.5 text-cyan-400" />
+                              </div>
+                              <p className="text-cyan-400 text-sm font-medium">Create new contact</p>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             )}
-            <select
-              value={form.contact_id}
-              onChange={(e) => setForm({ ...form, contact_id: e.target.value })}
-              className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              disabled={!!defaultContactId}
-            >
-              <option value="">Select contact</option>
-              {filteredContacts.map((c) => (
-                <option key={c.id} value={c.id}>{c.name} {c.email ? `(${c.email})` : ''}</option>
-              ))}
-            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

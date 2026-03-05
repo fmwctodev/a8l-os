@@ -7,6 +7,7 @@ import {
   Calendar as CalendarIcon,
   User as UserIcon,
   AlertCircle,
+  Plus,
 } from 'lucide-react';
 import type { Calendar, AppointmentType, Contact, AvailabilitySlot, User } from '../../../types';
 import { getAppointmentTypes } from '../../../services/appointmentTypes';
@@ -15,6 +16,7 @@ import { getAvailableSlots } from '../../../services/availability';
 import { createAppointment } from '../../../services/appointments';
 import { useAuth } from '../../../contexts/AuthContext';
 import { addDays, formatDateString } from '../../../utils/calendarViewUtils';
+import { InlineCreateContactForm } from '../../shared/InlineCreateContactForm';
 
 interface NewAppointmentModalProps {
   calendar: Calendar;
@@ -53,6 +55,7 @@ export function NewAppointmentModal({
 
   const [contactSearch, setContactSearch] = useState('');
   const [isContactDropdownOpen, setIsContactDropdownOpen] = useState(false);
+  const [showNewContactForm, setShowNewContactForm] = useState(false);
 
   const selectedType = useMemo(
     () => appointmentTypes.find((t) => t.id === selectedTypeId),
@@ -298,58 +301,116 @@ export function NewAppointmentModal({
             </div>
 
             <div className="relative">
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Contact (optional)
-              </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  value={selectedContact ? `${selectedContact.first_name} ${selectedContact.last_name}` : contactSearch}
-                  onChange={(e) => {
-                    setContactSearch(e.target.value);
-                    setSelectedContactId('');
-                    setIsContactDropdownOpen(true);
-                  }}
-                  onFocus={() => setIsContactDropdownOpen(true)}
-                  placeholder="Search contacts..."
-                  className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                />
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-slate-300">
+                  Contact (optional)
+                </label>
+                {!showNewContactForm && !selectedContact && (
+                  <button
+                    type="button"
+                    onClick={() => { setShowNewContactForm(true); setIsContactDropdownOpen(false); }}
+                    className="flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    New Contact
+                  </button>
+                )}
               </div>
-              {isContactDropdownOpen && filteredContacts.length > 0 && (
-                <div className="absolute z-10 left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
-                  {filteredContacts.map((contact) => (
+
+              {showNewContactForm && currentUser ? (
+                <InlineCreateContactForm
+                  orgId={currentUser.organization_id}
+                  currentUser={currentUser}
+                  initialFirstName={contactSearch}
+                  onCreated={(contact) => {
+                    setContacts((prev) => [contact, ...prev]);
+                    setSelectedContactId(contact.id);
+                    setContactSearch('');
+                    setShowNewContactForm(false);
+                  }}
+                  onCancel={() => setShowNewContactForm(false)}
+                />
+              ) : (
+                <>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={selectedContact ? `${selectedContact.first_name} ${selectedContact.last_name}` : contactSearch}
+                      onChange={(e) => {
+                        setContactSearch(e.target.value);
+                        setSelectedContactId('');
+                        setIsContactDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsContactDropdownOpen(true)}
+                      placeholder="Search contacts..."
+                      className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                  </div>
+                  {isContactDropdownOpen && (
+                    <div className="absolute z-10 left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                      {filteredContacts.length > 0 ? (
+                        <>
+                          {filteredContacts.map((contact) => (
+                            <button
+                              key={contact.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedContactId(contact.id);
+                                setContactSearch('');
+                                setIsContactDropdownOpen(false);
+                              }}
+                              className="w-full px-4 py-2 text-left hover:bg-slate-700 transition-colors"
+                            >
+                              <p className="text-white text-sm">
+                                {contact.first_name} {contact.last_name}
+                              </p>
+                              {contact.email && (
+                                <p className="text-xs text-slate-400">{contact.email}</p>
+                              )}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => { setShowNewContactForm(true); setIsContactDropdownOpen(false); }}
+                            className="w-full px-4 py-3 text-left hover:bg-slate-700 flex items-center gap-3 border-t border-slate-700 transition-colors"
+                          >
+                            <div className="w-7 h-7 rounded-full bg-cyan-600/20 flex items-center justify-center">
+                              <Plus className="w-3.5 h-3.5 text-cyan-400" />
+                            </div>
+                            <span className="text-cyan-400 text-sm font-medium">Create new contact</span>
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { setShowNewContactForm(true); setIsContactDropdownOpen(false); }}
+                          className="w-full px-4 py-3 text-left hover:bg-slate-700 flex items-center gap-3 transition-colors"
+                        >
+                          <div className="w-7 h-7 rounded-full bg-cyan-600/20 flex items-center justify-center">
+                            <Plus className="w-3.5 h-3.5 text-cyan-400" />
+                          </div>
+                          <div>
+                            <p className="text-cyan-400 text-sm font-medium">Create new contact</p>
+                            {contactSearch && <p className="text-xs text-slate-400">Add "{contactSearch}"</p>}
+                          </div>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {selectedContact && (
                     <button
-                      key={contact.id}
                       type="button"
                       onClick={() => {
-                        setSelectedContactId(contact.id);
+                        setSelectedContactId('');
                         setContactSearch('');
-                        setIsContactDropdownOpen(false);
                       }}
-                      className="w-full px-4 py-2 text-left hover:bg-slate-700 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 mt-3 text-slate-400 hover:text-white"
                     >
-                      <p className="text-white text-sm">
-                        {contact.first_name} {contact.last_name}
-                      </p>
-                      {contact.email && (
-                        <p className="text-xs text-slate-400">{contact.email}</p>
-                      )}
+                      <X className="w-4 h-4" />
                     </button>
-                  ))}
-                </div>
-              )}
-              {selectedContact && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedContactId('');
-                    setContactSearch('');
-                  }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 mt-3 text-slate-400 hover:text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                  )}
+                </>
               )}
             </div>
 
