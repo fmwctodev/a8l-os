@@ -305,25 +305,6 @@ export function ContactModal({
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {isAdmin && (
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                  Department *
-                </label>
-                <select
-                  value={formData.department_id}
-                  onChange={(e) => updateField('department_id', e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  required
-                >
-                  {departments.map((dept) => (
-                    <option key={dept.id} value={dept.id}>
-                      {dept.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1.5">Owner</label>
               <select
