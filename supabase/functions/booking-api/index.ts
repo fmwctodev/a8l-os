@@ -65,6 +65,10 @@ Deno.serve(async (req: Request) => {
       return handleGetCalendarInfo(req, supabase);
     }
 
+    if (req.method === "GET" && action === "calendar-types") {
+      return handleGetCalendarTypes(req, supabase);
+    }
+
     if (req.method === "POST" && action === "book") {
       return handleSubmitBooking(req, supabase);
     }
@@ -99,6 +103,49 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+async function handleGetCalendarTypes(
+  req: Request,
+  supabase: ReturnType<typeof createClient>
+) {
+  const url = new URL(req.url);
+  const calendarSlug = url.searchParams.get("calendar_slug");
+
+  if (!calendarSlug) {
+    return new Response(
+      JSON.stringify({ error: "Missing calendar_slug" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const { data: calendar } = await supabase
+    .from("calendars")
+    .select("id, name, slug, description")
+    .eq("slug", calendarSlug)
+    .maybeSingle();
+
+  if (!calendar) {
+    return new Response(
+      JSON.stringify({ error: "Calendar not found" }),
+      { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const { data: appointmentTypes } = await supabase
+    .from("appointment_types")
+    .select("id, name, slug, description, duration_minutes, location_type")
+    .eq("calendar_id", calendar.id)
+    .eq("active", true)
+    .order("name");
+
+  return new Response(
+    JSON.stringify({
+      calendar: { id: calendar.id, name: calendar.name, slug: calendar.slug, description: calendar.description },
+      appointment_types: appointmentTypes || [],
+    }),
+    { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
 
 async function handleGetCalendarInfo(
   req: Request,

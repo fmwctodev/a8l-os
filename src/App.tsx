@@ -92,6 +92,7 @@ import AssistantSettingsPage from './pages/settings/AssistantSettingsPage';
 import { MediaStylePresetsPage } from './pages/settings/MediaStylePresetsPage';
 import { CalendarDetail } from './pages/modules/CalendarDetail';
 import { BookingPage } from './pages/public/BookingPage';
+import { CalendarLandingPage } from './pages/public/CalendarLandingPage';
 import { PublicFormPage } from './pages/public/PublicFormPage';
 import { PublicSurveyPage } from './pages/public/PublicSurveyPage';
 import { ReviewPage } from './pages/public/ReviewPage';
@@ -652,6 +653,7 @@ function App() {
               />
             </Route>
 
+            <Route path="/book/:calendarSlug" element={<CalendarLandingPage />} />
             <Route path="/book/:calendarSlug/:typeSlug" element={<BookingPage />} />
             <Route path="/f/:slug" element={<PublicFormPage />} />
             <Route path="/s/:slug" element={<PublicSurveyPage />} />
