@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { callEdgeFunction } from '../lib/edgeFunction';
 import type { Review, ReviewFilters, CreateManualReviewInput, ReviewAIAnalysis } from '../types';
 
 export async function getReviews(
@@ -331,17 +332,9 @@ export async function getAIAnalysis(reviewId: string): Promise<ReviewAIAnalysis 
 }
 
 export async function analyzeReview(reviewId: string): Promise<ReviewAIAnalysis> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/review-ai-analyze`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ review_id: reviewId }),
-    }
-  );
+  const response = await callEdgeFunction('review-ai-analyze', {
+    review_id: reviewId,
+  });
 
   if (!response.ok) {
     const error = await response.json();
@@ -356,17 +349,10 @@ export async function generateAIReply(
   reviewId: string,
   tone?: string
 ): Promise<{ reply: string; provider: string }> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/review-ai-reply`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ review_id: reviewId, tone }),
-    }
-  );
+  const response = await callEdgeFunction('review-ai-reply', {
+    review_id: reviewId,
+    tone,
+  });
 
   if (!response.ok) {
     const error = await response.json();
@@ -398,23 +384,13 @@ export async function postReplyToProvider(
     return { success: true };
   }
 
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/review-reply-post`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        review_id: reviewId,
-        reply_text: replyText,
-        organization_id: orgId,
-        provider: review.provider,
-        user_id: userId,
-      }),
-    }
-  );
+  const response = await callEdgeFunction('review-reply-post', {
+    review_id: reviewId,
+    reply_text: replyText,
+    organization_id: orgId,
+    provider: review.provider,
+    user_id: userId,
+  });
 
   const data = await response.json();
   return { success: data.success, error: data.error };

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, AlertCircle, AlertTriangle, ExternalLink, RefreshCw, Power, Settings, Globe, User, Loader2 } from 'lucide-react';
+import { useToast } from '../../../contexts/ToastContext';
 import { getIntegrations, getGoogleConnectionStatuses, testIntegrationConnection, toggleIntegration } from '../../../services/integrations';
 import type { GoogleConnectionStatuses } from '../../../services/integrations';
 import type { Integration } from '../../../types';
@@ -12,6 +13,7 @@ interface ConnectedIntegrationsTabProps {
 
 export function ConnectedIntegrationsTab({ onSuccess }: ConnectedIntegrationsTabProps) {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
   const [testingId, setTestingId] = useState<string | null>(null);
@@ -53,6 +55,7 @@ export function ConnectedIntegrationsTab({ onSuccess }: ConnectedIntegrationsTab
       setIntegrations(merged.filter((int) => int.connection?.status === 'connected'));
     } catch (error) {
       console.error('Failed to load integrations:', error);
+      showToast('warning', 'Failed to load integrations', 'Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -62,9 +65,11 @@ export function ConnectedIntegrationsTab({ onSuccess }: ConnectedIntegrationsTab
     try {
       setTestingId(integration.id);
       await testIntegrationConnection(integration.key);
+      showToast('success', 'Connection test passed', `${integration.name} is working correctly.`);
       loadIntegrations();
     } catch (error) {
       console.error('Test failed:', error);
+      showToast('warning', 'Connection test failed', `${integration.name} could not be reached. Please check the configuration.`);
     } finally {
       setTestingId(null);
     }
@@ -78,6 +83,7 @@ export function ConnectedIntegrationsTab({ onSuccess }: ConnectedIntegrationsTab
       onSuccess?.();
     } catch (error) {
       console.error('Toggle failed:', error);
+      showToast('warning', 'Failed to toggle integration', `Could not ${integration.enabled ? 'disable' : 'enable'} ${integration.name}.`);
     } finally {
       setTogglingId(null);
     }

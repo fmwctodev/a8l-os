@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { callEdgeFunction } from '../lib/edgeFunction';
 import type {
   KnowledgeCollection,
   KnowledgeVersion,
@@ -247,21 +248,11 @@ async function generateEmbeddings(
   versionId: string
 ): Promise<void> {
   try {
-    await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-knowledge-embeddings`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'generate',
-          collection_id: collectionId,
-          version_id: versionId,
-        }),
-      }
-    );
+    await callEdgeFunction('ai-knowledge-embeddings', {
+      action: 'generate',
+      collection_id: collectionId,
+      version_id: versionId,
+    });
   } catch {
     console.error('Failed to generate embeddings');
   }
@@ -349,23 +340,13 @@ export async function searchKnowledge(
   collectionIds?: string[],
   limit = 5
 ): Promise<KnowledgeSearchResult[]> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-knowledge-embeddings`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'search',
-        org_id: orgId,
-        query,
-        collection_ids: collectionIds,
-        limit,
-      }),
-    }
-  );
+  const response = await callEdgeFunction('ai-knowledge-embeddings', {
+    action: 'search',
+    org_id: orgId,
+    query,
+    collection_ids: collectionIds,
+    limit,
+  });
 
   const result = await response.json();
   return result.results || [];

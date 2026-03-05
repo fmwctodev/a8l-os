@@ -13,6 +13,7 @@ import { sendGmailEmail, replyToGmailThread } from '../../services/gmailApi';
 import { getNumbers } from '../../services/phoneNumbers';
 import { sendSms } from '../../services/sendSms';
 import { supabase } from '../../lib/supabase';
+import { getGoogleErrorMessage } from '../../utils/googleAuthErrors';
 import type { Conversation, Message, InboxEvent, MessageChannel, Contact } from '../../types';
 import type { TwilioNumber } from '../../services/phoneNumbers';
 
@@ -213,12 +214,8 @@ export function MessageThread({
             )
           );
 
-          const isAuthError = errorMsg.includes('Unauthorized') || errorMsg.includes('Session expired') || errorMsg.includes('No active session') || errorMsg.toLowerCase().includes('invalid jwt');
-          if (isAuthError) {
-            showToast('warning', 'Email send failed', 'Your session has expired. Please log out and log back in, then try again.');
-          } else {
-            showToast('warning', 'Email send failed', 'Check your Gmail connection in Settings and try again.');
-          }
+          const errInfo = getGoogleErrorMessage(errorMsg, 'gmail');
+          showToast('warning', errInfo.title, errInfo.description);
           throw gmailError;
         }
       } else {

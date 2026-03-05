@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 import type { ReviewProviderConfig, ReviewProvider, ReviewProviderStatus } from '../types';
 
 export async function getProviders(orgId: string): Promise<ReviewProviderConfig[]> {
@@ -185,16 +186,10 @@ export async function updateSyncInterval(id: string, hours: number): Promise<voi
 export async function syncProviderNow(
   providerId: string
 ): Promise<{ synced: number; errors: string[] }> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/review-sync-worker?provider_id=${providerId}`,
-    {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
-    }
-  );
+  const response = await fetchEdge('review-sync-worker', {
+    method: 'GET',
+    params: { provider_id: providerId },
+  });
 
   if (!response.ok) {
     const error = await response.json();

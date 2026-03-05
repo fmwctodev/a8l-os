@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { callEdgeFunction } from '../lib/edgeFunction';
 import type {
   LLMProvider,
   LLMProviderFilters,
@@ -119,21 +120,11 @@ export async function testProviderConnection(
   orgId: string,
   providerId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-settings-providers`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'test-connection',
-        org_id: orgId,
-        provider_id: providerId,
-      }),
-    }
-  );
+  const response = await callEdgeFunction('ai-settings-providers', {
+    action: 'test-connection',
+    org_id: orgId,
+    provider_id: providerId,
+  });
 
   const result = await response.json();
   return result;

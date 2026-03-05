@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { callEdgeFunction } from '../lib/edgeFunction';
 import type { ElevenLabsConnection, ElevenLabsVoice } from '../types';
 
 export async function getConnection(orgId: string): Promise<ElevenLabsConnection | null> {
@@ -80,20 +81,10 @@ export async function deleteConnection(orgId: string): Promise<void> {
 export async function testConnection(
   orgId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-settings-elevenlabs`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'test-connection',
-        org_id: orgId,
-      }),
-    }
-  );
+  const response = await callEdgeFunction('ai-settings-elevenlabs', {
+    action: 'test-connection',
+    org_id: orgId,
+  });
 
   const result = await response.json();
   return result;
@@ -102,20 +93,10 @@ export async function testConnection(
 export async function syncVoices(
   orgId: string
 ): Promise<{ success: boolean; count?: number; error?: string }> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-settings-elevenlabs`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'sync-voices',
-        org_id: orgId,
-      }),
-    }
-  );
+  const response = await callEdgeFunction('ai-settings-elevenlabs', {
+    action: 'sync-voices',
+    org_id: orgId,
+  });
 
   const result = await response.json();
 
@@ -206,22 +187,12 @@ export async function previewVoice(
   voiceId: string,
   text: string
 ): Promise<{ audioUrl?: string; error?: string }> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-settings-elevenlabs`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'preview-voice',
-        org_id: orgId,
-        voice_id: voiceId,
-        text,
-      }),
-    }
-  );
+  const response = await callEdgeFunction('ai-settings-elevenlabs', {
+    action: 'preview-voice',
+    org_id: orgId,
+    voice_id: voiceId,
+    text,
+  });
 
   const result = await response.json();
   return result;

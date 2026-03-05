@@ -1,8 +1,6 @@
 import { supabase } from '../lib/supabase';
+import { callEdgeFunction } from '../lib/edgeFunction';
 import type { QBOConnection } from '../types';
-
-const QBO_TOKEN_ENDPOINT = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
-const QBO_REVOKE_ENDPOINT = 'https://developer.api.intuit.com/v2/oauth2/tokens/revoke';
 
 export async function getQBOConnection(): Promise<QBOConnection | null> {
   const { data, error } = await supabase
@@ -45,23 +43,7 @@ export async function isQBOConnected(): Promise<boolean> {
 }
 
 export async function generateQBOAuthUrl(orgId: string, redirectUri: string): Promise<string> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    throw new Error('Not authenticated');
-  }
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/qbo-oauth-start`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json',
-      'Apikey': supabaseKey,
-    },
-    body: JSON.stringify({ orgId, redirectUri }),
-  });
+  const response = await callEdgeFunction('qbo-oauth-start', { orgId, redirectUri });
 
   if (!response.ok) {
     const error = await response.json();
@@ -77,17 +59,7 @@ export async function exchangeQBOCode(
   realmId: string,
   redirectUri: string
 ): Promise<QBOConnection> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/qbo-oauth-callback`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ code, realmId, redirectUri }),
-  });
+  const response = await callEdgeFunction('qbo-oauth-callback', { code, realmId, redirectUri });
 
   if (!response.ok) {
     const error = await response.json();
@@ -99,17 +71,7 @@ export async function exchangeQBOCode(
 }
 
 export async function refreshQBOToken(): Promise<void> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/qbo-oauth-callback`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ action: 'refresh' }),
-  });
+  const response = await callEdgeFunction('qbo-oauth-callback', { action: 'refresh' });
 
   if (!response.ok) {
     const error = await response.json();
@@ -118,17 +80,7 @@ export async function refreshQBOToken(): Promise<void> {
 }
 
 export async function disconnectQBO(): Promise<void> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/qbo-oauth-callback`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ action: 'disconnect' }),
-  });
+  const response = await callEdgeFunction('qbo-oauth-callback', { action: 'disconnect' });
 
   if (!response.ok) {
     const error = await response.json();

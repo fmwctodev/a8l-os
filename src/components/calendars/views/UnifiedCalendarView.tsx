@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Loader2, Calendar as CalendarIcon, Plus } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useToast } from '../../../contexts/ToastContext';
 import { supabase } from '../../../lib/supabase';
 import { getVisibleAppointments, updateAppointment, cancelAppointment } from '../../../services/appointments';
 import { getBlockedSlots } from '../../../services/blockedSlots';
@@ -25,6 +26,7 @@ import type {
 } from '../../../types';
 import type { CalendarViewType } from '../../../utils/calendarViewUtils';
 import { getDateRangeForView } from '../../../utils/calendarViewUtils';
+import { getGoogleErrorMessage } from '../../../utils/googleAuthErrors';
 import { DayView } from './DayView';
 import { WeekView } from './WeekView';
 import { MonthView } from './MonthView';
@@ -43,6 +45,7 @@ import { CreateCalendarModal } from '../CreateCalendarModal';
 export function UnifiedCalendarView() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user: currentUser, hasPermission } = useAuth();
+  const { showToast } = useToast();
 
   const initialView = (searchParams.get('view') as CalendarViewType) || 'month';
   const initialDateStr = searchParams.get('date');
@@ -107,6 +110,9 @@ export function UnifiedCalendarView() {
         console.warn('Google sync request failed (network or timeout)');
       } else {
         console.error('Google sync failed:', err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const errInfo = getGoogleErrorMessage(errMsg, 'calendar');
+        showToast('warning', errInfo.title, errInfo.description);
       }
     } finally {
       clearTimeout(timeout);
@@ -192,6 +198,9 @@ export function UnifiedCalendarView() {
       setCalendarTasks(tasksData);
     } catch (err) {
       console.error('Failed to load calendar data:', err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const errInfo = getGoogleErrorMessage(errMsg, 'calendar');
+      showToast('warning', errInfo.title, errInfo.description);
     }
   }, [currentUser, dateRange, selectedCalendarIds, selectedUserIds, isAdmin, isManager, users]);
 

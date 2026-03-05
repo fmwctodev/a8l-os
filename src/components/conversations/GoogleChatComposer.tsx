@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, X, Loader2 } from 'lucide-react';
+import { useToast } from '../../contexts/ToastContext';
+import { getGoogleErrorMessage } from '../../utils/googleAuthErrors';
 
 interface GoogleChatComposerProps {
   onSend: (text: string, threadId?: string) => Promise<void>;
@@ -14,6 +16,7 @@ export function GoogleChatComposer({
   onCancelReply,
   disabled,
 }: GoogleChatComposerProps) {
+  const { showToast } = useToast();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -36,6 +39,9 @@ export function GoogleChatComposer({
       onCancelReply();
     } catch (error) {
       console.error('Failed to send message:', error);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      const errInfo = getGoogleErrorMessage(errMsg, 'chat');
+      showToast('warning', errInfo.title, errInfo.description);
     } finally {
       setSending(false);
     }

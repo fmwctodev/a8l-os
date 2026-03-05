@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, ExternalLink, CheckCircle, XCircle, AlertCircle, Settings, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '../../../contexts/ToastContext';
 import { getIntegrations, getGoogleConnectionStatuses } from '../../../services/integrations';
 import type { GoogleConnectionStatuses } from '../../../services/integrations';
 import type { Integration, IntegrationCategory } from '../../../types';
@@ -48,6 +49,7 @@ function getIntegrationIcon(key: string): string {
 
 export function AllIntegrationsTab({ onSuccess }: AllIntegrationsTabProps) {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -89,6 +91,7 @@ export function AllIntegrationsTab({ onSuccess }: AllIntegrationsTabProps) {
       setIntegrations(merged);
     } catch (error) {
       console.error('Failed to load integrations:', error);
+      showToast('warning', 'Failed to load integrations', 'Please check your connection and try again.');
     } finally {
       setLoading(false);
     }

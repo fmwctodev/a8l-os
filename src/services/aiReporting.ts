@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { callEdgeFunction } from '../lib/edgeFunction';
 import type {
   AIReportQuery,
   AIQueryRequest,
@@ -13,23 +14,13 @@ export async function askQuestion(
   userId: string,
   request: AIQueryRequest
 ): Promise<AIQueryResponse> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-report-query`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        organization_id: orgId,
-        user_id: userId,
-        query_text: request.query_text,
-        data_scope: request.data_scope,
-        time_range: request.time_range,
-      }),
-    }
-  );
+  const response = await callEdgeFunction('ai-report-query', {
+    organization_id: orgId,
+    user_id: userId,
+    query_text: request.query_text,
+    data_scope: request.data_scope,
+    time_range: request.time_range,
+  });
 
   const result = await response.json();
 

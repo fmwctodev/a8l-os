@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { callEdgeFunction, fetchEdge } from '../lib/edgeFunction';
 import type {
   AgentKnowledgeSource,
   CreateAgentKnowledgeSourceInput,
@@ -156,20 +157,10 @@ export async function reEmbedKnowledgeSource(id: string): Promise<void> {
 
 async function processKnowledgeSource(id: string): Promise<void> {
   try {
-    await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-knowledge-embeddings`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'process-knowledge-source',
-          knowledge_source_id: id,
-        }),
-      }
-    );
+    await callEdgeFunction('ai-knowledge-embeddings', {
+      action: 'process-knowledge-source',
+      knowledge_source_id: id,
+    });
   } catch (error) {
     console.error('Failed to process knowledge source:', error);
   }
@@ -180,22 +171,12 @@ export async function testKnowledgeRetrieval(
   query: string,
   knowledgeSourceIds: string[]
 ): Promise<{ results: Array<{ content: string; score: number; source: string }> }> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-knowledge-embeddings`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'test-retrieval',
-        org_id: orgId,
-        query,
-        knowledge_source_ids: knowledgeSourceIds,
-      }),
-    }
-  );
+  const response = await callEdgeFunction('ai-knowledge-embeddings', {
+    action: 'test-retrieval',
+    org_id: orgId,
+    query,
+    knowledge_source_ids: knowledgeSourceIds,
+  });
 
   return await response.json();
 }
@@ -206,16 +187,10 @@ export async function parseFileUpload(
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-knowledge-embeddings`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: formData,
-    }
-  );
+  const response = await fetchEdge('ai-knowledge-embeddings', {
+    method: 'POST',
+    body: formData,
+  });
 
   return await response.json();
 }
@@ -226,23 +201,13 @@ export async function crawlWebsite(
   includePatterns?: string[],
   excludePatterns?: string[]
 ): Promise<{ success: boolean; pages?: Array<{ url: string; content: string }>; error?: string }> {
-  const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-knowledge-embeddings`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'crawl-website',
-        url,
-        depth,
-        include_patterns: includePatterns,
-        exclude_patterns: excludePatterns,
-      }),
-    }
-  );
+  const response = await callEdgeFunction('ai-knowledge-embeddings', {
+    action: 'crawl-website',
+    url,
+    depth,
+    include_patterns: includePatterns,
+    exclude_patterns: excludePatterns,
+  });
 
   return await response.json();
 }
