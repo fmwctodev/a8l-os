@@ -60,10 +60,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (event === 'TOKEN_REFRESHED') {
+        setSession(newSession);
+        if (!isSessionHealthy()) {
+          markSessionRestored();
+        }
+        return;
+      }
+
       setSession(newSession);
 
       if (newSession) {
-        if (!isSessionHealthy() && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
+        if (!isSessionHealthy() && event === 'SIGNED_IN') {
           markSessionRestored();
         }
         setTimeout(() => {

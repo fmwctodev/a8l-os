@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bot,
@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 import { getAllPendingDraftsWithContext } from '../../services/aiDrafts';
 import type { AIDraft, AIDraftSource, MessageChannel, AIWorkflowActionType } from '../../types';
 
@@ -46,13 +47,7 @@ export function PendingDraftsSection({
   const [loading, setLoading] = useState(true);
   const [sourceFilter, setSourceFilter] = useState<AIDraftSource | 'all'>('all');
 
-  useEffect(() => {
-    loadPendingDrafts();
-    const interval = setInterval(loadPendingDrafts, 30000);
-    return () => clearInterval(interval);
-  }, [user?.organization_id, sourceFilter]);
-
-  const loadPendingDrafts = async () => {
+  const loadPendingDrafts = useCallback(async () => {
     if (!user?.organization_id) return;
 
     try {
@@ -67,7 +62,35 @@ export function PendingDraftsSection({
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.organization_id, sourceFilter]);
+
+  useEffect(() => {
+    loadPendingDrafts();
+  }, [loadPendingDrafts]);
+
+  useEffect(() => {
+    if (!user?.organization_id) return;
+
+    const channel = supabase
+      .channel(`ai-drafts:${user.organization_id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ai_messages',
+          filter: `organization_id=eq.${user.organization_id}`,
+        },
+        () => {
+          loadPendingDrafts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [user?.organization_id, loadPendingDrafts]);
 
   const handleSelectDraft = (draft: PendingDraftWithContext) => {
     if (draft.conversation_id) {

@@ -245,18 +245,6 @@ export function UnifiedCalendarView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.organization_id, isLoading]);
 
-  useEffect(() => {
-    if (isLoading) return;
-
-    const POLL_INTERVAL_MS = 60_000;
-    const intervalId = setInterval(() => {
-      if (!isSyncing) {
-        loadCalendarData();
-      }
-    }, POLL_INTERVAL_MS);
-
-    return () => clearInterval(intervalId);
-  }, [isLoading, isSyncing, loadCalendarData]);
 
   useEffect(() => {
     const params = new URLSearchParams();

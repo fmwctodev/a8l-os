@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -6,6 +6,7 @@ export function useUnreadCount() {
   const { user } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchUnreadCount = useCallback(async () => {
     if (!user?.organization_id) return;
@@ -28,6 +29,13 @@ export function useUnreadCount() {
     }
   }, [user?.organization_id]);
 
+  const debouncedFetch = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      fetchUnreadCount();
+    }, 400);
+  }, [fetchUnreadCount]);
+
   useEffect(() => {
     fetchUnreadCount();
   }, [fetchUnreadCount]);
@@ -46,15 +54,16 @@ export function useUnreadCount() {
           filter: `organization_id=eq.${user.organization_id}`,
         },
         () => {
-          fetchUnreadCount();
+          debouncedFetch();
         }
       )
       .subscribe();
 
     return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
       channel.unsubscribe();
     };
-  }, [user?.organization_id, fetchUnreadCount]);
+  }, [user?.organization_id, debouncedFetch]);
 
   return { unreadCount, loading, refresh: fetchUnreadCount };
 }
