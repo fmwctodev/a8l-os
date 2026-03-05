@@ -16,7 +16,6 @@ import {
   FileText,
   ExternalLink,
   Plus,
-  Check,
   Trash2,
   CreditCard,
   Send,
@@ -32,7 +31,6 @@ import type {
   Opportunity,
   OpportunityNote,
   OpportunityTimelineEvent,
-  ContactTask,
   PipelineStage,
   User as UserType,
   Invoice,
@@ -43,7 +41,6 @@ import type {
 import * as opportunitiesService from '../../services/opportunities';
 import * as opportunityNotesService from '../../services/opportunityNotes';
 import * as opportunityTimelineService from '../../services/opportunityTimeline';
-import * as contactTasksService from '../../services/contactTasks';
 import * as pipelinesService from '../../services/pipelines';
 import { getUsers } from '../../services/users';
 import { getOpportunityInvoices } from '../../services/invoices';
@@ -52,6 +49,7 @@ import { OpportunityModal } from '../../components/opportunities/OpportunityModa
 import { CreateInvoiceModal } from '../../components/payments/CreateInvoiceModal';
 import { CloseLostModal } from '../../components/opportunities/CloseLostModal';
 import OpportunityFilesTab from '../../components/opportunities/OpportunityFilesTab';
+import { OpportunityTasksTab } from '../../components/opportunities/OpportunityTasksTab';
 import { ScoreWidget } from '../../components/scoring/ScoreWidget';
 import { ConvertToProjectModal } from '../../components/projects/ConvertToProjectModal';
 import { AskClaraButton } from '../../components/assistant/AskClaraButton';
@@ -101,7 +99,6 @@ export function OpportunityDetail() {
   const [users, setUsers] = useState<UserType[]>([]);
   const [timeline, setTimeline] = useState<OpportunityTimelineEvent[]>([]);
   const [notes, setNotes] = useState<OpportunityNote[]>([]);
-  const [tasks, setTasks] = useState<ContactTask[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('details');
@@ -116,8 +113,6 @@ export function OpportunityDetail() {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [newNote, setNewNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [savingTask, setSavingTask] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
   useEffect(() => {
@@ -170,9 +165,6 @@ export function OpportunityDetail() {
       } else if (activeTab === 'notes') {
         const notesData = await opportunityNotesService.getNotesByOpportunity(opportunity.id);
         setNotes(notesData);
-      } else if (activeTab === 'tasks') {
-        const tasksData = await contactTasksService.getOpportunityTasks(opportunity.id);
-        setTasks(tasksData);
       } else if (activeTab === 'invoices') {
         const invoicesData = await getOpportunityInvoices(opportunity.id);
         setInvoices(invoicesData);
@@ -281,37 +273,6 @@ export function OpportunityDetail() {
       setNotes(notes.filter(n => n.id !== noteId));
     } catch (error) {
       console.error('Failed to delete note:', error);
-    }
-  }
-
-  async function handleAddTask() {
-    if (!newTaskTitle.trim() || !opportunity || !user) return;
-    setSavingTask(true);
-    try {
-      await contactTasksService.createTask(
-        opportunity.contact_id,
-        {
-          title: newTaskTitle.trim(),
-          opportunity_id: opportunity.id
-        },
-        user
-      );
-      setNewTaskTitle('');
-      loadRelatedData();
-    } catch (error) {
-      console.error('Failed to add task:', error);
-    } finally {
-      setSavingTask(false);
-    }
-  }
-
-  async function handleCompleteTask(taskId: string) {
-    if (!user) return;
-    try {
-      await contactTasksService.completeTask(taskId, user);
-      loadRelatedData();
-    } catch (error) {
-      console.error('Failed to complete task:', error);
     }
   }
 
@@ -653,67 +614,13 @@ export function OpportunityDetail() {
               </div>
             )}
 
-            {activeTab === 'tasks' && (
-              <div className="space-y-4">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTaskTitle}
-                    onChange={(e) => setNewTaskTitle(e.target.value)}
-                    placeholder="Add a new task..."
-                    className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white"
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
-                  />
-                  <button
-                    onClick={handleAddTask}
-                    disabled={savingTask || !newTaskTitle.trim()}
-                    className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700 disabled:opacity-50"
-                  >
-                    {savingTask ? 'Adding...' : 'Add Task'}
-                  </button>
-                </div>
-
-                {tasks.length === 0 ? (
-                  <div className="text-center py-12 text-slate-400">
-                    No tasks yet
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {tasks.map(task => (
-                      <div
-                        key={task.id}
-                        className={`flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg ${
-                          task.status === 'completed' ? 'opacity-60' : ''
-                        }`}
-                      >
-                        <button
-                          onClick={() => task.status !== 'completed' && handleCompleteTask(task.id)}
-                          className={`w-5 h-5 rounded border flex items-center justify-center ${
-                            task.status === 'completed'
-                              ? 'bg-emerald-500 border-emerald-500'
-                              : 'border-slate-500 hover:border-emerald-500'
-                          }`}
-                        >
-                          {task.status === 'completed' && <Check className="w-3 h-3 text-white" />}
-                        </button>
-                        <div className="flex-1">
-                          <div className={task.status === 'completed' ? 'text-slate-400 line-through' : 'text-white'}>
-                            {task.title}
-                          </div>
-                          {task.due_date && (
-                            <div className="text-sm text-slate-400">
-                              Due {formatDate(task.due_date)}
-                            </div>
-                          )}
-                        </div>
-                        {task.assigned_to && (
-                          <div className="text-sm text-slate-400">{task.assigned_to.name}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+            {activeTab === 'tasks' && opportunity && (
+              <OpportunityTasksTab
+                contactId={opportunity.contact_id}
+                opportunityId={opportunity.id}
+                users={users}
+                canEdit={canEdit}
+              />
             )}
 
             {activeTab === 'notes' && (

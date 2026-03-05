@@ -5,11 +5,11 @@ import {
   updateTask,
   deleteTask,
   completeTask,
+  getOpportunityTasks,
 } from '../../services/contactTasks';
 import type { ContactTask, User } from '../../types';
 import {
   Plus,
-  Check,
   Loader2,
   X,
   CheckCircle2,
@@ -17,14 +17,13 @@ import {
   Pencil,
   Save,
   Trash2,
-  Video,
 } from 'lucide-react';
 
-interface ContactTasksTabProps {
+interface OpportunityTasksTabProps {
   contactId: string;
-  tasks: ContactTask[];
+  opportunityId: string;
   users: User[];
-  onRefresh: () => void;
+  canEdit: boolean;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -47,21 +46,15 @@ const PRIORITY_DOTS: Record<string, string> = {
   high: 'bg-amber-500',
 };
 
-function isMeetSourcedTask(task: ContactTask): boolean {
-  return !!(task.description && task.description.includes('[meet:'));
-}
-
-function getCleanDescription(task: ContactTask): string | null {
-  if (!task.description) return null;
-  return (
-    task.description
-      .replace(/\n\n\[Source: Google Meet -- [^\]]*\]\n\[meet:[^\]]*\]/, '')
-      .trim() || null
-  );
-}
-
-export function ContactTasksTab({ contactId, tasks, users, onRefresh }: ContactTasksTabProps) {
-  const { user: currentUser, hasPermission, isSuperAdmin } = useAuth();
+export function OpportunityTasksTab({
+  contactId,
+  opportunityId,
+  users,
+  canEdit,
+}: OpportunityTasksTabProps) {
+  const { user: currentUser, isSuperAdmin } = useAuth();
+  const [tasks, setTasks] = useState<ContactTask[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -72,13 +65,27 @@ export function ContactTasksTab({ contactId, tasks, users, onRefresh }: ContactT
     due_date: '',
   });
 
-  const canEdit = hasPermission('contacts.edit');
   const isAdmin = isSuperAdmin || currentUser?.role?.hierarchy_level === 2;
 
   const canModifyTask = (task: ContactTask) =>
     task.created_by_user_id === currentUser?.id ||
     task.assigned_to_user_id === currentUser?.id ||
     isAdmin;
+
+  useEffect(() => {
+    loadTasks();
+  }, [opportunityId]);
+
+  async function loadTasks() {
+    try {
+      const data = await getOpportunityTasks(opportunityId);
+      setTasks(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleCreateTask(e: React.FormEvent) {
     e.preventDefault();
@@ -92,12 +99,13 @@ export function ContactTasksTab({ contactId, tasks, users, onRefresh }: ContactT
           due_date: newTask.due_date || null,
           priority: newTask.priority,
           assigned_to_user_id: newTask.assigned_to_user_id || null,
+          opportunity_id: opportunityId,
         },
         currentUser
       );
       setNewTask({ title: '', assigned_to_user_id: '', priority: 'medium', due_date: '' });
       setShowAddForm(false);
-      onRefresh();
+      await loadTasks();
     } catch (err) {
       console.error(err);
     } finally {
@@ -113,7 +121,7 @@ export function ContactTasksTab({ contactId, tasks, users, onRefresh }: ContactT
       } else {
         await completeTask(taskId, currentUser);
       }
-      onRefresh();
+      await loadTasks();
     } catch (err) {
       console.error(err);
     }
@@ -127,7 +135,7 @@ export function ContactTasksTab({ contactId, tasks, users, onRefresh }: ContactT
         { status: status as ContactTask['status'] },
         currentUser
       );
-      onRefresh();
+      await loadTasks();
     } catch (err) {
       console.error(err);
     }
@@ -138,7 +146,7 @@ export function ContactTasksTab({ contactId, tasks, users, onRefresh }: ContactT
     setSaving(true);
     try {
       await updateTask(taskId, updates as Parameters<typeof updateTask>[1], currentUser);
-      onRefresh();
+      await loadTasks();
       setSelectedTaskId(null);
     } catch (err) {
       console.error(err);
@@ -151,7 +159,7 @@ export function ContactTasksTab({ contactId, tasks, users, onRefresh }: ContactT
     if (!currentUser) return;
     try {
       await deleteTask(taskId, currentUser);
-      onRefresh();
+      await loadTasks();
       setSelectedTaskId(null);
     } catch (err) {
       console.error(err);
@@ -159,6 +167,14 @@ export function ContactTasksTab({ contactId, tasks, users, onRefresh }: ContactT
   }
 
   const selectedTask = tasks.find((t) => t.id === selectedTaskId) ?? null;
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full gap-0">
@@ -311,7 +327,6 @@ function TaskRow({
     taskDate < today &&
     task.status !== 'completed' &&
     task.status !== 'cancelled';
-  const isMeetTask = isMeetSourcedTask(task);
 
   return (
     <div
@@ -347,12 +362,6 @@ function TaskRow({
       >
         {task.title}
       </span>
-      {isMeetTask && (
-        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400 text-[10px] font-medium shrink-0">
-          <Video className="w-2.5 h-2.5" />
-          Meet
-        </span>
-      )}
       {task.assigned_to ? (
         <span className="text-xs text-slate-500 w-24 truncate text-right shrink-0">
           {task.assigned_to.name}
@@ -411,7 +420,7 @@ function TaskEditPanel({
 }) {
   const [form, setForm] = useState({
     title: task.title,
-    description: getCleanDescription(task) ?? '',
+    description: task.description ?? '',
     status: task.status,
     priority: task.priority,
     assigned_to_user_id: task.assigned_to_user_id ?? '',
@@ -422,7 +431,7 @@ function TaskEditPanel({
   useEffect(() => {
     setForm({
       title: task.title,
-      description: getCleanDescription(task) ?? '',
+      description: task.description ?? '',
       status: task.status,
       priority: task.priority,
       assigned_to_user_id: task.assigned_to_user_id ?? '',
