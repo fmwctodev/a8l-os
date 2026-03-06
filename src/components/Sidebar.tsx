@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSidebar } from '../contexts/SidebarContext';
 import { navigationConfig } from '../config/navigation';
 import { useUnreadCount } from '../hooks/useUnreadCount';
+import { usePaymentsAccess } from '../hooks/usePaymentsAccess';
 import { Tooltip } from './Tooltip';
 import type { NavItem, NavSection } from '../config/navigation';
 
@@ -70,8 +71,10 @@ function NavSectionComponent({
 }) {
   const { hasPermission, isFeatureEnabled } = useAuth();
   const { isGroupCollapsed, toggleGroup } = useSidebar();
+  const canAccessPayments = usePaymentsAccess();
 
   const visibleItems = section.items.filter((item) => {
+    if (item.path === '/payments' && !canAccessPayments) return false;
     const hasAccess = hasPermission(item.permission);
     const featureEnabled = !item.featureFlag || isFeatureEnabled(item.featureFlag);
     return hasAccess && featureEnabled;

@@ -1,7 +1,8 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { FolderKanban, List, GitBranch, TrendingUp } from 'lucide-react';
+import { usePaymentsAccess } from '../hooks/usePaymentsAccess';
 
-const tabs = [
+const allTabs = [
   { path: '/projects', label: 'Board', icon: FolderKanban, exact: true },
   { path: '/projects/list', label: 'List', icon: List },
   { path: '/projects/pipelines', label: 'Pipelines', icon: GitBranch },
@@ -10,6 +11,11 @@ const tabs = [
 
 export function ProjectsLayout() {
   const location = useLocation();
+  const canAccessPayments = usePaymentsAccess();
+
+  const tabs = canAccessPayments
+    ? allTabs
+    : allTabs.filter((t) => t.path !== '/projects/profitability');
 
   const isActiveTab = (path: string, exact?: boolean) => {
     if (exact) {

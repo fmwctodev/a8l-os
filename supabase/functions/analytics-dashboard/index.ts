@@ -276,59 +276,71 @@ Deno.serve(async (req: Request) => {
 
     const { count: completedApptPrev } = await completedApptPrevQuery;
 
-    const { data: invoicedCurrentData } = await supabase
-      .from("invoices")
-      .select("total")
-      .eq("org_id", user.orgId)
-      .gte("created_at", start.toISOString())
-      .lte("created_at", end.toISOString());
+    const PAYMENTS_ALLOWED_EMAILS = ["sean@autom8ionlab.com"];
+    const canViewPayments = user.isSuperAdmin || PAYMENTS_ALLOWED_EMAILS.includes(user.email.toLowerCase());
 
-    const invoicedCurrent = (invoicedCurrentData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);
+    let invoicedCurrent = 0;
+    let invoicedPrev = 0;
+    let paidCurrent = 0;
+    let paidPrev = 0;
+    let outstanding = 0;
+    let totalPaid = 0;
 
-    const { data: invoicedPrevData } = await supabase
-      .from("invoices")
-      .select("total")
-      .eq("org_id", user.orgId)
-      .gte("created_at", prevStart.toISOString())
-      .lte("created_at", prevEnd.toISOString());
+    if (canViewPayments) {
+      const { data: invoicedCurrentData } = await supabase
+        .from("invoices")
+        .select("total")
+        .eq("org_id", user.orgId)
+        .gte("created_at", start.toISOString())
+        .lte("created_at", end.toISOString());
 
-    const invoicedPrev = (invoicedPrevData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);
+      invoicedCurrent = (invoicedCurrentData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);
 
-    const { data: paidCurrentData } = await supabase
-      .from("invoices")
-      .select("total")
-      .eq("org_id", user.orgId)
-      .eq("status", "paid")
-      .gte("paid_at", start.toISOString())
-      .lte("paid_at", end.toISOString());
+      const { data: invoicedPrevData } = await supabase
+        .from("invoices")
+        .select("total")
+        .eq("org_id", user.orgId)
+        .gte("created_at", prevStart.toISOString())
+        .lte("created_at", prevEnd.toISOString());
 
-    const paidCurrent = (paidCurrentData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);
+      invoicedPrev = (invoicedPrevData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);
 
-    const { data: paidPrevData } = await supabase
-      .from("invoices")
-      .select("total")
-      .eq("org_id", user.orgId)
-      .eq("status", "paid")
-      .gte("paid_at", prevStart.toISOString())
-      .lte("paid_at", prevEnd.toISOString());
+      const { data: paidCurrentData } = await supabase
+        .from("invoices")
+        .select("total")
+        .eq("org_id", user.orgId)
+        .eq("status", "paid")
+        .gte("paid_at", start.toISOString())
+        .lte("paid_at", end.toISOString());
 
-    const paidPrev = (paidPrevData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);
+      paidCurrent = (paidCurrentData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);
 
-    const { data: outstandingData } = await supabase
-      .from("invoices")
-      .select("total")
-      .eq("org_id", user.orgId)
-      .in("status", ["sent", "viewed", "overdue"]);
+      const { data: paidPrevData } = await supabase
+        .from("invoices")
+        .select("total")
+        .eq("org_id", user.orgId)
+        .eq("status", "paid")
+        .gte("paid_at", prevStart.toISOString())
+        .lte("paid_at", prevEnd.toISOString());
 
-    const outstanding = (outstandingData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);
+      paidPrev = (paidPrevData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);
 
-    const { data: totalPaidData } = await supabase
-      .from("invoices")
-      .select("total")
-      .eq("org_id", user.orgId)
-      .eq("status", "paid");
+      const { data: outstandingData } = await supabase
+        .from("invoices")
+        .select("total")
+        .eq("org_id", user.orgId)
+        .in("status", ["sent", "viewed", "overdue"]);
 
-    const totalPaid = (totalPaidData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);
+      outstanding = (outstandingData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);
+
+      const { data: totalPaidData } = await supabase
+        .from("invoices")
+        .select("total")
+        .eq("org_id", user.orgId)
+        .eq("status", "paid");
+
+      totalPaid = (totalPaidData || []).reduce((sum, inv) => sum + (inv.total || 0), 0);
+    }
 
     return successResponse({
       contacts: {

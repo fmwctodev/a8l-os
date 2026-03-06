@@ -4,6 +4,7 @@ import { SidebarProvider } from './contexts/SidebarContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { PaymentsGate } from './components/PaymentsGate';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { Login } from './pages/Login';
 import { ForgotPassword } from './pages/ForgotPassword';
@@ -201,7 +202,7 @@ function App() {
                 <Route index element={<Projects />} />
                 <Route path="list" element={<ProjectsListPage />} />
                 <Route path="pipelines" element={<ProjectPipelinesPage />} />
-                <Route path="profitability" element={<ProjectProfitabilityPage />} />
+                <Route path="profitability" element={<PaymentsGate><ProjectProfitabilityPage /></PaymentsGate>} />
               </Route>
               <Route
                 path="/projects/:id"
@@ -215,7 +216,9 @@ function App() {
                 path="/payments"
                 element={
                   <ProtectedRoute permission="payments.view" featureFlag="payments">
-                    <Payments />
+                    <PaymentsGate>
+                      <Payments />
+                    </PaymentsGate>
                   </ProtectedRoute>
                 }
               />
@@ -223,7 +226,9 @@ function App() {
                 path="/payments/invoices/:id"
                 element={
                   <ProtectedRoute permission="payments.view" featureFlag="payments">
-                    <InvoiceDetail />
+                    <PaymentsGate>
+                      <InvoiceDetail />
+                    </PaymentsGate>
                   </ProtectedRoute>
                 }
               />

@@ -23,6 +23,7 @@ import { ScoreWidget } from '../../components/scoring/ScoreWidget';
 import { VirtualizedTimeline } from '../../components/contacts/VirtualizedTimeline';
 import { LeadScoreBadge } from '../../components/contacts/LeadScoreBadge';
 import { getAttachmentCount } from '../../services/fileAttachments';
+import { usePaymentsAccess } from '../../hooks/usePaymentsAccess';
 
 type TabType = 'overview' | 'notes' | 'tasks' | 'timeline' | 'meetings' | 'payments' | 'files';
 
@@ -61,6 +62,7 @@ export function ContactDetail() {
 
   const canEdit = hasPermission('contacts.edit');
   const canViewPayments = hasPermission('payments.view');
+  const canAccessPayments = usePaymentsAccess();
   const canViewMedia = hasPermission('media.view');
   const canDelete = hasPermission('contacts.delete');
   const canAdjustScore = hasPermission('scoring.adjust');
@@ -281,7 +283,7 @@ export function ContactDetail() {
     { id: 'tasks', label: 'Tasks', count: tasks.filter((t) => t.status !== 'completed').length },
     { id: 'timeline', label: 'Timeline', count: aggregatedTimeline.length },
     { id: 'meetings', label: 'Meetings', count: meetings.filter((m) => m.recording_url).length },
-    ...(paymentsEnabled && canViewPayments ? [{ id: 'payments' as const, label: 'Payments' }] : []),
+    ...(paymentsEnabled && canViewPayments && canAccessPayments ? [{ id: 'payments' as const, label: 'Payments' }] : []),
     ...(mediaEnabled && canViewMedia ? [{ id: 'files' as const, label: 'Files', count: filesCount }] : []),
   ];
 

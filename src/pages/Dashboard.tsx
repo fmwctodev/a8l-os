@@ -18,6 +18,7 @@ import { useDashboardData } from '../hooks/useDashboardData';
 import { useUserDashboardAnalytics } from '../hooks/useUserDashboardAnalytics';
 import { getGreeting, type DateRange } from '../services/dashboard';
 import { usePermission } from '../hooks/usePermission';
+import { usePaymentsAccess } from '../hooks/usePaymentsAccess';
 import {
   StatCard,
   QuickActionButton,
@@ -98,6 +99,7 @@ export function Dashboard() {
   const canCreateOpportunity = usePermission('opportunities.create');
   const canCreateInvoice = usePermission('invoices.create');
   const canCreateAppointment = usePermission('appointments.create');
+  const canAccessPayments = usePaymentsAccess();
 
   if (isSuperAdmin && mode === 'system') {
     return <SystemDashboard />;
@@ -260,44 +262,48 @@ export function Dashboard() {
           onClick={() => navigate('/calendars')}
           isLoading={isLoading}
         />
-        <StatCard
-          title="Total Paid"
-          value={
-            analytics?.revenue.totalPaid != null
-              ? formatCurrency(analytics.revenue.totalPaid)
-              : '--'
-          }
-          delta={analytics?.revenue.paidInPeriod.deltaPercent}
-          deltaType={
-            analytics?.revenue.paidInPeriod.trend === 'up'
-              ? 'positive'
-              : analytics?.revenue.paidInPeriod.trend === 'down'
-              ? 'negative'
-              : 'neutral'
-          }
-          sublabel={
-            analytics?.revenue.paidInPeriod
-              ? `${formatCurrency(analytics.revenue.paidInPeriod.current)} collected this period`
-              : 'All paid invoices'
-          }
-          icon={Receipt}
-          accentColor="emerald"
-          onClick={() => navigate('/payments')}
-          isLoading={isLoading}
-        />
-        <StatCard
-          title="Outstanding"
-          value={
-            analytics?.revenue.outstanding != null
-              ? formatCurrency(analytics.revenue.outstanding)
-              : '--'
-          }
-          sublabel="Unpaid invoices"
-          icon={DollarSign}
-          accentColor="amber"
-          onClick={() => navigate('/payments')}
-          isLoading={isLoading}
-        />
+        {canAccessPayments && (
+          <StatCard
+            title="Total Paid"
+            value={
+              analytics?.revenue.totalPaid != null
+                ? formatCurrency(analytics.revenue.totalPaid)
+                : '--'
+            }
+            delta={analytics?.revenue.paidInPeriod.deltaPercent}
+            deltaType={
+              analytics?.revenue.paidInPeriod.trend === 'up'
+                ? 'positive'
+                : analytics?.revenue.paidInPeriod.trend === 'down'
+                ? 'negative'
+                : 'neutral'
+            }
+            sublabel={
+              analytics?.revenue.paidInPeriod
+                ? `${formatCurrency(analytics.revenue.paidInPeriod.current)} collected this period`
+                : 'All paid invoices'
+            }
+            icon={Receipt}
+            accentColor="emerald"
+            onClick={() => navigate('/payments')}
+            isLoading={isLoading}
+          />
+        )}
+        {canAccessPayments && (
+          <StatCard
+            title="Outstanding"
+            value={
+              analytics?.revenue.outstanding != null
+                ? formatCurrency(analytics.revenue.outstanding)
+                : '--'
+            }
+            sublabel="Unpaid invoices"
+            icon={DollarSign}
+            accentColor="amber"
+            onClick={() => navigate('/payments')}
+            isLoading={isLoading}
+          />
+        )}
       </div>
 
       <div>
@@ -324,13 +330,15 @@ export function Dashboard() {
             disabled={!canCreateOpportunity}
             iconColor="text-amber-400"
           />
-          <QuickActionButton
-            icon={FileText}
-            label="Create Invoice"
-            onClick={() => setCreateInvoiceOpen(true)}
-            disabled={!canCreateInvoice}
-            iconColor="text-emerald-400"
-          />
+          {canAccessPayments && (
+            <QuickActionButton
+              icon={FileText}
+              label="Create Invoice"
+              onClick={() => setCreateInvoiceOpen(true)}
+              disabled={!canCreateInvoice}
+              iconColor="text-emerald-400"
+            />
+          )}
           <QuickActionButton
             icon={CalendarPlus}
             label="Book Appointment"
@@ -397,11 +405,13 @@ export function Dashboard() {
         onClose={() => setCreateOpportunityOpen(false)}
         onSuccess={handleDrawerSuccess}
       />
-      <CreateInvoiceDrawer
-        open={createInvoiceOpen}
-        onClose={() => setCreateInvoiceOpen(false)}
-        onSuccess={handleDrawerSuccess}
-      />
+      {canAccessPayments && (
+        <CreateInvoiceDrawer
+          open={createInvoiceOpen}
+          onClose={() => setCreateInvoiceOpen(false)}
+          onSuccess={handleDrawerSuccess}
+        />
+      )}
       <BookAppointmentDrawer
         open={bookAppointmentOpen}
         onClose={() => setBookAppointmentOpen(false)}

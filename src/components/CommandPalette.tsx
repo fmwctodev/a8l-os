@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAssistant } from '../contexts/AssistantContext';
+import { usePaymentsAccess } from '../hooks/usePaymentsAccess';
 import { supabase } from '../lib/supabase';
 
 interface SearchResult {
@@ -63,6 +64,7 @@ const navigationItems: SearchResult[] = [
 export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const navigate = useNavigate();
   const { user, hasPermission } = useAuth();
+  const canAccessPayments = usePaymentsAccess();
   const assistant = (() => { try { return useAssistant(); } catch { return null; } })();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -191,7 +193,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         }
       }
 
-      if (hasPermission('payments.view')) {
+      if (hasPermission('payments.view') && canAccessPayments) {
         const { data: invoices } = await supabase
           .from('invoices')
           .select('id, invoice_number, total')
@@ -219,7 +221,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     }
 
     return results;
-  }, [user?.organization_id, hasPermission]);
+  }, [user?.organization_id, hasPermission, canAccessPayments]);
 
   useEffect(() => {
     if (isOpen) {
@@ -232,7 +234,10 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   useEffect(() => {
     const searchTimer = setTimeout(async () => {
       if (query.trim()) {
-        const filteredNav = navigationItems.filter((item) =>
+        const allowedNav = canAccessPayments
+          ? navigationItems
+          : navigationItems.filter((item) => item.id !== 'nav-payments');
+        const filteredNav = allowedNav.filter((item) =>
           item.title.toLowerCase().includes(query.toLowerCase())
         );
         const filteredActions = quickActions.filter((item) =>
@@ -241,7 +246,10 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         const dbResults = await searchDatabase(query);
         setResults([...dbResults, ...filteredNav, ...filteredActions]);
       } else {
-        setResults([...recentSearches.slice(0, 3), ...quickActions, ...navigationItems.slice(0, 6)]);
+        const defaultNav = canAccessPayments
+          ? navigationItems
+          : navigationItems.filter((item) => item.id !== 'nav-payments');
+        setResults([...recentSearches.slice(0, 3), ...quickActions, ...defaultNav.slice(0, 6)]);
       }
       setSelectedIndex(0);
     }, 150);

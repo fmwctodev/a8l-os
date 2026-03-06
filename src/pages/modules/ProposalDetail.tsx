@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { usePaymentsAccess } from '../../hooks/usePaymentsAccess';
 import { SendProposalModal } from '../../components/proposals/SendProposalModal';
 import { ConvertToInvoiceModal } from '../../components/proposals/ConvertToInvoiceModal';
 import {
@@ -70,6 +71,7 @@ export function ProposalDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, hasPermission } = useAuth();
+  const canAccessPayments = usePaymentsAccess();
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [comments, setComments] = useState<ProposalComment[]>([]);
   const [activities, setActivities] = useState<ProposalActivity[]>([]);
@@ -340,7 +342,7 @@ export function ProposalDetail() {
                 Send Proposal
               </button>
             )}
-            {proposal.status === 'accepted' && hasPermission('payments.manage') && (
+            {proposal.status === 'accepted' && hasPermission('payments.manage') && canAccessPayments && (
               <button
                 onClick={() => setShowConvertModal(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
@@ -743,7 +745,7 @@ export function ProposalDetail() {
         />
       )}
 
-      {showConvertModal && proposal && (
+      {showConvertModal && proposal && canAccessPayments && (
         <ConvertToInvoiceModal
           proposal={proposal}
           onClose={() => setShowConvertModal(false)}

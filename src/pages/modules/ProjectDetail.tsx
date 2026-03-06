@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermission } from '../../hooks/usePermission';
+import { usePaymentsAccess } from '../../hooks/usePaymentsAccess';
 import type { Project, User } from '../../types';
 import { getProjectById, updateProject, closeProject, deleteProject } from '../../services/projects';
 import { getUsers } from '../../services/users';
@@ -41,6 +42,7 @@ export function ProjectDetail() {
   const canClose = usePermission('projects.close');
   const canDelete = usePermission('projects.delete');
   const canManageTasks = usePermission('projects.tasks.manage');
+  const canAccessPayments = usePaymentsAccess();
 
   const [project, setProject] = useState<Project | null>(null);
   const [users, setUsers] = useState<User[]>([]);
@@ -129,7 +131,7 @@ export function ProjectDetail() {
     { id: 'tasks', label: 'Tasks' },
     { id: 'notes', label: 'Notes' },
     { id: 'timeline', label: 'Timeline' },
-    { id: 'financials', label: 'Financials' },
+    ...(canAccessPayments ? [{ id: 'financials' as const, label: 'Financials' }] : []),
   ];
 
   return (

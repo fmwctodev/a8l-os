@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, DollarSign, User, Calendar, Tag, CreditCard as Edit2, Trophy, XCircle, RotateCcw, Clock, MessageSquare, CheckSquare, FileText, ExternalLink, Plus, Trash2, CreditCard, Send, Copy, MoreVertical, Link as LinkIcon, FolderKanban, Lock } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermission } from '../../hooks/usePermission';
+import { usePaymentsAccess } from '../../hooks/usePaymentsAccess';
 import type {
   Opportunity,
   OpportunityNote,
@@ -61,6 +62,7 @@ export function OpportunityDetail() {
   const canClose = usePermission('opportunities.close');
   const canViewPayments = usePermission('payments.view');
   const canCreateInvoice = usePermission('invoices.create');
+  const canAccessPayments = usePaymentsAccess();
   const canViewMedia = usePermission('media.view');
   const canAdjustScore = usePermission('scoring.adjust');
   const canCreateProject = usePermission('projects.create');
@@ -431,7 +433,7 @@ export function OpportunityDetail() {
         </div>
 
         <div className="flex gap-1">
-          {(['details', 'activity', 'tasks', 'notes', ...(paymentsEnabled && canViewPayments ? ['invoices'] : []), ...(mediaEnabled && canViewMedia ? ['files'] : [])] as TabType[]).map(tab => (
+          {(['details', 'activity', 'tasks', 'notes', ...(paymentsEnabled && canViewPayments && canAccessPayments ? ['invoices'] : []), ...(mediaEnabled && canViewMedia ? ['files'] : [])] as TabType[]).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
