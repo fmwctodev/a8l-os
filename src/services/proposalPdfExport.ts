@@ -147,7 +147,7 @@ function buildSectionPage(section: ProposalSection, index: number, accentColor: 
   const icon = SECTION_ICONS[section.section_type] || SECTION_ICONS.custom;
 
   return `
-    <div class="page section-page">
+    <div class="section-block">
       <div class="section-header">
         <div class="section-number" style="background: ${accentColor};">${num}</div>
         <div class="section-icon" style="color: ${accentColor};">${icon}</div>
@@ -188,7 +188,7 @@ function buildPricingPage(
   const paymentTermsContent = pricingSection?.content || '';
 
   return `
-    <div class="page section-page">
+    <div class="section-block">
       <div class="section-header">
         <div class="section-number" style="background: ${accentColor};">${num}</div>
         <div class="section-icon" style="color: ${accentColor};">${SECTION_ICONS.pricing}</div>
@@ -219,6 +219,7 @@ function buildAcceptancePage(proposal: Proposal, accentColor: string): string {
   const contactName = proposal.contact
     ? `${proposal.contact.first_name || ''} ${proposal.contact.last_name || ''}`.trim()
     : '';
+  const clientCompany = proposal.contact?.company || 'the Client';
 
   return `
     <div class="page acceptance-page">
@@ -270,14 +271,7 @@ function buildAcceptancePage(proposal: Proposal, accentColor: string): string {
         <p>Questions about this proposal? We are happy to help.</p>
         <p class="acceptance-contact">${escapeHtml(COMPANY.email)} &nbsp;&nbsp; ${escapeHtml(COMPANY.phone)}</p>
       </div>
-    </div>
-  `;
-}
 
-function buildClosingPage(proposal: Proposal): string {
-  const clientCompany = proposal.contact?.company || 'the Client';
-  return `
-    <div class="page closing-page">
       <div class="closing-content">
         <p class="closing-confidential">Confidential &mdash; Prepared exclusively for ${escapeHtml(clientCompany)}</p>
         <p class="closing-website">${escapeHtml(COMPANY.website)}</p>
@@ -307,11 +301,16 @@ function buildStyles(accentColor: string): string {
       width: 210mm;
       padding: 40px 50px 60px;
       background: #0b1120;
-      page-break-before: always;
       position: relative;
     }
-    .page:first-child {
+    .cover-page {
+      page-break-after: always;
+    }
+    .sections-flow {
       page-break-before: auto;
+    }
+    .acceptance-page {
+      page-break-before: always;
     }
 
     /* Cover */
@@ -412,13 +411,19 @@ function buildStyles(accentColor: string): string {
       margin-top: 2px;
     }
 
-    /* Section pages */
-    .section-page { padding-top: 50px; }
+    /* Section blocks (flowing) */
+    .section-block {
+      margin-bottom: 40px;
+    }
+    .section-block:first-child {
+      margin-top: 0;
+    }
     .section-header {
       display: flex;
       align-items: center;
       gap: 14px;
-      margin-bottom: 28px;
+      margin-bottom: 20px;
+      break-after: avoid;
     }
     .section-number {
       width: 38px;
@@ -449,7 +454,6 @@ function buildStyles(accentColor: string): string {
       color: #cbd5e1;
       font-size: 14px;
       line-height: 1.65;
-      break-inside: avoid-page;
     }
     .section-body h2,
     .section-body h3 {
@@ -457,6 +461,7 @@ function buildStyles(accentColor: string): string {
       font-weight: 700;
       margin-top: 18px;
       margin-bottom: 8px;
+      break-after: avoid;
     }
     .section-body h2 { font-size: 18px; }
     .section-body h3 { font-size: 16px; }
@@ -579,7 +584,7 @@ function buildStyles(accentColor: string): string {
 
     /* Acceptance */
     .acceptance-page {
-      padding-top: 60px;
+      padding-top: 50px;
     }
     .acceptance-title {
       font-size: 28px;
@@ -649,18 +654,14 @@ function buildStyles(accentColor: string): string {
       color: #94a3b8;
     }
 
-    /* Closing page */
-    .closing-page {
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
-    }
+    /* Closing footer (inside acceptance page) */
     .closing-content {
       background: linear-gradient(180deg, #162032 0%, #0b1120 100%);
       border-radius: 12px;
-      padding: 36px 50px;
+      padding: 28px 50px;
       text-align: center;
       width: 100%;
+      margin-top: 32px;
     }
     .closing-confidential {
       font-size: 14px;
@@ -672,17 +673,26 @@ function buildStyles(accentColor: string): string {
       color: #64748b;
     }
 
+    /* Keep signature blocks and pricing totals from splitting */
+    .signature-block {
+      break-inside: avoid;
+    }
+    .pricing-table {
+      break-inside: avoid;
+    }
     @media print {
       html, body {
         width: 210mm;
         background: #0b1120;
       }
       .page {
-        page-break-before: always;
         margin: 0;
       }
-      .page:first-child {
-        page-break-before: auto;
+      .cover-page {
+        page-break-after: always;
+      }
+      .acceptance-page {
+        page-break-before: always;
       }
     }
   `;
@@ -704,17 +714,19 @@ export function generateProposalHTML(
 
   pagesHtml += buildCoverPage(proposal, accentColor, logoUrl);
 
+  let sectionsHtml = '';
   nonPricingSections.forEach((section, i) => {
-    pagesHtml += buildSectionPage(section, i, accentColor);
+    sectionsHtml += buildSectionPage(section, i, accentColor);
   });
 
   if (hasPricing) {
     const pricingIndex = nonPricingSections.length;
-    pagesHtml += buildPricingPage(proposal, lineItems, pricingIndex, accentColor);
+    sectionsHtml += buildPricingPage(proposal, lineItems, pricingIndex, accentColor);
   }
 
+  pagesHtml += `<div class="page sections-flow">${sectionsHtml}</div>`;
+
   pagesHtml += buildAcceptancePage(proposal, accentColor);
-  pagesHtml += buildClosingPage(proposal);
 
   return `
 <!DOCTYPE html>
