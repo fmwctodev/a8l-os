@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { encryptToken, decryptToken, isEncryptedToken } from "../_shared/crypto.ts";
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID") || "";
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET") || "";
@@ -427,7 +428,15 @@ async function getValidAccessToken(
   const now = new Date();
 
   if (expiry > new Date(now.getTime() + 5 * 60 * 1000)) {
-    return tokenRecord.access_token;
+    let accessToken = tokenRecord.access_token;
+    try {
+      if (isEncryptedToken(accessToken)) {
+        accessToken = await decryptToken(accessToken);
+      }
+    } catch {
+      console.warn("Failed to decrypt chat access token, using raw value");
+    }
+    return accessToken;
   }
 
   if (!tokenRecord.refresh_token) {
@@ -435,15 +444,25 @@ async function getValidAccessToken(
   }
 
   try {
+    let refreshTokenPlain = tokenRecord.refresh_token;
+    try {
+      if (isEncryptedToken(refreshTokenPlain)) {
+        refreshTokenPlain = await decryptToken(refreshTokenPlain);
+      }
+    } catch {
+      console.warn("Failed to decrypt chat refresh token, using raw value");
+    }
+
     const response = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         client_id: GOOGLE_CLIENT_ID,
         client_secret: GOOGLE_CLIENT_SECRET,
-        refresh_token: tokenRecord.refresh_token,
+        refresh_token: refreshTokenPlain,
         grant_type: "refresh_token",
       }),
+      signal: AbortSignal.timeout(15000),
     });
 
     if (!response.ok) {
@@ -454,10 +473,17 @@ async function getValidAccessToken(
     const data = await response.json();
     const newExpiry = new Date(Date.now() + data.expires_in * 1000);
 
+    let encNewAccess: string;
+    try {
+      encNewAccess = await encryptToken(data.access_token);
+    } catch {
+      encNewAccess = data.access_token;
+    }
+
     await supabase
       .from("google_chat_tokens")
       .update({
-        access_token: data.access_token,
+        access_token: encNewAccess,
         token_expiry: newExpiry.toISOString(),
         updated_at: new Date().toISOString(),
       })

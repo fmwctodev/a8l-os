@@ -153,12 +153,22 @@ export async function crossPopulateServiceTables(
       .eq("user_id", userId)
       .maybeSingle();
 
+    let encCalAccess: string;
+    let encCalRefresh: string;
+    try {
+      encCalAccess = await encryptToken(accessToken);
+      encCalRefresh = await encryptToken(refreshToken);
+    } catch {
+      encCalAccess = accessToken;
+      encCalRefresh = refreshToken;
+    }
+
     await supabase.from("google_calendar_connections").upsert(
       {
         org_id: orgId,
         user_id: userId,
-        access_token: accessToken,
-        refresh_token: refreshToken,
+        access_token: encCalAccess,
+        refresh_token: encCalRefresh,
         token_expiry: tokenExpiry,
         email,
         selected_calendar_ids: existingCal?.selected_calendar_ids || ["primary"],
@@ -173,14 +183,24 @@ export async function crossPopulateServiceTables(
   }
 
   if (hasDriveScopes(grantedScopes)) {
+    let encDriveAccess: string;
+    let encDriveRefresh: string;
+    try {
+      encDriveAccess = await encryptToken(accessToken);
+      encDriveRefresh = await encryptToken(refreshToken);
+    } catch {
+      encDriveAccess = accessToken;
+      encDriveRefresh = refreshToken;
+    }
+
     await supabase.from("drive_connections").upsert(
       {
         user_id: userId,
         organization_id: orgId,
         connected_by: userId,
         email,
-        access_token_encrypted: accessToken,
-        refresh_token_encrypted: refreshToken,
+        access_token_encrypted: encDriveAccess,
+        refresh_token_encrypted: encDriveRefresh,
         token_expiry: tokenExpiry,
         scopes: DRIVE_SCOPES.concat([
           "https://www.googleapis.com/auth/userinfo.email",
@@ -228,7 +248,14 @@ export async function resolveRefreshToken(
     .maybeSingle();
 
   if (calConn?.refresh_token) {
-    return { refreshToken: calConn.refresh_token, source: "calendar" };
+    try {
+      const rt = isEncryptedToken(calConn.refresh_token)
+        ? await decryptToken(calConn.refresh_token)
+        : calConn.refresh_token;
+      return { refreshToken: rt, source: "calendar" };
+    } catch {
+      console.warn("Failed to decrypt calendar refresh token");
+    }
   }
 
   const { data: driveConn } = await supabase
@@ -238,7 +265,14 @@ export async function resolveRefreshToken(
     .maybeSingle();
 
   if (driveConn?.refresh_token_encrypted) {
-    return { refreshToken: driveConn.refresh_token_encrypted, source: "drive" };
+    try {
+      const rt = isEncryptedToken(driveConn.refresh_token_encrypted)
+        ? await decryptToken(driveConn.refresh_token_encrypted)
+        : driveConn.refresh_token_encrypted;
+      return { refreshToken: rt, source: "drive" };
+    } catch {
+      console.warn("Failed to decrypt drive refresh token");
+    }
   }
 
   const { data: gmailToken } = await supabase
@@ -282,6 +316,7 @@ export async function refreshAccessToken(
       client_secret: clientSecret,
       grant_type: "refresh_token",
     }),
+    signal: AbortSignal.timeout(15000),
   });
 
   if (!res.ok) return null;

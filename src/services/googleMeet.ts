@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
+import { fetchEdge } from '../lib/edgeFunction';
 import type { GoogleMeetRecording, MeetingParticipant } from '../types';
 
-const GOOGLE_DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const GOOGLE_MEET_RECORDINGS_FOLDER_NAME = 'Meet Recordings';
 
 export interface DriveRecordingFile {
@@ -32,85 +32,50 @@ export interface MeetRecordingDetails {
   participants: string[];
 }
 
-async function getDriveAccessToken(orgId: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('drive_connections')
-    .select('access_token_encrypted, token_expiry')
-    .eq('organization_id', orgId)
-    .eq('is_active', true)
-    .maybeSingle();
-
-  if (error || !data) return null;
-
-  const tokenExpiry = new Date(data.token_expiry);
-  if (tokenExpiry < new Date()) {
-    return null;
-  }
-
-  return data.access_token_encrypted;
-}
-
-export async function listGoogleMeetRecordings(
-  orgId: string,
-  startDate?: string,
-  endDate?: string
-): Promise<GoogleMeetRecording[]> {
-  const accessToken = await getDriveAccessToken(orgId);
-  if (!accessToken) {
-    throw new Error('Google Drive not connected or token expired');
-  }
-
-  const folderId = await findMeetRecordingsFolder(accessToken);
-  if (!folderId) {
-    return [];
-  }
-
-  let query = `'${folderId}' in parents and mimeType contains 'video'`;
-
-  if (startDate) {
-    query += ` and createdTime >= '${startDate}'`;
-  }
-  if (endDate) {
-    query += ` and createdTime <= '${endDate}'`;
-  }
-
-  const params = new URLSearchParams({
-    q: query,
-    fields: 'files(id,name,mimeType,webViewLink,size,createdTime,modifiedTime,videoMediaMetadata)',
-    orderBy: 'createdTime desc',
-    pageSize: '100',
-  });
-
-  const response = await fetch(`${GOOGLE_DRIVE_API}/files?${params}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+async function driveSearch(query: string): Promise<DriveRecordingFile[]> {
+  const response = await fetchEdge('drive-api', {
+    body: { action: 'search', query },
   });
 
   if (!response.ok) {
-    throw new Error('Failed to list Meet recordings');
+    throw new Error('Failed to search Drive files');
   }
 
   const data = await response.json();
-  const files: DriveRecordingFile[] = data.files || [];
-
-  return files.map(file => parseRecordingToMeetInfo(file));
+  return data.files || [];
 }
 
-async function findMeetRecordingsFolder(accessToken: string): Promise<string | null> {
-  const query = `name = '${GOOGLE_MEET_RECORDINGS_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder'`;
-  const params = new URLSearchParams({
-    q: query,
-    fields: 'files(id,name)',
-    pageSize: '1',
+async function driveGetMetadata(fileId: string): Promise<DriveRecordingFile | null> {
+  const response = await fetchEdge('drive-api', {
+    body: { action: 'get-metadata', fileId },
   });
 
-  const response = await fetch(`${GOOGLE_DRIVE_API}/files?${params}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  if (!response.ok) {
+    if (response.status === 404) return null;
+    throw new Error('Failed to get file metadata');
+  }
 
-  if (!response.ok) return null;
+  return await response.json();
+}
 
-  const data = await response.json();
-  return data.files?.[0]?.id || null;
+export async function listGoogleMeetRecordings(
+  _orgId: string,
+  startDate?: string,
+  endDate?: string
+): Promise<GoogleMeetRecording[]> {
+  const folderFiles = await driveSearch(
+    `name = '${GOOGLE_MEET_RECORDINGS_FOLDER_NAME}' and mimeType = 'application/vnd.google-apps.folder'`
+  );
+
+  const folderId = folderFiles[0]?.id;
+  if (!folderId) return [];
+
+  let query = `'${folderId}' in parents and mimeType contains 'video'`;
+  if (startDate) query += ` and createdTime >= '${startDate}'`;
+  if (endDate) query += ` and createdTime <= '${endDate}'`;
+
+  const files = await driveSearch(query);
+  return files.map(file => parseRecordingToMeetInfo(file));
 }
 
 function parseRecordingToMeetInfo(file: DriveRecordingFile): GoogleMeetRecording {
@@ -167,28 +132,12 @@ function formatDuration(milliseconds: number): string {
 }
 
 export async function getRecordingDetails(
-  orgId: string,
+  _orgId: string,
   fileId: string
 ): Promise<MeetRecordingDetails | null> {
-  const accessToken = await getDriveAccessToken(orgId);
-  if (!accessToken) {
-    throw new Error('Google Drive not connected or token expired');
-  }
+  const file = await driveGetMetadata(fileId);
+  if (!file) return null;
 
-  const params = new URLSearchParams({
-    fields: 'id,name,mimeType,webViewLink,webContentLink,size,createdTime,modifiedTime,videoMediaMetadata',
-  });
-
-  const response = await fetch(`${GOOGLE_DRIVE_API}/files/${fileId}?${params}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
-  if (!response.ok) {
-    if (response.status === 404) return null;
-    throw new Error('Failed to get recording details');
-  }
-
-  const file: DriveRecordingFile = await response.json();
   const meetingInfo = parseMeetingInfoFromFileName(file.name);
   const durationMs = file.videoMediaMetadata?.durationMillis;
 

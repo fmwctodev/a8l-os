@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { writeMasterToken, crossPopulateServiceTables, CALENDAR_SCOPES } from "../_shared/google-oauth-helpers.ts";
+import { encryptToken, decryptToken, isEncryptedToken } from "../_shared/crypto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -183,13 +184,23 @@ async function handleCallback(req: Request): Promise<Response> {
   const supabase = getSupabaseClient();
   const tokenExpiry = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
 
+  let encAccess: string;
+  let encRefresh: string;
+  try {
+    encAccess = await encryptToken(tokenData.access_token);
+    encRefresh = await encryptToken(tokenData.refresh_token);
+  } catch {
+    encAccess = tokenData.access_token;
+    encRefresh = tokenData.refresh_token;
+  }
+
   const { data: upsertedConn, error: upsertError } = await supabase
     .from("google_calendar_connections")
     .upsert({
       org_id: state.orgId,
       user_id: state.userId,
-      access_token: tokenData.access_token,
-      refresh_token: tokenData.refresh_token,
+      access_token: encAccess,
+      refresh_token: encRefresh,
       token_expiry: tokenExpiry,
       email: userInfo.email,
       selected_calendar_ids: ["primary"],
@@ -267,7 +278,13 @@ async function handleDisconnect(req: Request): Promise<Response> {
     .maybeSingle();
 
   if (connection?.access_token) {
-    await fetch(`https://oauth2.googleapis.com/revoke?token=${connection.access_token}`, {
+    let revokeToken = connection.access_token;
+    try {
+      if (isEncryptedToken(revokeToken)) {
+        revokeToken = await decryptToken(revokeToken);
+      }
+    } catch {}
+    await fetch(`https://oauth2.googleapis.com/revoke?token=${revokeToken}`, {
       method: "POST",
     }).catch(() => {});
   }
@@ -327,8 +344,15 @@ async function handleGetCalendars(req: Request): Promise<Response> {
   }
 
   let accessToken = connection.access_token;
+  if (isEncryptedToken(accessToken)) {
+    accessToken = await decryptToken(accessToken);
+  }
+  let refreshTokenVal = connection.refresh_token;
+  if (isEncryptedToken(refreshTokenVal)) {
+    refreshTokenVal = await decryptToken(refreshTokenVal);
+  }
   if (new Date(connection.token_expiry) <= new Date()) {
-    const refreshResult = await refreshToken(connection.refresh_token, user.id);
+    const refreshResult = await refreshToken(refreshTokenVal, user.id);
     if (!refreshResult.success) {
       return new Response(JSON.stringify({ error: "Token refresh failed" }), {
         status: 401,
@@ -337,10 +361,12 @@ async function handleGetCalendars(req: Request): Promise<Response> {
     }
     accessToken = refreshResult.accessToken;
 
+    let encNewAccess: string;
+    try { encNewAccess = await encryptToken(refreshResult.accessToken); } catch { encNewAccess = refreshResult.accessToken; }
     await supabase
       .from("google_calendar_connections")
       .update({
-        access_token: refreshResult.accessToken,
+        access_token: encNewAccess,
         token_expiry: refreshResult.tokenExpiry,
       })
       .eq("id", connection.id);
@@ -455,8 +481,15 @@ async function handleTestSync(req: Request): Promise<Response> {
   }
 
   let accessToken = connection.access_token;
+  if (isEncryptedToken(accessToken)) {
+    accessToken = await decryptToken(accessToken);
+  }
+  let refreshTokenVal2 = connection.refresh_token;
+  if (isEncryptedToken(refreshTokenVal2)) {
+    refreshTokenVal2 = await decryptToken(refreshTokenVal2);
+  }
   if (new Date(connection.token_expiry) <= new Date()) {
-    const refreshResult = await refreshToken(connection.refresh_token, user.id);
+    const refreshResult = await refreshToken(refreshTokenVal2, user.id);
     if (!refreshResult.success) {
       return new Response(JSON.stringify({ error: "Token refresh failed", tokenExpired: true }), {
         status: 401,
@@ -465,10 +498,12 @@ async function handleTestSync(req: Request): Promise<Response> {
     }
     accessToken = refreshResult.accessToken;
 
+    let encNewAccess2: string;
+    try { encNewAccess2 = await encryptToken(refreshResult.accessToken); } catch { encNewAccess2 = refreshResult.accessToken; }
     await supabase
       .from("google_calendar_connections")
       .update({
-        access_token: refreshResult.accessToken,
+        access_token: encNewAccess2,
         token_expiry: refreshResult.tokenExpiry,
       })
       .eq("id", connection.id);
@@ -599,22 +634,30 @@ async function handleGetTeamConnections(req: Request): Promise<Response> {
 }
 
 async function refreshToken(refreshTokenValue: string, userId?: string) {
+  let plainRefresh = refreshTokenValue;
+  try {
+    if (isEncryptedToken(refreshTokenValue)) {
+      plainRefresh = await decryptToken(refreshTokenValue);
+    }
+  } catch {}
+
   const response = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
       client_secret: GOOGLE_CLIENT_SECRET,
-      refresh_token: refreshTokenValue,
+      refresh_token: plainRefresh,
       grant_type: "refresh_token",
     }),
+    signal: AbortSignal.timeout(15000),
   });
 
   if (!response.ok) {
     if (userId) {
       console.warn("Calendar token refresh failed, trying fallback sources...");
       const { resolveRefreshToken, refreshAccessToken } = await import("../_shared/google-oauth-helpers.ts");
-      const supabase = getServiceClient();
+      const supabase = getSupabaseClient();
       const fallback = await resolveRefreshToken(supabase, userId, "");
       if (fallback) {
         const result = await refreshAccessToken(fallback.refreshToken);

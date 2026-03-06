@@ -100,14 +100,46 @@ Deno.serve(async (req: Request) => {
     let processedCount = 0;
     let skippedCount = 0;
     let nextPageToken: string | undefined;
+    let totalFetched = 0;
+    const MAX_MESSAGES = 5000;
+    const TOKEN_REFRESH_INTERVAL = 500;
+    let currentAccessToken = accessToken;
+    let messagesSinceRefresh = 0;
 
     do {
       let listUrl = `${GMAIL_API_URL}/users/me/messages?q=${encodeURIComponent(query)}&maxResults=500`;
       if (nextPageToken) listUrl += `&pageToken=${nextPageToken}`;
 
       const listResponse = await fetch(listUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${currentAccessToken}` },
+        signal: AbortSignal.timeout(15000),
       });
+
+      if (listResponse.status === 401) {
+        currentAccessToken = await getAccessToken(supabase, tokenData as GmailTokenRecord);
+        const retryResponse = await fetch(listUrl, {
+          headers: { Authorization: `Bearer ${currentAccessToken}` },
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!retryResponse.ok) throw new Error("Failed to fetch messages list after token refresh");
+        const retryData = await retryResponse.json();
+        nextPageToken = retryData.nextPageToken;
+        const retryRefs: Array<{ id: string }> = retryData.messages || [];
+        totalFetched += retryRefs.length;
+        for (const ref of retryRefs) {
+          if (totalFetched > MAX_MESSAGES) break;
+          const { data: existingMessage } = await supabase.from("messages").select("id").eq("external_id", ref.id).maybeSingle();
+          if (existingMessage) { skippedCount++; continue; }
+          const msgResponse = await fetch(`${GMAIL_API_URL}/users/me/messages/${ref.id}`, { headers: { Authorization: `Bearer ${currentAccessToken}` }, signal: AbortSignal.timeout(15000) });
+          if (!msgResponse.ok) continue;
+          const msgData = await msgResponse.json();
+          const result = await processGmailMessage(supabase, msgData, orgId, userId, tokenData.email, "initial_sync");
+          if (result.processed) processedCount++; else skippedCount++;
+          messagesSinceRefresh++;
+        }
+        if (totalFetched >= MAX_MESSAGES) break;
+        continue;
+      }
 
       if (!listResponse.ok) {
         throw new Error("Failed to fetch messages list");
@@ -116,8 +148,20 @@ Deno.serve(async (req: Request) => {
       const listData = await listResponse.json();
       const messageRefs: Array<{ id: string }> = listData.messages || [];
       nextPageToken = listData.nextPageToken;
+      totalFetched += messageRefs.length;
 
       for (const ref of messageRefs) {
+        if (totalFetched > MAX_MESSAGES) break;
+
+        if (messagesSinceRefresh >= TOKEN_REFRESH_INTERVAL) {
+          try {
+            currentAccessToken = await getAccessToken(supabase, tokenData as GmailTokenRecord);
+            messagesSinceRefresh = 0;
+          } catch {
+            console.warn("Mid-sync token refresh failed, continuing with current token");
+          }
+        }
+
         const { data: existingMessage } = await supabase
           .from("messages")
           .select("id")
@@ -131,8 +175,20 @@ Deno.serve(async (req: Request) => {
 
         const msgResponse = await fetch(
           `${GMAIL_API_URL}/users/me/messages/${ref.id}`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
+          { headers: { Authorization: `Bearer ${currentAccessToken}` }, signal: AbortSignal.timeout(15000) }
         );
+
+        if (msgResponse.status === 401) {
+          currentAccessToken = await getAccessToken(supabase, tokenData as GmailTokenRecord);
+          messagesSinceRefresh = 0;
+          const retryMsg = await fetch(`${GMAIL_API_URL}/users/me/messages/${ref.id}`, { headers: { Authorization: `Bearer ${currentAccessToken}` }, signal: AbortSignal.timeout(15000) });
+          if (!retryMsg.ok) continue;
+          const msgData = await retryMsg.json();
+          const result = await processGmailMessage(supabase, msgData, orgId, userId, tokenData.email, "initial_sync");
+          if (result.processed) processedCount++; else skippedCount++;
+          messagesSinceRefresh++;
+          continue;
+        }
 
         if (!msgResponse.ok) continue;
 
@@ -151,11 +207,18 @@ Deno.serve(async (req: Request) => {
         } else {
           skippedCount++;
         }
+        messagesSinceRefresh++;
+      }
+
+      if (totalFetched >= MAX_MESSAGES) {
+        console.warn(`Gmail sync capped at ${MAX_MESSAGES} messages`);
+        break;
       }
     } while (nextPageToken);
 
     const profileRes = await fetch(`${GMAIL_API_URL}/users/me/profile`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${currentAccessToken}` },
+      signal: AbortSignal.timeout(15000),
     });
     let historyId: string | null = null;
     if (profileRes.ok) {
@@ -196,7 +259,7 @@ Deno.serve(async (req: Request) => {
         success: true,
         processed: processedCount,
         skipped: skippedCount,
-        total: messageRefs.length,
+        total: totalFetched,
         historyId,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

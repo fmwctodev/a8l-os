@@ -29,10 +29,14 @@ Deno.serve(async (req: Request) => {
   try {
     const supabase = getServiceClient();
 
+    const MAX_BATCH = 20;
+
     const { data: staleRows, error: fetchError } = await supabase
       .from("google_oauth_master")
       .select("id, org_id, user_id, email, granted_scopes, token_expiry, encrypted_refresh_token")
-      .lt("token_expiry", new Date(Date.now() + 10 * 60 * 1000).toISOString());
+      .lt("token_expiry", new Date(Date.now() + 10 * 60 * 1000).toISOString())
+      .order("token_expiry", { ascending: true })
+      .limit(MAX_BATCH);
 
     if (fetchError) {
       console.error("[TokenRefreshCron] Failed to fetch stale tokens:", fetchError);
@@ -52,10 +56,17 @@ Deno.serve(async (req: Request) => {
 
     let refreshed = 0;
     let failed = 0;
+    let skipped = 0;
     const errors: string[] = [];
 
     for (const row of staleRows) {
       try {
+        const tokenExpiry = new Date(row.token_expiry);
+        if (tokenExpiry.getTime() > Date.now() + 10 * 60 * 1000) {
+          skipped++;
+          continue;
+        }
+
         const resolved = await resolveRefreshToken(supabase, row.user_id, row.org_id);
         if (!resolved) {
           errors.push(`No refresh token for user ${row.user_id}`);
@@ -87,7 +98,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return new Response(JSON.stringify({ success: true, total: staleRows.length, refreshed, failed, errors: errors.length > 0 ? errors : undefined }), {
+    return new Response(JSON.stringify({ success: true, total: staleRows.length, refreshed, failed, skipped, errors: errors.length > 0 ? errors : undefined }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

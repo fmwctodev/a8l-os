@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { resolveRefreshToken, refreshAccessToken, writeMasterToken } from "../_shared/google-oauth-helpers.ts";
+import { encryptToken, decryptToken, isEncryptedToken } from "../_shared/crypto.ts";
 
 interface UserContext {
   id: string;
@@ -291,15 +292,25 @@ async function refreshToken(refreshTokenStr: string): Promise<{ access_token: st
   const clientId = Deno.env.get("GOOGLE_CLIENT_ID")!;
   const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
 
+  let plainRefreshToken = refreshTokenStr;
+  try {
+    if (isEncryptedToken(plainRefreshToken)) {
+      plainRefreshToken = await decryptToken(plainRefreshToken);
+    }
+  } catch {
+    console.warn("[CalSync] Failed to decrypt refresh token, using raw value");
+  }
+
   const resp = await fetch(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      refresh_token: refreshTokenStr,
+      refresh_token: plainRefreshToken,
       client_id: clientId,
       client_secret: clientSecret,
       grant_type: "refresh_token",
     }),
+    signal: AbortSignal.timeout(15000),
   });
 
   if (!resp.ok) {
@@ -315,7 +326,15 @@ async function getValidToken(connection: Connection, supabase: Supabase): Promis
   const now = new Date();
 
   if (expiry.getTime() - now.getTime() > 60 * 1000) {
-    return connection.access_token;
+    let accessToken = connection.access_token;
+    try {
+      if (isEncryptedToken(accessToken)) {
+        accessToken = await decryptToken(accessToken);
+      }
+    } catch {
+      console.warn("[CalSync] Failed to decrypt access token, using raw value");
+    }
+    return accessToken;
   }
 
   let result: { access_token: string; expires_in: number; refresh_token?: string };
@@ -341,12 +360,25 @@ async function getValidToken(connection: Connection, supabase: Supabase): Promis
   const newExpiry = new Date(Date.now() + result.expires_in * 1000).toISOString();
   const finalRefreshToken = result.refresh_token || usedRefreshToken;
 
+  let encNewAccess: string;
+  try {
+    encNewAccess = await encryptToken(result.access_token);
+  } catch {
+    encNewAccess = result.access_token;
+  }
+
   const updateData: Record<string, unknown> = {
-    access_token: result.access_token,
+    access_token: encNewAccess,
     token_expiry: newExpiry,
   };
   if (result.refresh_token) {
-    updateData.refresh_token = result.refresh_token;
+    let encNewRefresh: string;
+    try {
+      encNewRefresh = await encryptToken(result.refresh_token);
+    } catch {
+      encNewRefresh = result.refresh_token;
+    }
+    updateData.refresh_token = encNewRefresh;
   }
 
   await supabase

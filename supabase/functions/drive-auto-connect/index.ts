@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { encryptToken } from "../_shared/crypto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -72,7 +73,17 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "User not found" }, 404);
     }
 
-    const tokenExpiry = new Date(Date.now() + 3600 * 1000).toISOString();
+    const tokenExpiry = new Date(Date.now() + 3500 * 1000).toISOString();
+
+    let encAccess: string;
+    let encRefresh: string;
+    try {
+      encAccess = await encryptToken(provider_token);
+      encRefresh = await encryptToken(provider_refresh_token);
+    } catch {
+      encAccess = provider_token;
+      encRefresh = provider_refresh_token;
+    }
 
     const { error: upsertError } = await supabase
       .from("drive_connections")
@@ -82,8 +93,8 @@ Deno.serve(async (req: Request) => {
           organization_id: userData.organization_id,
           connected_by: user.id,
           email,
-          access_token_encrypted: provider_token,
-          refresh_token_encrypted: provider_refresh_token,
+          access_token_encrypted: encAccess,
+          refresh_token_encrypted: encRefresh,
           token_expiry: tokenExpiry,
           scopes: [
             "https://www.googleapis.com/auth/drive",

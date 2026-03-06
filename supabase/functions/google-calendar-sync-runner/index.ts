@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { resolveRefreshToken, refreshAccessToken, writeMasterToken, crossPopulateServiceTables } from "../_shared/google-oauth-helpers.ts";
-import { encryptToken } from "../_shared/crypto.ts";
+import { encryptToken, decryptToken, isEncryptedToken } from "../_shared/crypto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,6 +13,7 @@ const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const MAX_JOBS_PER_RUN = 5;
 const MAX_ATTEMPTS = 5;
+const LOCK_DURATION_MS = 10 * 60 * 1000;
 
 function getSupabaseClient() {
   return createClient(
@@ -74,15 +75,25 @@ async function syncLog(
 }
 
 async function refreshToken(refreshTokenStr: string): Promise<{ access_token: string; expires_in: number; refresh_token?: string }> {
+  let plainRefreshToken = refreshTokenStr;
+  try {
+    if (isEncryptedToken(plainRefreshToken)) {
+      plainRefreshToken = await decryptToken(plainRefreshToken);
+    }
+  } catch {
+    console.warn("[Runner] Failed to decrypt refresh token, using raw value");
+  }
+
   const resp = await fetch(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      refresh_token: refreshTokenStr,
+      refresh_token: plainRefreshToken,
       client_id: Deno.env.get("GOOGLE_CLIENT_ID")!,
       client_secret: Deno.env.get("GOOGLE_CLIENT_SECRET")!,
       grant_type: "refresh_token",
     }),
+    signal: AbortSignal.timeout(15000),
   });
 
   if (!resp.ok) {
@@ -96,7 +107,15 @@ async function refreshToken(refreshTokenStr: string): Promise<{ access_token: st
 async function getValidToken(connection: Connection, supabase: Supabase): Promise<string> {
   const expiry = new Date(connection.token_expiry);
   if (expiry.getTime() - Date.now() > 60_000) {
-    return connection.access_token;
+    let accessToken = connection.access_token;
+    try {
+      if (isEncryptedToken(accessToken)) {
+        accessToken = await decryptToken(accessToken);
+      }
+    } catch {
+      console.warn("[Runner] Failed to decrypt access token, using raw value");
+    }
+    return accessToken;
   }
 
   let result: { access_token: string; expires_in: number; refresh_token?: string };
@@ -122,11 +141,26 @@ async function getValidToken(connection: Connection, supabase: Supabase): Promis
   const newExpiry = new Date(Date.now() + result.expires_in * 1000).toISOString();
   const finalRefreshToken = result.refresh_token || usedRefreshToken;
 
+  let encNewAccess: string;
+  try {
+    encNewAccess = await encryptToken(result.access_token);
+  } catch {
+    encNewAccess = result.access_token;
+  }
+
   const updateData: Record<string, unknown> = {
-    access_token: result.access_token,
+    access_token: encNewAccess,
     token_expiry: newExpiry,
   };
-  if (result.refresh_token) updateData.refresh_token = result.refresh_token;
+  if (result.refresh_token) {
+    let encNewRefresh: string;
+    try {
+      encNewRefresh = await encryptToken(result.refresh_token);
+    } catch {
+      encNewRefresh = result.refresh_token;
+    }
+    updateData.refresh_token = encNewRefresh;
+  }
 
   await supabase
     .from("google_calendar_connections")
@@ -793,11 +827,25 @@ Deno.serve(async (req: Request) => {
 
     const supabase = getSupabaseClient();
 
+    const staleCutoff = new Date(Date.now() - LOCK_DURATION_MS).toISOString();
+    await supabase
+      .from("google_calendar_sync_jobs")
+      .update({
+        status: "queued",
+        lock_acquired_at: null,
+        lock_expires_at: null,
+        last_error: "Lock expired (stale runner)",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("status", "processing")
+      .lt("lock_acquired_at", staleCutoff);
+
     const { data: jobs, error: fetchError } = await supabase
       .from("google_calendar_sync_jobs")
       .select("*")
       .eq("status", "queued")
       .lte("scheduled_at", new Date().toISOString())
+      .is("lock_acquired_at", null)
       .order("scheduled_at", { ascending: true })
       .limit(MAX_JOBS_PER_RUN);
 
@@ -819,17 +867,40 @@ Deno.serve(async (req: Request) => {
     let failed = 0;
 
     for (const job of jobs) {
-      const now = new Date().toISOString();
-      await supabase.from("google_calendar_sync_jobs")
-        .update({ status: "processing", started_at: now, updated_at: now })
+      const lockTime = new Date();
+      const lockExpiry = new Date(lockTime.getTime() + LOCK_DURATION_MS);
+
+      const { data: claimed, error: claimError } = await supabase
+        .from("google_calendar_sync_jobs")
+        .update({
+          status: "processing",
+          started_at: lockTime.toISOString(),
+          lock_acquired_at: lockTime.toISOString(),
+          lock_expires_at: lockExpiry.toISOString(),
+          updated_at: lockTime.toISOString(),
+        })
         .eq("id", job.id)
-        .eq("status", "queued");
+        .eq("status", "queued")
+        .is("lock_acquired_at", null)
+        .select("id")
+        .maybeSingle();
+
+      if (claimError || !claimed) {
+        continue;
+      }
 
       try {
         await processJob(supabase, job as SyncJob);
 
         await supabase.from("google_calendar_sync_jobs")
-          .update({ status: "completed", completed_at: new Date().toISOString(), last_error: null, updated_at: new Date().toISOString() })
+          .update({
+            status: "completed",
+            completed_at: new Date().toISOString(),
+            last_error: null,
+            lock_acquired_at: null,
+            lock_expires_at: null,
+            updated_at: new Date().toISOString(),
+          })
           .eq("id", job.id);
 
         processed++;
@@ -840,7 +911,15 @@ Deno.serve(async (req: Request) => {
 
         if (attempt >= maxAttempts) {
           await supabase.from("google_calendar_sync_jobs")
-            .update({ status: "failed", attempt, last_error: errMsg, completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .update({
+              status: "failed",
+              attempt,
+              last_error: errMsg,
+              completed_at: new Date().toISOString(),
+              lock_acquired_at: null,
+              lock_expires_at: null,
+              updated_at: new Date().toISOString(),
+            })
             .eq("id", job.id);
 
           await syncLog(supabase, job.org_id, job.connection_id, null, "error",
@@ -851,7 +930,15 @@ Deno.serve(async (req: Request) => {
           const nextScheduled = new Date(Date.now() + backoff).toISOString();
 
           await supabase.from("google_calendar_sync_jobs")
-            .update({ status: "queued", attempt, last_error: errMsg, scheduled_at: nextScheduled, updated_at: new Date().toISOString() })
+            .update({
+              status: "queued",
+              attempt,
+              last_error: errMsg,
+              scheduled_at: nextScheduled,
+              lock_acquired_at: null,
+              lock_expires_at: null,
+              updated_at: new Date().toISOString(),
+            })
             .eq("id", job.id);
 
           await syncLog(supabase, job.org_id, job.connection_id, null, "warn",

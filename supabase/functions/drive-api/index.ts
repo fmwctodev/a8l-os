@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { writeMasterToken } from "../_shared/google-oauth-helpers.ts";
+import { encryptToken, decryptToken, isEncryptedToken } from "../_shared/crypto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -174,7 +175,11 @@ async function getValidAccessToken(
   const now = new Date();
 
   if (expiry.getTime() - now.getTime() > 5 * 60 * 1000) {
-    return connection.access_token_encrypted;
+    let at = connection.access_token_encrypted;
+    if (isEncryptedToken(at)) {
+      at = await decryptToken(at);
+    }
+    return at;
   }
 
   const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
@@ -184,15 +189,21 @@ async function getValidAccessToken(
     throw new Error("Google OAuth not configured");
   }
 
+  let plainRefresh = connection.refresh_token_encrypted;
+  if (isEncryptedToken(plainRefresh)) {
+    plainRefresh = await decryptToken(plainRefresh);
+  }
+
   const response = await fetch(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      refresh_token: connection.refresh_token_encrypted,
+      refresh_token: plainRefresh,
       client_id: clientId,
       client_secret: clientSecret,
       grant_type: "refresh_token",
     }),
+    signal: AbortSignal.timeout(15000),
   });
 
   if (!response.ok) {
@@ -202,10 +213,13 @@ async function getValidAccessToken(
   const tokens = await response.json();
   const newExpiry = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
+  let encNewAccess: string;
+  try { encNewAccess = await encryptToken(tokens.access_token); } catch { encNewAccess = tokens.access_token; }
+
   await supabase
     .from("drive_connections")
     .update({
-      access_token_encrypted: tokens.access_token,
+      access_token_encrypted: encNewAccess,
       token_expiry: newExpiry,
       updated_at: new Date().toISOString(),
     })
@@ -219,7 +233,7 @@ async function getValidAccessToken(
       .maybeSingle();
 
     if (master) {
-      const refreshToken = tokens.refresh_token || connection.refresh_token_encrypted;
+      const refreshToken = tokens.refresh_token || plainRefresh;
       await writeMasterToken(supabase, master.org_id, connection.user_id, master.email, tokens.access_token, refreshToken, newExpiry, master.granted_scopes || []);
     }
   } catch (masterErr) {

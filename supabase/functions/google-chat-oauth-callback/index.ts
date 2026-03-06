@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { encryptToken } from "../_shared/crypto.ts";
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID") || "";
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET") || "";
@@ -87,13 +88,23 @@ Deno.serve(async (req: Request) => {
     const tokenExpiry = new Date(Date.now() + tokens.expires_in * 1000);
     const scopes = tokens.scope.split(" ");
 
+    let encChatAccess: string;
+    let encChatRefresh: string | null;
+    try {
+      encChatAccess = await encryptToken(tokens.access_token);
+      encChatRefresh = tokens.refresh_token ? await encryptToken(tokens.refresh_token) : null;
+    } catch {
+      encChatAccess = tokens.access_token;
+      encChatRefresh = tokens.refresh_token || null;
+    }
+
     const { error: upsertError } = await supabase
       .from("google_chat_tokens")
       .upsert({
         user_id: userId,
         org_id: orgId,
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token || null,
+        access_token: encChatAccess,
+        refresh_token: encChatRefresh,
         token_expiry: tokenExpiry.toISOString(),
         google_email: googleUserInfo?.email || null,
         google_user_id: googleUserInfo?.id || null,

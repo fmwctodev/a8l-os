@@ -88,11 +88,24 @@ Deno.serve(async (req: Request) => {
       return new Response("OK", { status: 200 });
     }
 
-    await supabase
+    if (syncState?.sync_status === "syncing") {
+      console.log(`Skipping webhook for ${emailAddress}: sync already in progress`);
+      return new Response("OK", { status: 200 });
+    }
+
+    const { data: claimed } = await supabase
       .from("gmail_sync_state")
       .update({ sync_status: "syncing", updated_at: new Date().toISOString() })
       .eq("organization_id", orgId)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .eq("sync_status", "idle")
+      .select("organization_id")
+      .maybeSingle();
+
+    if (!claimed) {
+      console.log(`Could not acquire sync lock for ${emailAddress}`);
+      return new Response("OK", { status: 200 });
+    }
 
     const accessToken = await getAccessToken(
       supabase,
@@ -103,6 +116,7 @@ Deno.serve(async (req: Request) => {
 
     const historyRes = await fetch(historyUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(15000),
     });
 
     if (historyRes.status === 404) {
@@ -156,7 +170,7 @@ Deno.serve(async (req: Request) => {
 
           const msgRes = await fetch(
             `${GMAIL_API_URL}/users/me/messages/${gmailMsgId}`,
-            { headers: { Authorization: `Bearer ${accessToken}` } }
+            { headers: { Authorization: `Bearer ${accessToken}` }, signal: AbortSignal.timeout(15000) }
           );
 
           if (!msgRes.ok) continue;
@@ -211,6 +225,6 @@ Deno.serve(async (req: Request) => {
     return new Response("OK", { status: 200 });
   } catch (err) {
     console.error("gmail-webhook error:", err);
-    return new Response("OK", { status: 200 });
+    return new Response("Internal error", { status: 500 });
   }
 });

@@ -16,6 +16,8 @@ const corsHeaders = {
 
 const MAX_JOBS_PER_RUN = 5;
 const MAX_RETRY_ATTEMPTS = 3;
+const LOCK_TIMEOUT_MS = 10 * 60 * 1000;
+const RUNNER_ID = crypto.randomUUID();
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -34,6 +36,19 @@ Deno.serve(async (req: Request) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
+    const staleCutoff = new Date(Date.now() - LOCK_TIMEOUT_MS).toISOString();
+    await supabase
+      .from("gmail_sync_jobs")
+      .update({
+        status: "retry",
+        locked_at: null,
+        locked_by: null,
+        last_error: "Lock expired (stale runner)",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("status", "running")
+      .lt("locked_at", staleCutoff);
+
     const now = new Date().toISOString();
 
     const { data: jobs } = await supabase
@@ -42,6 +57,7 @@ Deno.serve(async (req: Request) => {
       .in("status", ["queued", "retry"])
       .lte("run_at", now)
       .lt("attempts", MAX_RETRY_ATTEMPTS)
+      .is("locked_at", null)
       .order("run_at", { ascending: true })
       .limit(MAX_JOBS_PER_RUN);
 
@@ -55,14 +71,26 @@ Deno.serve(async (req: Request) => {
     const results: Array<{ jobId: string; status: string; detail?: string }> = [];
 
     for (const job of jobs) {
-      await supabase
+      const lockTime = new Date().toISOString();
+      const { data: claimed, error: claimError } = await supabase
         .from("gmail_sync_jobs")
         .update({
           status: "running",
+          locked_at: lockTime,
+          locked_by: RUNNER_ID,
           attempts: (job.attempts || 0) + 1,
-          updated_at: new Date().toISOString(),
+          updated_at: lockTime,
         })
-        .eq("id", job.id);
+        .eq("id", job.id)
+        .in("status", ["queued", "retry"])
+        .is("locked_at", null)
+        .select("id")
+        .maybeSingle();
+
+      if (claimError || !claimed) {
+        results.push({ jobId: job.id, status: "skipped", detail: "Could not acquire lock" });
+        continue;
+      }
 
       try {
         if (job.job_type === "initial" || job.job_type === "full_resync") {
@@ -78,6 +106,8 @@ Deno.serve(async (req: Request) => {
           .update({
             status: "done",
             last_error: null,
+            locked_at: null,
+            locked_by: null,
             updated_at: new Date().toISOString(),
           })
           .eq("id", job.id);
@@ -93,6 +123,8 @@ Deno.serve(async (req: Request) => {
             .update({
               status: "failed",
               last_error: errMsg,
+              locked_at: null,
+              locked_by: null,
               updated_at: new Date().toISOString(),
             })
             .eq("id", job.id);
@@ -108,6 +140,8 @@ Deno.serve(async (req: Request) => {
               status: "retry",
               last_error: errMsg,
               run_at: retryAt,
+              locked_at: null,
+              locked_by: null,
               updated_at: new Date().toISOString(),
             })
             .eq("id", job.id);

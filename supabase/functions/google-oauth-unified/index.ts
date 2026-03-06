@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { encryptToken, decryptToken, isEncryptedToken } from "../_shared/crypto.ts";
+import { encryptToken, decryptToken, isEncryptedToken, signState, verifyState } from "../_shared/crypto.ts";
 import {
   ALL_GOOGLE_SCOPES,
   writeMasterToken,
@@ -92,12 +92,20 @@ async function handleStart(req: Request): Promise<Response> {
 
   const callbackUri = `${SUPABASE_URL}/functions/v1/google-oauth-unified/callback`;
 
-  const state = btoa(JSON.stringify({
+  const statePayload = JSON.stringify({
     userId: user.id,
     orgId: userDetails.organization_id,
     redirectUri: callbackUri,
     appOrigin,
-  }));
+    ts: Date.now(),
+  });
+
+  let state: string;
+  try {
+    state = await signState(statePayload);
+  } catch {
+    state = btoa(statePayload);
+  }
 
   const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   authUrl.searchParams.set("client_id", GOOGLE_CLIENT_ID);
@@ -120,7 +128,16 @@ async function handleCallback(req: Request): Promise<Response> {
 
   if (error) {
     let stateForError: { appOrigin?: string } = {};
-    try { if (stateParam) stateForError = JSON.parse(atob(stateParam)); } catch {}
+    try {
+      if (stateParam) {
+        const verified = await verifyState(stateParam).catch(() => null);
+        if (verified) {
+          stateForError = JSON.parse(verified);
+        } else {
+          stateForError = JSON.parse(atob(stateParam));
+        }
+      }
+    } catch {}
     if (stateForError.appOrigin) {
       const errorRedirect = new URL(`${stateForError.appOrigin}/oauth/google-calendar/callback`);
       errorRedirect.searchParams.set("status", "error");
@@ -136,11 +153,28 @@ async function handleCallback(req: Request): Promise<Response> {
     return new Response("Missing code or state", { status: 400, headers: corsHeaders });
   }
 
-  let state: { userId: string; orgId: string; redirectUri: string; appOrigin?: string };
+  let state: { userId: string; orgId: string; redirectUri: string; appOrigin?: string; ts?: number };
   try {
-    state = JSON.parse(atob(stateParam));
+    const verified = await verifyState(stateParam);
+    if (verified) {
+      state = JSON.parse(verified);
+    } else {
+      state = JSON.parse(atob(stateParam));
+      console.warn("[UnifiedOAuth] State HMAC verification failed, falling back to base64 decode");
+    }
   } catch {
     return new Response("Invalid state", { status: 400, headers: corsHeaders });
+  }
+
+  if (state.ts && Date.now() - state.ts > 10 * 60 * 1000) {
+    const msg = "OAuth session expired. Please try connecting again.";
+    if (state.appOrigin) {
+      const errorRedirect = new URL(`${state.appOrigin}/oauth/google-calendar/callback`);
+      errorRedirect.searchParams.set("status", "error");
+      errorRedirect.searchParams.set("error", msg);
+      return Response.redirect(errorRedirect.toString(), 302);
+    }
+    return new Response(`<html><body><p>${msg}</p></body></html>`, { headers: { "Content-Type": "text/html" } });
   }
 
   const tokenController = new AbortController();
@@ -480,6 +514,8 @@ async function handleDisconnect(req: Request): Promise<Response> {
 
   await supabase.from("drive_connections").delete().eq("user_id", user.id);
 
+  await supabase.from("google_chat_tokens").delete().eq("user_id", user.id);
+
   await supabase
     .from("users")
     .update({
@@ -493,7 +529,14 @@ async function handleDisconnect(req: Request): Promise<Response> {
     .from("user_connected_accounts")
     .delete()
     .eq("user_id", user.id)
-    .in("provider", ["google_gmail", "google_drive", "google_calendar"]);
+    .in("provider", ["google_gmail", "google_drive", "google_calendar", "google_chat"]);
+
+  await supabase.from("audit_logs").insert({
+    user_id: user.id,
+    action: "google_unified_disconnected",
+    entity_type: "google_oauth_master",
+    after_state: { disconnected_at: new Date().toISOString() },
+  });
 
   return jsonResponse({ success: true });
 }

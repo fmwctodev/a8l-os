@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { writeMasterToken, crossPopulateServiceTables, DRIVE_SCOPES } from "../_shared/google-oauth-helpers.ts";
+import { encryptToken } from "../_shared/crypto.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -113,6 +114,16 @@ Deno.serve(async (req: Request) => {
       Date.now() + expires_in * 1000
     ).toISOString();
 
+    let encDriveAccess: string;
+    let encDriveRefresh: string;
+    try {
+      encDriveAccess = await encryptToken(access_token);
+      encDriveRefresh = await encryptToken(refresh_token);
+    } catch {
+      encDriveAccess = access_token;
+      encDriveRefresh = refresh_token;
+    }
+
     const { error: saveError } = await supabase
       .from("drive_connections")
       .upsert(
@@ -121,8 +132,8 @@ Deno.serve(async (req: Request) => {
           organization_id: userData.organization_id,
           connected_by: userId,
           email,
-          access_token_encrypted: access_token,
-          refresh_token_encrypted: refresh_token,
+          access_token_encrypted: encDriveAccess,
+          refresh_token_encrypted: encDriveRefresh,
           token_expiry: tokenExpiry,
           scopes: [
             "https://www.googleapis.com/auth/drive",
