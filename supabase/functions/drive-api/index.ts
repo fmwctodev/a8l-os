@@ -2,6 +2,13 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { writeMasterToken } from "../_shared/google-oauth-helpers.ts";
 import { encryptToken, decryptToken, isEncryptedToken } from "../_shared/crypto.ts";
+import {
+  findMeetTranscriptInDrive,
+  findGeminiNotesInDrive,
+  exportGoogleDoc,
+  parseGeminiNotesForActionItems,
+  parseGeminiNotesForKeyPoints,
+} from "../_shared/google-drive-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -175,6 +182,23 @@ Deno.serve(async (req: Request) => {
 
       case "get-share-link":
         return await handleGetShareLink(accessToken, body?.fileId as string);
+
+      case "export-doc":
+        return await handleExportDoc(accessToken, body?.fileId as string);
+
+      case "enrich-meeting":
+        return await handleEnrichMeeting(
+          supabase,
+          accessToken,
+          body?.meetingTranscriptionId as string
+        );
+
+      case "enrich-meetings-batch":
+        return await handleEnrichMeetingsBatch(
+          supabase,
+          accessToken,
+          body?.meetingTranscriptionIds as string[]
+        );
 
       default:
         return jsonResponse({ error: "Unknown action" }, 400);
@@ -626,6 +650,139 @@ async function handleGetShareLink(accessToken: string, fileId: string) {
 
   const fileData = await fileResponse.json();
   return jsonResponse({ link: fileData.webViewLink });
+}
+
+async function handleExportDoc(accessToken: string, fileId: string) {
+  if (!fileId) {
+    return jsonResponse({ error: "fileId is required" }, 400);
+  }
+
+  const text = await exportGoogleDoc(accessToken, fileId);
+  return jsonResponse({ text });
+}
+
+async function enrichSingleMeeting(
+  supabase: ReturnType<typeof createClient>,
+  accessToken: string,
+  meetingTranscriptionId: string
+): Promise<{ id: string; has_transcript: boolean; has_notes: boolean; key_points_count: number; action_items_count: number }> {
+  const { data: meeting, error } = await supabase
+    .from("meeting_transcriptions")
+    .select("id, meeting_title, meeting_date, recording_file_id, processed_at, summary")
+    .eq("id", meetingTranscriptionId)
+    .maybeSingle();
+
+  if (error || !meeting) {
+    throw new Error(`Meeting not found: ${meetingTranscriptionId}`);
+  }
+
+  const title = (meeting.meeting_title || "Meeting")
+    .replace(/\s*-\s*Recording\s*$/i, "")
+    .replace(/\s*-\s*\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}\s+\w+\s*$/i, "")
+    .trim() || "Meeting";
+
+  const meetingDate = meeting.meeting_date || new Date().toISOString();
+
+  let transcriptContent: string | null = null;
+  let geminiNotesContent: string | null = null;
+  let hasTranscript = false;
+  let hasNotes = false;
+
+  const transcript = await findMeetTranscriptInDrive(accessToken, title, meetingDate);
+  if (transcript) {
+    hasTranscript = true;
+    try {
+      transcriptContent = await exportGoogleDoc(accessToken, transcript.id);
+    } catch (e) {
+      console.warn("[DriveAPI] Transcript export failed:", (e as Error).message);
+    }
+  }
+
+  const geminiNotes = await findGeminiNotesInDrive(accessToken, title, meetingDate);
+  if (geminiNotes) {
+    hasNotes = true;
+    try {
+      geminiNotesContent = await exportGoogleDoc(accessToken, geminiNotes.id);
+    } catch (e) {
+      console.warn("[DriveAPI] Gemini notes export failed:", (e as Error).message);
+    }
+  }
+
+  let summary: string | null = null;
+  let keyPoints: string[] = [];
+  let actionItems: { description: string; assignee?: string; due_date?: string; priority: string; raw_text: string }[] = [];
+
+  if (geminiNotesContent) {
+    summary = geminiNotesContent.substring(0, 2000);
+    keyPoints = parseGeminiNotesForKeyPoints(geminiNotesContent);
+    actionItems = parseGeminiNotesForActionItems(geminiNotesContent, meetingDate);
+  }
+
+  const updateData: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+    processed_at: new Date().toISOString(),
+  };
+
+  if (transcriptContent) {
+    updateData.transcript_text = transcriptContent;
+  }
+  if (summary) {
+    updateData.summary = summary;
+  }
+  if (keyPoints.length > 0) {
+    updateData.key_points = keyPoints;
+  }
+  if (actionItems.length > 0) {
+    updateData.action_items = actionItems;
+  }
+
+  await supabase
+    .from("meeting_transcriptions")
+    .update(updateData)
+    .eq("id", meetingTranscriptionId);
+
+  return {
+    id: meetingTranscriptionId,
+    has_transcript: hasTranscript,
+    has_notes: hasNotes,
+    key_points_count: keyPoints.length,
+    action_items_count: actionItems.length,
+  };
+}
+
+async function handleEnrichMeeting(
+  supabase: ReturnType<typeof createClient>,
+  accessToken: string,
+  meetingTranscriptionId: string
+) {
+  if (!meetingTranscriptionId) {
+    return jsonResponse({ error: "meetingTranscriptionId is required" }, 400);
+  }
+
+  const result = await enrichSingleMeeting(supabase, accessToken, meetingTranscriptionId);
+  return jsonResponse(result);
+}
+
+async function handleEnrichMeetingsBatch(
+  supabase: ReturnType<typeof createClient>,
+  accessToken: string,
+  meetingTranscriptionIds: string[]
+) {
+  if (!meetingTranscriptionIds || meetingTranscriptionIds.length === 0) {
+    return jsonResponse({ error: "meetingTranscriptionIds is required" }, 400);
+  }
+
+  const results = [];
+  for (const id of meetingTranscriptionIds.slice(0, 10)) {
+    try {
+      const result = await enrichSingleMeeting(supabase, accessToken, id);
+      results.push(result);
+    } catch (e) {
+      results.push({ id, error: (e as Error).message });
+    }
+  }
+
+  return jsonResponse({ results });
 }
 
 function jsonResponse(data: unknown, status = 200) {

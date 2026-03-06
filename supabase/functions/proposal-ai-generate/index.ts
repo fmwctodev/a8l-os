@@ -53,6 +53,7 @@ interface MeetingData {
   key_points: string[];
   action_items: { description: string; assignee?: string }[];
   recording_url: string | null;
+  transcript_text: string | null;
 }
 
 interface GeneratedSection {
@@ -176,7 +177,7 @@ Deno.serve(async (req: Request) => {
     if (meeting_ids && meeting_ids.length > 0) {
       const { data: meetings } = await supabase
         .from("meeting_transcriptions")
-        .select("*")
+        .select("id, meeting_title, meeting_date, summary, key_points, action_items, recording_url, transcript_text")
         .in("id", meeting_ids)
         .order("meeting_date", { ascending: false });
 
@@ -189,6 +190,7 @@ Deno.serve(async (req: Request) => {
           key_points: m.key_points || [],
           action_items: m.action_items || [],
           recording_url: m.recording_url,
+          transcript_text: m.transcript_text || null,
         }));
       }
     }
@@ -499,6 +501,13 @@ Client Information:
       }
       if (meeting.action_items.length > 0) {
         prompt += `\nAction Items:\n${meeting.action_items.map((a) => `- ${a.description}`).join("\n")}`;
+      }
+      if (meeting.transcript_text && meeting.transcript_text.length > 0) {
+        const maxLen = 4000;
+        const excerpt = meeting.transcript_text.length > maxLen
+          ? meeting.transcript_text.substring(0, maxLen) + "\n[transcript truncated]"
+          : meeting.transcript_text;
+        prompt += `\nMeeting Transcript:\n${excerpt}`;
       }
       if (meeting.recording_url) {
         prompt += `\n[Meeting recording available]`;

@@ -263,6 +263,62 @@ export async function syncMeetRecordings(
   return { imported, skipped };
 }
 
+export async function enrichMeetingRecording(
+  meetingTranscriptionId: string
+): Promise<{ has_transcript: boolean; has_notes: boolean; key_points_count: number; action_items_count: number }> {
+  const response = await fetchEdge('drive-api', {
+    body: { action: 'enrich-meeting', meetingTranscriptionId },
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || 'Failed to enrich meeting');
+  }
+
+  return await response.json();
+}
+
+export async function enrichAllUnprocessedRecordings(
+  orgId: string
+): Promise<{ enriched: number; failed: number }> {
+  const { data: unprocessed } = await supabase
+    .from('meeting_transcriptions')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('meeting_source', 'google_meet')
+    .is('processed_at', null)
+    .limit(10);
+
+  if (!unprocessed || unprocessed.length === 0) {
+    return { enriched: 0, failed: 0 };
+  }
+
+  const ids = unprocessed.map(r => r.id);
+
+  const response = await fetchEdge('drive-api', {
+    body: { action: 'enrich-meetings-batch', meetingTranscriptionIds: ids },
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to enrich meetings batch');
+  }
+
+  const data = await response.json();
+  const results = data.results || [];
+
+  let enriched = 0;
+  let failed = 0;
+  for (const r of results) {
+    if (r.error) {
+      failed++;
+    } else {
+      enriched++;
+    }
+  }
+
+  return { enriched, failed };
+}
+
 export function formatRecordingSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

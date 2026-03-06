@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getProposalById, linkMeetingToProposal, unlinkMeetingFromProposal } from '../../services/proposals';
 import { callEdgeFunction } from '../../lib/edgeFunction';
 import { getMeetingTranscriptionsByContact, getGoogleMeetRecordingsForOrg } from '../../services/meetingTranscriptions';
-import { checkDriveConnectionStatus, syncMeetRecordings } from '../../services/googleMeet';
+import { checkDriveConnectionStatus, syncMeetRecordings, enrichMeetingRecording, enrichAllUnprocessedRecordings } from '../../services/googleMeet';
 import { parseFile, formatFileSize, ACCEPTED_TYPES, MAX_FILE_SIZE } from '../../utils/fileParser';
 import type { ParsedFile } from '../../utils/fileParser';
 import type { Proposal, MeetingTranscription, ProposalSectionType } from '../../types';
@@ -33,6 +33,9 @@ import {
   WifiOff,
   Mic,
   Link2,
+  ScanSearch,
+  FileType,
+  StickyNote,
 } from 'lucide-react';
 
 type BuilderStep = 'meetings' | 'sections' | 'generate' | 'review';
@@ -72,6 +75,8 @@ export function ProposalBuilder() {
   const [syncResult, setSyncResult] = useState<{ imported: number; skipped: number } | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [recordingSearch, setRecordingSearch] = useState('');
+  const [enrichingRecordings, setEnrichingRecordings] = useState(false);
+  const [enrichingId, setEnrichingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -95,7 +100,7 @@ export function ProposalBuilder() {
       }
 
       if (proposalData?.org_id) {
-        await loadGoogleMeetRecordings(proposalData.org_id);
+        await loadGoogleMeetRecordings(proposalData.org_id, undefined, true);
       }
     } catch (err) {
       console.error('Failed to load data:', err);
@@ -104,7 +109,7 @@ export function ProposalBuilder() {
     }
   };
 
-  const loadGoogleMeetRecordings = async (orgId: string, search?: string) => {
+  const loadGoogleMeetRecordings = async (orgId: string, search?: string, autoEnrich = false) => {
     try {
       setLoadingRecordings(true);
       const [status, recordings] = await Promise.all([
@@ -113,6 +118,19 @@ export function ProposalBuilder() {
       ]);
       setDriveConnected(status.connected);
       setGoogleMeetRecordings(recordings);
+
+      if (autoEnrich && status.connected && recordings.some(r => !r.processed_at)) {
+        setEnrichingRecordings(true);
+        try {
+          await enrichAllUnprocessedRecordings(orgId);
+          const refreshed = await getGoogleMeetRecordingsForOrg(orgId, search);
+          setGoogleMeetRecordings(refreshed);
+        } catch {
+          // enrichment is best-effort
+        } finally {
+          setEnrichingRecordings(false);
+        }
+      }
     } catch (err) {
       console.error('Failed to load Google Meet recordings:', err);
       setDriveConnected(false);
@@ -131,10 +149,34 @@ export function ProposalBuilder() {
       const result = await syncMeetRecordings(proposal.org_id, user.id);
       setSyncResult(result);
       await loadGoogleMeetRecordings(proposal.org_id, recordingSearch);
+
+      setEnrichingRecordings(true);
+      try {
+        await enrichAllUnprocessedRecordings(proposal.org_id);
+        await loadGoogleMeetRecordings(proposal.org_id, recordingSearch);
+      } catch {
+        // enrichment is best-effort
+      } finally {
+        setEnrichingRecordings(false);
+      }
     } catch (err) {
       setSyncError(err instanceof Error ? err.message : 'Failed to sync recordings');
     } finally {
       setSyncingRecordings(false);
+    }
+  };
+
+  const handleEnrichSingle = async (meetingId: string) => {
+    setEnrichingId(meetingId);
+    try {
+      await enrichMeetingRecording(meetingId);
+      if (proposal?.org_id) {
+        await loadGoogleMeetRecordings(proposal.org_id, recordingSearch);
+      }
+    } catch {
+      // enrichment is best-effort
+    } finally {
+      setEnrichingId(null);
     }
   };
 
@@ -497,6 +539,8 @@ export function ProposalBuilder() {
                         onToggle={() => toggleMeeting(meeting.id)}
                         formatDate={formatDate}
                         formatDuration={formatDuration}
+                        onEnrich={handleEnrichSingle}
+                        isEnriching={enrichingId === meeting.id}
                       />
                     ))}
                   </div>
@@ -605,6 +649,12 @@ export function ProposalBuilder() {
                         className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500/60"
                       />
                     </div>
+                    {enrichingRecordings && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
+                        <Loader2 className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
+                        <span className="text-xs text-cyan-300">Scanning for meeting summaries, notes, and transcripts...</span>
+                      </div>
+                    )}
                     <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
                       {filteredGoogleMeetRecordings.map((recording) => (
                         <MeetingCard
@@ -615,6 +665,8 @@ export function ProposalBuilder() {
                           formatDate={formatDate}
                           formatDuration={formatDuration}
                           badge="Google Meet"
+                          onEnrich={handleEnrichSingle}
+                          isEnriching={enrichingId === recording.id}
                         />
                       ))}
                     </div>
@@ -884,11 +936,15 @@ interface MeetingCardProps {
   formatDate: (d: string) => string;
   formatDuration: (m: number | null) => string | null;
   badge?: string;
+  onEnrich?: (id: string) => void;
+  isEnriching?: boolean;
 }
 
-function MeetingCard({ meeting, selected, onToggle, formatDate, formatDuration, badge }: MeetingCardProps) {
+function MeetingCard({ meeting, selected, onToggle, formatDate, formatDuration, badge, onEnrich, isEnriching }: MeetingCardProps) {
   const duration = formatDuration(meeting.duration_minutes);
-  const hasContent = meeting.summary || (meeting.key_points && meeting.key_points.length > 0);
+  const hasSummary = !!meeting.summary;
+  const hasTranscript = !!meeting.transcript_text;
+  const hasContent = hasSummary || hasTranscript || (meeting.key_points && meeting.key_points.length > 0);
 
   return (
     <button
@@ -915,9 +971,21 @@ function MeetingCard({ meeting, selected, onToggle, formatDate, formatDuration, 
                 {badge}
               </span>
             )}
+            {hasSummary && (
+              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-medium">
+                <StickyNote className="w-2.5 h-2.5" />
+                Summary
+              </span>
+            )}
+            {hasTranscript && (
+              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 border border-sky-500/25 font-medium">
+                <FileType className="w-2.5 h-2.5" />
+                Transcript
+              </span>
+            )}
             {!hasContent && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/25 font-medium">
-                No summary yet
+              <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/25 font-medium">
+                No docs found
               </span>
             )}
             {meeting.recording_url && (
@@ -952,6 +1020,22 @@ function MeetingCard({ meeting, selected, onToggle, formatDate, formatDuration, 
                 {meeting.participants.length} participant{meeting.participants.length !== 1 ? 's' : ''}
               </span>
             )}
+            {!hasContent && onEnrich && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); onEnrich(meeting.id); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); onEnrich(meeting.id); } }}
+                className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300 cursor-pointer transition-colors"
+              >
+                {isEnriching ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <ScanSearch className="w-3.5 h-3.5" />
+                )}
+                {isEnriching ? 'Scanning...' : 'Scan for docs'}
+              </span>
+            )}
           </div>
 
           {meeting.summary && (
@@ -965,7 +1049,7 @@ function MeetingCard({ meeting, selected, onToggle, formatDate, formatDuration, 
                   key={i}
                   className="text-[10px] bg-slate-700/80 text-slate-300 px-2 py-0.5 rounded-full"
                 >
-                  {point.length > 45 ? point.substring(0, 45) + '…' : point}
+                  {point.length > 45 ? point.substring(0, 45) + '...' : point}
                 </span>
               ))}
               {meeting.key_points.length > 3 && (
