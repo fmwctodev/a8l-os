@@ -143,17 +143,36 @@ async function handleCallback(req: Request): Promise<Response> {
     return new Response("Invalid state", { status: 400, headers: corsHeaders });
   }
 
-  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
-      redirect_uri: state.redirectUri,
-      grant_type: "authorization_code",
-    }),
-  });
+  const tokenController = new AbortController();
+  const tokenTimeout = setTimeout(() => tokenController.abort(), 15000);
+  let tokenResponse: Response;
+  try {
+    tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: state.redirectUri,
+        grant_type: "authorization_code",
+      }),
+      signal: tokenController.signal,
+    });
+  } catch (fetchErr) {
+    clearTimeout(tokenTimeout);
+    console.error("Token exchange fetch error:", fetchErr);
+    if (state.appOrigin) {
+      const errorRedirect = new URL(`${state.appOrigin}/oauth/google-calendar/callback`);
+      errorRedirect.searchParams.set("status", "error");
+      errorRedirect.searchParams.set("error", "Token exchange timed out. Please try again.");
+      return Response.redirect(errorRedirect.toString(), 302);
+    }
+    return new Response(`<html><body><p>Token exchange timed out. Please try again.</p></body></html>`, {
+      headers: { "Content-Type": "text/html" },
+    });
+  }
+  clearTimeout(tokenTimeout);
 
   const tokenData = await tokenResponse.json();
   if (!tokenResponse.ok) {
@@ -182,11 +201,20 @@ async function handleCallback(req: Request): Promise<Response> {
     return new Response(`<html><body><p>${msg}</p></body></html>`, { headers: { "Content-Type": "text/html" } });
   }
 
-  const userInfoResponse = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
-    headers: { Authorization: `Bearer ${access_token}` },
-  });
-  const userInfo = await userInfoResponse.json();
-  const email = userInfo.email || "";
+  const userInfoController = new AbortController();
+  const userInfoTimeout = setTimeout(() => userInfoController.abort(), 8000);
+  let email = "";
+  try {
+    const userInfoResponse = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: `Bearer ${access_token}` },
+      signal: userInfoController.signal,
+    });
+    const userInfo = await userInfoResponse.json();
+    email = userInfo.email || "";
+  } catch (uiErr) {
+    console.warn("Userinfo fetch failed, continuing without email:", uiErr);
+  }
+  clearTimeout(userInfoTimeout);
 
   const tokenExpiry = new Date(Date.now() + expires_in * 1000).toISOString();
   const grantedScopes = grantedScopeStr ? grantedScopeStr.split(" ").filter(Boolean) : ALL_GOOGLE_SCOPES;
@@ -197,103 +225,115 @@ async function handleCallback(req: Request): Promise<Response> {
 
   await crossPopulateServiceTables(supabase, state.orgId, state.userId, email, access_token, refresh_token, tokenExpiry, grantedScopes);
 
+  const backgroundTasks: Promise<void>[] = [];
+
   if (hasGmailScopes(grantedScopes)) {
-    const pubsubTopic = Deno.env.get("GMAIL_PUBSUB_TOPIC");
-    if (pubsubTopic) {
-      try {
-        const watchResponse = await fetch(`${GMAIL_API_URL}/users/me/watch`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${access_token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            topicName: pubsubTopic,
-            labelIds: ["INBOX", "SENT"],
-            labelFilterBehavior: "include",
-          }),
-        });
+    backgroundTasks.push((async () => {
+      const pubsubTopic = Deno.env.get("GMAIL_PUBSUB_TOPIC");
+      if (pubsubTopic) {
+        try {
+          const watchController = new AbortController();
+          const watchTimeout = setTimeout(() => watchController.abort(), 8000);
+          const watchResponse = await fetch(`${GMAIL_API_URL}/users/me/watch`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${access_token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              topicName: pubsubTopic,
+              labelIds: ["INBOX", "SENT"],
+              labelFilterBehavior: "include",
+            }),
+            signal: watchController.signal,
+          });
+          clearTimeout(watchTimeout);
 
-        let watchHistoryId: string | null = null;
-        let watchExpiration: string | null = null;
-        if (watchResponse.ok) {
-          const watchData = await watchResponse.json();
-          watchHistoryId = String(watchData.historyId);
-          watchExpiration = new Date(Number(watchData.expiration)).toISOString();
+          let watchHistoryId: string | null = null;
+          let watchExpiration: string | null = null;
+          if (watchResponse.ok) {
+            const watchData = await watchResponse.json();
+            watchHistoryId = String(watchData.historyId);
+            watchExpiration = new Date(Number(watchData.expiration)).toISOString();
+          }
+
+          await supabase.from("gmail_sync_state").upsert(
+            {
+              organization_id: state.orgId,
+              user_id: state.userId,
+              history_id: watchHistoryId,
+              watch_expiration: watchExpiration,
+              sync_status: "idle",
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "organization_id,user_id" }
+          );
+        } catch (watchErr) {
+          console.error("Gmail watch error:", watchErr);
         }
-
-        await supabase.from("gmail_sync_state").upsert(
-          {
-            organization_id: state.orgId,
-            user_id: state.userId,
-            history_id: watchHistoryId,
-            watch_expiration: watchExpiration,
-            sync_status: "idle",
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "organization_id,user_id" }
-        );
-      } catch (watchErr) {
-        console.error("Gmail watch error:", watchErr);
       }
-    }
 
-    await supabase.from("gmail_sync_jobs").insert({
-      organization_id: state.orgId,
-      user_id: state.userId,
-      job_type: "initial",
-      status: "queued",
-      run_at: new Date().toISOString(),
-    });
+      await supabase.from("gmail_sync_jobs").insert({
+        organization_id: state.orgId,
+        user_id: state.userId,
+        job_type: "initial",
+        status: "queued",
+        run_at: new Date().toISOString(),
+      });
 
-    try {
-      await fetch(`${SUPABASE_URL}/functions/v1/gmail-sync`, {
+      fetch(`${SUPABASE_URL}/functions/v1/gmail-sync`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ org_id: state.orgId, user_id: state.userId }),
-      });
-    } catch {}
+      }).catch(() => {});
+    })());
   }
 
   if (hasCalendarScopes(grantedScopes)) {
-    const { data: calConn } = await supabase
-      .from("google_calendar_connections")
-      .select("id")
-      .eq("user_id", state.userId)
-      .maybeSingle();
-
-    if (calConn?.id) {
-      const { data: existingJob } = await supabase
-        .from("google_calendar_sync_jobs")
+    backgroundTasks.push((async () => {
+      const { data: calConn } = await supabase
+        .from("google_calendar_connections")
         .select("id")
-        .eq("connection_id", calConn.id)
-        .in("status", ["queued", "running"])
+        .eq("user_id", state.userId)
         .maybeSingle();
 
-      if (!existingJob) {
-        await supabase.from("google_calendar_sync_jobs").insert({
-          org_id: state.orgId,
-          connection_id: calConn.id,
-          user_id: state.userId,
-          job_type: "initial_sync",
-          status: "queued",
-          scheduled_at: new Date().toISOString(),
-          attempt: 0,
-          max_attempts: 5,
-        });
+      if (calConn?.id) {
+        const { data: existingJob } = await supabase
+          .from("google_calendar_sync_jobs")
+          .select("id")
+          .eq("connection_id", calConn.id)
+          .in("status", ["queued", "running"])
+          .maybeSingle();
+
+        if (!existingJob) {
+          await supabase.from("google_calendar_sync_jobs").insert({
+            org_id: state.orgId,
+            connection_id: calConn.id,
+            user_id: state.userId,
+            job_type: "initial_sync",
+            status: "queued",
+            scheduled_at: new Date().toISOString(),
+            attempt: 0,
+            max_attempts: 5,
+          });
+        }
       }
-    }
+    })());
   }
 
-  await supabase.from("audit_logs").insert({
-    user_id: state.userId,
-    action: "google_unified_connected",
-    entity_type: "google_oauth_master",
-    after_state: { email, scopes: grantedScopes, organization_id: state.orgId },
-  });
+  backgroundTasks.push(
+    supabase.from("audit_logs").insert({
+      user_id: state.userId,
+      action: "google_unified_connected",
+      entity_type: "google_oauth_master",
+      after_state: { email, scopes: grantedScopes, organization_id: state.orgId },
+    }).then(() => {})
+  );
+
+  await Promise.allSettled(backgroundTasks);
 
   if (state.appOrigin) {
     const successRedirect = new URL(`${state.appOrigin}/oauth/google-calendar/callback`);
@@ -355,22 +395,27 @@ async function handleConnection(req: Request): Promise<Response> {
 
   if (new Date(master.token_expiry) <= new Date()) {
     try {
-      const resolved = await resolveRefreshToken(supabase, user.id, master.org_id);
-      if (resolved) {
+      const refreshPromise = (async () => {
+        const resolved = await resolveRefreshToken(supabase, user.id, master.org_id);
+        if (!resolved) return null;
         const refreshed = await refreshAccessToken(resolved.refreshToken);
-        if (refreshed) {
-          const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
-          const newRefreshToken = refreshed.refresh_token || resolved.refreshToken;
-          await writeMasterToken(supabase, master.org_id, user.id, master.email, refreshed.access_token, newRefreshToken, newExpiry, scopes);
-          await crossPopulateServiceTables(supabase, master.org_id, user.id, master.email, refreshed.access_token, newRefreshToken, newExpiry, scopes);
-          console.log(`[UnifiedOAuth] Silently refreshed token for user ${user.id}`);
-        } else {
-          tokenExpired = true;
-          console.warn(`[UnifiedOAuth] Google rejected refresh for user ${user.id}`);
-        }
+        if (!refreshed) return null;
+        return { resolved, refreshed };
+      })();
+
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 12000));
+      const result = await Promise.race([refreshPromise, timeoutPromise]);
+
+      if (result) {
+        const { resolved, refreshed } = result;
+        const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
+        const newRefreshToken = refreshed.refresh_token || resolved.refreshToken;
+        await writeMasterToken(supabase, master.org_id, user.id, master.email, refreshed.access_token, newRefreshToken, newExpiry, scopes);
+        await crossPopulateServiceTables(supabase, master.org_id, user.id, master.email, refreshed.access_token, newRefreshToken, newExpiry, scopes);
+        console.log(`[UnifiedOAuth] Silently refreshed token for user ${user.id}`);
       } else {
         tokenExpired = true;
-        console.warn(`[UnifiedOAuth] No refresh token found for user ${user.id}`);
+        console.warn(`[UnifiedOAuth] Token refresh timed out or failed for user ${user.id}`);
       }
     } catch (err) {
       tokenExpired = true;
