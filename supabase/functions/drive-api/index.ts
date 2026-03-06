@@ -24,6 +24,22 @@ interface DriveConnection {
   is_active: boolean;
 }
 
+function getAnonClient() {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+  return createClient(supabaseUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+function getServiceRoleClient() {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -32,8 +48,9 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
 
-    if (!supabaseUrl || !serviceRoleKey) {
+    if (!supabaseUrl || !serviceRoleKey || !anonKey) {
       throw new Error("Missing environment variables");
     }
 
@@ -42,21 +59,22 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "Missing authorization header" }, 401);
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+
+    const anonClient = getAnonClient();
+    const { data: { user }, error: userError } = await anonClient.auth.getUser(token);
     if (userError || !user) {
+      console.error("[DriveAPI] JWT validation failed:", userError?.message);
       return jsonResponse({ error: "Unauthorized" }, 401);
     }
+
+    const supabase = getServiceRoleClient();
 
     const { data: userData } = await supabase
       .from("users")
       .select("organization_id")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     if (!userData) {
       return jsonResponse({ error: "User not found" }, 404);
