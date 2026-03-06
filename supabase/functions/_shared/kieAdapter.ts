@@ -27,6 +27,13 @@ interface VeoGenerateParams {
   model?: string;
   mode?: string;
   sound?: boolean;
+  multiShots?: boolean;
+  multiPrompt?: MultiShotEntry[];
+}
+
+export interface MultiShotEntry {
+  prompt: string;
+  duration: number;
 }
 
 interface StandardGenerateParams {
@@ -41,6 +48,8 @@ interface StandardGenerateParams {
   endpointOverride?: string;
   mode?: string;
   sound?: boolean;
+  multiShots?: boolean;
+  multiPrompt?: MultiShotEntry[];
 }
 
 const IMAGE_SIZE_MODELS = new Set([
@@ -165,6 +174,8 @@ export async function generateTextToVideo(
     callbackUrl: params.callbackUrl,
     mode: params.mode,
     sound: params.sound,
+    multiShots: params.multiShots,
+    multiPrompt: params.multiPrompt,
   });
 }
 
@@ -320,6 +331,8 @@ async function generateStandard(
 
   if (isSoraStoryboard) {
     input.n_frames = String(params.duration || 10);
+  } else if (isKling3) {
+    input.duration = String(params.duration || 5);
   } else if (params.duration) {
     input.duration = params.duration;
   }
@@ -327,6 +340,20 @@ async function generateStandard(
   if (isKling3) {
     if (params.mode) input.mode = params.mode;
     if (params.sound !== undefined) input.sound = params.sound;
+
+    if (params.multiShots && params.multiPrompt && params.multiPrompt.length > 0) {
+      input.multi_shots = true;
+      input.multi_prompt = params.multiPrompt.map((s) => ({
+        prompt: s.prompt.slice(0, 2500),
+        duration: s.duration,
+      }));
+    } else {
+      input.multi_shots = false;
+    }
+
+    if (typeof input.prompt === "string" && (input.prompt as string).length > 2500) {
+      input.prompt = (input.prompt as string).slice(0, 2500);
+    }
   }
 
   if (params.negativePrompt) input.negative_prompt = params.negativePrompt;

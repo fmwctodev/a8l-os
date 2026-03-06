@@ -115,6 +115,7 @@ export interface CreateJobParams {
   job_type?: JobType;
   style_preset_id?: string;
   source_image_urls?: string[];
+  multi_prompt?: Array<{ prompt: string; duration: number }>;
 }
 
 export async function getKieModels(type?: 'image' | 'video'): Promise<KieModel[]> {

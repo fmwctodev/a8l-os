@@ -18,6 +18,7 @@ export interface MediaJobInfo {
   draft_index: number;
   message_id?: string;
   preloadedAssets?: MediaAsset[];
+  error?: string;
 }
 
 /**

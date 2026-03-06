@@ -42,6 +42,7 @@ interface DraftOutput {
   visual_style_suggestion?: string;
   style_preset?: string;
   hashtags?: string[];
+  multi_prompt?: Array<{ prompt: string; duration: number }>;
 }
 
 Deno.serve(async (req: Request) => {
@@ -214,7 +215,13 @@ Example:
 Always provide visual_style_suggestion when media_type is "image" or "video".
 Keep posts within platform character limits. Use relevant hashtags.
 Be creative and engaging. Adapt tone to each platform's audience.
-For image generation, the model is always Nano Banana 2. Do not suggest, recommend, or reference any other image generation model.`;
+For image generation, the model is always Nano Banana 2. Do not suggest, recommend, or reference any other image generation model.
+
+MULTI-SHOT VIDEO: When a user requests a video with multiple scenes or shots, you can provide a "multi_prompt" array in the draft object. Each entry has a "prompt" (max 2500 chars) describing that scene and a "duration" (seconds, typically 5). Example:
+\`\`\`drafts
+[{"platform":"instagram","body":"...","media_type":"video","visual_style_suggestion":"A cinematic brand story","multi_prompt":[{"prompt":"Scene 1: Product close-up on marble surface, soft lighting","duration":5},{"prompt":"Scene 2: Person unboxing the product, excited expression","duration":5}],"hashtags":["#brand"]}]
+\`\`\`
+Only use multi_prompt when the user explicitly asks for multi-scene or multi-shot videos. For single-scene videos, omit multi_prompt entirely.`;
 
     const rawHistory = (history || []).map((m: Record<string, unknown>) => ({
       role: m.role as string,
@@ -396,15 +403,17 @@ For image generation, the model is always Nano Banana 2. Do not suggest, recomme
 
             const rawPrompt = draft.visual_style_suggestion!;
             let enrichedPrompt = rawPrompt;
-            const imgStyleBlocks = guidelines
-              ? formatBlocks(guidelines.image_style as Array<{ content: string }> | null)
-              : "";
-            if (imgStyleBlocks) {
-              enrichedPrompt = `${enrichedPrompt}\n\nImage style guidelines: ${imgStyleBlocks}`;
-            }
-            const vsRules = guidelines?.visual_style_rules as string[] | null;
-            if (vsRules?.length) {
-              enrichedPrompt = `${enrichedPrompt}\n\nVisual style rules: ${vsRules.join(", ")}`;
+            if (!isVideo) {
+              const imgStyleBlocks = guidelines
+                ? formatBlocks(guidelines.image_style as Array<{ content: string }> | null)
+                : "";
+              if (imgStyleBlocks) {
+                enrichedPrompt = `${enrichedPrompt}\n\nImage style guidelines: ${imgStyleBlocks}`;
+              }
+              const vsRules = guidelines?.visual_style_rules as string[] | null;
+              if (vsRules?.length) {
+                enrichedPrompt = `${enrichedPrompt}\n\nVisual style rules: ${vsRules.join(", ")}`;
+              }
             }
             const finalPrompt = buildStructuredPrompt(enrichedPrompt, draftPreset);
 
@@ -442,6 +451,7 @@ For image generation, the model is always Nano Banana 2. Do not suggest, recomme
                   aspect_ratio: effectiveAspect,
                   ...(isVideo ? { duration: defaultDuration } : {}),
                   ...(effectiveMode ? { mode: effectiveMode } : {}),
+                  ...(hasMultiShot ? { multi_prompt: draft.multi_prompt } : {}),
                 },
                 status: "waiting",
                 job_type: jobType,
@@ -459,6 +469,8 @@ For image generation, the model is always Nano Banana 2. Do not suggest, recomme
               veoModelParam = modelKey === "google/veo-3.1" ? "veo3" : "veo3_fast";
             }
 
+            const hasMultiShot = isVideo && draft.multi_prompt && draft.multi_prompt.length > 0;
+
             if (isVideo) {
               kieResult = await generateTextToVideo(
                 kieApiKey,
@@ -469,6 +481,8 @@ For image generation, the model is always Nano Banana 2. Do not suggest, recomme
                   callbackUrl: webhookUrl,
                   model: isVeo ? veoModelParam : modelKey,
                   mode: effectiveMode,
+                  multiShots: hasMultiShot || undefined,
+                  multiPrompt: hasMultiShot ? draft.multi_prompt : undefined,
                 },
                 isVeo
                   ? endpointOverride || undefined
@@ -528,6 +542,7 @@ For image generation, the model is always Nano Banana 2. Do not suggest, recomme
                 prompt: finalPrompt,
                 status: "fail",
                 draft_index: draftIndex,
+                error: errMsg,
               });
             }
           } catch (mediaErr) {

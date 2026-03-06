@@ -34,6 +34,7 @@ export function ChatMediaTracker({ jobs, onAssetReady, onJobStatusChange, onRetr
       ...j,
       currentStatus: j.status,
       assets: j.preloadedAssets && j.preloadedAssets.length > 0 ? j.preloadedAssets : [],
+      error: j.error,
     }))
   );
   const [lightbox, setLightbox] = useState<{ items: LightboxItem[]; index: number } | null>(null);
@@ -112,6 +113,7 @@ export function ChatMediaTracker({ jobs, onAssetReady, onJobStatusChange, onRetr
           ...j,
           currentStatus: j.status,
           assets: j.preloadedAssets && j.preloadedAssets.length > 0 ? j.preloadedAssets : [],
+          error: j.error,
         })),
       ];
     });

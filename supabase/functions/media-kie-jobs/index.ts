@@ -33,6 +33,7 @@ interface CreateJobPayload {
   job_type?: string;
   style_preset_id?: string;
   source_image_urls?: string[];
+  multi_prompt?: Array<{ prompt: string; duration: number }>;
 }
 
 Deno.serve(async (req: Request) => {
@@ -225,6 +226,7 @@ Deno.serve(async (req: Request) => {
       ...(effectiveDuration && { duration: effectiveDuration }),
       ...(payload.negative_prompt && { negative_prompt: payload.negative_prompt }),
       ...(payload.extra_params || {}),
+      ...(payload.multi_prompt?.length ? { multi_prompt: payload.multi_prompt } : {}),
     };
 
     const { data: job, error: jobError } = await supabase
@@ -337,6 +339,7 @@ Deno.serve(async (req: Request) => {
       }
       const extraMode = (payload.extra_params?.mode as string) || (model.default_params?.mode as string) || undefined;
       const extraSound = payload.extra_params?.sound as boolean | undefined;
+      const hasMultiShot = payload.multi_prompt && payload.multi_prompt.length > 0;
 
       kieResult = await generateTextToVideo(
         kieApiKey,
@@ -348,6 +351,8 @@ Deno.serve(async (req: Request) => {
           model: isVeo ? veoModelParam : modelKey,
           mode: extraMode,
           sound: extraSound,
+          multiShots: hasMultiShot || undefined,
+          multiPrompt: hasMultiShot ? payload.multi_prompt : undefined,
         },
         isVeo ? (endpointOverride || undefined) : undefined
       );
