@@ -24,35 +24,7 @@ import {
   recalculateAndUpdateProposalTotal,
 } from '../../services/proposals';
 import type { Proposal, ProposalComment, ProposalActivity, ProposalSection, ProposalLineItem } from '../../types';
-import {
-  ArrowLeft,
-  FileText,
-  FileDown,
-  Send,
-  Edit3,
-  Trash2,
-  Loader2,
-  User,
-  Calendar,
-  DollarSign,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  Eye,
-  AlertCircle,
-  MessageSquare,
-  Activity,
-  Plus,
-  GripVertical,
-  Sparkles,
-  ExternalLink,
-  Copy,
-  MoreVertical,
-  Video,
-  Archive,
-  ArchiveRestore,
-  Copy as CopyIcon,
-} from 'lucide-react';
+import { ArrowLeft, FileText, FileDown, Send, CreditCard as Edit3, Trash2, Loader2, User, Calendar, DollarSign, Clock, CheckCircle2, XCircle, Eye, AlertCircle, MessageSquare, Activity, Plus, GripVertical, Sparkles, ExternalLink, Copy, MoreVertical, Video, Archive, ArchiveRestore, Copy as CopyIcon } from 'lucide-react';
 import { exportProposalToPDF } from '../../services/proposalPdfExport';
 import { getBrandKits } from '../../services/brandboard';
 
