@@ -1,34 +1,26 @@
 import { useState, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { parseCSVToContacts, importContacts } from '../../services/contacts';
-import type { Department } from '../../types';
 import { X, Loader2, Upload, FileText, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface ImportContactsModalProps {
-  departments: Department[];
   onClose: () => void;
   onSuccess: () => void;
 }
 
 export function ImportContactsModal({
-  departments,
   onClose,
   onSuccess,
 }: ImportContactsModalProps) {
-  const { user: currentUser, isSuperAdmin } = useAuth();
+  const { user: currentUser } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [departmentId, setDepartmentId] = useState(
-    currentUser?.department_id || departments[0]?.id || ''
-  );
   const [csvContent, setCsvContent] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [previewCount, setPreviewCount] = useState(0);
   const [isImporting, setIsImporting] = useState(false);
   const [result, setResult] = useState<{ imported: number; errors: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const isAdmin = isSuperAdmin || currentUser?.role?.hierarchy_level === 2;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -46,20 +38,20 @@ export function ImportContactsModal({
       setFileName(file.name);
       setError(null);
 
-      const contacts = parseCSVToContacts(content, departmentId);
+      const contacts = parseCSVToContacts(content);
       setPreviewCount(contacts.length);
     };
     reader.readAsText(file);
   };
 
   const handleImport = async () => {
-    if (!csvContent || !currentUser || !departmentId) return;
+    if (!csvContent || !currentUser) return;
 
     try {
       setIsImporting(true);
       setError(null);
 
-      const contacts = parseCSVToContacts(csvContent, departmentId);
+      const contacts = parseCSVToContacts(csvContent);
       const importResult = await importContacts(currentUser.organization_id, contacts, currentUser);
 
       setResult(importResult);
@@ -139,25 +131,6 @@ export function ImportContactsModal({
             </div>
           ) : (
             <>
-              {isAdmin && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                    Import to Department
-                  </label>
-                  <select
-                    value={departmentId}
-                    onChange={(e) => setDepartmentId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                  >
-                    {departments.map((dept) => (
-                      <option key={dept.id} value={dept.id}>
-                        {dept.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1.5">
                   CSV File
@@ -223,7 +196,7 @@ export function ImportContactsModal({
           {!result && (
             <button
               onClick={handleImport}
-              disabled={!csvContent || isImporting || !departmentId}
+              disabled={!csvContent || isImporting}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-white font-medium hover:from-cyan-600 hover:to-teal-700 transition-colors disabled:opacity-50"
             >
               {isImporting && <Loader2 className="w-4 h-4 animate-spin" />}

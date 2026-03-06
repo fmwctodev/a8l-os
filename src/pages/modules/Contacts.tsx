@@ -664,7 +664,6 @@ export function Contacts() {
 
       {isImportModalOpen && (
         <ImportContactsModal
-          departments={departments}
           onClose={() => setIsImportModalOpen(false)}
           onSuccess={() => {
             setIsImportModalOpen(false);

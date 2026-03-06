@@ -20,7 +20,7 @@ export interface ContactFilters {
 }
 
 export interface CreateContactData {
-  department_id: string;
+  department_id?: string | null;
   owner_id?: string | null;
   first_name: string;
   last_name?: string;
@@ -521,8 +521,7 @@ export function exportContactsToCSV(contacts: Contact[]): string {
 }
 
 export function parseCSVToContacts(
-  csvContent: string,
-  departmentId: string
+  csvContent: string
 ): CreateContactData[] {
   const lines = csvContent.split('\n').filter((line) => line.trim());
   if (lines.length < 2) return [];
@@ -539,7 +538,6 @@ export function parseCSVToContacts(
     });
 
     const contact: CreateContactData = {
-      department_id: departmentId,
       first_name: record.first_name || record.name?.split(' ')[0] || 'Unknown',
       last_name: record.last_name || record.name?.split(' ').slice(1).join(' ') || '',
       email: record.email || null,
