@@ -27,6 +27,7 @@ interface ChatRequest {
   message_type?: "text" | "url_share" | "image_share";
   attachments?: Array<{ type: string; url: string; title?: string }>;
   video_model_id?: string;
+  video_mode?: string;
   aspect_ratio?: string;
   auto_generate_media?: boolean;
   style_preset_id?: string;
@@ -106,6 +107,7 @@ Deno.serve(async (req: Request) => {
       message_type = "text",
       attachments = [],
       video_model_id,
+      video_mode,
       aspect_ratio,
       auto_generate_media = true,
       style_preset_id,
@@ -417,13 +419,17 @@ For image generation, the model is always Nano Banana 2. Do not suggest, recomme
 
             const jobType = isVideo ? "text_to_video" : "text_to_image";
 
+            const modelDefaults = (model.default_params as Record<string, unknown>) || {};
             const supportedDurations = model.supports_durations as
               | number[]
               | null;
             const defaultDuration =
-              supportedDurations && supportedDurations.length > 0
+              (modelDefaults.duration as number) ||
+              (supportedDurations && supportedDurations.length > 0
                 ? supportedDurations[0]
-                : 5;
+                : 5);
+
+            const effectiveMode = video_mode || (modelDefaults.mode as string) || undefined;
 
             const { data: job, error: jobErr } = await supabase
               .from("media_generation_jobs")
@@ -435,6 +441,7 @@ For image generation, the model is always Nano Banana 2. Do not suggest, recomme
                 params: {
                   aspect_ratio: effectiveAspect,
                   ...(isVideo ? { duration: defaultDuration } : {}),
+                  ...(effectiveMode ? { mode: effectiveMode } : {}),
                 },
                 status: "waiting",
                 job_type: jobType,
@@ -447,6 +454,11 @@ For image generation, the model is always Nano Banana 2. Do not suggest, recomme
 
             let kieResult;
 
+            let veoModelParam: string | undefined;
+            if (isVeo) {
+              veoModelParam = modelKey === "google/veo-3.1" ? "veo3" : "veo3_fast";
+            }
+
             if (isVideo) {
               kieResult = await generateTextToVideo(
                 kieApiKey,
@@ -455,7 +467,8 @@ For image generation, the model is always Nano Banana 2. Do not suggest, recomme
                   aspectRatio: effectiveAspect,
                   duration: defaultDuration,
                   callbackUrl: webhookUrl,
-                  model: isVeo ? undefined : modelKey,
+                  model: isVeo ? veoModelParam : modelKey,
+                  mode: effectiveMode,
                 },
                 isVeo
                   ? endpointOverride || undefined

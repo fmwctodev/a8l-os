@@ -45,6 +45,7 @@ export function SocialChat() {
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [mediaPreferences, setMediaPreferences] = useState<MediaPreferences>({
     auto_generate_media: true,
+    video_mode: 'std',
   });
   const [activeMediaJobs, setActiveMediaJobs] = useState<MediaJobInfo[]>([]);
   const [draftAssets, setDraftAssets] = useState<Record<string, MediaAsset[]>>({});

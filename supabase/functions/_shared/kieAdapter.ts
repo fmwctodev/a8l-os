@@ -25,6 +25,8 @@ interface VeoGenerateParams {
   generationType?: string;
   imageUrls?: string[];
   model?: string;
+  mode?: string;
+  sound?: boolean;
 }
 
 interface StandardGenerateParams {
@@ -37,6 +39,8 @@ interface StandardGenerateParams {
   inputUrls?: string[];
   callbackUrl?: string;
   endpointOverride?: string;
+  mode?: string;
+  sound?: boolean;
 }
 
 const IMAGE_SIZE_MODELS = new Set([
@@ -48,6 +52,14 @@ const IMAGE_SIZE_MODELS = new Set([
 const QUALITY_MODELS = new Set([
   "seedream/4.5-text-to-image",
 ]);
+
+const SORA_STORYBOARD_ASPECT: Record<string, string> = {
+  "16:9": "landscape",
+  "9:16": "portrait",
+  "1:1": "landscape",
+  "4:3": "landscape",
+  "3:4": "portrait",
+};
 
 const ASPECT_TO_IMAGE_SIZE: Record<string, string> = {
   "1:1": "square_hd",
@@ -151,6 +163,8 @@ export async function generateTextToVideo(
     aspectRatio: params.aspectRatio,
     duration: params.duration,
     callbackUrl: params.callbackUrl,
+    mode: params.mode,
+    sound: params.sound,
   });
 }
 
@@ -286,8 +300,13 @@ async function generateStandard(
     prompt: params.prompt,
   };
 
+  const isSoraStoryboard = modelKey === "sora-2-pro-storyboard";
+  const isKling3 = modelKey.startsWith("kling-3.0");
+
   if (usesImageSize) {
     input.image_size = ASPECT_TO_IMAGE_SIZE[aspect] || "square_hd";
+  } else if (isSoraStoryboard) {
+    input.aspect_ratio = SORA_STORYBOARD_ASPECT[aspect] || "landscape";
   } else {
     input.aspect_ratio = aspect;
   }
@@ -299,7 +318,17 @@ async function generateStandard(
     if (normalized) input.resolution = normalized;
   }
 
-  if (params.duration) input.duration = params.duration;
+  if (isSoraStoryboard) {
+    input.n_frames = String(params.duration || 10);
+  } else if (params.duration) {
+    input.duration = params.duration;
+  }
+
+  if (isKling3) {
+    if (params.mode) input.mode = params.mode;
+    if (params.sound !== undefined) input.sound = params.sound;
+  }
+
   if (params.negativePrompt) input.negative_prompt = params.negativePrompt;
   if (params.inputUrls?.length) input.input_urls = params.inputUrls;
 

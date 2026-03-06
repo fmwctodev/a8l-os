@@ -40,6 +40,15 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
     loadPresets();
   }, []);
 
+  useEffect(() => {
+    if (videoModels.length > 0 && !preferences.video_model_id) {
+      const sorted = [...videoModels].sort(
+        (a, b) => (a.display_priority ?? 99) - (b.display_priority ?? 99)
+      );
+      onChange({ ...preferences, video_model_id: sorted[0].id });
+    }
+  }, [videoModels]);
+
   async function loadModels() {
     try {
       const [imgModel, vids] = await Promise.all([
@@ -64,8 +73,15 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
   const selectedPreset = stylePresets.find(p => p.id === preferences.style_preset_id);
   const autoGen = preferences.auto_generate_media !== false;
 
+  const isKling3 = selectedVideoModel?.model_key?.startsWith('kling-3.0') ?? false;
+
   function selectVideoModel(model: KieModel) {
-    onChange({ ...preferences, video_model_id: model.id });
+    const isNewKling = model.model_key?.startsWith('kling-3.0') ?? false;
+    onChange({
+      ...preferences,
+      video_model_id: model.id,
+      video_mode: isNewKling ? (preferences.video_mode || 'std') : undefined,
+    });
   }
 
   function selectPreset(presetId: string | undefined) {
@@ -110,6 +126,7 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
           {selectedVideoModel && (
             <span className="px-1.5 py-0.5 bg-slate-700 text-slate-300 rounded text-[10px]">
               {selectedVideoModel.display_name}
+              {isKling3 && preferences.video_mode === 'pro' ? ' Pro' : ''}
             </span>
           )}
         </div>
@@ -223,44 +240,73 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
                   </div>
                 )
               ) : (
-                <div className="max-h-60 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
-                  {videoModels.map((model) => (
-                    <button
-                      key={model.id}
-                      onClick={() => selectVideoModel(model)}
-                      className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors ${
-                        preferences.video_model_id === model.id
-                          ? 'bg-cyan-500/10 border border-cyan-500/30'
-                          : 'bg-slate-900/50 border border-transparent hover:border-slate-600'
-                      }`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-xs font-medium ${preferences.video_model_id === model.id ? 'text-cyan-300' : 'text-slate-300'}`}>
-                            {model.display_name}
-                          </span>
-                          {model.badge_label && (
-                            <span className={`px-1 py-px rounded text-[9px] font-semibold ${
-                              model.is_recommended
-                                ? 'bg-amber-500/15 text-amber-400'
-                                : 'bg-slate-700 text-slate-400'
-                            }`}>
-                              {model.badge_label}
+                <>
+                  <div className="max-h-60 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                    {videoModels.map((model) => (
+                      <button
+                        key={model.id}
+                        onClick={() => selectVideoModel(model)}
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors ${
+                          preferences.video_model_id === model.id
+                            ? 'bg-cyan-500/10 border border-cyan-500/30'
+                            : 'bg-slate-900/50 border border-transparent hover:border-slate-600'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-xs font-medium ${preferences.video_model_id === model.id ? 'text-cyan-300' : 'text-slate-300'}`}>
+                              {model.display_name}
                             </span>
+                            {model.badge_label && (
+                              <span className={`px-1 py-px rounded text-[9px] font-semibold ${
+                                model.is_recommended
+                                  ? 'bg-amber-500/15 text-amber-400'
+                                  : 'bg-slate-700 text-slate-400'
+                              }`}>
+                                {model.badge_label}
+                              </span>
+                            )}
+                          </div>
+                          {model.short_description && (
+                            <p className="text-[10px] text-slate-500 mt-0.5 truncate">
+                              {model.short_description}
+                            </p>
                           )}
                         </div>
-                        {model.short_description && (
-                          <p className="text-[10px] text-slate-500 mt-0.5 truncate">
-                            {model.short_description}
-                          </p>
+                        {preferences.video_model_id === model.id && (
+                          <Sparkles className="w-3 h-3 text-cyan-400 flex-shrink-0" />
                         )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {isKling3 && (
+                    <div>
+                      <label className="text-[10px] text-slate-500 uppercase tracking-wider mb-1 block">
+                        Quality Mode
+                      </label>
+                      <div className="flex gap-1.5">
+                        {[
+                          { value: 'std', label: 'Standard', desc: 'Fast, everyday use' },
+                          { value: 'pro', label: 'Pro', desc: 'Higher quality' },
+                        ].map((m) => (
+                          <button
+                            key={m.value}
+                            onClick={() => onChange({ ...preferences, video_mode: m.value })}
+                            className={`flex-1 px-2 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
+                              (preferences.video_mode || 'std') === m.value
+                                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+                                : 'bg-slate-900 text-slate-500 border border-transparent hover:border-slate-600'
+                            }`}
+                          >
+                            <div>{m.label}</div>
+                            <div className="text-[9px] opacity-60">{m.desc}</div>
+                          </button>
+                        ))}
                       </div>
-                      {preferences.video_model_id === model.id && (
-                        <Sparkles className="w-3 h-3 text-cyan-400 flex-shrink-0" />
-                      )}
-                    </button>
-                  ))}
-                </div>
+                    </div>
+                  )}
+                </>
               )}
 
               <div>

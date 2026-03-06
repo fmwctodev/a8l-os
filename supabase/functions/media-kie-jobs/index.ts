@@ -331,6 +331,13 @@ Deno.serve(async (req: Request) => {
         isVeo ? (endpointOverride || undefined) : undefined
       );
     } else {
+      let veoModelParam: string | undefined;
+      if (isVeo) {
+        veoModelParam = modelKey === "google/veo-3.1" ? "veo3" : "veo3_fast";
+      }
+      const extraMode = (payload.extra_params?.mode as string) || (model.default_params?.mode as string) || undefined;
+      const extraSound = payload.extra_params?.sound as boolean | undefined;
+
       kieResult = await generateTextToVideo(
         kieApiKey,
         {
@@ -338,7 +345,9 @@ Deno.serve(async (req: Request) => {
           aspectRatio: effectiveAspect,
           duration: effectiveDuration || model.default_params?.duration as number || 8,
           callbackUrl: webhookUrl,
-          model: isVeo ? undefined : modelKey,
+          model: isVeo ? veoModelParam : modelKey,
+          mode: extraMode,
+          sound: extraSound,
         },
         isVeo ? (endpointOverride || undefined) : undefined
       );
