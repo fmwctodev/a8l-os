@@ -1,10 +1,16 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import type { UserWithDetails, PermissionKey, FeatureFlag } from '../types';
 import * as authService from '../services/auth';
 import { getFeatureFlags } from '../services/featureFlags';
 import { markSessionRestored, isSessionHealthy } from '../lib/edgeFunction';
+
+function hasOAuthHashTokens(): boolean {
+  const hash = window.location.hash;
+  return hash.includes('access_token=') || hash.includes('refresh_token=');
+}
+
 interface AuthContextValue {
   session: Session | null;
   user: UserWithDetails | null;
@@ -26,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserWithDetails | null>(null);
   const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const awaitingOAuth = useRef(hasOAuthHashTokens());
 
   const loadUser = useCallback(async () => {
     try {
@@ -57,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setFeatureFlags([]);
         setIsLoading(false);
+        awaitingOAuth.current = false;
         return;
       }
 
@@ -71,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession);
 
       if (newSession) {
+        awaitingOAuth.current = false;
         if (!isSessionHealthy() && event === 'SIGNED_IN') {
           markSessionRestored();
         }
@@ -81,7 +90,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
         }, 0);
       } else if (event === 'INITIAL_SESSION') {
-        setIsLoading(false);
+        if (!awaitingOAuth.current) {
+          setIsLoading(false);
+        }
       }
     });
 

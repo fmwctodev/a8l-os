@@ -13,7 +13,10 @@ export function ProtectedRoute({ children, permission, featureFlag }: ProtectedR
   const { user, session, isLoading, hasPermission, isFeatureEnabled } = useAuth();
   const location = useLocation();
 
-  if (isLoading || (session && !user)) {
+  const hashHasTokens = typeof window !== 'undefined' &&
+    (window.location.hash.includes('access_token=') || window.location.hash.includes('refresh_token='));
+
+  if (isLoading || (session && !user) || hashHasTokens) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900">
         <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
