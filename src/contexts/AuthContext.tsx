@@ -55,6 +55,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let isMounted = true;
+    let oauthTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    if (awaitingOAuth.current) {
+      oauthTimeout = setTimeout(() => {
+        if (isMounted && awaitingOAuth.current) {
+          awaitingOAuth.current = false;
+          setIsLoading(false);
+        }
+      }, 8000);
+    }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
       if (!isMounted) return;
@@ -80,6 +90,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (newSession) {
         awaitingOAuth.current = false;
+        if (oauthTimeout) {
+          clearTimeout(oauthTimeout);
+          oauthTimeout = null;
+        }
         if (!isSessionHealthy() && event === 'SIGNED_IN') {
           markSessionRestored();
         }
@@ -98,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isMounted = false;
+      if (oauthTimeout) clearTimeout(oauthTimeout);
       subscription.unsubscribe();
     };
   }, [loadUser]);

@@ -24,6 +24,7 @@ if (isOAuthCallback()) {
   const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
     if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
       markSessionRestored();
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
       if (sessionReadyResolve) {
         sessionReadyResolve();
         sessionReadyResolve = null;
@@ -77,6 +78,9 @@ export async function getFreshSession() {
   if (!session) {
     const refreshed = await dedupedRefresh().catch(() => null);
     if (refreshed) return refreshed;
+    await new Promise(r => setTimeout(r, 500));
+    const { data: { session: retrySession } } = await supabase.auth.getSession();
+    if (retrySession) return retrySession;
     emitExpired();
     throw new Error('No active session. Please log in.');
   }
@@ -87,6 +91,9 @@ export async function getFreshSession() {
 
   const refreshed = await forceRefresh();
   if (!refreshed) {
+    await new Promise(r => setTimeout(r, 500));
+    const { data: { session: retrySession } } = await supabase.auth.getSession();
+    if (retrySession) return retrySession;
     emitExpired();
     throw new Error('Session expired. Please log out and log back in.');
   }

@@ -17,13 +17,18 @@ export function ReAuthModal() {
     const unsubscribe = onSessionEvent((event) => {
       if (event === 'expired') {
         (async () => {
-          const { data: { session } } = await supabase.auth.getSession();
-          setEmail(session?.user?.email || '');
-          setProvider((session?.user?.app_metadata?.provider as string) || 'email');
+          const { data: { session: refreshed }, error } = await supabase.auth.refreshSession();
+          if (!error && refreshed) {
+            markSessionRestored();
+            return;
+          }
+          const { data: { session: current } } = await supabase.auth.getSession();
+          setEmail(current?.user?.email || '');
+          setProvider((current?.user?.app_metadata?.provider as string) || 'email');
+          setVisible(true);
+          setPassword('');
+          setError('');
         })();
-        setVisible(true);
-        setPassword('');
-        setError('');
       } else if (event === 'restored') {
         setVisible(false);
       }
@@ -68,7 +73,7 @@ export function ReAuthModal() {
     setLoading(true);
     setError('');
     try {
-      await authService.signInWithGoogle(window.location.href);
+      await authService.signInWithGoogle(window.location.origin + window.location.pathname);
     } catch {
       setError('Google sign-in failed. Please try again.');
       setLoading(false);
