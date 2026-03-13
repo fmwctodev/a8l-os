@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, AlertTriangle, Mail, Globe, AtSign, Send, ArrowRight } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, Mail, Globe, AtSign, Send, ArrowRight, ExternalLink } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getEmailSetupStatus, getTestEmailLogs } from '../../../services/emailSend';
-import { getProvider } from '../../../services/emailProviders';
+import { getProviderStatus } from '../../../services/emailProviders';
 import type { EmailSetupStatus, EmailTestLog } from '../../../types';
 
 interface OverviewTabProps {
-  onNavigate: (tab: 'providers' | 'domains' | 'from-addresses' | 'test') => void;
+  onNavigate: (tab: 'domains' | 'from-addresses' | 'test') => void;
 }
 
 export function OverviewTab({ onNavigate }: OverviewTabProps) {
@@ -15,6 +16,7 @@ export function OverviewTab({ onNavigate }: OverviewTabProps) {
   const [providerNickname, setProviderNickname] = useState<string | null>(null);
   const [lastTestLog, setLastTestLog] = useState<EmailTestLog | null>(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   const isAdmin = hasPermission('email.settings.manage');
   const canTest = hasPermission('email.send.test');
@@ -26,13 +28,13 @@ export function OverviewTab({ onNavigate }: OverviewTabProps) {
   const loadData = async () => {
     if (!user?.organization_id) return;
     try {
-      const [statusData, provider, testLogs] = await Promise.all([
+      const [statusData, providerStatus, testLogs] = await Promise.all([
         getEmailSetupStatus(),
-        getProvider(user.organization_id),
+        getProviderStatus(user.organization_id),
         getTestEmailLogs(user.organization_id, 1),
       ]);
       setStatus(statusData);
-      setProviderNickname(provider?.account_nickname || null);
+      setProviderNickname(providerStatus?.nickname || null);
       setLastTestLog(testLogs[0] || null);
     } catch (error) {
       console.error('Failed to load email status:', error);
@@ -107,10 +109,10 @@ export function OverviewTab({ onNavigate }: OverviewTabProps) {
           {isAdmin && !status.providerConnected && (
             <div className="bg-slate-700/50 px-5 py-3">
               <button
-                onClick={() => onNavigate('providers')}
+                onClick={() => navigate('/settings/integrations?tab=all&search=sendgrid')}
                 className="text-sm font-medium text-cyan-400 hover:text-cyan-300 flex items-center"
               >
-                Connect SendGrid <ArrowRight className="ml-1 h-4 w-4" />
+                Connect SendGrid <ExternalLink className="ml-1 h-4 w-4" />
               </button>
             </div>
           )}

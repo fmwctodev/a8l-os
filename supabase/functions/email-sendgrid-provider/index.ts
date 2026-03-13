@@ -21,7 +21,11 @@ interface DisconnectRequest {
   action: "disconnect";
 }
 
-type RequestPayload = ConnectRequest | TestRequest | DisconnectRequest;
+interface StatusRequest {
+  action: "status";
+}
+
+type RequestPayload = ConnectRequest | TestRequest | DisconnectRequest | StatusRequest;
 
 async function validateSendGridApiKey(apiKey: string): Promise<{ valid: boolean; error?: string }> {
   try {
@@ -42,7 +46,7 @@ async function validateSendGridApiKey(apiKey: string): Promise<{ valid: boolean;
     }
 
     return { valid: false, error: `SendGrid API error: ${response.status}` };
-  } catch (error) {
+  } catch {
     return { valid: false, error: "Failed to connect to SendGrid" };
   }
 }
@@ -154,17 +158,32 @@ Deno.serve(async (req: Request) => {
 
       const { encrypted, iv } = await encryptApiKey(payload.apiKey, supabaseUrl, serviceRoleKey);
 
+      const { data: integration } = await supabase
+        .from("integrations")
+        .select("id")
+        .eq("key", "sendgrid")
+        .maybeSingle();
+
+      if (!integration) {
+        return new Response(
+          JSON.stringify({ error: "SendGrid integration not found in catalog" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const { error: upsertError } = await supabase
-        .from("email_providers")
+        .from("integration_connections")
         .upsert({
           org_id: orgId,
-          provider: "sendgrid",
-          api_key_encrypted: encrypted,
-          api_key_iv: iv,
-          account_nickname: payload.nickname || null,
+          integration_id: integration.id,
           status: "connected",
+          credentials_encrypted: encrypted,
+          credentials_iv: iv,
+          account_info: { nickname: payload.nickname || null },
+          connected_at: new Date().toISOString(),
+          connected_by: user.id,
           updated_at: new Date().toISOString(),
-        }, { onConflict: "org_id" });
+        }, { onConflict: "org_id,integration_id" });
 
       if (upsertError) {
         return new Response(
@@ -177,7 +196,7 @@ Deno.serve(async (req: Request) => {
         org_id: orgId,
         user_id: user.id,
         action: "email.provider.connected",
-        entity_type: "email_provider",
+        entity_type: "integration_connection",
         details: { provider: "sendgrid", nickname: payload.nickname },
       });
 
@@ -187,14 +206,34 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (payload.action === "test") {
-      const { data: provider, error: providerError } = await supabase
-        .from("email_providers")
-        .select("api_key_encrypted, api_key_iv, status")
+    if (payload.action === "status") {
+      const { data: conn } = await supabase
+        .from("integration_connections")
+        .select("status, account_info, connected_at, integrations!inner(key)")
         .eq("org_id", orgId)
-        .single();
+        .eq("integrations.key", "sendgrid")
+        .maybeSingle();
 
-      if (providerError || !provider || provider.status !== "connected") {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          connected: conn?.status === "connected",
+          nickname: conn?.account_info?.nickname || null,
+          connectedAt: conn?.connected_at || null,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (payload.action === "test") {
+      const { data: conn } = await supabase
+        .from("integration_connections")
+        .select("credentials_encrypted, credentials_iv, status, integrations!inner(key)")
+        .eq("org_id", orgId)
+        .eq("integrations.key", "sendgrid")
+        .maybeSingle();
+
+      if (!conn || conn.status !== "connected" || !conn.credentials_encrypted || !conn.credentials_iv) {
         return new Response(
           JSON.stringify({ error: "No connected email provider found" }),
           { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -202,8 +241,8 @@ Deno.serve(async (req: Request) => {
       }
 
       const apiKey = await decryptApiKey(
-        provider.api_key_encrypted,
-        provider.api_key_iv,
+        conn.credentials_encrypted,
+        conn.credentials_iv,
         supabaseUrl,
         serviceRoleKey
       );
@@ -211,9 +250,10 @@ Deno.serve(async (req: Request) => {
       const validation = await validateSendGridApiKey(apiKey);
       if (!validation.valid) {
         await supabase
-          .from("email_providers")
-          .update({ status: "disconnected" })
-          .eq("org_id", orgId);
+          .from("integration_connections")
+          .update({ status: "error", updated_at: new Date().toISOString() })
+          .eq("org_id", orgId)
+          .eq("integration_id", (await supabase.from("integrations").select("id").eq("key", "sendgrid").single()).data!.id);
 
         return new Response(
           JSON.stringify({ success: false, error: validation.error }),
@@ -228,28 +268,30 @@ Deno.serve(async (req: Request) => {
     }
 
     if (payload.action === "disconnect") {
-      const { error: updateError } = await supabase
-        .from("email_providers")
-        .update({
-          status: "disconnected",
-          api_key_encrypted: null,
-          api_key_iv: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("org_id", orgId);
+      const { data: integration } = await supabase
+        .from("integrations")
+        .select("id")
+        .eq("key", "sendgrid")
+        .maybeSingle();
 
-      if (updateError) {
-        return new Response(
-          JSON.stringify({ error: "Failed to disconnect provider" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (integration) {
+        await supabase
+          .from("integration_connections")
+          .update({
+            status: "disconnected",
+            credentials_encrypted: null,
+            credentials_iv: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("org_id", orgId)
+          .eq("integration_id", integration.id);
       }
 
       await supabase.from("audit_logs").insert({
         org_id: orgId,
         user_id: user.id,
         action: "email.provider.disconnected",
-        entity_type: "email_provider",
+        entity_type: "integration_connection",
         details: { provider: "sendgrid" },
       });
 

@@ -212,7 +212,7 @@ export function SendForSignatureModal({ proposal, onClose, onSent }: SendForSign
                   ))}
                 </ul>
                 <p className="text-xs text-amber-200/60 mt-2">
-                  Configure SendGrid in Settings &gt; Email Services to send signature requests.
+                  Connect SendGrid in Settings &gt; Integrations to send signature requests.
                 </p>
               </div>
             </div>

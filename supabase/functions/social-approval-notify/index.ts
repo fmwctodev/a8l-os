@@ -33,13 +33,14 @@ async function getDecryptedApiKey(
   supabaseUrl: string,
   serviceRoleKey: string
 ): Promise<string | null> {
-  const { data: provider } = await supabase
-    .from("email_providers")
-    .select("api_key_encrypted, api_key_iv, status")
+  const { data: conn } = await supabase
+    .from("integration_connections")
+    .select("credentials_encrypted, credentials_iv, status, integrations!inner(key)")
     .eq("org_id", orgId)
+    .eq("integrations.key", "sendgrid")
     .maybeSingle();
 
-  if (!provider || provider.status !== "connected") {
+  if (!conn || conn.status !== "connected" || !conn.credentials_encrypted || !conn.credentials_iv) {
     return null;
   }
 
@@ -51,8 +52,8 @@ async function getDecryptedApiKey(
     },
     body: JSON.stringify({
       action: "decrypt",
-      encrypted: provider.api_key_encrypted,
-      iv: provider.api_key_iv,
+      encrypted: conn.credentials_encrypted,
+      iv: conn.credentials_iv,
     }),
   });
 

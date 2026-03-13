@@ -30,16 +30,41 @@ interface DecryptResponse {
 
 async function getEncryptionKey(): Promise<CryptoKey> {
   const keyHex = Deno.env.get("SENDGRID_ENCRYPTION_KEY");
-  if (!keyHex) {
-    throw new Error("SENDGRID_ENCRYPTION_KEY not configured");
+
+  if (keyHex) {
+    const keyBytes = new Uint8Array(keyHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    return await crypto.subtle.importKey(
+      "raw",
+      keyBytes,
+      { name: "AES-GCM" },
+      false,
+      ["encrypt", "decrypt"]
+    );
   }
 
-  const keyBytes = new Uint8Array(keyHex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceRoleKey) {
+    throw new Error("No encryption key available");
+  }
 
-  return await crypto.subtle.importKey(
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
     "raw",
-    keyBytes,
-    { name: "AES-GCM" },
+    encoder.encode(serviceRoleKey),
+    { name: "HKDF" },
+    false,
+    ["deriveKey"]
+  );
+
+  return await crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      salt: encoder.encode("sendgrid-email-crypto"),
+      info: encoder.encode("aes-gcm-key"),
+      hash: "SHA-256",
+    },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
     false,
     ["encrypt", "decrypt"]
   );

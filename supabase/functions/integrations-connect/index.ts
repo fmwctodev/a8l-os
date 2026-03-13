@@ -42,6 +42,40 @@ interface RequestPayload {
   app_url?: string;
 }
 
+async function validateSendGridApiKey(apiKey: string): Promise<{ valid: boolean; error?: string }> {
+  try {
+    const response = await fetch("https://api.sendgrid.com/v3/user/profile", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+    if (response.ok) return { valid: true };
+    if (response.status === 401) return { valid: false, error: "Invalid API key" };
+    return { valid: false, error: `SendGrid API error: ${response.status}` };
+  } catch {
+    return { valid: false, error: "Failed to connect to SendGrid" };
+  }
+}
+
+async function encryptWithCrypto(
+  plaintext: string,
+  supabaseUrl: string,
+  serviceRoleKey: string
+): Promise<{ encrypted: string; iv: string }> {
+  const response = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action: "encrypt", plaintext }),
+  });
+  if (!response.ok) throw new Error("Failed to encrypt credentials");
+  return await response.json();
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -169,8 +203,43 @@ Deno.serve(async (req: Request) => {
           );
         }
 
-        const iv = crypto.randomUUID().replace(/-/g, "").slice(0, 32);
-        const credentialsJson = JSON.stringify(credentials);
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        let credentialsEncrypted: string;
+        let credentialsIv: string;
+        let accountInfo: Record<string, unknown> = {};
+
+        if (integration_key === "sendgrid") {
+          const apiKey = credentials.api_key;
+          if (!apiKey) {
+            return new Response(
+              JSON.stringify({ error: "API key is required" }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          const validation = await validateSendGridApiKey(apiKey);
+          if (!validation.valid) {
+            return new Response(
+              JSON.stringify({ error: validation.error }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          const encrypted = await encryptWithCrypto(apiKey, supabaseUrl, serviceRoleKey);
+          credentialsEncrypted = encrypted.encrypted;
+          credentialsIv = encrypted.iv;
+          accountInfo = {
+            provider: "sendgrid",
+            configured: true,
+            api_key_set: true,
+            nickname: credentials.nickname || null,
+          };
+        } else {
+          credentialsIv = crypto.randomUUID().replace(/-/g, "").slice(0, 32);
+          credentialsEncrypted = JSON.stringify(credentials);
+          accountInfo = {};
+        }
 
         const { data: existingConnection } = await serviceClient
           .from("integration_connections")
@@ -185,8 +254,9 @@ Deno.serve(async (req: Request) => {
           org_id: userData.organization_id,
           user_id: integration.scope === "global" ? null : user.id,
           status: "connected",
-          credentials_encrypted: credentialsJson,
-          credentials_iv: iv,
+          credentials_encrypted: credentialsEncrypted,
+          credentials_iv: credentialsIv,
+          account_info: accountInfo,
           connected_at: new Date().toISOString(),
           connected_by: user.id,
         };
@@ -217,7 +287,7 @@ Deno.serve(async (req: Request) => {
           user_id: user.id,
           action: "connect",
           status: "success",
-          request_meta: { type: "api_key" },
+          request_meta: { type: "api_key", integration_key },
         });
 
         return new Response(
@@ -272,6 +342,71 @@ Deno.serve(async (req: Request) => {
       }
 
       case "test": {
+        if (integration_key === "sendgrid") {
+          const sgUrl = Deno.env.get("SUPABASE_URL")!;
+          const sgSrk = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+          const { data: conn } = await serviceClient
+            .from("integration_connections")
+            .select("credentials_encrypted, credentials_iv, status")
+            .eq("integration_id", integration.id)
+            .eq("org_id", userData.organization_id)
+            .maybeSingle();
+
+          if (!conn || conn.status !== "connected" || !conn.credentials_encrypted || !conn.credentials_iv) {
+            return new Response(
+              JSON.stringify({ success: false, message: "SendGrid is not connected" }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          const decryptRes = await fetch(`${sgUrl}/functions/v1/email-crypto`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${sgSrk}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ action: "decrypt", encrypted: conn.credentials_encrypted, iv: conn.credentials_iv }),
+          });
+
+          if (!decryptRes.ok) {
+            return new Response(
+              JSON.stringify({ success: false, message: "Failed to decrypt credentials" }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          const { plaintext: apiKey } = await decryptRes.json();
+          const validation = await validateSendGridApiKey(apiKey);
+
+          await serviceClient.from("integration_logs").insert({
+            integration_id: integration.id,
+            org_id: userData.organization_id,
+            user_id: user.id,
+            action: "test",
+            status: validation.valid ? "success" : "failure",
+            request_meta: { message: validation.valid ? "SendGrid API key is valid" : validation.error },
+          });
+
+          if (!validation.valid) {
+            await serviceClient
+              .from("integration_connections")
+              .update({ status: "error", error_message: validation.error })
+              .eq("integration_id", integration.id)
+              .eq("org_id", userData.organization_id);
+
+            return new Response(
+              JSON.stringify({ success: false, message: validation.error }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          return new Response(
+            JSON.stringify({ success: true, message: "SendGrid connection is healthy" }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
         await serviceClient.from("integration_logs").insert({
           integration_id: integration.id,
           org_id: userData.organization_id,
