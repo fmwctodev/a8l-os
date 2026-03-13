@@ -30,10 +30,8 @@ const categoryOptions: { value: IntegrationCategory | ''; label: string }[] = [
 function getIntegrationIcon(key: string): string {
   const icons: Record<string, string> = {
     gmail: 'https://www.gstatic.com/images/branding/product/2x/gmail_2020q4_48dp.png',
-    webchat: 'https://www.gstatic.com/images/branding/product/2x/chat_2020q4_48dp.png',
     google_workspace: 'https://www.gstatic.com/images/branding/product/2x/drive_2020q4_48dp.png',
     google_calendar: 'https://www.gstatic.com/images/branding/product/2x/calendar_2020q4_48dp.png',
-    twilio: 'https://www.twilio.com/assets/icons/twilio-icon-512.png',
     sendgrid: 'https://sendgrid.com/content/dam/sendgrid/legacy/themes/flavor/1.0.0-flavor.0/images/SG_Twilio_Lockup_RGB-small.png',
     quickbooks_online: 'https://quickbooks.intuit.com/oidam/intuit/ic/en_us/images/qb-logo-63x63.png',
     openai: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/OpenAI_Logo.svg/512px-OpenAI_Logo.svg.png',
@@ -41,8 +39,6 @@ function getIntegrationIcon(key: string): string {
     elevenlabs: 'https://elevenlabs.io/favicon.ico',
     meta_ads: 'https://www.facebook.com/images/fb_icon_325x325.png',
     google_ads: 'https://www.gstatic.com/adsense/publishers/ui/images/apub/ae/ae-home-advert-icon-x2.png',
-    zapier: 'https://cdn.zapier.com/zapier/images/logos/zapier-logo.png',
-    slack: 'https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png',
     vapi: 'https://assets-global.website-files.com/651727b9c12e1e44865bff7a/6519b28e79a38ee5ed81e0d5_Logo%20Icon.svg',
   };
   return icons[key] || '';
