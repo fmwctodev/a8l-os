@@ -20,6 +20,8 @@ export async function saveConnection(
 ): Promise<ElevenLabsConnection> {
   const existing = await getConnection(orgId);
 
+  let result: ElevenLabsConnection;
+
   if (existing) {
     const { data, error } = await supabase
       .from('elevenlabs_connection')
@@ -32,21 +34,44 @@ export async function saveConnection(
       .single();
 
     if (error) throw error;
-    return data;
+    result = data;
+  } else {
+    const { data, error } = await supabase
+      .from('elevenlabs_connection')
+      .insert({
+        org_id: orgId,
+        api_key_encrypted: apiKey,
+        enabled,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    result = data;
   }
 
-  const { data, error } = await supabase
-    .from('elevenlabs_connection')
-    .insert({
-      org_id: orgId,
-      api_key_encrypted: apiKey,
-      enabled,
-    })
-    .select()
-    .single();
+  await syncIntegrationConnectionStatus(orgId, 'connected');
+  return result;
+}
 
-  if (error) throw error;
-  return data;
+async function syncIntegrationConnectionStatus(orgId: string, status: 'connected' | 'disconnected') {
+  const { data: integration } = await supabase
+    .from('integrations')
+    .select('id')
+    .eq('key', 'elevenlabs')
+    .maybeSingle();
+
+  if (!integration) return;
+
+  await supabase
+    .from('integration_connections')
+    .upsert({
+      org_id: orgId,
+      integration_id: integration.id,
+      status,
+      connected_at: status === 'connected' ? new Date().toISOString() : undefined,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'org_id,integration_id' });
 }
 
 export async function updateConnectionEnabled(
@@ -76,6 +101,8 @@ export async function deleteConnection(orgId: string): Promise<void> {
     .from('elevenlabs_voices')
     .delete()
     .eq('org_id', orgId);
+
+  await syncIntegrationConnectionStatus(orgId, 'disconnected');
 }
 
 export async function testConnection(
