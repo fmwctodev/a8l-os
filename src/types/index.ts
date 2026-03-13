@@ -162,7 +162,10 @@ export type PermissionKey =
   | 'projects.view' | 'projects.create' | 'projects.edit' | 'projects.move_stage'
   | 'projects.close' | 'projects.delete' | 'projects.tasks.manage'
   | 'projects.view_financials'
-  | 'project_pipelines.manage';
+  | 'project_pipelines.manage'
+  | 'ai_agents.voice.view' | 'ai_agents.voice.create' | 'ai_agents.voice.edit'
+  | 'ai_agents.voice.delete' | 'ai_agents.voice.publish' | 'ai_agents.voice.call'
+  | 'ai_agents.voice.tools' | 'ai_agents.voice.settings';
 
 export interface InviteStaffInput {
   first_name: string;

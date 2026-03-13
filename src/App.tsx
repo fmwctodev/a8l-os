@@ -37,7 +37,16 @@ import { AIAgents } from './pages/modules/AIAgents';
 import { AIAgentDetail } from './pages/modules/AIAgentDetail';
 import { AIAgentsLayout } from './layouts/AIAgentsLayout';
 import { AIAgentsGettingStarted } from './pages/modules/AIAgentsGettingStarted';
-import { AIAgentsVoice } from './pages/modules/AIAgentsVoice';
+import { VoiceAIPage } from './pages/modules/voice-ai/VoiceAIPage';
+import { VapiAssistantsListPage } from './pages/modules/voice-ai/VapiAssistantsListPage';
+import { VapiAssistantDetailPage } from './pages/modules/voice-ai/VapiAssistantDetailPage';
+import { VapiNumbersPage } from './pages/modules/voice-ai/VapiNumbersPage';
+import { VapiWidgetsPage } from './pages/modules/voice-ai/VapiWidgetsPage';
+import { VapiToolsPage } from './pages/modules/voice-ai/VapiToolsPage';
+import { VapiCallsPage } from './pages/modules/voice-ai/VapiCallsPage';
+import { VapiSessionsPage } from './pages/modules/voice-ai/VapiSessionsPage';
+import { VapiAnalyticsPage } from './pages/modules/voice-ai/VapiAnalyticsPage';
+import { VapiSettingsPage } from './pages/modules/voice-ai/VapiSettingsPage';
 import { AIAgentsConversation } from './pages/modules/AIAgentsConversation';
 import { AIAgentsKnowledge } from './pages/modules/AIAgentsKnowledge';
 import { AIAgentsTemplates } from './pages/modules/AIAgentsTemplates';
@@ -272,7 +281,18 @@ function App() {
               >
                 <Route index element={<AIAgentsGettingStarted />} />
                 <Route path="getting-started" element={<AIAgentsGettingStarted />} />
-                <Route path="voice" element={<AIAgentsVoice />} />
+                <Route path="voice" element={<VoiceAIPage />}>
+                  <Route index element={<VapiAssistantsListPage />} />
+                  <Route path="assistants" element={<VapiAssistantsListPage />} />
+                  <Route path="assistants/:id" element={<VapiAssistantDetailPage />} />
+                  <Route path="numbers" element={<VapiNumbersPage />} />
+                  <Route path="widgets" element={<VapiWidgetsPage />} />
+                  <Route path="tools" element={<VapiToolsPage />} />
+                  <Route path="calls" element={<VapiCallsPage />} />
+                  <Route path="sessions" element={<VapiSessionsPage />} />
+                  <Route path="analytics" element={<VapiAnalyticsPage />} />
+                  <Route path="settings" element={<VapiSettingsPage />} />
+                </Route>
                 <Route path="conversation" element={<AIAgentsConversation />} />
                 <Route path="knowledge" element={<AIAgentsKnowledge />} />
                 <Route path="templates" element={<AIAgentsTemplates />} />
