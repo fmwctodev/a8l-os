@@ -77,6 +77,16 @@ export type WorkflowActionType =
   | 'notify_user'
   | 'log_custom_event'
   | 'webhook'
+  // Proposal Actions
+  | 'create_proposal'
+  | 'send_proposal'
+  // Project Actions
+  | 'create_project'
+  | 'update_project_stage'
+  // Booking Actions
+  | 'send_booking_link'
+  // Goal Actions
+  | 'goal_check'
   // Meeting Actions
   | 'generate_meeting_follow_up';
 
@@ -88,6 +98,8 @@ export type ActionCategory =
   | 'appointments'
   | 'payments'
   | 'marketing'
+  | 'proposals'
+  | 'projects'
   | 'flow_control'
   | 'ai'
   | 'system';
@@ -774,6 +786,20 @@ export const WORKFLOW_ACTION_DEFINITIONS: WorkflowActionDefinition[] = [
   { type: 'hide_review', label: 'Hide Review', description: 'Hide a review from public view', category: 'marketing', icon: 'EyeOff' },
   { type: 'create_review_followup_task', label: 'Create Review Follow-up Task', description: 'Create a task to follow up on a review', category: 'marketing', icon: 'ListTodo' },
 
+  // Proposal Actions
+  { type: 'create_proposal', label: 'Create Proposal', description: 'Create a new proposal for the contact', category: 'proposals', icon: 'FileText' },
+  { type: 'send_proposal', label: 'Send Proposal', description: 'Send a proposal to the contact', category: 'proposals', icon: 'Send' },
+
+  // Project Actions
+  { type: 'create_project', label: 'Create Project', description: 'Create a new project from the contact', category: 'projects', icon: 'FolderKanban' },
+  { type: 'update_project_stage', label: 'Move Project Stage', description: 'Move a project to a different stage', category: 'projects', icon: 'ArrowRightCircle' },
+
+  // Booking Actions
+  { type: 'send_booking_link', label: 'Send Booking Link', description: 'Send a calendar booking link to the contact', category: 'appointments', icon: 'Link' },
+
+  // Goal Check
+  { type: 'goal_check', label: 'Goal Check', description: 'Check if a goal condition is met and branch accordingly', category: 'flow_control', icon: 'Target' },
+
   // Flow Control Actions
   { type: 'delay', label: 'Delay', description: 'Wait for a specified time', category: 'flow_control', icon: 'Clock' },
   { type: 'wait_for_condition', label: 'Wait for Condition', description: 'Wait until a condition is met', category: 'flow_control', icon: 'Timer' },
@@ -805,6 +831,8 @@ export const ACTION_CATEGORY_LABELS: Record<ActionCategory, string> = {
   opportunities: 'Opportunities',
   appointments: 'Appointments',
   payments: 'Payments',
+  proposals: 'Proposals',
+  projects: 'Projects',
   marketing: 'Marketing & Reputation',
   flow_control: 'Flow Control',
   ai: 'AI Actions',
@@ -818,6 +846,8 @@ export const ACTION_CATEGORY_ICONS: Record<ActionCategory, string> = {
   opportunities: 'CircleDollarSign',
   appointments: 'Calendar',
   payments: 'CreditCard',
+  proposals: 'FileText',
+  projects: 'FolderKanban',
   marketing: 'Megaphone',
   flow_control: 'GitBranch',
   ai: 'Sparkles',

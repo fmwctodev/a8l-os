@@ -8,8 +8,10 @@ import {
   duplicateWorkflow,
 } from '../../services/workflows';
 import { TRIGGER_TYPE_LABELS } from '../../services/workflowEngine';
+import { getAutomationOverview } from '../../services/workflowRuntimeStats';
 import type { Workflow, WorkflowStatus, WorkflowFilters } from '../../types';
-import { Search, Plus, Filter, Loader2, AlertCircle, Workflow as WorkflowIcon, MoreVertical, Play, Copy, Archive, Users, Zap, Clock, ChevronDown, LayoutGrid as Layout } from 'lucide-react';
+import type { AutomationOverviewStats } from '../../services/workflowRuntimeStats';
+import { Search, Plus, Filter, Loader2, AlertCircle, Workflow as WorkflowIcon, MoreVertical, Play, Copy, Archive, Users, Zap, Clock, ChevronDown, LayoutGrid as Layout, CheckSquare, AlertTriangle, Activity } from 'lucide-react';
 import { CreateWorkflowModal } from '../../components/automation/CreateWorkflowModal';
 
 const STATUS_STYLES: Record<WorkflowStatus, { bg: string; text: string; label: string }> = {
@@ -23,6 +25,7 @@ export function Automation() {
   const navigate = useNavigate();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [stats, setStats] = useState({ total: 0, published: 0, draft: 0, activeEnrollments: 0 });
+  const [runtimeStats, setRuntimeStats] = useState<AutomationOverviewStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,13 +50,15 @@ export function Automation() {
         status: statusFilter !== 'all' ? [statusFilter] : undefined,
       };
 
-      const [workflowsData, statsData] = await Promise.all([
+      const [workflowsData, statsData, runtimeData] = await Promise.all([
         getWorkflows(currentUser.organization_id, filters),
         getWorkflowStats(currentUser.organization_id),
+        getAutomationOverview(currentUser.organization_id).catch(() => null),
       ]);
 
       setWorkflows(workflowsData);
       setStats(statsData);
+      setRuntimeStats(runtimeData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load workflows');
     } finally {
@@ -125,6 +130,18 @@ export function Automation() {
         </div>
         <div className="flex items-center gap-3">
           <button
+            onClick={() => navigate('/automation/approvals')}
+            className="relative inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
+          >
+            <CheckSquare className="w-4 h-4" />
+            Approvals
+            {runtimeStats && runtimeStats.pendingApprovals > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-amber-500 text-white text-xs font-bold flex items-center justify-center">
+                {runtimeStats.pendingApprovals}
+              </span>
+            )}
+          </button>
+          <button
             onClick={() => navigate('/automation/templates')}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
           >
@@ -189,6 +206,46 @@ export function Automation() {
           </div>
         </div>
       </div>
+
+      {runtimeStats && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="bg-slate-900 rounded-lg border border-slate-800 px-3 py-2.5 flex items-center gap-2.5">
+            <Activity className="w-4 h-4 text-cyan-400 shrink-0" />
+            <div>
+              <p className="text-lg font-semibold text-white leading-tight">{runtimeStats.eventsProcessedToday}</p>
+              <p className="text-xs text-slate-400">Events Today</p>
+            </div>
+          </div>
+          <div className="bg-slate-900 rounded-lg border border-slate-800 px-3 py-2.5 flex items-center gap-2.5">
+            <Users className="w-4 h-4 text-blue-400 shrink-0" />
+            <div>
+              <p className="text-lg font-semibold text-white leading-tight">{runtimeStats.totalEnrollmentsToday}</p>
+              <p className="text-xs text-slate-400">Enrolled Today</p>
+            </div>
+          </div>
+          <div className="bg-slate-900 rounded-lg border border-slate-800 px-3 py-2.5 flex items-center gap-2.5">
+            <Play className="w-4 h-4 text-emerald-400 shrink-0" />
+            <div>
+              <p className="text-lg font-semibold text-white leading-tight">{runtimeStats.totalCompletedToday}</p>
+              <p className="text-xs text-slate-400">Completed Today</p>
+            </div>
+          </div>
+          <div className="bg-slate-900 rounded-lg border border-slate-800 px-3 py-2.5 flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+            <div>
+              <p className="text-lg font-semibold text-white leading-tight">{runtimeStats.totalErroredToday}</p>
+              <p className="text-xs text-slate-400">Errored Today</p>
+            </div>
+          </div>
+          <div className="bg-slate-900 rounded-lg border border-slate-800 px-3 py-2.5 flex items-center gap-2.5">
+            <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+            <div>
+              <p className="text-lg font-semibold text-white leading-tight">{runtimeStats.pendingDelayedJobs}</p>
+              <p className="text-xs text-slate-400">Delayed Jobs</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-slate-900 rounded-xl border border-slate-800">
         <div className="p-4 border-b border-slate-800">

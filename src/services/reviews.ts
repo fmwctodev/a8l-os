@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { callEdgeFunction } from '../lib/edgeFunction';
 import type { Review, ReviewFilters, CreateManualReviewInput, ReviewAIAnalysis } from '../types';
+import { emitEvent } from './eventDispatcher';
 
 export async function getReviews(
   orgId: string,
@@ -218,6 +219,18 @@ export async function respondToReview(
     .single();
 
   if (error) throw error;
+
+  emitEvent('review.replied', {
+    entityType: 'review',
+    entityId: reviewId,
+    orgId: data.organization_id,
+    data: {
+      contact_id: data.contact_id,
+      rating: data.rating,
+      response_source: source,
+    },
+  }, { userId }).catch(() => {});
+
   return data as Review;
 }
 

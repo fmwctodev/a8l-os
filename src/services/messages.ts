@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { Message, MessageChannel, MessageDirection, MessageStatus, MessageMetadata } from '../types';
 import { logAuditWithContext, createUserContext } from './audit';
+import { emitEvent } from './eventDispatcher';
 
 export async function getMessages(
   conversationId: string,
@@ -133,6 +134,20 @@ export async function createMessage(
       preview: body.substring(0, 100)
     }
   });
+
+  const eventKey = direction === 'inbound' ? 'message.received' : 'message.sent';
+  emitEvent(eventKey, {
+    entityType: 'message',
+    entityId: data.id,
+    orgId: orgId,
+    data: {
+      contact_id: contactId,
+      conversation_id: conversationId,
+      channel,
+      direction,
+      preview: body.substring(0, 200),
+    },
+  }).catch(() => {});
 
   return data as Message;
 }

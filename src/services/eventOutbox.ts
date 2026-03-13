@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { EventOutbox, WorkflowTriggerType } from '../types';
 
-type EntityType = 'contact' | 'conversation' | 'appointment' | 'message' | 'invoice' | 'recurring_profile';
+type EntityType = 'contact' | 'conversation' | 'appointment' | 'message' | 'invoice' | 'recurring_profile' | 'opportunity' | 'proposal' | 'project' | 'review' | 'form_submission' | 'survey_response' | 'social_post';
 
 export async function publishEvent(
   orgId: string,

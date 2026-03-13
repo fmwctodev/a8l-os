@@ -10,6 +10,7 @@ import type {
 } from '../types';
 import { createTimelineEvent } from './opportunityTimeline';
 import { logAuditWithContext, createUserContext } from './audit';
+import { emitEvent } from './eventDispatcher';
 
 function normalizeOpportunityTags(opportunity: Opportunity): Opportunity {
   if (opportunity.contact && (opportunity.contact as any).tags) {
@@ -295,6 +296,18 @@ export async function createOpportunity(
     console.error('Failed to create timeline event:', timelineError);
   }
 
+  emitEvent('opportunity.created', {
+    entityType: 'opportunity',
+    entityId: data.id,
+    orgId: opportunity.org_id,
+    data: {
+      contact_id: opportunity.contact_id,
+      pipeline_id: opportunity.pipeline_id,
+      stage_id: opportunity.stage_id,
+      value_amount: opportunity.value_amount ?? 0,
+    },
+  }, { userId: opportunity.created_by }).catch(() => {});
+
   return normalizeOpportunityTags(data);
 }
 
@@ -376,6 +389,17 @@ export async function updateOpportunity(
         beforeState: { stage_id: existing.stage_id, stage_name: existing.stage?.name },
         afterState: { stage_id: updates.stage_id, stage_name: data.stage?.name },
       });
+
+      emitEvent('opportunity.stage_changed', {
+        entityType: 'opportunity',
+        entityId: id,
+        orgId: existing.org_id,
+        data: {
+          contact_id: existing.contact_id,
+          from_stage_id: existing.stage_id,
+          to_stage_id: updates.stage_id,
+        },
+      }, { userId: actorUserId }).catch(() => {});
     }
 
     if (updates.assigned_user_id !== undefined && updates.assigned_user_id !== existing.assigned_user_id) {
@@ -479,6 +503,18 @@ export async function closeOpportunity(
     },
     actor_user_id: actorUserId
   });
+
+  const eventKey = status === 'won' ? 'opportunity.won' : 'opportunity.lost';
+  emitEvent(eventKey, {
+    entityType: 'opportunity',
+    entityId: id,
+    orgId: existing.org_id,
+    data: {
+      contact_id: existing.contact_id,
+      value_amount: existing.value_amount,
+      lost_reason: lostReasonText,
+    },
+  }, { userId: actorUserId }).catch(() => {});
 
   return normalizeOpportunityTags(data);
 }

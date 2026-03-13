@@ -71,7 +71,7 @@ Deno.serve(async (req: Request) => {
           .from("workflow_triggers")
           .select(`
             *,
-            workflow:workflows(id, org_id, status, published_definition)
+            workflow:workflows(id, org_id, status, published_definition, enrollment_rules)
           `)
           .eq("trigger_type", event.event_type)
           .eq("is_active", true)
@@ -89,15 +89,73 @@ Deno.serve(async (req: Request) => {
           const contactId = event.contact_id;
           if (!contactId) continue;
 
-          const { data: existingEnrollment } = await supabase
+          const enrollmentRules = (trigger.workflow as Record<string, unknown>).enrollment_rules as {
+            allow_re_enrollment?: string;
+            max_concurrent_enrollments?: number;
+            stop_existing_on_re_entry?: boolean;
+          } | null;
+          const rules = enrollmentRules || {
+            allow_re_enrollment: "after_completion",
+            max_concurrent_enrollments: 1,
+            stop_existing_on_re_entry: false,
+          };
+
+          const { data: activeEnrollments } = await supabase
             .from("workflow_enrollments")
-            .select("id")
+            .select("id, status")
             .eq("workflow_id", trigger.workflow_id)
             .eq("contact_id", contactId)
-            .eq("status", "active")
-            .maybeSingle();
+            .in("status", ["active", "waiting"]);
 
-          if (existingEnrollment) continue;
+          const activeCount = (activeEnrollments || []).length;
+          let enrollmentAllowed = true;
+          let blockReason = "";
+
+          if (rules.allow_re_enrollment === "never") {
+            const { count } = await supabase
+              .from("workflow_enrollments")
+              .select("id", { count: "exact", head: true })
+              .eq("workflow_id", trigger.workflow_id)
+              .eq("contact_id", contactId);
+            if ((count || 0) > 0) {
+              enrollmentAllowed = false;
+              blockReason = "re_enrollment_disabled";
+            }
+          } else if (rules.allow_re_enrollment === "after_completion") {
+            if (activeCount > 0) {
+              enrollmentAllowed = false;
+              blockReason = "active_enrollment_exists";
+            }
+          } else if (rules.allow_re_enrollment === "always") {
+            if (activeCount >= (rules.max_concurrent_enrollments || 1)) {
+              enrollmentAllowed = false;
+              blockReason = "max_concurrent_reached";
+            }
+          }
+
+          if (rules.stop_existing_on_re_entry && enrollmentAllowed && activeCount > 0) {
+            for (const existing of activeEnrollments || []) {
+              await supabase
+                .from("workflow_enrollments")
+                .update({
+                  status: "stopped",
+                  stopped_reason: "Stopped by re-entry rule",
+                  completed_at: new Date().toISOString(),
+                })
+                .eq("id", existing.id);
+            }
+          }
+
+          await supabase.from("workflow_enrollment_attempts").insert({
+            org_id: event.org_id,
+            workflow_id: trigger.workflow_id,
+            contact_id: contactId,
+            event_type: event.event_type,
+            result: enrollmentAllowed ? "enrolled" : "blocked",
+            reason: enrollmentAllowed ? null : blockReason,
+          });
+
+          if (!enrollmentAllowed) continue;
 
           const { data: latestVersion } = await supabase
             .from("workflow_versions")
@@ -224,6 +282,15 @@ Deno.serve(async (req: Request) => {
           case "delay": {
             const runAt = calculateDelayRunAt(node.data);
             if (runAt > new Date()) {
+              await supabase.from("delayed_action_queue").insert({
+                org_id: job.org_id,
+                enrollment_id: enrollment.id,
+                node_id: node.id,
+                resume_at: runAt.toISOString(),
+                wait_type: (node.data.delayType as string) || "wait_duration",
+                status: "waiting",
+              });
+
               await supabase
                 .from("workflow_jobs")
                 .update({
@@ -256,14 +323,28 @@ Deno.serve(async (req: Request) => {
               }
 
               if (actionResult.status === "pending_approval") {
+                await supabase.from("workflow_approval_queue").insert({
+                  org_id: job.org_id,
+                  enrollment_id: enrollment.id,
+                  workflow_id: (enrollment as Record<string, unknown>).workflow_id,
+                  node_id: node.id,
+                  action_type: node.data.actionType,
+                  contact_id: (enrollment.contact as Record<string, unknown>)?.id,
+                  draft_content: actionResult.output_raw || actionResult.output_structured,
+                  ai_run_id: actionResult.draft_id || null,
+                  pending_next_node_id: nextNodeId,
+                  status: "pending",
+                });
+
                 await supabase
                   .from("workflow_jobs")
-                  .update({ status: "pending", last_error: "Waiting for AI draft approval" })
+                  .update({ status: "waiting_approval" })
                   .eq("id", job.id);
 
                 await supabase
                   .from("workflow_enrollments")
                   .update({
+                    status: "waiting",
                     context_data: {
                       ...(enrollment.context_data as Record<string, unknown>),
                       waiting_for_approval: true,
@@ -981,6 +1062,80 @@ async function executeAction(
       break;
     }
 
+    case "create_proposal": {
+      const result = await executeProposalAction(supabase, "create", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "send_proposal": {
+      const result = await executeProposalAction(supabase, "send", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "create_project": {
+      const result = await executeProjectAction(supabase, "create", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "update_project_stage": {
+      const result = await executeProjectAction(supabase, "move_stage", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "send_review_request": {
+      const result = await executeReviewAction(supabase, "send_request", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "generate_ai_review_reply": {
+      const result = await executeReviewAction(supabase, "ai_reply", config, enrollment, orgId, contactId);
+      return result;
+    }
+
+    case "send_booking_link": {
+      const calendarId = config.calendarId as string;
+      const appointmentTypeId = config.appointmentTypeId as string;
+
+      const { data: org } = await supabase
+        .from("organizations")
+        .select("slug")
+        .eq("id", orgId)
+        .single();
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+      const bookingUrl = `${supabaseUrl.replace('.supabase.co', '.supabase.co')}/booking/${org?.slug || orgId}/${calendarId}/${appointmentTypeId}`;
+
+      const message = resolveMergeFields(
+        (config.message as string) || `Book a time with us: ${bookingUrl}`,
+        contact
+      ).replace("{{booking_link}}", bookingUrl);
+
+      const channel = (config.channel as string) || "email";
+      if (channel === "sms" && contact.phone) {
+        await sendSms(supabase, orgId, contactId, contact.phone as string, message);
+      } else if (contact.email) {
+        const subject = resolveMergeFields(
+          (config.subject as string) || "Book Your Appointment",
+          contact
+        );
+        await sendEmail(supabase, orgId, contactId, contact.email as string, subject, message);
+      }
+      break;
+    }
+
+    case "goal_check": {
+      const goalConditions = config.conditions as TriggerConfig;
+      if (!goalConditions) return { branch: "not_met" };
+
+      const goalMet = evaluateCondition(
+        { conditions: goalConditions },
+        contact,
+        (enrollment.context_data as Record<string, unknown>) || {}
+      );
+
+      return { branch: goalMet ? "met" : "not_met" };
+    }
+
     case "wait_for_condition": {
       const timeoutDays = config.timeoutDays || 30;
       const timeoutAt = new Date();
@@ -1693,6 +1848,324 @@ async function executeAIWorkflowAction(
     output_structured: result.output_structured,
     draft_id: result.draft_id,
   };
+}
+
+async function executeProposalAction(
+  supabase: ReturnType<typeof createClient>,
+  action: string,
+  config: Record<string, unknown>,
+  enrollment: Record<string, unknown>,
+  orgId: string,
+  contactId: string
+): Promise<Record<string, unknown>> {
+  const contextData = (enrollment.context_data as Record<string, unknown>) || {};
+
+  switch (action) {
+    case "create": {
+      const opportunityId = (config.opportunitySource === "context"
+        ? contextData.opportunityId
+        : config.opportunityId) as string | null;
+
+      const lineItems = (config.lineItems as Array<{
+        description: string;
+        quantity: number;
+        unitPrice: number;
+      }>) || [];
+
+      let totalValue = 0;
+      const processedSections = [{
+        title: config.sectionTitle || "Services",
+        sort_order: 0,
+        items: lineItems.map((item, index) => {
+          const total = item.quantity * item.unitPrice;
+          totalValue += total;
+          return {
+            description: item.description,
+            quantity: item.quantity,
+            unit_price: item.unitPrice,
+            total_price: total,
+            sort_order: index,
+          };
+        }),
+      }];
+
+      const validUntil = new Date();
+      validUntil.setDate(validUntil.getDate() + ((config.validDays as number) || 30));
+
+      const { data: proposal } = await supabase
+        .from("proposals")
+        .insert({
+          org_id: orgId,
+          contact_id: contactId,
+          opportunity_id: opportunityId || null,
+          title: config.title || "Proposal",
+          status: "draft",
+          total_value: totalValue,
+          currency: config.currency || "USD",
+          valid_until: validUntil.toISOString().split("T")[0],
+          sections: processedSections,
+          created_by: null,
+        })
+        .select()
+        .single();
+
+      if (proposal) {
+        await supabase.from("proposal_activity").insert({
+          proposal_id: proposal.id,
+          event_type: "created",
+          description: "Proposal created via workflow",
+          metadata: { enrollment_id: enrollment.id },
+        });
+      }
+
+      return { success: true, proposalId: proposal?.id };
+    }
+
+    case "send": {
+      let proposalId = config.proposalId as string | null;
+      if (!proposalId && contextData.proposalId) {
+        proposalId = contextData.proposalId as string;
+      }
+      if (!proposalId) {
+        const { data } = await supabase
+          .from("proposals")
+          .select("id")
+          .eq("org_id", orgId)
+          .eq("contact_id", contactId)
+          .eq("status", "draft")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        proposalId = data?.id || null;
+      }
+
+      if (!proposalId) return { success: false, error: "Proposal not found" };
+
+      await supabase
+        .from("proposals")
+        .update({
+          status: "sent",
+          sent_at: new Date().toISOString(),
+        })
+        .eq("id", proposalId);
+
+      await supabase.from("proposal_activity").insert({
+        proposal_id: proposalId,
+        event_type: "sent",
+        description: "Proposal sent via workflow",
+        metadata: { enrollment_id: enrollment.id },
+      });
+
+      return { success: true };
+    }
+
+    default:
+      return { success: false, error: "Unknown action" };
+  }
+}
+
+async function executeProjectAction(
+  supabase: ReturnType<typeof createClient>,
+  action: string,
+  config: Record<string, unknown>,
+  enrollment: Record<string, unknown>,
+  orgId: string,
+  contactId: string
+): Promise<Record<string, unknown>> {
+  const contextData = (enrollment.context_data as Record<string, unknown>) || {};
+
+  switch (action) {
+    case "create": {
+      const assigneeType = config.assigneeType as string || "contact_owner";
+      let assigneeId: string | null = null;
+
+      if (assigneeType === "specific_user") {
+        assigneeId = config.assigneeId as string;
+      } else if (assigneeType === "contact_owner") {
+        const { data: contact } = await supabase
+          .from("contacts")
+          .select("assigned_user_id")
+          .eq("id", contactId)
+          .single();
+        assigneeId = contact?.assigned_user_id;
+      }
+
+      const opportunityId = contextData.opportunityId as string | null;
+
+      const { data: project } = await supabase
+        .from("projects")
+        .insert({
+          org_id: orgId,
+          contact_id: contactId,
+          opportunity_id: opportunityId || config.opportunityId || null,
+          pipeline_id: config.pipelineId,
+          stage_id: config.stageId,
+          assigned_user_id: assigneeId,
+          name: config.name || "New Project",
+          description: config.description || null,
+          priority: config.priority || "medium",
+          start_date: new Date().toISOString().split("T")[0],
+          target_end_date: config.targetEndDays
+            ? new Date(Date.now() + (config.targetEndDays as number) * 86400000).toISOString().split("T")[0]
+            : null,
+          budget_amount: config.budgetAmount || 0,
+          currency: config.currency || "USD",
+          risk_level: "low",
+          status: "active",
+          created_by: assigneeId,
+          stage_changed_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (project) {
+        await supabase.from("project_activity_log").insert({
+          org_id: orgId,
+          project_id: project.id,
+          event_type: "project_created",
+          summary: "Project created via workflow",
+          payload: { enrollment_id: enrollment.id },
+        });
+      }
+
+      return { success: true, projectId: project?.id };
+    }
+
+    case "move_stage": {
+      let projectId = config.projectId as string | null;
+      if (!projectId && contextData.projectId) {
+        projectId = contextData.projectId as string;
+      }
+      if (!projectId) {
+        const { data } = await supabase
+          .from("projects")
+          .select("id")
+          .eq("org_id", orgId)
+          .eq("contact_id", contactId)
+          .eq("status", "active")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        projectId = data?.id || null;
+      }
+
+      if (!projectId) return { success: false, error: "Project not found" };
+
+      await supabase
+        .from("projects")
+        .update({
+          stage_id: config.targetStageId,
+          stage_changed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", projectId);
+
+      await supabase.from("project_activity_log").insert({
+        org_id: orgId,
+        project_id: projectId,
+        event_type: "stage_changed",
+        summary: "Stage changed via workflow",
+        payload: { to_stage_id: config.targetStageId, enrollment_id: enrollment.id },
+      });
+
+      return { success: true };
+    }
+
+    default:
+      return { success: false, error: "Unknown action" };
+  }
+}
+
+async function executeReviewAction(
+  supabase: ReturnType<typeof createClient>,
+  action: string,
+  config: Record<string, unknown>,
+  enrollment: Record<string, unknown>,
+  orgId: string,
+  contactId: string
+): Promise<Record<string, unknown>> {
+  const contact = enrollment.contact as Record<string, unknown>;
+
+  switch (action) {
+    case "send_request": {
+      const providerId = config.providerId as string;
+      const channel = (config.channel as string) || "email";
+      const customMessage = resolveMergeFields(
+        (config.message as string) || "We'd love your feedback! Please leave us a review.",
+        contact
+      );
+
+      const { data: request } = await supabase
+        .from("review_requests")
+        .insert({
+          organization_id: orgId,
+          contact_id: contactId,
+          provider_id: providerId || null,
+          channel,
+          status: "sent",
+          message: customMessage,
+          sent_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (channel === "sms" && contact.phone) {
+        await sendSms(supabase, orgId, contactId, contact.phone as string, customMessage);
+      } else if (contact.email) {
+        const subject = resolveMergeFields(
+          (config.subject as string) || "We'd Love Your Review!",
+          contact
+        );
+        await sendEmail(supabase, orgId, contactId, contact.email as string, subject, customMessage);
+      }
+
+      return { success: true, requestId: request?.id };
+    }
+
+    case "ai_reply": {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+      let reviewId = config.reviewId as string | null;
+      if (!reviewId) {
+        const { data } = await supabase
+          .from("reputation_reviews")
+          .select("id")
+          .eq("organization_id", orgId)
+          .eq("contact_id", contactId)
+          .is("response_text", null)
+          .order("published_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        reviewId = data?.id || null;
+      }
+
+      if (!reviewId) return { success: false, error: "Review not found" };
+
+      const response = await fetch(
+        `${supabaseUrl}/functions/v1/review-ai-reply`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${serviceRoleKey}`,
+          },
+          body: JSON.stringify({
+            review_id: reviewId,
+            org_id: orgId,
+            tone: config.tone || "professional",
+            auto_post: config.autoPost || false,
+          }),
+        }
+      );
+
+      const result = await response.json();
+      return { success: result.success !== false, reply: result.reply };
+    }
+
+    default:
+      return { success: false, error: "Unknown action" };
+  }
 }
 
 function resolveMergeFields(template: string, contact: Record<string, unknown>): string {

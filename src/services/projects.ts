@@ -7,6 +7,7 @@ import type {
   ProjectStatus,
 } from '../types';
 import { logProjectActivity } from './projectActivityLog';
+import { emitEvent } from './eventDispatcher';
 
 const PROJECT_SELECT = `
   *,
@@ -130,6 +131,18 @@ export async function createProject(
     actor_user_id: actorUserId,
   });
 
+  emitEvent('project.created', {
+    entityType: 'project',
+    entityId: data.id,
+    orgId: input.org_id,
+    data: {
+      contact_id: input.contact_id,
+      pipeline_id: input.pipeline_id,
+      stage_id: input.stage_id,
+      name: input.name,
+    },
+  }, { userId: actorUserId }).catch(() => {});
+
   return data as Project;
 }
 
@@ -184,6 +197,17 @@ export async function updateProject(
       payload: { from_stage_id: existing.stage_id, to_stage_id: updates.stage_id },
       actor_user_id: actorUserId,
     });
+
+    emitEvent('project.stage_changed', {
+      entityType: 'project',
+      entityId: id,
+      orgId: existing.org_id,
+      data: {
+        contact_id: existing.contact_id,
+        from_stage_id: existing.stage_id,
+        to_stage_id: updates.stage_id,
+      },
+    }, { userId: actorUserId }).catch(() => {});
   }
 
   if (updates.status && updates.status !== existing.status) {
@@ -195,6 +219,15 @@ export async function updateProject(
       payload: { from_status: existing.status, to_status: updates.status },
       actor_user_id: actorUserId,
     });
+
+    if (updates.status === 'completed') {
+      emitEvent('project.completed', {
+        entityType: 'project',
+        entityId: id,
+        orgId: existing.org_id,
+        data: { contact_id: existing.contact_id },
+      }, { userId: actorUserId }).catch(() => {});
+    }
   }
 
   if (updates.assigned_user_id && updates.assigned_user_id !== existing.assigned_user_id) {

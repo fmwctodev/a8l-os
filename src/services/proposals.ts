@@ -11,6 +11,7 @@ import type {
   ProposalStatus,
   ProposalSectionType,
 } from '../types';
+import { emitEvent } from './eventDispatcher';
 
 const FROZEN_STATUSES = ['pending_signature', 'viewed', 'signed'] as const;
 
@@ -249,6 +250,29 @@ export async function updateProposalStatus(
     { new_status: status },
     actorUserId
   );
+
+  const statusEventMap: Record<string, string> = {
+    sent: 'proposal.sent',
+    viewed: 'proposal.viewed',
+    accepted: 'proposal.accepted',
+    rejected: 'proposal.declined',
+    signed: 'proposal.accepted',
+  };
+
+  const eventKey = statusEventMap[status];
+  if (eventKey) {
+    emitEvent(eventKey, {
+      entityType: 'proposal',
+      entityId: data.id,
+      orgId: data.org_id,
+      data: {
+        contact_id: data.contact_id,
+        opportunity_id: data.opportunity_id,
+        total_value: data.total_value,
+        status,
+      },
+    }, { userId: actorUserId }).catch(() => {});
+  }
 
   return data;
 }

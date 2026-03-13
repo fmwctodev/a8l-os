@@ -68,6 +68,8 @@ import WorkflowAnalytics from './pages/modules/WorkflowAnalytics';
 import AutomationTemplates from './pages/modules/AutomationTemplates';
 import AutomationTemplateViewer from './pages/modules/AutomationTemplateViewer';
 import AutomationTemplateEditor from './pages/modules/AutomationTemplateEditor';
+import AutomationApprovals from './pages/modules/AutomationApprovals';
+import AutomationLogs from './pages/modules/AutomationLogs';
 import { MediaStorage } from './pages/modules/MediaStorage';
 import { Reputation } from './pages/modules/Reputation';
 import { Reporting } from './pages/modules/Reporting';
@@ -428,6 +430,22 @@ function App() {
                 element={
                   <ProtectedRoute permission="automation.manage" featureFlag="automation">
                     <AutomationTemplateEditor />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/automation/approvals"
+                element={
+                  <ProtectedRoute permission="automation.view" featureFlag="automation">
+                    <AutomationApprovals />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/automation/logs"
+                element={
+                  <ProtectedRoute permission="automation.view" featureFlag="automation">
+                    <AutomationLogs />
                   </ProtectedRoute>
                 }
               />

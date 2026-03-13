@@ -215,6 +215,35 @@ const eventRoutingMap: Record<string, EventRouting> = {
   'review_request.clicked': {
     workflowTrigger: 'review_request_clicked',
   },
+  'review.replied': {
+    workflowTrigger: 'review_replied',
+    activityEvent: 'review_replied',
+    webhookEvent: 'review.replied',
+  },
+
+  'project.created': {
+    workflowTrigger: 'project_created',
+    auditAction: 'create',
+    webhookEvent: 'project.created',
+  },
+  'project.stage_changed': {
+    workflowTrigger: 'project_stage_changed',
+  },
+  'project.completed': {
+    workflowTrigger: 'project_completed',
+    webhookEvent: 'project.completed',
+  },
+
+  'social_post.published': {
+    workflowTrigger: 'social_post_published',
+  },
+
+  'ai_agent.completed': {
+    workflowTrigger: 'ai_agent_completed',
+  },
+  'ai_agent.failed': {
+    workflowTrigger: 'ai_agent_failed',
+  },
 
   'note.added': {
     activityEvent: 'note_added',
@@ -511,6 +540,51 @@ export async function emitProposalEvent(
   return emitEvent(eventKey, {
     entityType: 'proposal',
     entityId: proposalId,
+    orgId,
+    data,
+  }, options);
+}
+
+export async function emitProjectEvent(
+  eventKey: string,
+  projectId: string,
+  orgId: string,
+  data?: Record<string, unknown>,
+  options?: EventOptions
+): Promise<{ success: boolean; errors: string[] }> {
+  return emitEvent(eventKey, {
+    entityType: 'project',
+    entityId: projectId,
+    orgId,
+    data,
+  }, options);
+}
+
+export async function emitReviewEvent(
+  eventKey: string,
+  reviewId: string,
+  orgId: string,
+  data?: Record<string, unknown>,
+  options?: EventOptions
+): Promise<{ success: boolean; errors: string[] }> {
+  return emitEvent(eventKey, {
+    entityType: 'review',
+    entityId: reviewId,
+    orgId,
+    data,
+  }, options);
+}
+
+export async function emitMessageEvent(
+  eventKey: string,
+  messageId: string,
+  orgId: string,
+  data?: Record<string, unknown>,
+  options?: EventOptions
+): Promise<{ success: boolean; errors: string[] }> {
+  return emitEvent(eventKey, {
+    entityType: 'message',
+    entityId: messageId,
     orgId,
     data,
   }, options);
