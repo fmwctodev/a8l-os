@@ -14,7 +14,6 @@ import {
 import { createStreamingTTS } from '../../../services/assistantVoice';
 import { updateProfile } from '../../../services/assistantProfile';
 import { useStreamingPlayer } from '../../../hooks/useStreamingPlayer';
-import { SentenceSegmenter } from '../../../lib/sentenceSegmenter';
 import { isSessionHealthy } from '../../../lib/edgeFunction';
 import type { AssistantMessage } from '../../../types/assistant';
 import { ThreadSelector } from './ThreadSelector';
@@ -135,30 +134,13 @@ export function AssistantChatView() {
 
         let fullResponse = '';
         let metadata: Record<string, unknown> = {};
-        const sentenceQueue: string[] = [];
-        let ttsStarted = false;
 
         const shouldSpeak = profile?.voice_enabled && profile?.auto_speak_chat && profile?.elevenlabs_voice_id;
-
-        const segmenter = shouldSpeak ? new SentenceSegmenter((sentence) => {
-          sentenceQueue.push(sentence);
-          if (!ttsStarted && profile?.elevenlabs_voice_id) {
-            ttsStarted = true;
-            setIsSpeaking(true);
-            const tts = createStreamingTTS(profile.elevenlabs_voice_id, profile.speech_rate);
-            ttsControllerRef.current = tts;
-            tts.onAudioChunk((chunk) => streamingPlayer.enqueue(chunk));
-            tts.onDone(() => streamingPlayer.finalize());
-            tts.onError(() => {});
-            tts.start([...sentenceQueue]);
-          }
-        }) : null;
 
         for await (const evt of stream) {
           if (evt.type === 'token' && typeof evt.text === 'string') {
             fullResponse += evt.text;
             setStreamingContent(fullResponse);
-            segmenter?.push(evt.text);
           } else if (evt.type === 'done') {
             fullResponse = (evt.response as string) || fullResponse;
             setStreamingContent(fullResponse);
@@ -180,16 +162,14 @@ export function AssistantChatView() {
           }
         }
 
-        segmenter?.flush();
-
-        if (shouldSpeak && !ttsStarted && sentenceQueue.length > 0 && profile?.elevenlabs_voice_id) {
+        if (shouldSpeak && fullResponse && profile?.elevenlabs_voice_id) {
           setIsSpeaking(true);
           const tts = createStreamingTTS(profile.elevenlabs_voice_id, profile.speech_rate);
           ttsControllerRef.current = tts;
           tts.onAudioChunk((chunk) => streamingPlayer.enqueue(chunk));
           tts.onDone(() => streamingPlayer.finalize());
           tts.onError(() => {});
-          tts.start([...sentenceQueue]);
+          tts.start([fullResponse]);
         }
 
         setStreamingMessageId(null);

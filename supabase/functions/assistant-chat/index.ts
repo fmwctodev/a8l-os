@@ -196,10 +196,13 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    const parsedObj = parsed as Record<string, unknown>;
+    const parsedResponseText = typeof parsedObj.response_to_user === "string" ? parsedObj.response_to_user : null;
+
     const validation = validateITSRequest(parsed);
     if (!validation.valid || !validation.request) {
       return jsonResponse({
-        response: `I generated an invalid action plan. Errors: ${(validation.errors || []).join("; ")}. Let me try a different approach -- could you rephrase your request?`,
+        response: parsedResponseText || `I generated an invalid action plan. Errors: ${(validation.errors || []).join("; ")}. Let me try a different approach -- could you rephrase your request?`,
         its_request: null,
         execution_result: null,
         tool_calls: [],
@@ -578,16 +581,18 @@ async function handleStreamingChat(
                 })));
               }
             } else {
+              const cleanResponse = validation.request?.response_to_user || parsed?.response_to_user || fullText;
               controller.enqueue(encoder.encode(sseEvent({
                 type: "done",
-                response: fullText,
+                response: cleanResponse,
                 model_used: llmConfig.model,
               })));
             }
           } else {
+            const cleanResponse = (parsed as Record<string, unknown>)?.response_to_user || fullText;
             controller.enqueue(encoder.encode(sseEvent({
               type: "done",
-              response: fullText,
+              response: typeof cleanResponse === "string" ? cleanResponse : fullText,
               model_used: llmConfig.model,
             })));
           }
