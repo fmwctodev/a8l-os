@@ -119,7 +119,13 @@ export function IntegrationDetailPanel({ integration, onClose, onSuccess }: Inte
     }
   };
 
-  const apiKeyFields = (integration.api_key_config?.fields || []) as ApiKeyFieldConfig[];
+  const apiKeyFields = (integration.api_key_config?.fields || []).map((f) => {
+    const field = f as ApiKeyFieldConfig;
+    if (field.type === 'password' && field.secret === undefined) {
+      field.secret = true;
+    }
+    return field;
+  });
 
   return (
     <>
@@ -259,31 +265,48 @@ export function IntegrationDetailPanel({ integration, onClose, onSuccess }: Inte
                           {field.label}
                           {field.required && <span className="text-red-400 ml-1">*</span>}
                         </label>
-                        <div className="relative mt-1">
-                          <input
-                            type={field.secret && !showSecrets[field.name] ? 'password' : 'text'}
-                            value={credentials[field.name] || ''}
+                        {field.type === 'select' && field.options ? (
+                          <select
+                            value={credentials[field.name] || field.default || ''}
                             onChange={(e) =>
                               setCredentials({ ...credentials, [field.name]: e.target.value })
                             }
-                            className="block w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 pr-10 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                          />
-                          {field.secret && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setShowSecrets({ ...showSecrets, [field.name]: !showSecrets[field.name] })
+                            className="mt-1 block w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                          >
+                            {field.options.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt.charAt(0).toUpperCase() + opt.slice(1)}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="relative mt-1">
+                            <input
+                              type={field.secret && !showSecrets[field.name] ? 'password' : 'text'}
+                              value={credentials[field.name] || ''}
+                              onChange={(e) =>
+                                setCredentials({ ...credentials, [field.name]: e.target.value })
                               }
-                              className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-white"
-                            >
-                              {showSecrets[field.name] ? (
-                                <EyeOff className="h-4 w-4" />
-                              ) : (
-                                <Eye className="h-4 w-4" />
-                              )}
-                            </button>
-                          )}
-                        </div>
+                              placeholder={field.placeholder || ''}
+                              className="block w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 pr-10 text-sm text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                            />
+                            {field.secret && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowSecrets({ ...showSecrets, [field.name]: !showSecrets[field.name] })
+                                }
+                                className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-white"
+                              >
+                                {showSecrets[field.name] ? (
+                                  <EyeOff className="h-4 w-4" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                     <button

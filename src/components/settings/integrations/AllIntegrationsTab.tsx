@@ -43,6 +43,7 @@ function getIntegrationIcon(key: string): string {
     google_ads: 'https://www.gstatic.com/adsense/publishers/ui/images/apub/ae/ae-home-advert-icon-x2.png',
     zapier: 'https://cdn.zapier.com/zapier/images/logos/zapier-logo.png',
     slack: 'https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png',
+    vapi: 'https://assets-global.website-files.com/651727b9c12e1e44865bff7a/6519b28e79a38ee5ed81e0d5_Logo%20Icon.svg',
   };
   return icons[key] || '';
 }

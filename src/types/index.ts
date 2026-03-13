@@ -4380,6 +4380,10 @@ export interface ApiKeyFieldConfig {
   label: string;
   required: boolean;
   secret?: boolean;
+  type?: 'text' | 'password' | 'select';
+  placeholder?: string;
+  default?: string;
+  options?: string[];
 }
 
 export interface ApiKeyConfig {
