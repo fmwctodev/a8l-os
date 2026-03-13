@@ -9,23 +9,7 @@ import {
 } from '../../services/workflows';
 import { TRIGGER_TYPE_LABELS } from '../../services/workflowEngine';
 import type { Workflow, WorkflowStatus, WorkflowFilters } from '../../types';
-import {
-  Search,
-  Plus,
-  Filter,
-  Loader2,
-  AlertCircle,
-  Workflow as WorkflowIcon,
-  MoreVertical,
-  Play,
-  Copy,
-  Archive,
-  Users,
-  Zap,
-  Clock,
-  ChevronDown,
-  Layout,
-} from 'lucide-react';
+import { Search, Plus, Filter, Loader2, AlertCircle, Workflow as WorkflowIcon, MoreVertical, Play, Copy, Archive, Users, Zap, Clock, ChevronDown, LayoutGrid as Layout } from 'lucide-react';
 import { CreateWorkflowModal } from '../../components/automation/CreateWorkflowModal';
 
 const STATUS_STYLES: Record<WorkflowStatus, { bg: string; text: string; label: string }> = {

@@ -19,31 +19,7 @@ import type {
   WorkflowTriggerType,
   WorkflowActionType,
 } from '../../types';
-import {
-  ArrowLeft,
-  Save,
-  Upload,
-  Loader2,
-  AlertCircle,
-  Plus,
-  Trash2,
-  Zap,
-  GitBranch,
-  Clock,
-  CheckCircle,
-  Play,
-  MessageSquare,
-  Mail,
-  Tag,
-  User,
-  Building2,
-  FileText,
-  Globe,
-  X,
-  History,
-  ChevronDown,
-  Layout,
-} from 'lucide-react';
+import { ArrowLeft, Save, Upload, Loader2, AlertCircle, Plus, Trash2, Zap, GitBranch, Clock, CheckCircle, Play, MessageSquare, Mail, Tag, User, Building2, FileText, Globe, X, History, ChevronDown, LayoutGrid as Layout } from 'lucide-react';
 import { NodeConfigPanel } from '../../components/automation/NodeConfigPanel';
 
 const NODE_COLORS: Record<WorkflowNodeType, { bg: string; border: string; icon: string }> = {
