@@ -1,9 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  Plus, Search, Filter, MoreVertical, Eye, Edit, Copy, Upload,
-  Archive, Phone, MessageSquare, Globe, Mic, Zap,
-} from 'lucide-react';
+import { Plus, Search, Filter, MoreVertical, Eye, CreditCard as Edit, Copy, Upload, Archive, Phone, MessageSquare, Globe, Mic, Zap } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { listAssistants, archiveAssistant, duplicateAssistant, deleteAssistant } from '../../../services/vapiAssistants';
 import type { VapiAssistant } from '../../../services/vapiAssistants';

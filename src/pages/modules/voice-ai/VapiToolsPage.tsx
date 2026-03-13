@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react';
-import {
-  Plus, Wrench, ToggleLeft, ToggleRight, Edit, Trash2,
-  Shield, Building2, ChevronDown, ChevronUp, X,
-} from 'lucide-react';
+import { Plus, Wrench, ToggleLeft, ToggleRight, CreditCard as Edit, Trash2, Shield, Building2, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
   listTools, createTool, updateTool, toggleTool, deleteTool,
