@@ -187,7 +187,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: userData } = await supabase
       .from("users")
-      .select("org_id")
+      .select("organization_id")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -198,7 +198,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const orgId = userData.org_id;
+    const orgId = userData.organization_id;
     const payload: RequestPayload = await req.json();
 
     if (payload.action === "check-status") {
