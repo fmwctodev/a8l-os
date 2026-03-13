@@ -11,6 +11,7 @@ import { DraftPreviewCard } from './DraftPreviewCard';
 import { ExecutionPlanCard } from './ExecutionPlanCard';
 import { ExecutionResultCard } from './ExecutionResultCard';
 import { ClaraMarkdown } from './ClaraMarkdown';
+import { extractCleanResponse } from '../../../lib/claraResponseParser';
 
 interface MessageBubbleProps {
   message: AssistantMessage;
@@ -42,12 +43,14 @@ export function MessageBubble({ message, streaming }: MessageBubbleProps) {
 
   const canSpeak = !isUser && profile?.voice_enabled && profile?.elevenlabs_voice_id;
 
+  const displayContent = isUser ? message.content : extractCleanResponse(message.content);
+
   const handleSpeak = async () => {
     if (!profile?.elevenlabs_voice_id || ttsLoading || player.isPlaying) return;
     setTtsLoading(true);
     try {
       const blob = await textToSpeech(
-        message.content,
+        displayContent,
         profile.elevenlabs_voice_id,
         profile.speech_rate
       );
@@ -85,7 +88,7 @@ export function MessageBubble({ message, streaming }: MessageBubbleProps) {
         <div className="space-y-2">
           <div className="bg-slate-800 border border-slate-700/50 rounded-2xl rounded-tl-md px-3 py-2 group/bubble">
             <div className="relative">
-              <ClaraMarkdown content={message.content} />
+              <ClaraMarkdown content={displayContent} />
               {streaming && (
                 <span className="inline-block w-1.5 h-3.5 bg-cyan-400 ml-0.5 -mb-0.5 animate-pulse rounded-sm" />
               )}

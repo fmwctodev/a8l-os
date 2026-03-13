@@ -4,7 +4,6 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useAssistant } from '../../../contexts/AssistantContext';
 import {
   getThreadMessages,
-  sendMessage,
   sendMessageStreaming,
   sendMessageNonStreaming,
   persistStreamedAssistantMessage,
@@ -15,6 +14,7 @@ import { createStreamingTTS } from '../../../services/assistantVoice';
 import { updateProfile } from '../../../services/assistantProfile';
 import { useStreamingPlayer } from '../../../hooks/useStreamingPlayer';
 import { isSessionHealthy } from '../../../lib/edgeFunction';
+import { extractCleanResponse } from '../../../lib/claraResponseParser';
 import type { AssistantMessage } from '../../../types/assistant';
 import { ThreadSelector } from './ThreadSelector';
 import { MessageBubble } from './MessageBubble';
@@ -140,18 +140,20 @@ export function AssistantChatView() {
         for await (const evt of stream) {
           if (evt.type === 'token' && typeof evt.text === 'string') {
             fullResponse += evt.text;
-            setStreamingContent(fullResponse);
           } else if (evt.type === 'done') {
-            fullResponse = (evt.response as string) || fullResponse;
-            setStreamingContent(fullResponse);
+            const doneResponse = extractCleanResponse((evt.response as string) || fullResponse);
+            fullResponse = doneResponse;
+            setStreamingContent(doneResponse);
             metadata = { model_used: evt.model_used };
           } else if (evt.type === 'plan') {
-            fullResponse = (evt.response as string) || fullResponse;
-            setStreamingContent(fullResponse);
+            const planResponse = extractCleanResponse((evt.response as string) || fullResponse);
+            fullResponse = planResponse;
+            setStreamingContent(planResponse);
             metadata = { its_request: evt.its_request, model_used: evt.model_used };
           } else if (evt.type === 'execution_result') {
-            fullResponse = (evt.response as string) || fullResponse;
-            setStreamingContent(fullResponse);
+            const execResponse = extractCleanResponse((evt.response as string) || fullResponse);
+            fullResponse = execResponse;
+            setStreamingContent(execResponse);
             metadata = {
               its_request: evt.its_request,
               execution_result: evt.execution_result,
@@ -162,21 +164,28 @@ export function AssistantChatView() {
           }
         }
 
+        if (!streamingContent && fullResponse) {
+          fullResponse = extractCleanResponse(fullResponse);
+          setStreamingContent(fullResponse);
+        }
+
         if (shouldSpeak && fullResponse && profile?.elevenlabs_voice_id) {
           setIsSpeaking(true);
+          const cleanForTTS = extractCleanResponse(fullResponse);
           const tts = createStreamingTTS(profile.elevenlabs_voice_id, profile.speech_rate);
           ttsControllerRef.current = tts;
           tts.onAudioChunk((chunk) => streamingPlayer.enqueue(chunk));
           tts.onDone(() => streamingPlayer.finalize());
           tts.onError(() => {});
-          tts.start([fullResponse]);
+          tts.start([cleanForTTS]);
         }
 
         setStreamingMessageId(null);
         setStreamingContent('');
 
-        if (threadId && fullResponse) {
-          persistStreamedAssistantMessage(threadId, fullResponse, metadata)
+        const cleanedResponse = extractCleanResponse(fullResponse);
+        if (threadId && cleanedResponse) {
+          persistStreamedAssistantMessage(threadId, cleanedResponse, metadata)
             .then((assistantMsg) => {
               setMessages((prev) => {
                 if (prev.some((m) => m.id === assistantMsg.id)) return prev;
@@ -190,7 +199,7 @@ export function AssistantChatView() {
                   id: `local-${Date.now()}`,
                   thread_id: threadId!,
                   role: 'assistant',
-                  content: fullResponse,
+                  content: cleanedResponse,
                   message_type: 'text',
                   tool_calls: null,
                   metadata,
@@ -211,7 +220,7 @@ export function AssistantChatView() {
             id: `fallback-${Date.now()}`,
             thread_id: threadId!,
             role: 'assistant',
-            content: chatResponse.response,
+            content: extractCleanResponse(chatResponse.response),
             message_type: 'text',
             tool_calls: null,
             metadata: { model_used: chatResponse.model_used },

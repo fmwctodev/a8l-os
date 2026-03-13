@@ -10,6 +10,7 @@ import { useWakeWord } from '../../../hooks/useWakeWord';
 import { useBargeIn } from '../../../hooks/useBargeIn';
 import { transcribeFinal, createStreamingTTS } from '../../../services/assistantVoice';
 import { sendMessageNonStreaming, sendMessageStreaming, persistStreamedAssistantMessage, createThread } from '../../../services/assistantChat';
+import { extractCleanResponse } from '../../../lib/claraResponseParser';
 import { logVoiceEvent } from '../../../services/claraVoiceEvents';
 import { SentenceSegmenter } from '../../../lib/sentenceSegmenter';
 import { VoiceOrb } from './VoiceOrb';
@@ -121,58 +122,22 @@ export function AssistantVoiceView() {
           return;
         }
 
-        const sentenceQueue: string[] = [];
-        let ttsStarted = false;
-
-        const segmenter = new SentenceSegmenter((sentence) => {
-          sentenceQueue.push(sentence);
-          if (!ttsStarted && profile?.voice_enabled && profile.elevenlabs_voice_id) {
-            ttsStarted = true;
-            startTTSStream(sentenceQueue, profile.elevenlabs_voice_id, profile.speech_rate);
-          }
-        });
-
-        function startTTSStream(queue: string[], voiceId: string, speechRate: number) {
-          setVoiceMode('speaking');
-          if (profile) {
-            logVoiceEvent(user!.id, profile.org_id, 'tts_started');
-          }
-
-          const tts = createStreamingTTS(voiceId, speechRate);
-          ttsControllerRef.current = tts;
-
-          tts.onAudioChunk((chunk) => {
-            streamingPlayer.enqueue(chunk);
-          });
-          tts.onDone(() => {
-            streamingPlayer.finalize();
-          });
-          tts.onError(() => {});
-
-          tts.start([...queue]);
-        }
-
         for await (const evt of streamResult.stream) {
           if (abortRef.current) break;
 
           if (evt.type === 'token' && typeof evt.text === 'string') {
             fullResponse += evt.text;
-            setResponse(fullResponse);
-            segmenter.push(evt.text);
           } else if (evt.type === 'done') {
-            fullResponse = (evt.response as string) || fullResponse;
-            setResponse(fullResponse);
+            fullResponse = extractCleanResponse((evt.response as string) || fullResponse);
             streamDoneMetadata = { model_used: evt.model_used };
           } else if (evt.type === 'plan') {
-            fullResponse = (evt.response as string) || fullResponse;
-            setResponse(fullResponse);
+            fullResponse = extractCleanResponse((evt.response as string) || fullResponse);
             streamDoneMetadata = {
               its_request: evt.its_request,
               model_used: evt.model_used,
             };
           } else if (evt.type === 'execution_result') {
-            fullResponse = (evt.response as string) || fullResponse;
-            setResponse(fullResponse);
+            fullResponse = extractCleanResponse((evt.response as string) || fullResponse);
             streamDoneMetadata = {
               its_request: evt.its_request,
               execution_result: evt.execution_result,
@@ -183,11 +148,29 @@ export function AssistantVoiceView() {
           }
         }
 
-        segmenter.flush();
+        fullResponse = extractCleanResponse(fullResponse);
+        setResponse(fullResponse);
 
-        if (!ttsStarted && profile?.voice_enabled && profile.elevenlabs_voice_id && sentenceQueue.length > 0) {
-          startTTSStream(sentenceQueue, profile.elevenlabs_voice_id, profile.speech_rate);
-        } else if (!ttsStarted) {
+        if (profile?.voice_enabled && profile.elevenlabs_voice_id && fullResponse) {
+          setVoiceMode('speaking');
+          if (profile) {
+            logVoiceEvent(user!.id, profile.org_id, 'tts_started');
+          }
+
+          const sentenceQueue: string[] = [];
+          const segmenter = new SentenceSegmenter((sentence) => {
+            sentenceQueue.push(sentence);
+          });
+          segmenter.push(fullResponse);
+          segmenter.flush();
+
+          const tts = createStreamingTTS(profile.elevenlabs_voice_id, profile.speech_rate);
+          ttsControllerRef.current = tts;
+          tts.onAudioChunk((chunk) => streamingPlayer.enqueue(chunk));
+          tts.onDone(() => streamingPlayer.finalize());
+          tts.onError(() => {});
+          tts.start(sentenceQueue.length > 0 ? sentenceQueue : [fullResponse]);
+        } else {
           setVoiceMode(defaultMode());
         }
       } catch {
@@ -196,7 +179,7 @@ export function AssistantVoiceView() {
 
       if (!useStreaming) {
         const chatResponse = await sendMessageNonStreaming(threadId, text, pageContext);
-        fullResponse = chatResponse.response;
+        fullResponse = extractCleanResponse(chatResponse.response);
         setResponse(fullResponse);
         streamDoneMetadata = { model_used: chatResponse.model_used };
 
@@ -481,15 +464,20 @@ export function AssistantVoiceView() {
                 <p className="text-xs text-slate-300">{transcript}</p>
               </div>
             )}
+            {!response && voiceMode === 'processing' && (
+              <div className="mr-auto max-w-[280px] px-3 py-2 bg-slate-800 border border-slate-700/50 rounded-lg">
+                <p className="text-[10px] text-teal-400/70 font-medium mb-0.5">Clara</p>
+                <div className="flex items-center gap-1.5 py-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+            )}
             {response && (
               <div className="mr-auto max-w-[280px] px-3 py-2 bg-slate-800 border border-slate-700/50 rounded-lg">
                 <p className="text-[10px] text-teal-400/70 font-medium mb-0.5">Clara</p>
-                <p className="text-xs text-slate-300 whitespace-pre-wrap">
-                  {response}
-                  {voiceMode === 'processing' && (
-                    <span className="inline-block w-1.5 h-3.5 bg-cyan-400 ml-0.5 animate-pulse" />
-                  )}
-                </p>
+                <p className="text-xs text-slate-300 whitespace-pre-wrap">{response}</p>
               </div>
             )}
           </div>
