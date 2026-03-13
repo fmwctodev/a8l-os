@@ -6,6 +6,7 @@ import {
   getThreadMessages,
   sendMessage,
   sendMessageStreaming,
+  sendMessageNonStreaming,
   persistStreamedAssistantMessage,
   createThread,
   subscribeToMessages,
@@ -222,15 +223,21 @@ export function AssistantChatView() {
         setStreamingMessageId(null);
         setStreamingContent('');
 
-        const { userMessage, assistantMessage } = await sendMessage(threadId, text, pageContext);
+        const chatResponse = await sendMessageNonStreaming(threadId, text, pageContext);
 
-        setMessages((prev) => {
-          const filtered = prev.filter((m) => m.id !== userMessage.id);
-          if (usedStreaming) {
-            return [...filtered, assistantMessage];
-          }
-          return [...filtered, userMessage, assistantMessage];
-        });
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `fallback-${Date.now()}`,
+            thread_id: threadId!,
+            role: 'assistant',
+            content: chatResponse.response,
+            message_type: 'text',
+            tool_calls: null,
+            metadata: { model_used: chatResponse.model_used },
+            created_at: new Date().toISOString(),
+          },
+        ]);
       }
     } catch (err) {
       setStreamingMessageId(null);

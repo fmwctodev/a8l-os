@@ -79,7 +79,17 @@ export function useWakeWord(options: WakeWordOptions): WakeWordState {
       const afterWake = text.slice(idx + phrase.length).trim();
       const commandPrefix = afterWake.length > 2 ? afterWake : undefined;
       callbackRef.current(commandPrefix);
-    } catch {
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+      const isAuth = /session expired|invalid jwt|unauthorized|sign in/i.test(msg);
+
+      if (isAuth) {
+        setIsPaused(true);
+        onErrorRef.current?.(msg || 'Session expired. Please refresh the page.');
+        return;
+      }
+
       failureCountRef.current += 1;
 
       if (failureCountRef.current >= MAX_CONSECUTIVE_FAILURES) {
