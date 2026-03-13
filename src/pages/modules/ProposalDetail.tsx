@@ -2,13 +2,11 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePaymentsAccess } from '../../hooks/usePaymentsAccess';
-import { SendProposalModal } from '../../components/proposals/SendProposalModal';
 import { SendForSignatureModal } from '../../components/proposals/SendForSignatureModal';
 import { ConvertToInvoiceModal } from '../../components/proposals/ConvertToInvoiceModal';
 import {
   getProposalById,
   updateProposal,
-  sendProposal,
   deleteProposal,
   duplicateProposal,
   archiveProposal,
@@ -88,7 +86,6 @@ export function ProposalDetail() {
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [sectionContent, setSectionContent] = useState('');
   const [showActionMenu, setShowActionMenu] = useState(false);
-  const [showSendModal, setShowSendModal] = useState(false);
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
@@ -148,19 +145,6 @@ export function ProposalDetail() {
     } finally {
       setIsExportingPDF(false);
     }
-  };
-
-  const handleSendProposal = () => {
-    if (!proposal?.contact?.email) {
-      alert('This proposal must have a contact with an email address before it can be sent.');
-      return;
-    }
-    setShowSendModal(true);
-  };
-
-  const handleSendComplete = () => {
-    setShowSendModal(false);
-    loadProposal();
   };
 
   const handleSignatureComplete = () => {
@@ -432,15 +416,6 @@ export function ProposalDetail() {
                 <Sparkles className="w-4 h-4" />
                 AI Builder
               </Link>
-            )}
-            {canSend && proposal.status === 'draft' && (
-              <button
-                onClick={handleSendProposal}
-                className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors"
-              >
-                <Send className="w-4 h-4" />
-                Send Proposal
-              </button>
             )}
             {canRequestSignature && (
               <button
@@ -994,14 +969,6 @@ export function ProposalDetail() {
           </div>
         )}
       </div>
-
-      {showSendModal && proposal && (
-        <SendProposalModal
-          proposal={proposal}
-          onClose={() => setShowSendModal(false)}
-          onSent={handleSendComplete}
-        />
-      )}
 
       {showConvertModal && proposal && canAccessPayments && (
         <ConvertToInvoiceModal
