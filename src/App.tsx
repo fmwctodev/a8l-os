@@ -65,6 +65,9 @@ import WorkflowRuns from './pages/modules/WorkflowRuns';
 import WorkflowRunDetail from './pages/modules/WorkflowRunDetail';
 import WorkflowVersions from './pages/modules/WorkflowVersions';
 import WorkflowAnalytics from './pages/modules/WorkflowAnalytics';
+import AutomationTemplates from './pages/modules/AutomationTemplates';
+import AutomationTemplateViewer from './pages/modules/AutomationTemplateViewer';
+import AutomationTemplateEditor from './pages/modules/AutomationTemplateEditor';
 import { MediaStorage } from './pages/modules/MediaStorage';
 import { Reputation } from './pages/modules/Reputation';
 import { Reporting } from './pages/modules/Reporting';
@@ -393,6 +396,38 @@ function App() {
                 element={
                   <ProtectedRoute permission="automation.view" featureFlag="automation">
                     <Automation />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/automation/templates"
+                element={
+                  <ProtectedRoute permission="automation.view" featureFlag="automation">
+                    <AutomationTemplates />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/automation/templates/new"
+                element={
+                  <ProtectedRoute permission="automation.manage" featureFlag="automation">
+                    <AutomationTemplateEditor />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/automation/templates/:templateId"
+                element={
+                  <ProtectedRoute permission="automation.view" featureFlag="automation">
+                    <AutomationTemplateViewer />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/automation/templates/:templateId/edit"
+                element={
+                  <ProtectedRoute permission="automation.manage" featureFlag="automation">
+                    <AutomationTemplateEditor />
                   </ProtectedRoute>
                 }
               />

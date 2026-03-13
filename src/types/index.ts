@@ -1420,6 +1420,65 @@ export interface EnrollmentFilters {
   contactSearch?: string;
 }
 
+export type TemplateCategory = 'sales' | 'lead_management' | 'scheduling' | 'proposal' | 'follow_up' | 'internal_ops';
+export type TemplateStatus = 'draft' | 'published' | 'archived';
+export type TemplateComplexity = 'simple' | 'moderate' | 'advanced';
+
+export interface AutomationTemplate {
+  id: string;
+  org_id: string | null;
+  name: string;
+  description: string | null;
+  category: TemplateCategory;
+  icon_name: string;
+  channel_tags: string[];
+  estimated_time: string | null;
+  complexity: TemplateComplexity;
+  is_system: boolean;
+  status: TemplateStatus;
+  created_by_user_id: string | null;
+  published_at: string | null;
+  use_count: number;
+  created_at: string;
+  updated_at: string;
+  latest_version?: AutomationTemplateVersion | null;
+  instance_count?: number;
+  created_by?: User | null;
+}
+
+export interface AutomationTemplateVersion {
+  id: string;
+  template_id: string;
+  version_number: number;
+  definition_snapshot: WorkflowDefinition;
+  change_summary: string | null;
+  created_by_user_id: string | null;
+  created_at: string;
+  created_by?: User | null;
+}
+
+export interface AutomationTemplateInstance {
+  id: string;
+  template_id: string;
+  template_version_id: string;
+  workflow_id: string;
+  org_id: string;
+  created_by_user_id: string | null;
+  customizations: Record<string, unknown>;
+  created_at: string;
+  template?: AutomationTemplate;
+  workflow?: Workflow;
+}
+
+export interface TemplateFilters {
+  category?: TemplateCategory;
+  status?: TemplateStatus;
+  complexity?: TemplateComplexity;
+  search?: string;
+  channel?: string;
+  systemOnly?: boolean;
+}
+
 export type AIAgentRunStatus = 'pending' | 'running' | 'success' | 'failed' | 'stopped';
 export type AIAgentTriggerType = 'user' | 'automation';
 export type AIToolCallStatus = 'success' | 'failed';

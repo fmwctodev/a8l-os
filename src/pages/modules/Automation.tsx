@@ -24,6 +24,7 @@ import {
   Zap,
   Clock,
   ChevronDown,
+  Layout,
 } from 'lucide-react';
 import { CreateWorkflowModal } from '../../components/automation/CreateWorkflowModal';
 
@@ -138,15 +139,24 @@ export function Automation() {
             Build workflows to automate your business processes
           </p>
         </div>
-        {canManage && (
+        <div className="flex items-center gap-3">
           <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-white font-medium hover:from-cyan-600 hover:to-teal-700 transition-colors"
+            onClick={() => navigate('/automation/templates')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
           >
-            <Plus className="w-4 h-4" />
-            Create Workflow
+            <Layout className="w-4 h-4" />
+            Browse Templates
           </button>
-        )}
+          {canManage && (
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-white font-medium hover:from-cyan-600 hover:to-teal-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Create Workflow
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -394,14 +404,25 @@ export function Automation() {
                   ? 'Try adjusting your filters'
                   : 'Get started by creating your first automation workflow'}
               </p>
-              {canManage && !searchQuery && statusFilter === 'all' && (
-                <button
-                  onClick={() => setIsCreateModalOpen(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-white font-medium hover:from-cyan-600 hover:to-teal-700 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  Create Workflow
-                </button>
+              {!searchQuery && statusFilter === 'all' && (
+                <div className="flex items-center gap-3 justify-center">
+                  <button
+                    onClick={() => navigate('/automation/templates')}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
+                  >
+                    <Layout className="w-4 h-4" />
+                    Start from Template
+                  </button>
+                  {canManage && (
+                    <button
+                      onClick={() => setIsCreateModalOpen(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-teal-600 text-white font-medium hover:from-cyan-600 hover:to-teal-700 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Create from Scratch
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
