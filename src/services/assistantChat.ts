@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
-import { callEdgeFunction } from '../lib/edgeFunction';
+import { callEdgeFunction, streamEdgeFunction, parseSSEStream } from '../lib/edgeFunction';
+import type { SSEEvent } from '../lib/edgeFunction';
 import type {
   AssistantThread,
   AssistantMessage,
@@ -139,6 +140,91 @@ export async function sendMessage(
     assistantMessage: assistantMsg as AssistantMessage,
     chatResponse,
   };
+}
+
+export interface StreamingChatResult {
+  userMessage: AssistantMessage;
+  stream: AsyncGenerator<SSEEvent>;
+  abort: () => void;
+}
+
+export async function sendMessageStreaming(
+  threadId: string,
+  content: string,
+  context: ClaraPageContext
+): Promise<StreamingChatResult> {
+  const { data: userMsg, error: userError } = await supabase
+    .from('assistant_messages')
+    .insert({
+      thread_id: threadId,
+      role: 'user',
+      content,
+      message_type: 'text',
+    })
+    .select('*')
+    .single();
+
+  if (userError) throw userError;
+
+  await supabase
+    .from('assistant_threads')
+    .update({ updated_at: new Date().toISOString() })
+    .eq('id', threadId);
+
+  const response = await streamEdgeFunction('assistant-chat', {
+    thread_id: threadId,
+    content,
+    context,
+    stream: true,
+  });
+
+  if (!response.ok) {
+    let errMsg = 'Failed to get assistant response';
+    try {
+      const err = await response.json();
+      if (typeof err.error === 'string') errMsg = err.error;
+      else if (err.error?.message) errMsg = err.error.message;
+    } catch { /* not JSON */ }
+    throw new Error(errMsg);
+  }
+
+  const reader = response.body!.getReader();
+  const stream = parseSSEStream(reader);
+
+  return {
+    userMessage: userMsg as AssistantMessage,
+    stream,
+    abort: () => reader.cancel(),
+  };
+}
+
+export async function persistStreamedAssistantMessage(
+  threadId: string,
+  fullResponse: string,
+  metadata: Record<string, unknown>
+): Promise<AssistantMessage> {
+  let messageType: AssistantMessage['message_type'] = 'text';
+  if (metadata.its_request && (metadata.its_request as Record<string, unknown>).requires_confirmation) {
+    messageType = 'execution_plan';
+  } else if (metadata.execution_result) {
+    messageType = 'execution_result';
+  }
+
+  const { data: assistantMsg, error } = await supabase
+    .from('assistant_messages')
+    .insert({
+      thread_id: threadId,
+      role: 'assistant',
+      content: fullResponse,
+      message_type: messageType,
+      tool_calls: null,
+      metadata,
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return assistantMsg as AssistantMessage;
 }
 
 export async function confirmAction(

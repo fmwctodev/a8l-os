@@ -14,9 +14,10 @@ import { ClaraMarkdown } from './ClaraMarkdown';
 
 interface MessageBubbleProps {
   message: AssistantMessage;
+  streaming?: boolean;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, streaming }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const meta = message.metadata as Record<string, unknown> | null;
   const confirmations = (meta?.confirmations || []) as ClaraActionConfirmation[];
@@ -83,28 +84,35 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         </div>
         <div className="space-y-2">
           <div className="bg-slate-800 border border-slate-700/50 rounded-2xl rounded-tl-md px-3 py-2 group/bubble">
-            <ClaraMarkdown content={message.content} />
-            <div className="flex items-center gap-1.5 mt-1">
-              <p className="text-[9px] text-slate-500">
-                {formatTime(message.created_at)}
-              </p>
-              {canSpeak && (
-                <button
-                  onClick={handleSpeak}
-                  disabled={ttsLoading || player.isPlaying}
-                  className="opacity-0 group-hover/bubble:opacity-100 transition-opacity p-0.5 rounded text-slate-500 hover:text-cyan-400 disabled:opacity-50"
-                  title="Play aloud"
-                >
-                  {ttsLoading ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : player.isPlaying ? (
-                    <Volume2 className="w-3 h-3 text-cyan-400 animate-pulse" />
-                  ) : (
-                    <Volume2 className="w-3 h-3" />
-                  )}
-                </button>
+            <div className="relative">
+              <ClaraMarkdown content={message.content} />
+              {streaming && (
+                <span className="inline-block w-1.5 h-3.5 bg-cyan-400 ml-0.5 -mb-0.5 animate-pulse rounded-sm" />
               )}
             </div>
+            {!streaming && (
+              <div className="flex items-center gap-1.5 mt-1">
+                <p className="text-[9px] text-slate-500">
+                  {formatTime(message.created_at)}
+                </p>
+                {canSpeak && (
+                  <button
+                    onClick={handleSpeak}
+                    disabled={ttsLoading || player.isPlaying}
+                    className="opacity-0 group-hover/bubble:opacity-100 transition-opacity p-0.5 rounded text-slate-500 hover:text-cyan-400 disabled:opacity-50"
+                    title="Play aloud"
+                  >
+                    {ttsLoading ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : player.isPlaying ? (
+                      <Volume2 className="w-3 h-3 text-cyan-400 animate-pulse" />
+                    ) : (
+                      <Volume2 className="w-3 h-3" />
+                    )}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {(permissionDenied.length > 0 || integrationErrors.length > 0) && (

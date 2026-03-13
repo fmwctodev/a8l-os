@@ -4,13 +4,15 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useAssistant } from '../../../contexts/AssistantContext';
 import {
   getThreadMessages,
-  sendMessage,
+  sendMessageStreaming,
+  persistStreamedAssistantMessage,
   createThread,
   subscribeToMessages,
 } from '../../../services/assistantChat';
-import { textToSpeech } from '../../../services/assistantVoice';
+import { createStreamingTTS } from '../../../services/assistantVoice';
 import { updateProfile } from '../../../services/assistantProfile';
-import { useVoicePlayer } from '../../../hooks/useVoicePlayer';
+import { useStreamingPlayer } from '../../../hooks/useStreamingPlayer';
+import { SentenceSegmenter } from '../../../lib/sentenceSegmenter';
 import { isSessionHealthy } from '../../../lib/edgeFunction';
 import type { AssistantMessage } from '../../../types/assistant';
 import { ThreadSelector } from './ThreadSelector';
@@ -28,7 +30,6 @@ export function AssistantChatView() {
     refreshProfile,
   } = useAssistant();
 
-  const player = useVoicePlayer();
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -36,10 +37,18 @@ export function AssistantChatView() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [togglingMute, setTogglingMute] = useState(false);
   const [failedPrompt, setFailedPrompt] = useState<string | null>(null);
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
+  const [streamingContent, setStreamingContent] = useState('');
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const streamAbortRef = useRef<(() => void) | null>(null);
+  const ttsControllerRef = useRef<ReturnType<typeof createStreamingTTS> | null>(null);
+
+  const streamingPlayer = useStreamingPlayer(useCallback(() => {
+    setIsSpeaking(false);
+  }, []));
 
   useEffect(() => {
     if (!activeThreadId) {
@@ -78,7 +87,7 @@ export function AssistantChatView() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages.length, scrollToBottom]);
+  }, [messages.length, streamingContent, scrollToBottom]);
 
   const handleScroll = () => {
     if (!scrollRef.current) return;
@@ -106,33 +115,107 @@ export function AssistantChatView() {
         setActiveThread(thread.id);
       }
 
-      const result = await sendMessage(threadId, text, pageContext);
+      const { userMessage, stream, abort } = await sendMessageStreaming(threadId, text, pageContext);
+      streamAbortRef.current = abort;
+
       setMessages((prev) => {
-        const ids = new Set(prev.map((m) => m.id));
-        const newMsgs = [result.userMessage, result.assistantMessage].filter(
-          (m) => !ids.has(m.id)
-        );
-        return [...prev, ...newMsgs];
+        if (prev.some((m) => m.id === userMessage.id)) return prev;
+        return [...prev, userMessage];
       });
 
-      if (
-        profile?.voice_enabled &&
-        profile?.auto_speak_chat &&
-        profile?.elevenlabs_voice_id &&
-        result.assistantMessage.content
-      ) {
+      const placeholderId = `streaming-${Date.now()}`;
+      setStreamingMessageId(placeholderId);
+      setStreamingContent('');
+
+      let fullResponse = '';
+      let metadata: Record<string, unknown> = {};
+      const sentenceQueue: string[] = [];
+      let ttsStarted = false;
+
+      const shouldSpeak = profile?.voice_enabled && profile?.auto_speak_chat && profile?.elevenlabs_voice_id;
+
+      const segmenter = shouldSpeak ? new SentenceSegmenter((sentence) => {
+        sentenceQueue.push(sentence);
+        if (!ttsStarted && profile?.elevenlabs_voice_id) {
+          ttsStarted = true;
+          setIsSpeaking(true);
+          const tts = createStreamingTTS(profile.elevenlabs_voice_id, profile.speech_rate);
+          ttsControllerRef.current = tts;
+          tts.onAudioChunk((chunk) => streamingPlayer.enqueue(chunk));
+          tts.onDone(() => streamingPlayer.finalize());
+          tts.onError(() => {});
+          tts.start([...sentenceQueue]);
+        }
+      }) : null;
+
+      for await (const evt of stream) {
+        if (evt.type === 'token' && typeof evt.text === 'string') {
+          fullResponse += evt.text;
+          setStreamingContent(fullResponse);
+          segmenter?.push(evt.text);
+        } else if (evt.type === 'done') {
+          fullResponse = (evt.response as string) || fullResponse;
+          setStreamingContent(fullResponse);
+          metadata = { model_used: evt.model_used };
+        } else if (evt.type === 'plan') {
+          fullResponse = (evt.response as string) || fullResponse;
+          setStreamingContent(fullResponse);
+          metadata = { its_request: evt.its_request, model_used: evt.model_used };
+        } else if (evt.type === 'execution_result') {
+          fullResponse = (evt.response as string) || fullResponse;
+          setStreamingContent(fullResponse);
+          metadata = {
+            its_request: evt.its_request,
+            execution_result: evt.execution_result,
+            model_used: evt.model_used,
+          };
+        } else if (evt.type === 'error') {
+          throw new Error(evt.message as string);
+        }
+      }
+
+      segmenter?.flush();
+
+      if (shouldSpeak && !ttsStarted && sentenceQueue.length > 0 && profile?.elevenlabs_voice_id) {
         setIsSpeaking(true);
-        textToSpeech(
-          result.assistantMessage.content,
-          profile.elevenlabs_voice_id,
-          profile.speech_rate
-        )
-          .then((blob) => {
-            player.play(blob, () => setIsSpeaking(false), profile.output_volume);
+        const tts = createStreamingTTS(profile.elevenlabs_voice_id, profile.speech_rate);
+        ttsControllerRef.current = tts;
+        tts.onAudioChunk((chunk) => streamingPlayer.enqueue(chunk));
+        tts.onDone(() => streamingPlayer.finalize());
+        tts.onError(() => {});
+        tts.start([...sentenceQueue]);
+      }
+
+      setStreamingMessageId(null);
+      setStreamingContent('');
+
+      if (threadId && fullResponse) {
+        persistStreamedAssistantMessage(threadId, fullResponse, metadata)
+          .then((assistantMsg) => {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === assistantMsg.id)) return prev;
+              return [...prev, assistantMsg];
+            });
           })
-          .catch(() => setIsSpeaking(false));
+          .catch(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `local-${Date.now()}`,
+                thread_id: threadId!,
+                role: 'assistant',
+                content: fullResponse,
+                message_type: 'text',
+                tool_calls: null,
+                metadata,
+                created_at: new Date().toISOString(),
+              },
+            ]);
+          });
       }
     } catch (err) {
+      setStreamingMessageId(null);
+      setStreamingContent('');
       console.error('[Clara] Send failed:', err);
       const raw = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
       const isAuthError = /invalid jwt|authentication required|session expired|unauthorized/i.test(raw);
@@ -181,7 +264,7 @@ export function AssistantChatView() {
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />
           </div>
-        ) : messages.length === 0 ? (
+        ) : messages.length === 0 && !streamingMessageId ? (
           <EmptyState />
         ) : (
           messages.map((msg) => (
@@ -207,7 +290,23 @@ export function AssistantChatView() {
           ))
         )}
 
-        {sending && (
+        {streamingMessageId && streamingContent && (
+          <MessageBubble
+            message={{
+              id: streamingMessageId,
+              thread_id: activeThreadId || '',
+              role: 'assistant',
+              content: streamingContent,
+              message_type: 'text',
+              tool_calls: null,
+              metadata: null,
+              created_at: new Date().toISOString(),
+            }}
+            streaming
+          />
+        )}
+
+        {sending && !streamingContent && (
           <div className="flex items-center gap-2 px-3 py-2">
             <div className="flex gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-bounce" style={{ animationDelay: '0ms' }} />
@@ -245,7 +344,11 @@ export function AssistantChatView() {
             </div>
             <span className="text-[10px] text-cyan-400">Clara is speaking...</span>
             <button
-              onClick={() => { player.stop(); setIsSpeaking(false); }}
+              onClick={() => {
+                streamingPlayer.stop();
+                ttsControllerRef.current?.cancel();
+                setIsSpeaking(false);
+              }}
               className="ml-auto text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
             >
               Stop

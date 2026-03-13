@@ -5,14 +5,16 @@ import { useAssistant } from '../../../contexts/AssistantContext';
 import { usePersistentMic } from '../../../hooks/usePersistentMic';
 import { useVAD } from '../../../hooks/useVAD';
 import { useSegmentRecorder } from '../../../hooks/useSegmentRecorder';
-import { useVoicePlayer } from '../../../hooks/useVoicePlayer';
+import { useStreamingPlayer } from '../../../hooks/useStreamingPlayer';
 import { useWakeWord } from '../../../hooks/useWakeWord';
 import { useBargeIn } from '../../../hooks/useBargeIn';
-import { transcribeFinal, textToSpeech } from '../../../services/assistantVoice';
-import { sendMessage, createThread } from '../../../services/assistantChat';
+import { transcribeFinal, createStreamingTTS } from '../../../services/assistantVoice';
+import { sendMessageStreaming, persistStreamedAssistantMessage, createThread } from '../../../services/assistantChat';
 import { logVoiceEvent } from '../../../services/claraVoiceEvents';
+import { SentenceSegmenter } from '../../../lib/sentenceSegmenter';
 import { VoiceOrb } from './VoiceOrb';
 import type { ClaraVoiceMode } from '../../../types/assistant';
+import type { StreamingTTSController } from '../../../services/assistantVoice';
 
 export function AssistantVoiceView() {
   const { user } = useAuth();
@@ -32,7 +34,6 @@ export function AssistantVoiceView() {
   } = useAssistant();
 
   const mic = usePersistentMic();
-  const player = useVoicePlayer();
   const commandRecorder = useSegmentRecorder();
 
   const [transcript, setTranscript] = useState('');
@@ -43,11 +44,23 @@ export function AssistantVoiceView() {
   const abortRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentMessageIdRef = useRef<string | null>(null);
-  const ttsAbortRef = useRef<AbortController | null>(null);
+  const ttsControllerRef = useRef<StreamingTTSController | null>(null);
+  const streamAbortRef = useRef<(() => void) | null>(null);
 
   const wakeEnabled = profile?.wake_word_enabled ?? true;
   const bargeInEnabled = profile?.barge_in_enabled ?? true;
   const wakePhrase = (profile?.wake_word || 'clara').toLowerCase();
+
+  const defaultMode = useCallback((): ClaraVoiceMode => {
+    return micEnabled && wakeEnabled ? 'passive_listening' : 'idle';
+  }, [micEnabled, wakeEnabled]);
+
+  const streamingPlayer = useStreamingPlayer(useCallback(() => {
+    if (profile) {
+      logVoiceEvent(user?.id || '', profile.org_id, 'tts_finished');
+    }
+    setVoiceMode(defaultMode());
+  }, [user, profile, setVoiceMode, defaultMode]));
 
   useEffect(() => {
     setVoiceActive(voiceMode !== 'idle');
@@ -58,10 +71,6 @@ export function AssistantVoiceView() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [voiceHistory.length, transcript, response]);
-
-  const defaultMode = useCallback((): ClaraVoiceMode => {
-    return micEnabled && wakeEnabled ? 'passive_listening' : 'idle';
-  }, [micEnabled, wakeEnabled]);
 
   const processCommand = useCallback(async (audioBlob: Blob, prefillText?: string) => {
     if (!user) return;
@@ -81,6 +90,7 @@ export function AssistantVoiceView() {
       }
 
       setTranscript(text);
+      setResponse('');
       if (profile) {
         logVoiceEvent(user.id, profile.org_id, 'command_sent');
       }
@@ -97,50 +107,100 @@ export function AssistantVoiceView() {
         setActiveThread(thread.id);
       }
 
-      const chatResult = await sendMessage(threadId, text, pageContext);
+      const { stream, abort } = await sendMessageStreaming(threadId, text, pageContext);
+      streamAbortRef.current = abort;
+
       if (abortRef.current) {
+        abort();
         setVoiceMode('idle');
         return;
       }
 
-      const responseText = chatResult.chatResponse.response;
-      setResponse(responseText);
-      addVoiceExchange(text, responseText);
+      let fullResponse = '';
+      const sentenceQueue: string[] = [];
+      let ttsStarted = false;
+      let streamDoneMetadata: Record<string, unknown> | null = null;
 
-      if (profile?.voice_enabled && profile.elevenlabs_voice_id) {
+      const segmenter = new SentenceSegmenter((sentence) => {
+        sentenceQueue.push(sentence);
+        if (!ttsStarted && profile?.voice_enabled && profile.elevenlabs_voice_id) {
+          ttsStarted = true;
+          startTTSStream(sentenceQueue, profile.elevenlabs_voice_id, profile.speech_rate);
+        }
+      });
+
+      function startTTSStream(queue: string[], voiceId: string, speechRate: number) {
         setVoiceMode('speaking');
         if (profile) {
-          logVoiceEvent(user.id, profile.org_id, 'tts_started');
+          logVoiceEvent(user!.id, profile.org_id, 'tts_started');
         }
 
-        const controller = new AbortController();
-        ttsAbortRef.current = controller;
+        const tts = createStreamingTTS(voiceId, speechRate);
+        ttsControllerRef.current = tts;
 
-        const ttsBlob = await textToSpeech(
-          responseText,
-          profile.elevenlabs_voice_id,
-          profile.speech_rate
-        );
+        tts.onAudioChunk((chunk) => {
+          streamingPlayer.enqueue(chunk);
+        });
+        tts.onDone(() => {
+          streamingPlayer.finalize();
+        });
+        tts.onError(() => {});
 
-        if (controller.signal.aborted || abortRef.current) {
-          setVoiceMode('idle');
-          return;
+        const pollAndSend = async () => {
+          await tts.start([...queue]);
+        };
+        pollAndSend();
+      }
+
+      for await (const evt of stream) {
+        if (abortRef.current) break;
+
+        if (evt.type === 'token' && typeof evt.text === 'string') {
+          fullResponse += evt.text;
+          setResponse(fullResponse);
+          segmenter.push(evt.text);
+        } else if (evt.type === 'done') {
+          fullResponse = (evt.response as string) || fullResponse;
+          setResponse(fullResponse);
+          streamDoneMetadata = { model_used: evt.model_used };
+        } else if (evt.type === 'plan') {
+          fullResponse = (evt.response as string) || fullResponse;
+          setResponse(fullResponse);
+          streamDoneMetadata = {
+            its_request: evt.its_request,
+            model_used: evt.model_used,
+          };
+        } else if (evt.type === 'execution_result') {
+          fullResponse = (evt.response as string) || fullResponse;
+          setResponse(fullResponse);
+          streamDoneMetadata = {
+            its_request: evt.its_request,
+            execution_result: evt.execution_result,
+            model_used: evt.model_used,
+          };
+        } else if (evt.type === 'error') {
+          throw new Error(evt.message as string);
         }
+      }
 
-        player.play(ttsBlob, () => {
-          if (profile) {
-            logVoiceEvent(user.id, profile.org_id, 'tts_finished');
-          }
-          setVoiceMode(defaultMode());
-        }, profile.output_volume);
-      } else {
+      segmenter.flush();
+
+      if (!ttsStarted && profile?.voice_enabled && profile.elevenlabs_voice_id && sentenceQueue.length > 0) {
+        startTTSStream(sentenceQueue, profile.elevenlabs_voice_id, profile.speech_rate);
+      } else if (!ttsStarted) {
         setVoiceMode(defaultMode());
+      }
+
+      addVoiceExchange(text, fullResponse);
+
+      if (threadId && fullResponse) {
+        persistStreamedAssistantMessage(threadId, fullResponse, streamDoneMetadata || {}).catch(() => {});
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Voice processing failed');
       setVoiceMode(defaultMode());
     }
-  }, [user, profile, activeThreadId, setActiveThread, pageContext, player, addVoiceExchange, setVoiceMode, defaultMode]);
+  }, [user, profile, activeThreadId, setActiveThread, pageContext, streamingPlayer, addVoiceExchange, setVoiceMode, defaultMode]);
 
   const handleCommandSpeechEnd = useCallback(async () => {
     try {
@@ -201,20 +261,22 @@ export function AssistantVoiceView() {
   });
 
   const handleBargeInInterrupted = useCallback(() => {
+    ttsControllerRef.current?.cancel();
+    streamingPlayer.stop();
     setVoiceMode('interrupted');
     setTimeout(() => {
       if (mic.stream) {
         startActiveListening(mic.stream);
       }
     }, 100);
-  }, [mic.stream, setVoiceMode, startActiveListening]);
+  }, [mic.stream, setVoiceMode, startActiveListening, streamingPlayer]);
 
   const bargeIn = useBargeIn({
     enabled: bargeInEnabled,
     stream: mic.stream,
     isSpeaking: voiceMode === 'speaking',
     onInterrupted: handleBargeInInterrupted,
-    stopPlayer: player.stop,
+    stopPlayer: streamingPlayer.stop,
     currentMessageId: currentMessageIdRef.current,
   });
 
@@ -227,7 +289,9 @@ export function AssistantVoiceView() {
   const toggleMic = useCallback(async () => {
     if (micEnabled) {
       abortRef.current = true;
-      player.stop();
+      streamingPlayer.stop();
+      ttsControllerRef.current?.cancel();
+      streamAbortRef.current?.();
       commandVad.stop();
       commandRecorder.cancelSegment();
       mic.releaseMic();
@@ -253,7 +317,7 @@ export function AssistantVoiceView() {
     if (wakeEnabled) {
       setVoiceMode('passive_listening');
     }
-  }, [micEnabled, mic, player, commandVad, commandRecorder, setMicEnabled, wakeEnabled, user, profile, setVoiceMode]);
+  }, [micEnabled, mic, streamingPlayer, commandVad, commandRecorder, setMicEnabled, wakeEnabled, user, profile, setVoiceMode]);
 
   const handleHoldStart = useCallback(async () => {
     if (!user) return;
@@ -285,14 +349,15 @@ export function AssistantVoiceView() {
 
   const handleCancel = useCallback(() => {
     abortRef.current = true;
-    player.stop();
+    streamingPlayer.stop();
+    ttsControllerRef.current?.cancel();
+    streamAbortRef.current?.();
     commandVad.stop();
     commandRecorder.cancelSegment();
-    ttsAbortRef.current?.abort();
     setTranscript('');
     setResponse('');
     setVoiceMode(defaultMode());
-  }, [player, commandVad, commandRecorder, setVoiceMode, defaultMode]);
+  }, [streamingPlayer, commandVad, commandRecorder, setVoiceMode, defaultMode]);
 
   if (!profile?.voice_enabled) {
     return (
@@ -397,7 +462,12 @@ export function AssistantVoiceView() {
             {response && (
               <div className="mr-auto max-w-[280px] px-3 py-2 bg-slate-800 border border-slate-700/50 rounded-lg">
                 <p className="text-[10px] text-teal-400/70 font-medium mb-0.5">Clara</p>
-                <p className="text-xs text-slate-300 whitespace-pre-wrap">{response}</p>
+                <p className="text-xs text-slate-300 whitespace-pre-wrap">
+                  {response}
+                  {voiceMode === 'processing' && (
+                    <span className="inline-block w-1.5 h-3.5 bg-cyan-400 ml-0.5 animate-pulse" />
+                  )}
+                </p>
               </div>
             )}
           </div>

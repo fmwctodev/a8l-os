@@ -199,6 +199,88 @@ export async function fetchEdge(slug: string, options: FetchEdgeOptions = {}): P
   return authenticatedFetch(url, method, session.access_token, serializedBody);
 }
 
+export interface SSEEvent {
+  type: string;
+  [key: string]: unknown;
+}
+
+export async function streamEdgeFunction(
+  slug: string,
+  body: Record<string, unknown>
+): Promise<Response> {
+  if (sessionReadyPromise) await sessionReadyPromise;
+  if (!sessionHealthy) {
+    const recovered = await tryRecoverSession();
+    if (!recovered) {
+      throw new Error('Session expired. Please log out and log back in.');
+    }
+  }
+  const session = await getFreshSession();
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${slug}`;
+  const headers = buildHeaders(session.access_token, true);
+  return fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
+export async function* parseSSEStream(
+  reader: ReadableStreamDefaultReader<Uint8Array>
+): AsyncGenerator<SSEEvent> {
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('data: ')) continue;
+      const json = trimmed.slice(6);
+      if (json === '[DONE]') return;
+      try {
+        yield JSON.parse(json) as SSEEvent;
+      } catch {
+        // skip malformed SSE lines
+      }
+    }
+  }
+
+  if (buffer.trim().startsWith('data: ')) {
+    const json = buffer.trim().slice(6);
+    if (json !== '[DONE]') {
+      try {
+        yield JSON.parse(json) as SSEEvent;
+      } catch {
+        // skip
+      }
+    }
+  }
+}
+
+export async function getEdgeWebSocketUrl(slug: string): Promise<{ url: string; token: string }> {
+  if (sessionReadyPromise) await sessionReadyPromise;
+  if (!sessionHealthy) {
+    const recovered = await tryRecoverSession();
+    if (!recovered) {
+      throw new Error('Session expired. Please log out and log back in.');
+    }
+  }
+  const session = await getFreshSession();
+  const base = import.meta.env.VITE_SUPABASE_URL.replace(/^https?:\/\//, '');
+  const protocol = import.meta.env.VITE_SUPABASE_URL.startsWith('https') ? 'wss' : 'ws';
+  return {
+    url: `${protocol}://${base}/functions/v1/${slug}`,
+    token: session.access_token,
+  };
+}
+
 export function parseEdgeFunctionError(
   err: Record<string, unknown>,
   fallback: string

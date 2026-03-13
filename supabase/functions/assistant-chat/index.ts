@@ -80,7 +80,7 @@ Deno.serve(async (req: Request) => {
     );
 
     const body = await req.json();
-    const { thread_id, content, context, action, execution_request_id, approved, action_ids, internal_user_id } = body as {
+    const { thread_id, content, context, action, execution_request_id, approved, action_ids, internal_user_id, stream } = body as {
       thread_id: string;
       content?: string;
       context?: PageContext;
@@ -89,6 +89,7 @@ Deno.serve(async (req: Request) => {
       approved?: boolean;
       action_ids?: string[];
       internal_user_id?: string;
+      stream?: boolean;
     };
 
     let userCtx;
@@ -162,6 +163,10 @@ Deno.serve(async (req: Request) => {
       })
     );
     conversationHistory.push({ role: "user", content: content || "" });
+
+    if (stream) {
+      return handleStreamingChat(llmConfig, systemPrompt, conversationHistory, supabase, user, userData, thread_id, context || null, content || "", profile);
+    }
 
     const llmResponse = await callLLM(llmConfig, systemPrompt, conversationHistory);
 
@@ -418,6 +423,200 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+function sseEvent(data: Record<string, unknown>): string {
+  return `data: ${JSON.stringify(data)}\n\n`;
+}
+
+async function handleStreamingChat(
+  llmConfig: LLMConfig,
+  systemPrompt: string,
+  conversationHistory: { role: string; content: string }[],
+  supabase: SupabaseClient,
+  user: UserContext,
+  userData: { id: string; organization_id: string; email: string; name: string },
+  threadId: string,
+  context: PageContext | null,
+  userContent: string,
+  profile: Record<string, unknown> | null
+): Promise<Response> {
+  const url = getResponsesApiUrl(llmConfig.baseUrl);
+
+  const input: ResponsesApiInput[] = [
+    { role: "developer", content: systemPrompt },
+    ...conversationHistory.map((m) => ({
+      role: (m.role === "assistant" ? "assistant" : "user") as ResponsesApiInput["role"],
+      content: m.content,
+    })),
+  ];
+
+  const body: Record<string, unknown> = {
+    model: CLARA_MODEL,
+    input,
+    temperature: CLARA_TEMPERATURE,
+    max_output_tokens: CLARA_MAX_TOKENS,
+    stream: true,
+  };
+
+  const openaiRes = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${llmConfig.apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!openaiRes.ok) {
+    const errText = await openaiRes.text();
+    const errMsg = `OpenAI API error ${openaiRes.status}: ${errText.slice(0, 200)}`;
+    return new Response(sseEvent({ type: "error", message: errMsg }) + "data: [DONE]\n\n", {
+      headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
+    });
+  }
+
+  const readable = new ReadableStream({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      const decoder = new TextDecoder();
+      let fullText = "";
+
+      try {
+        const reader = openaiRes.body!.getReader();
+        let sseBuffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          sseBuffer += decoder.decode(value, { stream: true });
+          const lines = sseBuffer.split("\n");
+          sseBuffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data: ")) continue;
+            const json = trimmed.slice(6);
+            if (json === "[DONE]") continue;
+
+            try {
+              const evt = JSON.parse(json);
+              if (evt.type === "response.output_text.delta" && evt.delta) {
+                fullText += evt.delta;
+                controller.enqueue(encoder.encode(sseEvent({ type: "token", text: evt.delta })));
+              }
+            } catch {
+              // skip malformed
+            }
+          }
+        }
+
+        const parsed = parseITSFromLLM(fullText);
+
+        if (parsed) {
+          const validation = validateITSRequest(parsed);
+          if (validation.valid && validation.request && validation.request.actions.length > 0) {
+            let itsRequest = validation.request;
+
+            itsRequest.actions = itsRequest.actions.map((a) => {
+              const cleaned = stripUnknownKeys(a);
+              return cleaned;
+            });
+
+            const permResult = validatePermissions(itsRequest.actions, user);
+            itsRequest.actions = permResult.allowed;
+
+            if (itsRequest.actions.length > 0) {
+              const intResult = await validateIntegrationState(itsRequest.actions, {
+                userId: user.id,
+                orgId: user.orgId,
+                supabase,
+              });
+              itsRequest.actions = intResult.valid;
+            }
+
+            if (itsRequest.actions.length > 0) {
+              itsRequest = await applyConfirmationOverrides(itsRequest, {
+                userId: user.id,
+                orgId: user.orgId,
+                supabase,
+                confirmAllWrites: (profile as Record<string, unknown> | null)?.confirm_all_writes ?? true,
+              });
+
+              if (itsRequest.requires_confirmation) {
+                controller.enqueue(encoder.encode(sseEvent({
+                  type: "plan",
+                  its_request: itsRequest,
+                  response: itsRequest.response_to_user,
+                  model_used: llmConfig.model,
+                })));
+              } else {
+                const execRequestId = crypto.randomUUID();
+                const executionResult = await executeActionPlan(
+                  supabase, user, userData, threadId, execRequestId, itsRequest, llmConfig.model, parsed, llmConfig
+                );
+
+                const queryResults = executionResult.results.filter((r) => r.query_data !== undefined && r.status === "success");
+                let finalResponse = itsRequest.response_to_user;
+                if (queryResults.length > 0) {
+                  const summarized = await summarizeQueryResults(
+                    llmConfig, queryResults, itsRequest, userContent, userData.name || userData.email
+                  );
+                  if (summarized) finalResponse = summarized;
+                }
+
+                controller.enqueue(encoder.encode(sseEvent({
+                  type: "execution_result",
+                  response: finalResponse,
+                  its_request: itsRequest,
+                  execution_result: {
+                    execution_id: execRequestId,
+                    status: executionResult.results.every((r) => r.status === "success") ? "success" : "partial",
+                    results: executionResult.results,
+                  },
+                  model_used: llmConfig.model,
+                })));
+              }
+            } else {
+              controller.enqueue(encoder.encode(sseEvent({
+                type: "done",
+                response: fullText,
+                model_used: llmConfig.model,
+              })));
+            }
+          } else {
+            controller.enqueue(encoder.encode(sseEvent({
+              type: "done",
+              response: fullText,
+              model_used: llmConfig.model,
+            })));
+          }
+        } else {
+          controller.enqueue(encoder.encode(sseEvent({
+            type: "done",
+            response: fullText,
+            model_used: llmConfig.model,
+          })));
+        }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : "Streaming error";
+        controller.enqueue(encoder.encode(sseEvent({ type: "error", message: errMsg })));
+      }
+
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+
+  return new Response(readable, {
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}
 
 async function handleConfirmation(
   supabase: SupabaseClient,
