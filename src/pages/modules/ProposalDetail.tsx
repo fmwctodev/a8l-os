@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePaymentsAccess } from '../../hooks/usePaymentsAccess';
 import { SendProposalModal } from '../../components/proposals/SendProposalModal';
+import { SendForSignatureModal } from '../../components/proposals/SendForSignatureModal';
 import { ConvertToInvoiceModal } from '../../components/proposals/ConvertToInvoiceModal';
 import {
   getProposalById,
@@ -23,21 +24,54 @@ import {
   deleteProposalLineItem,
   recalculateAndUpdateProposalTotal,
 } from '../../services/proposals';
-import type { Proposal, ProposalComment, ProposalActivity, ProposalSection, ProposalLineItem } from '../../types';
-import { ArrowLeft, FileText, FileDown, Send, CreditCard as Edit3, Trash2, Loader2, User, Calendar, DollarSign, Clock, CheckCircle2, XCircle, Eye, AlertCircle, MessageSquare, Activity, Plus, GripVertical, Sparkles, ExternalLink, Copy, MoreVertical, Video, Archive, ArchiveRestore, Copy as CopyIcon } from 'lucide-react';
+import {
+  getSignatureRequestByProposal,
+  getAuditEvents,
+  voidSignatureRequest,
+  resendSignatureRequest,
+} from '../../services/proposalSigning';
+import { buildSignatureReminderEmail } from '../../services/proposalSigningEmails';
+import { sendEmail } from '../../services/emailSend';
+import { getEmailDefaults } from '../../services/emailDefaults';
+import type { Proposal, ProposalComment, ProposalActivity, ProposalSection, ProposalLineItem, ProposalSignatureRequest, ProposalAuditEvent } from '../../types';
+import { ArrowLeft, FileText, FileDown, Send, CreditCard as Edit3, Trash2, Loader2, User, Calendar, DollarSign, Clock, CheckCircle2, XCircle, Eye, AlertCircle, MessageSquare, Activity, Plus, GripVertical, Sparkles, ExternalLink, Copy, MoreVertical, Video, Archive, ArchiveRestore, Copy as CopyIcon, PenTool, Shield, Ban, RefreshCw, Mail } from 'lucide-react';
 import { exportProposalToPDF } from '../../services/proposalPdfExport';
 import { getBrandKits } from '../../services/brandboard';
 
-const STATUS_STYLES = {
+const STATUS_STYLES: Record<string, { bg: string; text: string; icon: typeof Clock; label: string }> = {
   draft: { bg: 'bg-slate-500/20', text: 'text-slate-300', icon: Clock, label: 'Draft' },
   sent: { bg: 'bg-cyan-500/20', text: 'text-cyan-300', icon: Send, label: 'Sent' },
   viewed: { bg: 'bg-amber-500/20', text: 'text-amber-300', icon: Eye, label: 'Viewed' },
   accepted: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', icon: CheckCircle2, label: 'Accepted' },
   rejected: { bg: 'bg-red-500/20', text: 'text-red-300', icon: XCircle, label: 'Rejected' },
   expired: { bg: 'bg-slate-700/50', text: 'text-slate-500', icon: AlertCircle, label: 'Expired' },
+  signed: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', icon: PenTool, label: 'Signed' },
+  declined: { bg: 'bg-red-500/20', text: 'text-red-300', icon: Ban, label: 'Declined' },
+  voided: { bg: 'bg-slate-700/50', text: 'text-slate-500', icon: Ban, label: 'Voided' },
 };
 
-type TabType = 'content' | 'pricing' | 'comments' | 'activity';
+const SIGNATURE_STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  not_sent: { bg: 'bg-slate-500/20', text: 'text-slate-400', label: 'Not Sent' },
+  pending_signature: { bg: 'bg-amber-500/20', text: 'text-amber-300', label: 'Pending Signature' },
+  viewed: { bg: 'bg-cyan-500/20', text: 'text-cyan-300', label: 'Viewed by Signer' },
+  signed: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', label: 'Signed' },
+  declined: { bg: 'bg-red-500/20', text: 'text-red-300', label: 'Declined' },
+  expired: { bg: 'bg-slate-700/50', text: 'text-slate-500', label: 'Expired' },
+  voided: { bg: 'bg-slate-700/50', text: 'text-slate-500', label: 'Voided' },
+};
+
+const AUDIT_EVENT_ICONS: Record<string, { icon: typeof Clock; color: string }> = {
+  sent_for_signature: { icon: Send, color: 'text-cyan-400' },
+  viewed: { icon: Eye, color: 'text-amber-400' },
+  signed: { icon: PenTool, color: 'text-emerald-400' },
+  declined: { icon: XCircle, color: 'text-red-400' },
+  voided: { icon: Ban, color: 'text-slate-400' },
+  resent: { icon: RefreshCw, color: 'text-cyan-400' },
+  reminder_sent: { icon: Mail, color: 'text-cyan-400' },
+  signed_document_generated: { icon: FileDown, color: 'text-emerald-400' },
+};
+
+type TabType = 'content' | 'pricing' | 'comments' | 'activity' | 'signature';
 
 export function ProposalDetail() {
   const { id } = useParams<{ id: string }>();
@@ -55,8 +89,13 @@ export function ProposalDetail() {
   const [sectionContent, setSectionContent] = useState('');
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [signatureRequest, setSignatureRequest] = useState<ProposalSignatureRequest | null>(null);
+  const [auditEvents, setAuditEvents] = useState<ProposalAuditEvent[]>([]);
+  const [isVoiding, setIsVoiding] = useState(false);
+  const [isResending, setIsResending] = useState(false);
 
   const canEdit = hasPermission('proposals.edit');
   const canSend = hasPermission('proposals.send');
@@ -75,12 +114,16 @@ export function ProposalDetail() {
       setProposal(data);
 
       if (data) {
-        const [commentsData, activitiesData] = await Promise.all([
+        const [commentsData, activitiesData, sigReq, auditData] = await Promise.all([
           getProposalComments(id!),
           getProposalActivities(id!),
+          getSignatureRequestByProposal(id!),
+          getAuditEvents(id!),
         ]);
         setComments(commentsData);
         setActivities(activitiesData);
+        setSignatureRequest(sigReq);
+        setAuditEvents(auditData);
       }
     } catch (err) {
       console.error('Failed to load proposal:', err);
@@ -118,6 +161,81 @@ export function ProposalDetail() {
   const handleSendComplete = () => {
     setShowSendModal(false);
     loadProposal();
+  };
+
+  const handleSignatureComplete = () => {
+    setShowSignatureModal(false);
+    loadProposal();
+  };
+
+  const handleSendForSignature = () => {
+    if (!proposal?.contact?.email) {
+      alert('This proposal must have a contact with an email address before requesting a signature.');
+      return;
+    }
+    if (!proposal.sections?.length) {
+      alert('Add content sections before requesting a signature.');
+      return;
+    }
+    setShowSignatureModal(true);
+  };
+
+  const handleVoidSignature = async () => {
+    if (!proposal || !signatureRequest || !user) return;
+    if (!confirm('Void this signature request? The signer will no longer be able to sign.')) return;
+    try {
+      setIsVoiding(true);
+      await voidSignatureRequest(signatureRequest.id, proposal.id, proposal.org_id, user.id);
+      loadProposal();
+    } catch (err) {
+      console.error('Failed to void:', err);
+    } finally {
+      setIsVoiding(false);
+    }
+  };
+
+  const handleResendSignature = async () => {
+    if (!proposal || !signatureRequest || !user) return;
+    try {
+      setIsResending(true);
+      const { rawToken, signingUrl } = await resendSignatureRequest(
+        signatureRequest.id,
+        proposal.id,
+        proposal.org_id,
+        user.id
+      );
+
+      let fromAddressId: string | undefined;
+      try {
+        const defaults = await getEmailDefaults(user.organization_id);
+        fromAddressId = defaults?.default_from_address?.id;
+      } catch {}
+
+      if (fromAddressId) {
+        const companyName = user.organization?.name || 'Our Company';
+        const htmlBody = buildSignatureReminderEmail({
+          signerName: signatureRequest.signer_name,
+          proposalTitle: proposal.title,
+          signingUrl,
+          companyName,
+        });
+        await sendEmail({
+          toEmail: signatureRequest.signer_email,
+          toName: signatureRequest.signer_name,
+          fromAddressId,
+          subject: `Reminder: Please sign - ${proposal.title}`,
+          htmlBody,
+          trackOpens: true,
+          trackClicks: true,
+        });
+      }
+
+      loadProposal();
+    } catch (err) {
+      console.error('Failed to resend:', err);
+    } finally {
+      setIsResending(false);
+    }
   };
 
   const handleDeleteProposal = async () => {
@@ -242,8 +360,12 @@ export function ProposalDetail() {
     );
   }
 
-  const statusStyle = STATUS_STYLES[proposal.status];
+  const statusStyle = STATUS_STYLES[proposal.status] || STATUS_STYLES.draft;
   const StatusIcon = statusStyle.icon;
+  const sigStatus = proposal.signature_status;
+  const sigStyle = sigStatus ? SIGNATURE_STATUS_STYLES[sigStatus] : null;
+  const isFrozenForSigning = ['pending_signature', 'viewed', 'signed'].includes(sigStatus || '');
+  const canRequestSignature = canSend && ['draft', 'sent', 'viewed', 'accepted'].includes(proposal.status) && !isFrozenForSigning;
 
   return (
     <div className="h-full flex flex-col">
@@ -267,6 +389,12 @@ export function ProposalDetail() {
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-500/20 text-slate-400 rounded-full text-xs">
                     <Archive className="w-3 h-3" />
                     Archived
+                  </span>
+                )}
+                {sigStyle && sigStatus !== 'not_sent' && (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${sigStyle.bg} ${sigStyle.text}`}>
+                    <PenTool className="w-3 h-3" />
+                    {sigStyle.label}
                   </span>
                 )}
                 {proposal.ai_context?.generated_at && (
@@ -312,6 +440,15 @@ export function ProposalDetail() {
               >
                 <Send className="w-4 h-4" />
                 Send Proposal
+              </button>
+            )}
+            {canRequestSignature && (
+              <button
+                onClick={handleSendForSignature}
+                className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg transition-colors"
+              >
+                <PenTool className="w-4 h-4" />
+                Send for Signature
               </button>
             )}
             {proposal.status === 'accepted' && hasPermission('payments.manage') && canAccessPayments && (
@@ -407,7 +544,7 @@ export function ProposalDetail() {
         </div>
 
         <div className="flex items-center gap-1 mt-4">
-          {(['content', 'pricing', 'comments', 'activity'] as const).map((tab) => (
+          {(['content', 'pricing', 'signature', 'comments', 'activity'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -419,12 +556,18 @@ export function ProposalDetail() {
             >
               {tab === 'content' && <FileText className="w-4 h-4 inline mr-2" />}
               {tab === 'pricing' && <DollarSign className="w-4 h-4 inline mr-2" />}
+              {tab === 'signature' && <PenTool className="w-4 h-4 inline mr-2" />}
               {tab === 'comments' && <MessageSquare className="w-4 h-4 inline mr-2" />}
               {tab === 'activity' && <Activity className="w-4 h-4 inline mr-2" />}
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
               {tab === 'comments' && comments.length > 0 && (
                 <span className="ml-2 px-1.5 py-0.5 bg-cyan-500/20 text-cyan-300 rounded text-xs">
                   {comments.length}
+                </span>
+              )}
+              {tab === 'signature' && sigStatus === 'signed' && (
+                <span className="ml-2 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-300 rounded text-xs">
+                  Signed
                 </span>
               )}
             </button>
@@ -618,6 +761,149 @@ export function ProposalDetail() {
           </div>
         )}
 
+        {activeTab === 'signature' && (
+          <div className="max-w-3xl mx-auto space-y-6">
+            {!signatureRequest && !sigStatus ? (
+              <div className="text-center py-12 text-slate-400">
+                <PenTool className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                <p>No signature request has been sent for this proposal</p>
+                {canRequestSignature && (
+                  <button
+                    onClick={handleSendForSignature}
+                    className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg transition-colors"
+                  >
+                    <PenTool className="w-4 h-4" />
+                    Send for Signature
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="bg-slate-800/50 rounded-lg border border-slate-700 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-white flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-cyan-400" />
+                      Signature Status
+                    </h3>
+                    {sigStyle && (
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${sigStyle.bg} ${sigStyle.text}`}>
+                        {sigStyle.label}
+                      </span>
+                    )}
+                  </div>
+
+                  {signatureRequest && (
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Signer</p>
+                        <p className="text-white">{signatureRequest.signer_name}</p>
+                        <p className="text-sm text-slate-400">{signatureRequest.signer_email}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Expires</p>
+                        <p className="text-white">{formatDate(signatureRequest.expires_at)}</p>
+                      </div>
+                      {signatureRequest.viewed_at && (
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">First Viewed</p>
+                          <p className="text-white">{formatDateTime(signatureRequest.viewed_at)}</p>
+                        </div>
+                      )}
+                      {signatureRequest.signed_at && (
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Signed At</p>
+                          <p className="text-emerald-400 font-medium">{formatDateTime(signatureRequest.signed_at)}</p>
+                        </div>
+                      )}
+                      {signatureRequest.declined_at && (
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Declined At</p>
+                          <p className="text-red-400">{formatDateTime(signatureRequest.declined_at)}</p>
+                        </div>
+                      )}
+                      {signatureRequest.decline_reason && (
+                        <div className="col-span-2">
+                          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Decline Reason</p>
+                          <p className="text-slate-300">{signatureRequest.decline_reason}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {proposal.final_signed_pdf_url && (
+                    <a
+                      href={proposal.final_signed_pdf_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 rounded-lg hover:bg-emerald-600/30 transition-colors mb-4"
+                    >
+                      <FileDown className="w-4 h-4" />
+                      Download Signed Document
+                    </a>
+                  )}
+
+                  {signatureRequest && ['pending', 'viewed'].includes(signatureRequest.status) && canSend && (
+                    <div className="flex items-center gap-2 pt-4 border-t border-slate-700">
+                      <button
+                        onClick={handleResendSignature}
+                        disabled={isResending}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {isResending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                        Resend
+                      </button>
+                      <button
+                        onClick={handleVoidSignature}
+                        disabled={isVoiding}
+                        className="flex items-center gap-2 px-4 py-2 text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-500/50 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {isVoiding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}
+                        Void
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {auditEvents.length > 0 && (
+                  <div className="bg-slate-800/50 rounded-lg border border-slate-700 p-5">
+                    <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-cyan-400" />
+                      Audit Trail
+                    </h3>
+                    <div className="space-y-3">
+                      {auditEvents.map((evt) => {
+                        const evtStyle = AUDIT_EVENT_ICONS[evt.event_type] || { icon: Activity, color: 'text-slate-400' };
+                        const EvtIcon = evtStyle.icon;
+                        return (
+                          <div key={evt.id} className="flex gap-3">
+                            <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center flex-shrink-0">
+                              <EvtIcon className={`w-4 h-4 ${evtStyle.color}`} />
+                            </div>
+                            <div className="flex-1 pb-3 border-b border-slate-700/50">
+                              <p className="text-white text-sm">
+                                {evt.event_type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1 text-xs text-slate-400">
+                                <span className="capitalize">{evt.actor_type}</span>
+                                <span>{formatDateTime(evt.created_at)}</span>
+                              </div>
+                              {evt.metadata?.signer_email && (
+                                <p className="text-xs text-slate-500 mt-1">
+                                  {String(evt.metadata.signer_name || '')} ({String(evt.metadata.signer_email)})
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {activeTab === 'comments' && (
           <div className="max-w-2xl mx-auto space-y-4">
             <div className="flex gap-3">
@@ -723,6 +1009,17 @@ export function ProposalDetail() {
           onClose={() => setShowConvertModal(false)}
           onConverted={() => {
             setShowConvertModal(false);
+            loadProposal();
+          }}
+        />
+      )}
+
+      {showSignatureModal && proposal && (
+        <SendForSignatureModal
+          proposal={proposal}
+          onClose={() => setShowSignatureModal(false)}
+          onSent={() => {
+            setShowSignatureModal(false);
             loadProposal();
           }}
         />

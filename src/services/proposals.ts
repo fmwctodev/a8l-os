@@ -12,6 +12,20 @@ import type {
   ProposalSectionType,
 } from '../types';
 
+const FROZEN_STATUSES = ['pending_signature', 'viewed', 'signed'] as const;
+
+async function assertNotFrozen(proposalId: string): Promise<void> {
+  const { data } = await supabase
+    .from('proposals')
+    .select('signature_status')
+    .eq('id', proposalId)
+    .maybeSingle();
+
+  if (data?.signature_status && FROZEN_STATUSES.includes(data.signature_status)) {
+    throw new Error('This proposal is locked for signing and cannot be edited. Void the signature request first to make changes.');
+  }
+}
+
 const PROPOSAL_SELECT = `
   *,
   contact:contacts(*),
@@ -187,6 +201,7 @@ export async function updateProposal(
   }>,
   actorUserId: string
 ): Promise<Proposal> {
+  await assertNotFrozen(id);
   const { data, error } = await supabase
     .from('proposals')
     .update(updates)
@@ -252,7 +267,7 @@ export async function deleteProposal(id: string): Promise<void> {
 }
 
 export async function getProposalStats(filters: ProposalFilters = {}): Promise<ProposalStats> {
-  let query = supabase.from('proposals').select('status, total_value');
+  let query = supabase.from('proposals').select('status, total_value, signature_status');
 
   if (filters.contactId) {
     query = query.eq('contact_id', filters.contactId);
@@ -272,8 +287,10 @@ export async function getProposalStats(filters: ProposalFilters = {}): Promise<P
   const viewed = proposals.filter(p => p.status === 'viewed').length;
   const accepted = proposals.filter(p => p.status === 'accepted').length;
   const rejected = proposals.filter(p => p.status === 'rejected').length;
+  const signed = proposals.filter(p => p.status === 'signed').length;
   const totalValue = proposals.reduce((sum, p) => sum + Number(p.total_value), 0);
   const acceptedValue = proposals.filter(p => p.status === 'accepted').reduce((sum, p) => sum + Number(p.total_value), 0);
+  const signedValue = proposals.filter(p => p.status === 'signed').reduce((sum, p) => sum + Number(p.total_value), 0);
   const responded = accepted + rejected;
   const conversionRate = responded > 0 ? (accepted / responded) * 100 : 0;
 
@@ -286,7 +303,9 @@ export async function getProposalStats(filters: ProposalFilters = {}): Promise<P
     rejectedCount: rejected,
     totalValue,
     acceptedValue,
-    conversionRate
+    conversionRate,
+    signedCount: signed,
+    signedValue,
   };
 }
 
@@ -392,6 +411,7 @@ export async function addProposalLineItem(
     sort_order?: number;
   }
 ): Promise<ProposalLineItem> {
+  await assertNotFrozen(item.proposal_id);
   const { data, error } = await supabase
     .from('proposal_line_items')
     .insert({
@@ -423,6 +443,13 @@ export async function updateProposalLineItem(
     sort_order: number;
   }>
 ): Promise<ProposalLineItem> {
+  const { data: item } = await supabase
+    .from('proposal_line_items')
+    .select('proposal_id')
+    .eq('id', id)
+    .maybeSingle();
+  if (item) await assertNotFrozen(item.proposal_id);
+
   const { data, error } = await supabase
     .from('proposal_line_items')
     .update(updates)
@@ -435,6 +462,13 @@ export async function updateProposalLineItem(
 }
 
 export async function deleteProposalLineItem(id: string): Promise<void> {
+  const { data: item } = await supabase
+    .from('proposal_line_items')
+    .select('proposal_id')
+    .eq('id', id)
+    .maybeSingle();
+  if (item) await assertNotFrozen(item.proposal_id);
+
   const { error } = await supabase
     .from('proposal_line_items')
     .delete()
@@ -454,6 +488,7 @@ export async function addProposalSection(
     ai_generated?: boolean;
   }
 ): Promise<ProposalSection> {
+  await assertNotFrozen(section.proposal_id);
   const { data, error } = await supabase
     .from('proposal_sections')
     .insert({
@@ -481,6 +516,13 @@ export async function updateProposalSection(
     sort_order: number;
   }>
 ): Promise<ProposalSection> {
+  const { data: sec } = await supabase
+    .from('proposal_sections')
+    .select('proposal_id')
+    .eq('id', id)
+    .maybeSingle();
+  if (sec) await assertNotFrozen(sec.proposal_id);
+
   const { data, error } = await supabase
     .from('proposal_sections')
     .update(updates)
@@ -493,6 +535,13 @@ export async function updateProposalSection(
 }
 
 export async function deleteProposalSection(id: string): Promise<void> {
+  const { data: sec } = await supabase
+    .from('proposal_sections')
+    .select('proposal_id')
+    .eq('id', id)
+    .maybeSingle();
+  if (sec) await assertNotFrozen(sec.proposal_id);
+
   const { error } = await supabase
     .from('proposal_sections')
     .delete()
@@ -502,6 +551,7 @@ export async function deleteProposalSection(id: string): Promise<void> {
 }
 
 export async function reorderProposalSections(proposalId: string, sectionIds: string[]): Promise<void> {
+  await assertNotFrozen(proposalId);
   for (let i = 0; i < sectionIds.length; i++) {
     await supabase
       .from('proposal_sections')

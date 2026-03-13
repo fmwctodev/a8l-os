@@ -4852,9 +4852,10 @@ export const BRAND_USAGE_ENTITY_LABELS: Record<BrandUsageEntityType, string> = {
   social_post: 'Social Post',
 };
 
-export type ProposalStatus = 'draft' | 'sent' | 'viewed' | 'accepted' | 'rejected' | 'expired';
+export type ProposalStatus = 'draft' | 'sent' | 'viewed' | 'accepted' | 'rejected' | 'expired' | 'signed' | 'declined' | 'voided';
+export type ProposalSignatureStatus = 'not_sent' | 'pending_signature' | 'viewed' | 'signed' | 'declined' | 'expired' | 'voided';
 export type ProposalSectionType = 'intro' | 'scope' | 'deliverables' | 'timeline' | 'pricing' | 'terms' | 'custom';
-export type ProposalActivityType = 'created' | 'updated' | 'sent' | 'viewed' | 'commented' | 'status_changed' | 'ai_generated';
+export type ProposalActivityType = 'created' | 'updated' | 'sent' | 'viewed' | 'commented' | 'status_changed' | 'ai_generated' | 'signature_sent' | 'signature_viewed' | 'signature_signed' | 'signature_declined' | 'signature_expired' | 'signature_voided';
 export type MeetingSource = 'google_meet' | 'zoom' | 'teams' | 'other';
 
 export interface ProposalTemplate {
@@ -4900,6 +4901,17 @@ export interface Proposal {
   template_id: string | null;
   ai_context: ProposalAIContext;
   public_token: string;
+  signature_status: ProposalSignatureStatus;
+  signed_at: string | null;
+  declined_at: string | null;
+  expires_at: string | null;
+  final_signed_pdf_url: string | null;
+  frozen_html_snapshot: string | null;
+  frozen_json_snapshot: Record<string, unknown> | null;
+  frozen_document_hash: string | null;
+  signer_name: string | null;
+  signer_email: string | null;
+  signature_request_id: string | null;
   created_at: string;
   updated_at: string;
   contact?: Contact;
@@ -4990,9 +5002,62 @@ export interface ProposalStats {
   viewedCount: number;
   acceptedCount: number;
   rejectedCount: number;
+  signedCount: number;
+  signedValue: number;
   totalValue: number;
   acceptedValue: number;
   conversionRate: number;
+}
+
+export interface ProposalSignatureRequest {
+  id: string;
+  org_id: string;
+  proposal_id: string;
+  contact_id: string | null;
+  signer_name: string;
+  signer_email: string;
+  access_token_hash: string;
+  status: 'pending' | 'viewed' | 'signed' | 'declined' | 'expired' | 'voided';
+  expires_at: string;
+  viewed_at: string | null;
+  signed_at: string | null;
+  declined_at: string | null;
+  decline_reason: string | null;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+  proposal?: Proposal;
+  contact?: Contact;
+  created_by_user?: User;
+}
+
+export interface ProposalSignature {
+  id: string;
+  org_id: string;
+  proposal_id: string;
+  signature_request_id: string;
+  signature_type: 'typed' | 'drawn';
+  signature_text: string | null;
+  signature_image_url: string | null;
+  signer_name: string;
+  signer_email: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  consent_text: string;
+  signed_at: string;
+  document_hash: string;
+  created_at: string;
+}
+
+export interface ProposalAuditEvent {
+  id: string;
+  org_id: string;
+  proposal_id: string;
+  event_type: string;
+  actor_type: 'system' | 'user' | 'signer';
+  actor_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
 }
 
 export interface MeetingParticipant {

@@ -25,18 +25,28 @@ import {
   ChevronDown,
   ExternalLink,
   Copy,
+  PenTool,
+  Ban,
 } from 'lucide-react';
 import { CreateProposalModal } from '../../components/proposals/CreateProposalModal';
 import { exportProposalToPDF } from '../../services/proposalPdfExport';
 import { getBrandKits } from '../../services/brandboard';
 
-const STATUS_STYLES: Record<ProposalStatus, { bg: string; text: string; icon: typeof Clock; label: string }> = {
+const STATUS_STYLES: Record<string, { bg: string; text: string; icon: typeof Clock; label: string }> = {
   draft: { bg: 'bg-slate-500/20', text: 'text-slate-300', icon: Clock, label: 'Draft' },
   sent: { bg: 'bg-cyan-500/20', text: 'text-cyan-300', icon: Send, label: 'Sent' },
   viewed: { bg: 'bg-amber-500/20', text: 'text-amber-300', icon: Eye, label: 'Viewed' },
   accepted: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', icon: CheckCircle2, label: 'Accepted' },
   rejected: { bg: 'bg-red-500/20', text: 'text-red-300', icon: XCircle, label: 'Rejected' },
   expired: { bg: 'bg-slate-700/50', text: 'text-slate-500', icon: AlertCircle, label: 'Expired' },
+};
+
+const SIGNATURE_STATUS_STYLES: Record<string, { bg: string; text: string; icon: typeof PenTool; label: string }> = {
+  pending_signature: { bg: 'bg-amber-500/20', text: 'text-amber-300', icon: PenTool, label: 'Awaiting Signature' },
+  viewed: { bg: 'bg-cyan-500/20', text: 'text-cyan-300', icon: Eye, label: 'Viewed by Signer' },
+  signed: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', icon: PenTool, label: 'Signed' },
+  declined: { bg: 'bg-red-500/20', text: 'text-red-300', icon: Ban, label: 'Declined' },
+  voided: { bg: 'bg-slate-500/20', text: 'text-slate-400', icon: Ban, label: 'Voided' },
 };
 
 export function Proposals() {
@@ -231,6 +241,15 @@ export function Proposals() {
               </div>
               <p className="text-2xl font-semibold text-emerald-300">{stats.conversionRate.toFixed(1)}%</p>
             </div>
+            {(stats as Record<string, unknown>).signedCount !== undefined && (
+              <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+                <div className="flex items-center gap-2 text-teal-400 text-sm mb-1">
+                  <PenTool className="w-4 h-4" />
+                  Signed
+                </div>
+                <p className="text-2xl font-semibold text-teal-300">{String((stats as Record<string, unknown>).signedCount)}</p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -349,10 +368,18 @@ export function Proposals() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle.bg} ${statusStyle.text}`}>
-                        <StatusIcon className="w-3 h-3" />
-                        {statusStyle.label}
-                      </span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle.bg} ${statusStyle.text}`}>
+                          <StatusIcon className="w-3 h-3" />
+                          {statusStyle.label}
+                        </span>
+                        {proposal.signature_status && SIGNATURE_STATUS_STYLES[proposal.signature_status] && (
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${SIGNATURE_STATUS_STYLES[proposal.signature_status].bg} ${SIGNATURE_STATUS_STYLES[proposal.signature_status].text}`}>
+                            {(() => { const SigIcon = SIGNATURE_STATUS_STYLES[proposal.signature_status!].icon; return <SigIcon className="w-3 h-3" />; })()}
+                            {SIGNATURE_STATUS_STYLES[proposal.signature_status].label}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-white font-medium">
