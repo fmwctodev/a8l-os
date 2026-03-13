@@ -10,6 +10,35 @@ function getSupabase() {
   });
 }
 
+async function getWebhookSecret(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+): Promise<string | null> {
+  const { data: integ } = await supabase
+    .from("integrations")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("key", "vapi")
+    .maybeSingle();
+  if (!integ) return null;
+
+  const { data: conn } = await supabase
+    .from("integration_connections")
+    .select("credentials_encrypted")
+    .eq("integration_id", integ.id)
+    .eq("org_id", orgId)
+    .eq("status", "connected")
+    .maybeSingle();
+  if (!conn?.credentials_encrypted) return null;
+
+  try {
+    const creds = JSON.parse(conn.credentials_encrypted);
+    return creds.webhook_secret || null;
+  } catch {
+    return null;
+  }
+}
+
 interface VapiWebhookPayload {
   message: {
     type: string;

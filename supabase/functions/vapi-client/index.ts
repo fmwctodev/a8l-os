@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { handleCors, jsonResponse, errorResponse, successResponse } from "../_shared/cors.ts";
 import { getSupabaseClient, extractUserContext, requireAuth } from "../_shared/auth.ts";
 
@@ -10,46 +10,35 @@ interface VapiRequestPayload {
   [key: string]: unknown;
 }
 
-async function getVapiApiKey(supabase: ReturnType<typeof createClient>, orgId: string): Promise<string | null> {
-  const { data } = await supabase
+async function getVapiCredentials(
+  supabase: SupabaseClient,
+  orgId: string,
+): Promise<{ api_key: string; [key: string]: string } | null> {
+  const { data: integ } = await supabase
+    .from("integrations")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("key", "vapi")
+    .maybeSingle();
+
+  if (!integ) return null;
+
+  const { data: conn } = await supabase
     .from("integration_connections")
     .select("credentials_encrypted")
+    .eq("integration_id", integ.id)
     .eq("org_id", orgId)
     .eq("status", "connected")
     .maybeSingle();
 
-  if (!data?.credentials_encrypted) {
-    const { data: integ } = await supabase
-      .from("integrations")
-      .select("id")
-      .eq("org_id", orgId)
-      .eq("key", "vapi")
-      .maybeSingle();
-
-    if (integ) {
-      const { data: conn } = await supabase
-        .from("integration_connections")
-        .select("credentials_encrypted")
-        .eq("integration_id", integ.id)
-        .eq("status", "connected")
-        .maybeSingle();
-      if (conn?.credentials_encrypted) {
-        try {
-          const creds = JSON.parse(conn.credentials_encrypted);
-          return creds.api_key || null;
-        } catch {
-          return conn.credentials_encrypted;
-        }
-      }
-    }
-    return null;
-  }
+  if (!conn?.credentials_encrypted) return null;
 
   try {
-    const creds = JSON.parse(data.credentials_encrypted);
-    return creds.api_key || null;
+    const creds = JSON.parse(conn.credentials_encrypted);
+    if (!creds.api_key) return null;
+    return creds;
   } catch {
-    return data.credentials_encrypted;
+    return null;
   }
 }
 
@@ -91,7 +80,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const orgId = user.orgId;
-    const apiKey = await getVapiApiKey(supabase, orgId);
+    const vapiCreds = await getVapiCredentials(supabase, orgId);
+    const apiKey = vapiCreds?.api_key ?? null;
 
     if (action === "test_connection") {
       if (!payload.api_key && !apiKey) {
@@ -103,6 +93,15 @@ Deno.serve(async (req: Request) => {
         return successResponse({ connected: true });
       }
       return errorResponse("CONNECTION_FAILED", "Failed to connect to Vapi", 400, { status: result.status });
+    }
+
+    if (action === "get_connection_status") {
+      return successResponse({
+        connected: !!apiKey,
+        has_public_key: !!vapiCreds?.public_key,
+        has_webhook_secret: !!vapiCreds?.webhook_secret,
+        environment: vapiCreds?.environment || "production",
+      });
     }
 
     if (!apiKey) {

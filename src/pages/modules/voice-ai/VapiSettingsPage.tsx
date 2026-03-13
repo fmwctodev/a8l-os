@@ -1,7 +1,16 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Settings, ExternalLink, Key, Shield, Book,
+  Settings, ExternalLink, Key, Shield, Book, CheckCircle, XCircle, Loader2, Copy, Check, Webhook, Globe,
 } from 'lucide-react';
+import { callEdgeFunction } from '../../../lib/edgeFunction';
+
+interface ConnectionStatus {
+  connected: boolean;
+  has_public_key: boolean;
+  has_webhook_secret: boolean;
+  environment: string;
+}
 
 const links = [
   {
@@ -41,15 +50,159 @@ const links = [
 
 export function VapiSettingsPage() {
   const navigate = useNavigate();
+  const [status, setStatus] = useState<ConnectionStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  const webhookUrl = `${supabaseUrl}/functions/v1/vapi-webhook`;
+  const toolGatewayUrl = `${supabaseUrl}/functions/v1/vapi-tool-gateway`;
+
+  useEffect(() => {
+    loadStatus();
+  }, []);
+
+  const loadStatus = async () => {
+    try {
+      setLoading(true);
+      const res = await callEdgeFunction('vapi-client', { action: 'get_connection_status' });
+      if (res.ok) {
+        const json = await res.json();
+        setStatus(json.data || json);
+      }
+    } catch {
+      setStatus(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
 
   return (
-    <div>
-      <div className="mb-6">
+    <div className="space-y-6">
+      <div>
         <h2 className="text-lg font-semibold text-white">Voice AI Settings</h2>
         <p className="text-sm text-slate-400 mt-0.5">
-          Quick links to configure your Voice AI integration
+          Configure your Vapi integration and manage Voice AI settings
         </p>
       </div>
+
+      <div className="rounded-xl border border-slate-700 bg-slate-800/60 overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-700 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-cyan-500/10">
+              <Globe className="w-5 h-5 text-cyan-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-white">Connection Status</h3>
+              <p className="text-xs text-slate-400">Vapi API integration health</p>
+            </div>
+          </div>
+          {loading ? (
+            <Loader2 className="w-5 h-5 text-slate-400 animate-spin" />
+          ) : status?.connected ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+              <CheckCircle className="w-4 h-4 text-emerald-400" />
+              <span className="text-xs font-medium text-emerald-400">Connected</span>
+            </div>
+          ) : (
+            <button
+              onClick={() => navigate('/settings/integrations')}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+            >
+              <XCircle className="w-4 h-4 text-red-400" />
+              <span className="text-xs font-medium text-red-400">Not Connected</span>
+            </button>
+          )}
+        </div>
+
+        {!loading && status?.connected && (
+          <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${status.has_public_key ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+              <span className="text-xs text-slate-300">Public Key</span>
+              <span className={`text-xs ${status.has_public_key ? 'text-emerald-400' : 'text-slate-500'}`}>
+                {status.has_public_key ? 'Set' : 'Not set'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${status.has_webhook_secret ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+              <span className="text-xs text-slate-300">Webhook Secret</span>
+              <span className={`text-xs ${status.has_webhook_secret ? 'text-emerald-400' : 'text-slate-500'}`}>
+                {status.has_webhook_secret ? 'Set' : 'Not set'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-cyan-400" />
+              <span className="text-xs text-slate-300">Environment</span>
+              <span className="text-xs text-cyan-400 capitalize">{status.environment}</span>
+            </div>
+          </div>
+        )}
+
+        {!loading && !status?.connected && (
+          <div className="px-5 py-4">
+            <p className="text-sm text-slate-400">
+              Connect your Vapi API key in{' '}
+              <button onClick={() => navigate('/settings/integrations')} className="text-cyan-400 hover:underline">
+                Settings &gt; Integrations
+              </button>{' '}
+              to enable Voice AI features.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {!loading && status?.connected && supabaseUrl && (
+        <div className="rounded-xl border border-slate-700 bg-slate-800/60 overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-700 flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-amber-500/10">
+              <Webhook className="w-5 h-5 text-amber-400" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-white">Vapi Dashboard Configuration</h3>
+              <p className="text-xs text-slate-400">Copy these URLs into your Vapi dashboard settings</p>
+            </div>
+          </div>
+          <div className="px-5 py-4 space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Server URL (Webhook)</label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200 font-mono truncate">
+                  {webhookUrl}
+                </code>
+                <button
+                  onClick={() => copyToClipboard(webhookUrl, 'webhook')}
+                  className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors shrink-0"
+                >
+                  {copiedField === 'webhook' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">Paste this in Vapi Dashboard &gt; Account Settings &gt; Server URL</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Tool Gateway URL</label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200 font-mono truncate">
+                  {toolGatewayUrl}
+                </code>
+                <button
+                  onClick={() => copyToClipboard(toolGatewayUrl, 'tool')}
+                  className="p-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors shrink-0"
+                >
+                  {copiedField === 'tool' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">Use this as the server URL for Vapi tool/function definitions</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {links.map((link) => {
