@@ -28,9 +28,11 @@ import {
   voidSignatureRequest,
   resendSignatureRequest,
 } from '../../services/proposalSigning';
-import { buildSignatureReminderEmail } from '../../services/proposalSigningEmails';
-import { sendEmail } from '../../services/emailSend';
-import { getEmailDefaults } from '../../services/emailDefaults';
+import { useToast } from '../../contexts/ToastContext';
+import {
+  sendSignatureRequestEmail,
+  updateSignatureRequestSendStatus,
+} from '../../services/proposalSignatureEmail';
 import type { Proposal, ProposalComment, ProposalActivity, ProposalSection, ProposalLineItem, ProposalSignatureRequest, ProposalAuditEvent } from '../../types';
 import { ArrowLeft, FileText, FileDown, Send, CreditCard as Edit3, Trash2, Loader2, User, Calendar, DollarSign, Clock, CheckCircle2, XCircle, Eye, AlertCircle, MessageSquare, Activity, Plus, GripVertical, Sparkles, ExternalLink, Copy, MoreVertical, Video, Archive, ArchiveRestore, Copy as CopyIcon, PenTool, Shield, Ban, RefreshCw, Mail } from 'lucide-react';
 import { exportProposalToPDF } from '../../services/proposalPdfExport';
@@ -67,6 +69,7 @@ const AUDIT_EVENT_ICONS: Record<string, { icon: typeof Clock; color: string }> =
   resent: { icon: RefreshCw, color: 'text-cyan-400' },
   reminder_sent: { icon: Mail, color: 'text-cyan-400' },
   signed_document_generated: { icon: FileDown, color: 'text-emerald-400' },
+  proposal_signature_send_failed: { icon: AlertCircle, color: 'text-red-400' },
 };
 
 type TabType = 'content' | 'pricing' | 'comments' | 'activity' | 'signature';
@@ -76,6 +79,7 @@ export function ProposalDetail() {
   const navigate = useNavigate();
   const { user, hasPermission } = useAuth();
   const canAccessPayments = usePaymentsAccess();
+  const { showToast } = useToast();
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [comments, setComments] = useState<ProposalComment[]>([]);
   const [activities, setActivities] = useState<ProposalActivity[]>([]);
@@ -182,41 +186,41 @@ export function ProposalDetail() {
     if (!proposal || !signatureRequest || !user) return;
     try {
       setIsResending(true);
-      const { rawToken, signingUrl } = await resendSignatureRequest(
+      const { signingUrl } = await resendSignatureRequest(
         signatureRequest.id,
         proposal.id,
         proposal.org_id,
         user.id
       );
 
-      let fromAddressId: string | undefined;
-      try {
-        const defaults = await getEmailDefaults(user.organization_id);
-        fromAddressId = defaults?.default_from_address?.id;
-      } catch {}
+      const companyName = user.organization?.name || 'Our Company';
+      const expiresAt = signatureRequest.expires_at;
 
-      if (fromAddressId) {
-        const companyName = user.organization?.name || 'Our Company';
-        const htmlBody = buildSignatureReminderEmail({
-          signerName: signatureRequest.signer_name,
-          proposalTitle: proposal.title,
-          signingUrl,
-          companyName,
-        });
-        await sendEmail({
-          toEmail: signatureRequest.signer_email,
-          toName: signatureRequest.signer_name,
-          fromAddressId,
-          subject: `Reminder: Please sign - ${proposal.title}`,
-          htmlBody,
-          trackOpens: true,
-          trackClicks: true,
-        });
+      const emailResult = await sendSignatureRequestEmail({
+        proposalTitle: proposal.title,
+        totalValue: proposal.total_value > 0
+          ? new Intl.NumberFormat('en-US', { style: 'currency', currency: proposal.currency || 'USD' }).format(proposal.total_value)
+          : undefined,
+        signerName: signatureRequest.signer_name,
+        signerEmail: signatureRequest.signer_email,
+        signingUrl,
+        expiresAt,
+        orgId: proposal.org_id,
+        companyName,
+      });
+
+      if (emailResult.success) {
+        await updateSignatureRequestSendStatus(signatureRequest.id, 'sent', emailResult.messageId);
+        showToast('Signature request resent successfully', 'success');
+      } else {
+        await updateSignatureRequestSendStatus(signatureRequest.id, 'failed', undefined, emailResult.error);
+        showToast(emailResult.error || 'Failed to send signature request', 'warning');
       }
 
       loadProposal();
     } catch (err) {
       console.error('Failed to resend:', err);
+      showToast('Failed to resend signature request', 'warning');
     } finally {
       setIsResending(false);
     }
@@ -802,6 +806,51 @@ export function ProposalDetail() {
                           <p className="text-slate-300">{signatureRequest.decline_reason}</p>
                         </div>
                       )}
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Email Delivery</p>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                          signatureRequest.send_status === 'sent'
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : signatureRequest.send_status === 'failed'
+                              ? 'bg-red-500/20 text-red-300'
+                              : 'bg-amber-500/20 text-amber-300'
+                        }`}>
+                          {signatureRequest.send_status === 'sent' ? 'Sent' : signatureRequest.send_status === 'failed' ? 'Failed' : 'Pending'}
+                        </span>
+                      </div>
+                      {signatureRequest.last_sent_at && (
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Last Sent</p>
+                          <p className="text-white">{formatDateTime(signatureRequest.last_sent_at)}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {signatureRequest?.send_status === 'failed' && signatureRequest.send_error && (
+                    <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
+                      <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-sm text-red-300">{signatureRequest.send_error}</p>
+                        {canSend && ['pending', 'viewed'].includes(signatureRequest.status) && (
+                          <button
+                            onClick={handleResendSignature}
+                            disabled={isResending}
+                            className="mt-2 flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded text-xs font-medium transition-colors disabled:opacity-50"
+                          >
+                            {isResending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                            Retry Send
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {signatureRequest?.sendgrid_message_id && (
+                    <div className="mb-4">
+                      <p className="text-xs text-slate-600">
+                        Message ID: {signatureRequest.sendgrid_message_id}
+                      </p>
                     </div>
                   )}
 

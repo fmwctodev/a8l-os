@@ -5026,6 +5026,10 @@ export interface ProposalSignatureRequest {
   created_by_user_id: string | null;
   created_at: string;
   updated_at: string;
+  send_status: 'pending' | 'sent' | 'failed';
+  sendgrid_message_id: string | null;
+  send_error: string | null;
+  last_sent_at: string | null;
   proposal?: Proposal;
   contact?: Contact;
   created_by_user?: User;

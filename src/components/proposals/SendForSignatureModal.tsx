@@ -1,18 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { freezeProposal, createSignatureRequest } from '../../services/proposalSigning';
-import { sendEmail } from '../../services/emailSend';
-import { getEmailDefaults } from '../../services/emailDefaults';
+import { freezeProposal, createSignatureRequest, createAuditEvent } from '../../services/proposalSigning';
 import { buildSignatureRequestEmail } from '../../services/proposalSigningEmails';
 import { createProposalActivity } from '../../services/proposals';
+import {
+  validateEmailSetup,
+  sendSignatureRequestEmail,
+  updateSignatureRequestSendStatus,
+} from '../../services/proposalSignatureEmail';
 import type { Proposal } from '../../types';
-import { X, PenTool, Loader2, AlertCircle, Calendar, Mail, User } from 'lucide-react';
+import {
+  X, PenTool, Loader2, AlertCircle, Calendar, Mail, User,
+  ArrowLeft, Eye, Send, AlertTriangle,
+} from 'lucide-react';
 
 interface SendForSignatureModalProps {
   proposal: Proposal;
   onClose: () => void;
   onSent: () => void;
 }
+
+type ModalStep = 'form' | 'preview' | 'freezing' | 'sending';
 
 export function SendForSignatureModal({ proposal, onClose, onSent }: SendForSignatureModalProps) {
   const { user } = useAuth();
@@ -25,20 +33,61 @@ export function SendForSignatureModal({ proposal, onClose, onSent }: SendForSign
   const [expirationDays, setExpirationDays] = useState(14);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState<'form' | 'sending' | 'freezing'>('form');
+  const [step, setStep] = useState<ModalStep>('form');
+  const [emailReady, setEmailReady] = useState<boolean | null>(null);
+  const [senderEmail, setSenderEmail] = useState<string | null>(null);
+  const [emailBlockingReasons, setEmailBlockingReasons] = useState<string[]>([]);
 
   const formatCurrency = (amount: number, currency = 'USD') =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
 
-  const canSend =
+  const expiresAt = useMemo(
+    () => new Date(Date.now() + expirationDays * 86400000).toISOString(),
+    [expirationDays]
+  );
+
+  const companyName = user?.organization?.name || 'Our Company';
+
+  const previewHtml = useMemo(() => {
+    if (!signerName.trim() || !proposal.title) return '';
+    return buildSignatureRequestEmail({
+      signerName: signerName.trim(),
+      proposalTitle: proposal.title,
+      totalValue: proposal.total_value > 0
+        ? formatCurrency(proposal.total_value, proposal.currency)
+        : undefined,
+      signingUrl: '#',
+      expiresAt,
+      companyName,
+    });
+  }, [signerName, proposal.title, proposal.total_value, proposal.currency, expiresAt, companyName]);
+
+  const canProceed =
     signerName.trim() &&
     signerEmail.trim() &&
     expirationDays > 0 &&
     proposal.title &&
     (proposal.sections?.length || 0) > 0;
 
+  useEffect(() => {
+    let cancelled = false;
+    validateEmailSetup(proposal.org_id).then((result) => {
+      if (cancelled) return;
+      setEmailReady(result.ready);
+      setSenderEmail(result.fromAddress?.email || null);
+      setEmailBlockingReasons(result.blockingReasons);
+    });
+    return () => { cancelled = true; };
+  }, [proposal.org_id]);
+
+  const handlePreview = () => {
+    if (!canProceed) return;
+    setError(null);
+    setStep('preview');
+  };
+
   const handleSend = async () => {
-    if (!user || !canSend) return;
+    if (!user || !canProceed) return;
 
     try {
       setIsSending(true);
@@ -49,7 +98,7 @@ export function SendForSignatureModal({ proposal, onClose, onSent }: SendForSign
 
       setStep('sending');
 
-      const { rawToken, signingUrl } = await createSignatureRequest(
+      const { request, signingUrl } = await createSignatureRequest(
         proposal.id,
         proposal.contact_id,
         signerName.trim(),
@@ -59,48 +108,56 @@ export function SendForSignatureModal({ proposal, onClose, onSent }: SendForSign
         proposal.org_id
       );
 
-      const companyName = user.organization?.name || 'Our Company';
-      const htmlBody = buildSignatureRequestEmail({
-        signerName: signerName.trim(),
+      const emailResult = await sendSignatureRequestEmail({
         proposalTitle: proposal.title,
         totalValue: proposal.total_value > 0
           ? formatCurrency(proposal.total_value, proposal.currency)
           : undefined,
+        signerName: signerName.trim(),
+        signerEmail: signerEmail.trim(),
         signingUrl,
-        expiresAt: new Date(Date.now() + expirationDays * 86400000).toISOString(),
+        expiresAt,
+        orgId: proposal.org_id,
         companyName,
       });
 
-      let fromAddressId: string | undefined;
-      try {
-        const defaults = await getEmailDefaults(user.organization_id);
-        fromAddressId = defaults?.default_from_address?.id;
-      } catch {
-        // continue without default
-      }
+      if (emailResult.success) {
+        await updateSignatureRequestSendStatus(request.id, 'sent', emailResult.messageId);
 
-      if (fromAddressId) {
-        await sendEmail({
-          toEmail: signerEmail.trim(),
-          toName: signerName.trim(),
-          fromAddressId,
-          subject: `Please review and sign: ${proposal.title}`,
-          htmlBody,
-          trackOpens: true,
-          trackClicks: true,
+        await createProposalActivity(
+          proposal.id,
+          proposal.org_id,
+          'signature_sent',
+          `Signature request sent to ${signerEmail.trim()}`,
+          {
+            signer_name: signerName.trim(),
+            signer_email: signerEmail.trim(),
+            sendgrid_message_id: emailResult.messageId,
+            sender_email: senderEmail,
+          },
+          user.id
+        );
+
+        onSent();
+      } else {
+        await updateSignatureRequestSendStatus(request.id, 'failed', undefined, emailResult.error);
+
+        await createAuditEvent({
+          proposalId: proposal.id,
+          orgId: proposal.org_id,
+          eventType: 'proposal_signature_send_failed',
+          actorType: 'system',
+          metadata: {
+            error: emailResult.error,
+            signer_email: signerEmail.trim(),
+            proposal_id: proposal.id,
+            request_id: request.id,
+          },
         });
+
+        setError(emailResult.error || 'Failed to send signature request email. You can retry from the Signature tab.');
+        setStep('form');
       }
-
-      await createProposalActivity(
-        proposal.id,
-        proposal.org_id,
-        'signature_sent',
-        `Signature request sent to ${signerEmail.trim()}`,
-        { signer_name: signerName.trim(), signer_email: signerEmail.trim() },
-        user.id
-      );
-
-      onSent();
     } catch (err) {
       console.error('Failed to send for signature:', err);
       setError(err instanceof Error ? err.message : 'Failed to send signature request');
@@ -110,17 +167,21 @@ export function SendForSignatureModal({ proposal, onClose, onSent }: SendForSign
     }
   };
 
+  const subjectLine = `Please review and sign: ${proposal.title}`;
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-slate-900 rounded-xl border border-slate-700 w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-white flex items-center gap-2">
               <PenTool className="w-5 h-5 text-cyan-400" />
-              Send for Signature
+              {step === 'preview' ? 'Preview Email' : 'Send for Signature'}
             </h2>
             <p className="text-sm text-slate-400 mt-1">
-              Request an electronic signature on this proposal
+              {step === 'preview'
+                ? 'Review the email before sending'
+                : 'Request an electronic signature on this proposal'}
             </p>
           </div>
           <button
@@ -140,6 +201,23 @@ export function SendForSignatureModal({ proposal, onClose, onSent }: SendForSign
             </div>
           )}
 
+          {emailReady === false && step === 'form' && (
+            <div className="mb-5 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-300 mb-1">Email services not configured</p>
+                <ul className="text-sm text-amber-200/80 space-y-0.5">
+                  {emailBlockingReasons.map((reason, i) => (
+                    <li key={i}>{reason}</li>
+                  ))}
+                </ul>
+                <p className="text-xs text-amber-200/60 mt-2">
+                  Configure SendGrid in Settings &gt; Email Services to send signature requests.
+                </p>
+              </div>
+            </div>
+          )}
+
           {step === 'freezing' && (
             <div className="flex flex-col items-center justify-center py-12 gap-4">
               <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
@@ -151,7 +229,7 @@ export function SendForSignatureModal({ proposal, onClose, onSent }: SendForSign
           {step === 'sending' && (
             <div className="flex flex-col items-center justify-center py-12 gap-4">
               <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
-              <p className="text-slate-300">Sending signature request...</p>
+              <p className="text-slate-300">Sending signature request via SendGrid...</p>
             </div>
           )}
 
@@ -222,6 +300,40 @@ export function SendForSignatureModal({ proposal, onClose, onSent }: SendForSign
               </div>
             </div>
           )}
+
+          {step === 'preview' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 p-4 bg-slate-800/60 border border-slate-700 rounded-lg text-sm">
+                <div>
+                  <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">From</p>
+                  <p className="text-slate-200">{senderEmail || 'Default sender'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">To</p>
+                  <p className="text-slate-200">{signerName.trim()} &lt;{signerEmail.trim()}&gt;</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">Subject</p>
+                  <p className="text-slate-200">{subjectLine}</p>
+                </div>
+              </div>
+
+              <div className="border border-slate-700 rounded-lg overflow-hidden">
+                <div className="px-4 py-2 bg-slate-800 border-b border-slate-700 flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-slate-400" />
+                  <span className="text-xs text-slate-400 uppercase tracking-wider">Email Preview</span>
+                </div>
+                <div
+                  className="bg-white p-0 max-h-80 overflow-auto"
+                  dangerouslySetInnerHTML={{ __html: previewHtml }}
+                />
+              </div>
+
+              <p className="text-xs text-slate-500 text-center">
+                The signing link in the preview is a placeholder. A unique secure link will be generated on send.
+              </p>
+            </div>
+          )}
         </div>
 
         {step === 'form' && (
@@ -234,11 +346,32 @@ export function SendForSignatureModal({ proposal, onClose, onSent }: SendForSign
               Cancel
             </button>
             <button
-              onClick={handleSend}
-              disabled={!canSend || isSending}
+              onClick={handlePreview}
+              disabled={!canProceed || emailReady === false || emailReady === null}
+              title={emailReady === false ? 'Email services must be configured before sending signature requests' : undefined}
               className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
             >
-              <PenTool className="w-4 h-4" />
+              <Eye className="w-4 h-4" />
+              Preview Email
+            </button>
+          </div>
+        )}
+
+        {step === 'preview' && (
+          <div className="px-6 py-4 border-t border-slate-700 flex justify-between">
+            <button
+              onClick={() => setStep('form')}
+              className="flex items-center gap-2 px-4 py-2 text-slate-300 hover:text-white transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </button>
+            <button
+              onClick={handleSend}
+              disabled={isSending}
+              className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+            >
+              <Send className="w-4 h-4" />
               Send for Signature
             </button>
           </div>

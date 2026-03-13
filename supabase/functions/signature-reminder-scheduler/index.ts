@@ -148,23 +148,37 @@ Deno.serve(async (req: Request) => {
         .eq("is_default", true)
         .maybeSingle();
 
+      let sendgridMessageId: string | null = null;
+      let sendError: string | null = null;
+
       if (fromAddress) {
         try {
-          await fetch(`${supabaseUrl}/functions/v1/email-send`, {
+          const emailRes = await fetch(`${supabaseUrl}/functions/v1/email-send`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${supabaseServiceKey}`,
             },
             body: JSON.stringify({
-              org_id: req.org_id,
-              to: req.signer_email,
+              action: "send",
+              toEmail: req.signer_email,
+              toName: req.signer_name,
+              fromAddressId: fromAddress.id,
               subject: `Reminder: Please sign "${proposal.title}"`,
-              body: htmlBody,
+              htmlBody: htmlBody,
+              trackOpens: true,
+              trackClicks: true,
+              transactional: true,
             }),
           });
-        } catch {
-          // continue even if email fails
+          const emailResult = await emailRes.json();
+          if (emailRes.ok && emailResult.success) {
+            sendgridMessageId = emailResult.messageId || null;
+          } else {
+            sendError = emailResult.error || "Email send failed";
+          }
+        } catch (emailErr) {
+          sendError = emailErr instanceof Error ? emailErr.message : "Email send failed";
         }
       }
 
@@ -173,6 +187,9 @@ Deno.serve(async (req: Request) => {
         .update({
           last_reminder_sent_at: now.toISOString(),
           reminder_count: (req.reminder_count || 0) + 1,
+          send_status: sendError ? "failed" : "sent",
+          sendgrid_message_id: sendgridMessageId,
+          send_error: sendError,
         })
         .eq("id", req.id);
 
@@ -185,6 +202,8 @@ Deno.serve(async (req: Request) => {
           request_id: req.id,
           reminder_number: (req.reminder_count || 0) + 1,
           days_remaining: daysRemaining,
+          sendgrid_message_id: sendgridMessageId,
+          send_error: sendError,
         },
       });
 

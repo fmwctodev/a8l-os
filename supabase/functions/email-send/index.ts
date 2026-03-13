@@ -27,6 +27,7 @@ interface SendEmailRequest {
   unsubscribeGroupId?: string;
   trackOpens?: boolean;
   trackClicks?: boolean;
+  transactional?: boolean;
 }
 
 interface CheckStatusRequest {
@@ -448,17 +449,19 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const unsubGroupId = payload.unsubscribeGroupId || defaults?.default_unsubscribe_group_id;
       let asmGroupId: number | null = null;
-      if (unsubGroupId) {
-        const { data: unsubGroup } = await supabase
-          .from("email_unsubscribe_groups")
-          .select("sendgrid_group_id")
-          .eq("id", unsubGroupId)
-          .single();
+      if (!payload.transactional) {
+        const unsubGroupId = payload.unsubscribeGroupId || defaults?.default_unsubscribe_group_id;
+        if (unsubGroupId) {
+          const { data: unsubGroup } = await supabase
+            .from("email_unsubscribe_groups")
+            .select("sendgrid_group_id")
+            .eq("id", unsubGroupId)
+            .single();
 
-        if (unsubGroup) {
-          asmGroupId = parseInt(unsubGroup.sendgrid_group_id);
+          if (unsubGroup) {
+            asmGroupId = parseInt(unsubGroup.sendgrid_group_id);
+          }
         }
       }
 

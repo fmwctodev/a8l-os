@@ -54,6 +54,7 @@ export interface SendEmailOptions {
   unsubscribeGroupId?: string;
   trackOpens?: boolean;
   trackClicks?: boolean;
+  transactional?: boolean;
 }
 
 export async function sendEmail(
