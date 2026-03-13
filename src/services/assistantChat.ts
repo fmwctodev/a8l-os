@@ -181,14 +181,25 @@ export async function sendMessageStreaming(
   if (!response.ok) {
     let errMsg = 'Failed to get assistant response';
     try {
-      const err = await response.json();
-      if (typeof err.error === 'string') errMsg = err.error;
-      else if (err.error?.message) errMsg = err.error.message;
-    } catch { /* not JSON */ }
+      const text = await response.text();
+      try {
+        const err = JSON.parse(text);
+        if (typeof err.error === 'string') errMsg = err.error;
+        else if (err.error?.message) errMsg = err.error.message;
+        else if (err.message) errMsg = err.message;
+        else if (err.msg) errMsg = err.msg;
+      } catch {
+        if (text.length > 0 && text.length < 300) errMsg = text;
+      }
+    } catch { /* could not read body */ }
     throw new Error(errMsg);
   }
 
-  const reader = response.body!.getReader();
+  if (!response.body) {
+    throw new Error('No response stream available');
+  }
+
+  const reader = response.body.getReader();
   const stream = parseSSEStream(reader);
 
   return {
@@ -225,6 +236,58 @@ export async function persistStreamedAssistantMessage(
 
   if (error) throw error;
   return assistantMsg as AssistantMessage;
+}
+
+export async function sendMessageNonStreaming(
+  threadId: string,
+  content: string,
+  context: ClaraPageContext
+): Promise<ClaraChatResponse> {
+  const response = await callEdgeFunction('assistant-chat', {
+    thread_id: threadId,
+    content,
+    context,
+  });
+
+  if (!response.ok) {
+    let errMsg = 'Failed to get assistant response';
+    try {
+      const err = await response.json();
+      const errObj = err.error;
+      if (typeof errObj === 'string') errMsg = errObj;
+      else if (errObj?.message) errMsg = errObj.message;
+      else if (err.message) errMsg = err.message;
+    } catch { /* response wasn't JSON */ }
+    throw new Error(errMsg);
+  }
+
+  const chatResponse: ClaraChatResponse = await response.json();
+
+  let messageType: AssistantMessage['message_type'] = 'text';
+  if (chatResponse.its_request?.requires_confirmation && chatResponse.its_request.actions.length > 0) {
+    messageType = 'execution_plan';
+  } else if (chatResponse.execution_result) {
+    messageType = 'execution_result';
+  }
+
+  await supabase
+    .from('assistant_messages')
+    .insert({
+      thread_id: threadId,
+      role: 'assistant',
+      content: chatResponse.response,
+      message_type: messageType,
+      tool_calls: chatResponse.tool_calls?.length > 0 ? chatResponse.tool_calls : null,
+      metadata: {
+        confirmations: chatResponse.confirmations_pending || [],
+        drafts: chatResponse.drafts || [],
+        model_used: chatResponse.model_used,
+        its_request: chatResponse.its_request || null,
+        execution_result: chatResponse.execution_result || null,
+      },
+    });
+
+  return chatResponse;
 }
 
 export async function confirmAction(

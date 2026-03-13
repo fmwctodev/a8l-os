@@ -4,6 +4,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useAssistant } from '../../../contexts/AssistantContext';
 import {
   getThreadMessages,
+  sendMessage,
   sendMessageStreaming,
   persistStreamedAssistantMessage,
   createThread,
@@ -115,29 +116,72 @@ export function AssistantChatView() {
         setActiveThread(thread.id);
       }
 
-      const { userMessage, stream, abort } = await sendMessageStreaming(threadId, text, pageContext);
-      streamAbortRef.current = abort;
+      let usedStreaming = false;
 
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === userMessage.id)) return prev;
-        return [...prev, userMessage];
-      });
+      try {
+        const { userMessage, stream, abort } = await sendMessageStreaming(threadId, text, pageContext);
+        streamAbortRef.current = abort;
+        usedStreaming = true;
 
-      const placeholderId = `streaming-${Date.now()}`;
-      setStreamingMessageId(placeholderId);
-      setStreamingContent('');
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === userMessage.id)) return prev;
+          return [...prev, userMessage];
+        });
 
-      let fullResponse = '';
-      let metadata: Record<string, unknown> = {};
-      const sentenceQueue: string[] = [];
-      let ttsStarted = false;
+        const placeholderId = `streaming-${Date.now()}`;
+        setStreamingMessageId(placeholderId);
+        setStreamingContent('');
 
-      const shouldSpeak = profile?.voice_enabled && profile?.auto_speak_chat && profile?.elevenlabs_voice_id;
+        let fullResponse = '';
+        let metadata: Record<string, unknown> = {};
+        const sentenceQueue: string[] = [];
+        let ttsStarted = false;
 
-      const segmenter = shouldSpeak ? new SentenceSegmenter((sentence) => {
-        sentenceQueue.push(sentence);
-        if (!ttsStarted && profile?.elevenlabs_voice_id) {
-          ttsStarted = true;
+        const shouldSpeak = profile?.voice_enabled && profile?.auto_speak_chat && profile?.elevenlabs_voice_id;
+
+        const segmenter = shouldSpeak ? new SentenceSegmenter((sentence) => {
+          sentenceQueue.push(sentence);
+          if (!ttsStarted && profile?.elevenlabs_voice_id) {
+            ttsStarted = true;
+            setIsSpeaking(true);
+            const tts = createStreamingTTS(profile.elevenlabs_voice_id, profile.speech_rate);
+            ttsControllerRef.current = tts;
+            tts.onAudioChunk((chunk) => streamingPlayer.enqueue(chunk));
+            tts.onDone(() => streamingPlayer.finalize());
+            tts.onError(() => {});
+            tts.start([...sentenceQueue]);
+          }
+        }) : null;
+
+        for await (const evt of stream) {
+          if (evt.type === 'token' && typeof evt.text === 'string') {
+            fullResponse += evt.text;
+            setStreamingContent(fullResponse);
+            segmenter?.push(evt.text);
+          } else if (evt.type === 'done') {
+            fullResponse = (evt.response as string) || fullResponse;
+            setStreamingContent(fullResponse);
+            metadata = { model_used: evt.model_used };
+          } else if (evt.type === 'plan') {
+            fullResponse = (evt.response as string) || fullResponse;
+            setStreamingContent(fullResponse);
+            metadata = { its_request: evt.its_request, model_used: evt.model_used };
+          } else if (evt.type === 'execution_result') {
+            fullResponse = (evt.response as string) || fullResponse;
+            setStreamingContent(fullResponse);
+            metadata = {
+              its_request: evt.its_request,
+              execution_result: evt.execution_result,
+              model_used: evt.model_used,
+            };
+          } else if (evt.type === 'error') {
+            throw new Error(evt.message as string);
+          }
+        }
+
+        segmenter?.flush();
+
+        if (shouldSpeak && !ttsStarted && sentenceQueue.length > 0 && profile?.elevenlabs_voice_id) {
           setIsSpeaking(true);
           const tts = createStreamingTTS(profile.elevenlabs_voice_id, profile.speech_rate);
           ttsControllerRef.current = tts;
@@ -146,72 +190,47 @@ export function AssistantChatView() {
           tts.onError(() => {});
           tts.start([...sentenceQueue]);
         }
-      }) : null;
 
-      for await (const evt of stream) {
-        if (evt.type === 'token' && typeof evt.text === 'string') {
-          fullResponse += evt.text;
-          setStreamingContent(fullResponse);
-          segmenter?.push(evt.text);
-        } else if (evt.type === 'done') {
-          fullResponse = (evt.response as string) || fullResponse;
-          setStreamingContent(fullResponse);
-          metadata = { model_used: evt.model_used };
-        } else if (evt.type === 'plan') {
-          fullResponse = (evt.response as string) || fullResponse;
-          setStreamingContent(fullResponse);
-          metadata = { its_request: evt.its_request, model_used: evt.model_used };
-        } else if (evt.type === 'execution_result') {
-          fullResponse = (evt.response as string) || fullResponse;
-          setStreamingContent(fullResponse);
-          metadata = {
-            its_request: evt.its_request,
-            execution_result: evt.execution_result,
-            model_used: evt.model_used,
-          };
-        } else if (evt.type === 'error') {
-          throw new Error(evt.message as string);
-        }
-      }
+        setStreamingMessageId(null);
+        setStreamingContent('');
 
-      segmenter?.flush();
-
-      if (shouldSpeak && !ttsStarted && sentenceQueue.length > 0 && profile?.elevenlabs_voice_id) {
-        setIsSpeaking(true);
-        const tts = createStreamingTTS(profile.elevenlabs_voice_id, profile.speech_rate);
-        ttsControllerRef.current = tts;
-        tts.onAudioChunk((chunk) => streamingPlayer.enqueue(chunk));
-        tts.onDone(() => streamingPlayer.finalize());
-        tts.onError(() => {});
-        tts.start([...sentenceQueue]);
-      }
-
-      setStreamingMessageId(null);
-      setStreamingContent('');
-
-      if (threadId && fullResponse) {
-        persistStreamedAssistantMessage(threadId, fullResponse, metadata)
-          .then((assistantMsg) => {
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === assistantMsg.id)) return prev;
-              return [...prev, assistantMsg];
+        if (threadId && fullResponse) {
+          persistStreamedAssistantMessage(threadId, fullResponse, metadata)
+            .then((assistantMsg) => {
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === assistantMsg.id)) return prev;
+                return [...prev, assistantMsg];
+              });
+            })
+            .catch(() => {
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: `local-${Date.now()}`,
+                  thread_id: threadId!,
+                  role: 'assistant',
+                  content: fullResponse,
+                  message_type: 'text',
+                  tool_calls: null,
+                  metadata,
+                  created_at: new Date().toISOString(),
+                },
+              ]);
             });
-          })
-          .catch(() => {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: `local-${Date.now()}`,
-                thread_id: threadId!,
-                role: 'assistant',
-                content: fullResponse,
-                message_type: 'text',
-                tool_calls: null,
-                metadata,
-                created_at: new Date().toISOString(),
-              },
-            ]);
-          });
+        }
+      } catch (streamErr) {
+        setStreamingMessageId(null);
+        setStreamingContent('');
+
+        const { userMessage, assistantMessage } = await sendMessage(threadId, text, pageContext);
+
+        setMessages((prev) => {
+          const filtered = prev.filter((m) => m.id !== userMessage.id);
+          if (usedStreaming) {
+            return [...filtered, assistantMessage];
+          }
+          return [...filtered, userMessage, assistantMessage];
+        });
       }
     } catch (err) {
       setStreamingMessageId(null);
@@ -394,7 +413,7 @@ export function AssistantChatView() {
             disabled={sending}
           />
           <button
-            onClick={handleSend}
+            onClick={() => handleSend()}
             disabled={!input.trim() || sending}
             className="p-1.5 rounded-lg bg-cyan-600 text-white disabled:opacity-30 disabled:cursor-not-allowed hover:bg-cyan-500 transition-colors flex-shrink-0"
           >

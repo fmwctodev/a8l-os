@@ -218,11 +218,25 @@ export async function streamEdgeFunction(
   const session = await getFreshSession();
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${slug}`;
   const headers = buildHeaders(session.access_token, true);
-  return fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  const serializedBody = JSON.stringify(body);
+
+  let response = await fetch(url, { method: 'POST', headers, body: serializedBody });
+
+  if (response.status === 401) {
+    const refreshed = await forceRefresh();
+    if (!refreshed) {
+      emitExpired();
+      throw new Error('Session expired. Please log out and log back in.');
+    }
+    markSessionRestored();
+    const retryHeaders = buildHeaders(refreshed.access_token, true);
+    response = await fetch(url, { method: 'POST', headers: retryHeaders, body: serializedBody });
+    if (response.status === 401) {
+      emitExpired();
+    }
+  }
+
+  return response;
 }
 
 export async function* parseSSEStream(

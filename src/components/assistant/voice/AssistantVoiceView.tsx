@@ -9,7 +9,7 @@ import { useStreamingPlayer } from '../../../hooks/useStreamingPlayer';
 import { useWakeWord } from '../../../hooks/useWakeWord';
 import { useBargeIn } from '../../../hooks/useBargeIn';
 import { transcribeFinal, createStreamingTTS } from '../../../services/assistantVoice';
-import { sendMessageStreaming, persistStreamedAssistantMessage, createThread } from '../../../services/assistantChat';
+import { sendMessageNonStreaming, sendMessageStreaming, persistStreamedAssistantMessage, createThread } from '../../../services/assistantChat';
 import { logVoiceEvent } from '../../../services/claraVoiceEvents';
 import { SentenceSegmenter } from '../../../lib/sentenceSegmenter';
 import { VoiceOrb } from './VoiceOrb';
@@ -107,93 +107,115 @@ export function AssistantVoiceView() {
         setActiveThread(thread.id);
       }
 
-      const { stream, abort } = await sendMessageStreaming(threadId, text, pageContext);
-      streamAbortRef.current = abort;
-
-      if (abortRef.current) {
-        abort();
-        setVoiceMode('idle');
-        return;
-      }
-
       let fullResponse = '';
-      const sentenceQueue: string[] = [];
-      let ttsStarted = false;
       let streamDoneMetadata: Record<string, unknown> | null = null;
+      let useStreaming = true;
 
-      const segmenter = new SentenceSegmenter((sentence) => {
-        sentenceQueue.push(sentence);
-        if (!ttsStarted && profile?.voice_enabled && profile.elevenlabs_voice_id) {
-          ttsStarted = true;
+      try {
+        const streamResult = await sendMessageStreaming(threadId, text, pageContext);
+        streamAbortRef.current = streamResult.abort;
+
+        if (abortRef.current) {
+          streamResult.abort();
+          setVoiceMode('idle');
+          return;
+        }
+
+        const sentenceQueue: string[] = [];
+        let ttsStarted = false;
+
+        const segmenter = new SentenceSegmenter((sentence) => {
+          sentenceQueue.push(sentence);
+          if (!ttsStarted && profile?.voice_enabled && profile.elevenlabs_voice_id) {
+            ttsStarted = true;
+            startTTSStream(sentenceQueue, profile.elevenlabs_voice_id, profile.speech_rate);
+          }
+        });
+
+        function startTTSStream(queue: string[], voiceId: string, speechRate: number) {
+          setVoiceMode('speaking');
+          if (profile) {
+            logVoiceEvent(user!.id, profile.org_id, 'tts_started');
+          }
+
+          const tts = createStreamingTTS(voiceId, speechRate);
+          ttsControllerRef.current = tts;
+
+          tts.onAudioChunk((chunk) => {
+            streamingPlayer.enqueue(chunk);
+          });
+          tts.onDone(() => {
+            streamingPlayer.finalize();
+          });
+          tts.onError(() => {});
+
+          tts.start([...queue]);
+        }
+
+        for await (const evt of streamResult.stream) {
+          if (abortRef.current) break;
+
+          if (evt.type === 'token' && typeof evt.text === 'string') {
+            fullResponse += evt.text;
+            setResponse(fullResponse);
+            segmenter.push(evt.text);
+          } else if (evt.type === 'done') {
+            fullResponse = (evt.response as string) || fullResponse;
+            setResponse(fullResponse);
+            streamDoneMetadata = { model_used: evt.model_used };
+          } else if (evt.type === 'plan') {
+            fullResponse = (evt.response as string) || fullResponse;
+            setResponse(fullResponse);
+            streamDoneMetadata = {
+              its_request: evt.its_request,
+              model_used: evt.model_used,
+            };
+          } else if (evt.type === 'execution_result') {
+            fullResponse = (evt.response as string) || fullResponse;
+            setResponse(fullResponse);
+            streamDoneMetadata = {
+              its_request: evt.its_request,
+              execution_result: evt.execution_result,
+              model_used: evt.model_used,
+            };
+          } else if (evt.type === 'error') {
+            throw new Error(evt.message as string);
+          }
+        }
+
+        segmenter.flush();
+
+        if (!ttsStarted && profile?.voice_enabled && profile.elevenlabs_voice_id && sentenceQueue.length > 0) {
           startTTSStream(sentenceQueue, profile.elevenlabs_voice_id, profile.speech_rate);
+        } else if (!ttsStarted) {
+          setVoiceMode(defaultMode());
         }
-      });
-
-      function startTTSStream(queue: string[], voiceId: string, speechRate: number) {
-        setVoiceMode('speaking');
-        if (profile) {
-          logVoiceEvent(user!.id, profile.org_id, 'tts_started');
-        }
-
-        const tts = createStreamingTTS(voiceId, speechRate);
-        ttsControllerRef.current = tts;
-
-        tts.onAudioChunk((chunk) => {
-          streamingPlayer.enqueue(chunk);
-        });
-        tts.onDone(() => {
-          streamingPlayer.finalize();
-        });
-        tts.onError(() => {});
-
-        const pollAndSend = async () => {
-          await tts.start([...queue]);
-        };
-        pollAndSend();
+      } catch {
+        useStreaming = false;
       }
 
-      for await (const evt of stream) {
-        if (abortRef.current) break;
+      if (!useStreaming) {
+        const chatResponse = await sendMessageNonStreaming(threadId, text, pageContext);
+        fullResponse = chatResponse.response;
+        setResponse(fullResponse);
+        streamDoneMetadata = { model_used: chatResponse.model_used };
 
-        if (evt.type === 'token' && typeof evt.text === 'string') {
-          fullResponse += evt.text;
-          setResponse(fullResponse);
-          segmenter.push(evt.text);
-        } else if (evt.type === 'done') {
-          fullResponse = (evt.response as string) || fullResponse;
-          setResponse(fullResponse);
-          streamDoneMetadata = { model_used: evt.model_used };
-        } else if (evt.type === 'plan') {
-          fullResponse = (evt.response as string) || fullResponse;
-          setResponse(fullResponse);
-          streamDoneMetadata = {
-            its_request: evt.its_request,
-            model_used: evt.model_used,
-          };
-        } else if (evt.type === 'execution_result') {
-          fullResponse = (evt.response as string) || fullResponse;
-          setResponse(fullResponse);
-          streamDoneMetadata = {
-            its_request: evt.its_request,
-            execution_result: evt.execution_result,
-            model_used: evt.model_used,
-          };
-        } else if (evt.type === 'error') {
-          throw new Error(evt.message as string);
+        if (profile?.voice_enabled && profile.elevenlabs_voice_id && fullResponse) {
+          setVoiceMode('speaking');
+          const tts = createStreamingTTS(profile.elevenlabs_voice_id, profile.speech_rate);
+          ttsControllerRef.current = tts;
+          tts.onAudioChunk((chunk) => streamingPlayer.enqueue(chunk));
+          tts.onDone(() => streamingPlayer.finalize());
+          tts.onError(() => {});
+          tts.start([fullResponse]);
+        } else {
+          setVoiceMode(defaultMode());
         }
-      }
-
-      segmenter.flush();
-
-      if (!ttsStarted && profile?.voice_enabled && profile.elevenlabs_voice_id && sentenceQueue.length > 0) {
-        startTTSStream(sentenceQueue, profile.elevenlabs_voice_id, profile.speech_rate);
-      } else if (!ttsStarted) {
-        setVoiceMode(defaultMode());
       }
 
       addVoiceExchange(text, fullResponse);
 
-      if (threadId && fullResponse) {
+      if (useStreaming && threadId && fullResponse) {
         persistStreamedAssistantMessage(threadId, fullResponse, streamDoneMetadata || {}).catch(() => {});
       }
     } catch (err) {
