@@ -185,21 +185,31 @@ export async function publishAssistant(id: string, userId: string, notes?: strin
 
   const vapiConfig: Record<string, unknown> = {
     name: assistant.name,
-    firstMessage: assistant.first_message || undefined,
     model: {
       provider: assistant.llm_provider,
       model: assistant.llm_model,
       messages: [{ role: 'system', content: assistant.system_prompt }],
-    },
-    voice: {
-      provider: assistant.voice_provider,
-      voiceId: assistant.voice_id || undefined,
     },
     transcriber: {
       provider: assistant.transcriber_provider,
       model: assistant.transcriber_model,
     },
   };
+
+  if (assistant.first_message) {
+    vapiConfig.firstMessage = assistant.first_message;
+  }
+
+  if (assistant.voice_id) {
+    vapiConfig.voice = {
+      provider: assistant.voice_provider,
+      voiceId: assistant.voice_id,
+    };
+  } else if (assistant.voice_provider) {
+    vapiConfig.voice = {
+      provider: assistant.voice_provider,
+    };
+  }
 
   const { data: toolBindings } = await supabase
     .from('vapi_assistant_tool_bindings')
@@ -238,7 +248,10 @@ export async function publishAssistant(id: string, userId: string, notes?: strin
       config: vapiConfig,
     });
     const json = await response.json();
-    if (!json.success) throw new Error(json.error?.message || 'Failed to update Vapi assistant');
+    if (!json.success) {
+      const detail = json.error?.details?.message || json.error?.details?.error || '';
+      throw new Error(json.error?.message + (detail ? `: ${detail}` : '') || 'Failed to update Vapi assistant');
+    }
     vapiResult = json.data;
   } else {
     const response = await callEdgeFunction('vapi-client', {
@@ -246,7 +259,10 @@ export async function publishAssistant(id: string, userId: string, notes?: strin
       config: vapiConfig,
     });
     const json = await response.json();
-    if (!json.success) throw new Error(json.error?.message || 'Failed to create Vapi assistant');
+    if (!json.success) {
+      const detail = json.error?.details?.message || json.error?.details?.error || '';
+      throw new Error(json.error?.message + (detail ? `: ${detail}` : '') || 'Failed to create Vapi assistant');
+    }
     vapiResult = json.data;
   }
 
