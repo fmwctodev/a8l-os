@@ -347,6 +347,84 @@ export async function getAssistantVersions(assistantId: string): Promise<VapiAss
   return data || [];
 }
 
+let lastReconcileTime = 0;
+const RECONCILE_COOLDOWN_MS = 60_000;
+
+export async function reconcileWithVapi(
+  orgId: string
+): Promise<{ deletedCount: number; deletedNames: string[] }> {
+  const now = Date.now();
+  if (now - lastReconcileTime < RECONCILE_COOLDOWN_MS) {
+    return { deletedCount: 0, deletedNames: [] };
+  }
+
+  try {
+    const response = await callEdgeFunction('vapi-client', {
+      action: 'list_assistants',
+    });
+    const json = await response.json();
+    if (!json.success) return { deletedCount: 0, deletedNames: [] };
+
+    const remoteIds = new Set<string>(
+      (Array.isArray(json.data) ? json.data : []).map(
+        (a: { id: string }) => a.id
+      )
+    );
+
+    const { data: locals } = await supabase
+      .from('vapi_assistants')
+      .select('id, name, vapi_assistant_id')
+      .eq('org_id', orgId)
+      .not('vapi_assistant_id', 'is', null);
+
+    if (!locals || locals.length === 0) {
+      lastReconcileTime = now;
+      return { deletedCount: 0, deletedNames: [] };
+    }
+
+    const stale = locals.filter(
+      (l) => l.vapi_assistant_id && !remoteIds.has(l.vapi_assistant_id)
+    );
+
+    const deletedNames: string[] = [];
+    for (const s of stale) {
+      try {
+        const { error } = await supabase
+          .from('vapi_assistants')
+          .delete()
+          .eq('id', s.id);
+        if (!error) deletedNames.push(s.name);
+      } catch {
+        // skip individual failures
+      }
+    }
+
+    lastReconcileTime = now;
+    console.log(
+      `Vapi reconciliation: removed ${deletedNames.length} assistant(s) that no longer exist on Vapi`
+    );
+    return { deletedCount: deletedNames.length, deletedNames };
+  } catch (e) {
+    console.warn('Vapi reconciliation skipped due to error:', e);
+    return { deletedCount: 0, deletedNames: [] };
+  }
+}
+
+export async function verifyAssistantExistsOnVapi(
+  vapiAssistantId: string
+): Promise<boolean> {
+  try {
+    const response = await callEdgeFunction('vapi-client', {
+      action: 'get_assistant',
+      vapi_assistant_id: vapiAssistantId,
+    });
+    const json = await response.json();
+    return json.success === true;
+  } catch {
+    return true;
+  }
+}
+
 export async function deleteAssistant(id: string): Promise<void> {
   const assistant = await getAssistant(id);
   if (assistant?.vapi_assistant_id) {

@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Filter, MoreVertical, Eye, CreditCard as Edit, Copy, Upload, Archive, Phone, MessageSquare, Globe, Mic, Zap } from 'lucide-react';
+import { Plus, Search, Filter, MoreVertical, Eye, CreditCard as Edit, Copy, Upload, Archive, Phone, MessageSquare, Globe, Mic, Zap, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
-import { listAssistants, archiveAssistant, duplicateAssistant, deleteAssistant } from '../../../services/vapiAssistants';
+import { listAssistants, archiveAssistant, duplicateAssistant, deleteAssistant, reconcileWithVapi } from '../../../services/vapiAssistants';
 import type { VapiAssistant } from '../../../services/vapiAssistants';
 
 const statusColors: Record<string, string> = {
@@ -26,11 +26,14 @@ export function VapiAssistantsListPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const hasReconciledRef = useRef(false);
 
   const canCreate = hasPermission('ai_agents.voice.create');
   const canEdit = hasPermission('ai_agents.voice.edit');
 
-  const loadAssistants = async () => {
+  const loadAssistants = useCallback(async () => {
     if (!user?.organization_id) return;
     setLoading(true);
     try {
@@ -44,11 +47,29 @@ export function VapiAssistantsListPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.organization_id, search, statusFilter]);
 
   useEffect(() => {
     loadAssistants();
   }, [user?.organization_id, statusFilter]);
+
+  useEffect(() => {
+    if (!user?.organization_id || hasReconciledRef.current) return;
+    hasReconciledRef.current = true;
+
+    setSyncing(true);
+    reconcileWithVapi(user.organization_id)
+      .then((result) => {
+        if (result.deletedCount > 0) {
+          setSyncMessage(
+            `${result.deletedCount} assistant(s) removed -- deleted from Vapi dashboard`
+          );
+          loadAssistants();
+          setTimeout(() => setSyncMessage(null), 6000);
+        }
+      })
+      .finally(() => setSyncing(false));
+  }, [user?.organization_id]);
 
   useEffect(() => {
     const timeout = setTimeout(loadAssistants, 300);
@@ -58,6 +79,11 @@ export function VapiAssistantsListPage() {
   useEffect(() => {
     if (searchParams.get('create') === 'true' && canCreate) {
       navigate('/ai-agents/voice/assistants/new');
+    }
+    if (searchParams.get('removed') === 'vapi') {
+      setSyncMessage('An assistant was removed because it was deleted from the Vapi dashboard');
+      setTimeout(() => setSyncMessage(null), 6000);
+      navigate('/ai-agents/voice/assistants', { replace: true });
     }
   }, [searchParams]);
 
@@ -98,8 +124,11 @@ export function VapiAssistantsListPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-lg font-semibold text-white">Voice Assistants</h2>
-          <p className="text-sm text-slate-400 mt-0.5">
+          <p className="text-sm text-slate-400 mt-0.5 flex items-center gap-2">
             Create and manage Vapi-powered assistants for voice, SMS, and web chat
+            {syncing && (
+              <RefreshCw className="w-3.5 h-3.5 text-slate-500 animate-spin" />
+            )}
           </p>
         </div>
 
@@ -113,6 +142,13 @@ export function VapiAssistantsListPage() {
           </button>
         )}
       </div>
+
+      {syncMessage && (
+        <div className="mb-4 flex items-center gap-2 px-4 py-2.5 text-sm bg-amber-500/10 border border-amber-500/20 text-amber-300 rounded-lg">
+          <RefreshCw className="w-4 h-4 shrink-0" />
+          {syncMessage}
+        </div>
+      )}
 
       <div className="flex items-center gap-3 mb-4">
         <div className="relative flex-1 max-w-sm">

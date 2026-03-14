@@ -7,7 +7,8 @@ import {
 import { useAuth } from '../../../contexts/AuthContext';
 import {
   getAssistant, createAssistant, updateAssistant, publishAssistant,
-  getAssistantVersions, duplicateAssistant,
+  getAssistantVersions, duplicateAssistant, deleteAssistant,
+  verifyAssistantExistsOnVapi,
 } from '../../../services/vapiAssistants';
 import { hasSmsNumberForAssistant } from '../../../services/vapiNumbers';
 import { listTools } from '../../../services/vapiTools';
@@ -89,6 +90,16 @@ export function VapiAssistantDetailPage() {
         navigate('/ai-agents/voice/assistants');
         return;
       }
+
+      if (assistant.vapi_assistant_id) {
+        const existsOnVapi = await verifyAssistantExistsOnVapi(assistant.vapi_assistant_id);
+        if (!existsOnVapi) {
+          await deleteAssistant(id);
+          navigate('/ai-agents/voice/assistants?removed=vapi', { replace: true });
+          return;
+        }
+      }
+
       setForm({
         name: assistant.name,
         slug: assistant.slug,
