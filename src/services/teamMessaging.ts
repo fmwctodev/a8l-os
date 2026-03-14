@@ -1,5 +1,15 @@
 import { supabase } from '../lib/supabase';
 
+export const TEAM_ATTACHMENT_MAX_SIZE = 100 * 1024 * 1024;
+export const TEAM_ATTACHMENT_MAX_FILES = 10;
+
+export interface TeamAttachment {
+  url: string;
+  name: string;
+  size: number;
+  type: string;
+}
+
 export interface TeamChannel {
   id: string;
   organization_id: string;
@@ -32,7 +42,7 @@ export interface TeamMessage {
   sender_id: string;
   content: string;
   reply_to_id: string | null;
-  attachments: any[];
+  attachments: TeamAttachment[];
   mentions: any[];
   is_edited: boolean;
   is_deleted: boolean;
@@ -351,7 +361,7 @@ export async function sendMessage(
   channelId: string,
   content: string,
   replyToId?: string,
-  attachments?: any[]
+  attachments?: TeamAttachment[]
 ): Promise<TeamMessage> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
@@ -391,6 +401,26 @@ export async function sendMessage(
   if (error) throw error;
 
   return data;
+}
+
+export async function uploadTeamAttachment(file: File, orgId: string): Promise<TeamAttachment> {
+  const ext = file.name.split('.').pop() || 'bin';
+  const path = `${orgId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from('team-attachments')
+    .upload(path, file, { contentType: file.type, upsert: false });
+
+  if (error) throw new Error(`Attachment upload failed: ${error.message}`);
+
+  const { data } = supabase.storage.from('team-attachments').getPublicUrl(path);
+
+  return {
+    url: data.publicUrl,
+    name: file.name,
+    size: file.size,
+    type: file.type,
+  };
 }
 
 export async function markChannelAsRead(channelId: string): Promise<void> {

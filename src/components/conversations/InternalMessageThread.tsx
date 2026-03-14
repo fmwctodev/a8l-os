@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
-import { Hash, Users, RefreshCw } from 'lucide-react';
-import { TeamMessage, ChannelWithDetails } from '../../services/teamMessaging';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { Hash, Users, RefreshCw, FileText, Film, Music, Archive, File as FileIcon, Download } from 'lucide-react';
+import { TeamMessage, TeamAttachment, ChannelWithDetails } from '../../services/teamMessaging';
 import { InternalMessageComposer } from './InternalMessageComposer';
+import { MediaLightbox, LightboxItem } from '../ui/MediaLightbox';
 import { formatTime, formatDate } from '../../utils/dateUtils';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -10,8 +11,132 @@ interface InternalMessageThreadProps {
   messages: TeamMessage[];
   loading: boolean;
   refreshing: boolean;
-  onSendMessage: (content: string) => Promise<void>;
+  onSendMessage: (content: string, attachments?: TeamAttachment[]) => Promise<void>;
   onRefresh: () => void;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getNonImageIcon(type: string) {
+  if (type.startsWith('video/')) return Film;
+  if (type.startsWith('audio/')) return Music;
+  if (type === 'application/pdf') return FileText;
+  if (type.includes('zip') || type.includes('rar') || type.includes('gzip')) return Archive;
+  return FileIcon;
+}
+
+function MessageAttachments({ attachments }: { attachments: TeamAttachment[] }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
+  const mediaItems: LightboxItem[] = attachments
+    .filter((a) => a.type.startsWith('image/') || a.type.startsWith('video/'))
+    .map((a) => ({
+      url: a.url,
+      mediaType: a.type.startsWith('video/') ? 'video' as const : 'image' as const,
+      filename: a.name,
+    }));
+
+  const imageAttachments = attachments.filter((a) => a.type.startsWith('image/'));
+  const videoAttachments = attachments.filter((a) => a.type.startsWith('video/'));
+  const otherAttachments = attachments.filter(
+    (a) => !a.type.startsWith('image/') && !a.type.startsWith('video/')
+  );
+
+  const openLightbox = useCallback((attachment: TeamAttachment) => {
+    const idx = mediaItems.findIndex((m) => m.url === attachment.url);
+    if (idx >= 0) {
+      setLightboxIndex(idx);
+      setLightboxOpen(true);
+    }
+  }, [mediaItems]);
+
+  return (
+    <>
+      {imageAttachments.length > 0 && (
+        <div className={`mt-1.5 flex flex-wrap gap-1.5 ${imageAttachments.length === 1 ? '' : 'max-w-[320px]'}`}>
+          {imageAttachments.map((att, i) => (
+            <button
+              key={i}
+              onClick={() => openLightbox(att)}
+              className="block rounded-lg overflow-hidden hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            >
+              <img
+                src={att.url}
+                alt={att.name}
+                className={`object-cover ${
+                  imageAttachments.length === 1
+                    ? 'max-w-[280px] max-h-[200px] rounded-lg'
+                    : 'w-[100px] h-[100px]'
+                }`}
+                loading="lazy"
+              />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {videoAttachments.length > 0 && (
+        <div className="mt-1.5 space-y-1.5">
+          {videoAttachments.map((att, i) => (
+            <button
+              key={i}
+              onClick={() => openLightbox(att)}
+              className="relative block rounded-lg overflow-hidden bg-slate-700 hover:opacity-90 transition-opacity max-w-[280px] focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            >
+              <div className="w-full h-[160px] flex items-center justify-center">
+                <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                  <Film size={20} className="text-white" />
+                </div>
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 px-3 py-1.5 bg-gradient-to-t from-black/70 to-transparent">
+                <p className="text-xs text-white/80 truncate">{att.name}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {otherAttachments.length > 0 && (
+        <div className="mt-1.5 space-y-1">
+          {otherAttachments.map((att, i) => {
+            const Icon = getNonImageIcon(att.type);
+            return (
+              <a
+                key={i}
+                href={att.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                download={att.name}
+                className="flex items-center gap-2.5 px-3 py-2 bg-slate-700/60 hover:bg-slate-700 border border-slate-600 rounded-lg transition-colors max-w-[280px] group"
+              >
+                <div className="w-8 h-8 rounded bg-slate-600 flex items-center justify-center flex-shrink-0">
+                  <Icon size={16} className="text-slate-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-white font-medium truncate">{att.name}</p>
+                  <p className="text-xs text-slate-400">{formatFileSize(att.size)}</p>
+                </div>
+                <Download size={14} className="text-slate-500 group-hover:text-slate-300 flex-shrink-0 transition-colors" />
+              </a>
+            );
+          })}
+        </div>
+      )}
+
+      {lightboxOpen && mediaItems.length > 0 && (
+        <MediaLightbox
+          items={mediaItems}
+          startIndex={lightboxIndex}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
+    </>
+  );
 }
 
 export function InternalMessageThread({
@@ -51,10 +176,10 @@ export function InternalMessageThread({
     };
   };
 
-  const groupMessagesByDate = (messages: TeamMessage[]) => {
+  const groupMessagesByDate = (msgs: TeamMessage[]) => {
     const groups: { [key: string]: TeamMessage[] } = {};
 
-    messages.forEach((message) => {
+    msgs.forEach((message) => {
       const date = formatDate(new Date(message.created_at));
       if (!groups[date]) {
         groups[date] = [];
@@ -152,6 +277,8 @@ export function InternalMessageThread({
                   const showAvatar =
                     index === 0 ||
                     dateMessages[index - 1]?.sender_id !== message.sender_id;
+                  const hasAttachments = message.attachments && message.attachments.length > 0;
+                  const hasText = message.content.trim().length > 0;
 
                   return (
                     <div
@@ -201,20 +328,28 @@ export function InternalMessageThread({
                           </div>
                         )}
 
-                        <div
-                          className={`inline-block px-4 py-2 rounded-2xl ${
-                            isOwnMessage
-                              ? 'bg-cyan-600 text-white'
-                              : 'bg-slate-800 text-white'
-                          }`}
-                        >
-                          <p className="text-sm whitespace-pre-wrap break-words">
-                            {message.content}
-                          </p>
-                          {message.is_edited && (
-                            <span className="text-xs opacity-70 ml-2">(edited)</span>
-                          )}
-                        </div>
+                        {hasText && (
+                          <div
+                            className={`inline-block px-4 py-2 rounded-2xl ${
+                              isOwnMessage
+                                ? 'bg-cyan-600 text-white'
+                                : 'bg-slate-800 text-white'
+                            }`}
+                          >
+                            <p className="text-sm whitespace-pre-wrap break-words">
+                              {message.content}
+                            </p>
+                            {message.is_edited && (
+                              <span className="text-xs opacity-70 ml-2">(edited)</span>
+                            )}
+                          </div>
+                        )}
+
+                        {hasAttachments && (
+                          <div className={`${isOwnMessage ? 'flex justify-end' : ''}`}>
+                            <MessageAttachments attachments={message.attachments} />
+                          </div>
+                        )}
 
                         {message.reactions && message.reactions.length > 0 && (
                           <div className="flex gap-1 mt-1 flex-wrap">

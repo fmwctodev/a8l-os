@@ -14,6 +14,7 @@ import {
   subscribeToChannels,
   type ChannelWithDetails,
   type TeamMessage,
+  type TeamAttachment,
 } from '../../services/teamMessaging';
 import { MessageSquare, Loader2 } from 'lucide-react';
 import { usePermission } from '../../hooks/usePermission';
@@ -92,10 +93,10 @@ export function TeamMessagingTab() {
   );
 
   const handleSendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, attachments?: TeamAttachment[]) => {
       if (!selectedChannel) return;
 
-      await sendMessage(selectedChannel.id, content);
+      await sendMessage(selectedChannel.id, content, undefined, attachments);
     },
     [selectedChannel]
   );
