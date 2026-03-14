@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { User, ChevronDown, PanelRight, PanelRightClose, MoreVertical, UserPlus, Check } from 'lucide-react';
+import { User, ChevronDown, PanelRight, PanelRightClose, MoreVertical, UserPlus, Check, Bot, Mic, Clock, PhoneCall } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermission } from '../../hooks/usePermission';
 import { updateConversationStatus, assignConversation } from '../../services/conversations';
@@ -41,6 +41,10 @@ export function ConversationHeader({
     : 'Unknown';
 
   const currentStatus = STATUS_OPTIONS.find((s) => s.value === conversation.status) || STATUS_OPTIONS[0];
+  const isVapi = conversation.provider === 'vapi';
+  const vapiMeta = conversation.conversation_metadata as Record<string, unknown> | undefined;
+  const assistantName = vapiMeta?.assistant_name as string | undefined;
+  const durationSeconds = vapiMeta?.duration_seconds as number | undefined;
 
   useEffect(() => {
     async function loadUsers() {
@@ -92,14 +96,37 @@ export function ConversationHeader({
           {getInitials(contactName)}
         </div>
         <div>
-          <Link
-            to={`/contacts/${conversation.contact_id}`}
-            className="font-semibold text-white hover:text-cyan-400 transition-colors"
-          >
-            {contactName}
-          </Link>
-          <div className="text-sm text-slate-400">
-            {contact?.email || contact?.phone || 'No contact info'}
+          <div className="flex items-center gap-2">
+            <Link
+              to={`/contacts/${conversation.contact_id}`}
+              className="font-semibold text-white hover:text-cyan-400 transition-colors"
+            >
+              {contactName}
+            </Link>
+            {isVapi && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-500/20 border border-teal-500/30 text-[11px] font-medium text-teal-400">
+                <Bot size={11} />
+                Vapi
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 text-sm text-slate-400">
+            <span>{contact?.email || contact?.phone || 'No contact info'}</span>
+            {isVapi && assistantName && (
+              <>
+                <span className="text-slate-600">|</span>
+                <span className="text-teal-400 text-xs">{assistantName}</span>
+              </>
+            )}
+            {isVapi && durationSeconds != null && durationSeconds > 0 && (
+              <>
+                <span className="text-slate-600">|</span>
+                <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                  <Clock size={11} />
+                  {formatDuration(durationSeconds)}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -240,4 +267,10 @@ function getInitials(name: string): string {
     .join('')
     .toUpperCase()
     .substring(0, 2);
+}
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }

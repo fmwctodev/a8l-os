@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Phone, Mail, PhoneCall, MessageCircle, Share2, Search } from 'lucide-react';
+import { X, Phone, Mail, PhoneCall, MessageCircle, Share2, Search, Mic, Bot } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getUsers } from '../../services/users';
 import { getDepartments } from '../../services/departments';
@@ -17,6 +17,15 @@ const CHANNELS: { value: MessageChannel; label: string; icon: React.ReactNode }[
   { value: 'voice', label: 'Voice', icon: <PhoneCall size={14} /> },
   { value: 'webchat', label: 'Webchat', icon: <MessageCircle size={14} /> },
   { value: 'social_dm', label: 'Social DMs', icon: <Share2 size={14} /> },
+  { value: 'vapi_voice', label: 'Vapi Voice', icon: <Mic size={14} /> },
+  { value: 'vapi_sms', label: 'Vapi SMS', icon: <Bot size={14} /> },
+  { value: 'vapi_webchat', label: 'Vapi Chat', icon: <Bot size={14} /> },
+];
+
+const PROVIDERS = [
+  { value: '', label: 'All sources' },
+  { value: 'vapi', label: 'Vapi AI only' },
+  { value: 'non-vapi', label: 'Non-Vapi only' },
 ];
 
 const STATUSES: { value: ConversationStatus; label: string; color: string }[] = [
@@ -103,13 +112,21 @@ export function ConversationFilters({ filters, onChange, onClose }: Conversation
     onChange({});
   };
 
+  const handleProviderChange = (value: string) => {
+    onChange({
+      ...filters,
+      provider: value || undefined,
+    });
+  };
+
   const hasActiveFilters =
     (filters.channels && filters.channels.length > 0) ||
     (filters.status && filters.status.length > 0) ||
     filters.assignedUserId ||
     filters.departmentId ||
     filters.unreadOnly ||
-    filters.search;
+    filters.search ||
+    filters.provider;
 
   return (
     <div className="border-b border-slate-700 bg-slate-800/50 p-4 space-y-4">
@@ -226,6 +243,21 @@ export function ConversationFilters({ filters, onChange, onClose }: Conversation
           </select>
         </div>
       )}
+
+      <div>
+        <label className="block text-xs font-medium text-slate-400 mb-2">Source</label>
+        <select
+          value={filters.provider || ''}
+          onChange={(e) => handleProviderChange(e.target.value)}
+          className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+        >
+          {PROVIDERS.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 }

@@ -45,6 +45,12 @@ export async function getConversations(
     query = query.gt('unread_count', 0);
   }
 
+  if (filters.provider === 'vapi') {
+    query = query.eq('provider', 'vapi');
+  } else if (filters.provider === 'non-vapi') {
+    query = query.is('provider', null);
+  }
+
   const offset = (page - 1) * pageSize;
   query = query.range(offset, offset + pageSize - 1);
 

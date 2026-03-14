@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { RefreshCw, AlertTriangle } from 'lucide-react';
+import { RefreshCw, AlertTriangle, Bot, Mic, Clock, PhoneCall, FileAudio, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { MessageBubble } from './MessageBubble';
@@ -310,6 +310,8 @@ export function MessageThread({
   };
 
   const threadItems = buildThreadItems(messages, events);
+  const isVapiConversation = conversation.provider === 'vapi';
+  const vapiMeta = conversation.conversation_metadata as Record<string, unknown> | undefined;
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -319,6 +321,10 @@ export function MessageThread({
         onToggleContactPanel={onToggleContactPanel}
         showContactPanel={showContactPanel}
       />
+
+      {isVapiConversation && vapiMeta && (
+        <VapiCallInfoBar metadata={vapiMeta} />
+      )}
 
       <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
         {loading ? (
@@ -343,7 +349,7 @@ export function MessageThread({
           </div>
         ) : threadItems.length === 0 ? (
           <div className="flex items-center justify-center h-full text-slate-400">
-            No messages yet. Start the conversation!
+            {isVapiConversation ? 'No messages in this conversation.' : 'No messages yet. Start the conversation!'}
           </div>
         ) : (
           threadItems.map((item, index) => {
@@ -376,20 +382,29 @@ export function MessageThread({
         <div ref={messagesEndRef} />
       </div>
 
-      <MessageComposer
-        onSend={handleSendMessage}
-        onSendInternalComment={handleSendInternalComment}
-        sending={sending}
-        disabled={conversation.status === 'closed'}
-        availableChannels={availableChannels}
-        selectedChannel={selectedChannel}
-        onChannelChange={setSelectedChannel}
-        showSubject={selectedChannel === 'email'}
-        contact={conversation.contact as Contact}
-        conversation={conversation}
-        gmailConnected={user?.gmail_connected || false}
-        fromNumbers={fromNumbers}
-      />
+      {isVapiConversation ? (
+        <div className="px-4 py-3 border-t border-slate-700 bg-slate-800/50">
+          <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
+            <Bot size={16} />
+            <span>This conversation was handled by Vapi AI and is read-only</span>
+          </div>
+        </div>
+      ) : (
+        <MessageComposer
+          onSend={handleSendMessage}
+          onSendInternalComment={handleSendInternalComment}
+          sending={sending}
+          disabled={conversation.status === 'closed'}
+          availableChannels={availableChannels}
+          selectedChannel={selectedChannel}
+          onChannelChange={setSelectedChannel}
+          showSubject={selectedChannel === 'email'}
+          contact={conversation.contact as Contact}
+          conversation={conversation}
+          gmailConnected={user?.gmail_connected || false}
+          fromNumbers={fromNumbers}
+        />
+      )}
 
       {emailThread && (
         <EmailThreadDrawer
@@ -501,4 +516,63 @@ function formatTime(dateString: string): string {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+function VapiCallInfoBar({ metadata }: { metadata: Record<string, unknown> }) {
+  const recordingUrl = metadata.recording_url as string | undefined;
+  const durationSeconds = metadata.duration_seconds as number | undefined;
+  const channelType = metadata.channel_type as string | undefined;
+  const endedReason = metadata.ended_reason as string | undefined;
+
+  const hasInfo = recordingUrl || durationSeconds || channelType;
+  if (!hasInfo) return null;
+
+  return (
+    <div className="px-4 py-2 border-b border-slate-700 bg-slate-800/30 flex items-center gap-4 flex-wrap">
+      {channelType && (
+        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+          {channelType === 'voice' || channelType === 'vapi_voice' ? (
+            <PhoneCall size={13} className="text-teal-400" />
+          ) : (
+            <Bot size={13} className="text-teal-400" />
+          )}
+          <span className="capitalize">{channelType.replace('vapi_', '')}</span>
+        </div>
+      )}
+      {durationSeconds != null && durationSeconds > 0 && (
+        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+          <Clock size={13} />
+          <span>{formatCallDuration(durationSeconds)}</span>
+        </div>
+      )}
+      {endedReason && (
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <span>Ended: {endedReason.replace(/-/g, ' ')}</span>
+        </div>
+      )}
+      {recordingUrl && (
+        <a
+          href={recordingUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-xs text-teal-400 hover:text-teal-300 transition-colors ml-auto"
+        >
+          <FileAudio size={13} />
+          Play Recording
+          <ExternalLink size={11} />
+        </a>
+      )}
+    </div>
+  );
+}
+
+function formatCallDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m >= 60) {
+    const h = Math.floor(m / 60);
+    const rm = m % 60;
+    return `${h}h ${rm}m ${s}s`;
+  }
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }

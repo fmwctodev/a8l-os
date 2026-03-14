@@ -328,13 +328,33 @@ function ConversationListItem({ conversation, isSelected, onClick, bulkMode, isC
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2 mb-1">
-              <span className={`truncate ${hasUnread ? 'font-semibold text-white' : 'text-slate-200'}`}>
-                {contactName}
-              </span>
-              <span className="text-xs text-slate-500 whitespace-nowrap">
-                {formatRelativeTime(conversation.last_message_at)}
-              </span>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className={`truncate ${hasUnread ? 'font-semibold text-white' : 'text-slate-200'}`}>
+                  {contactName}
+                </span>
+                {conversation.provider === 'vapi' && (
+                  <span className="shrink-0 px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-400 text-[10px] font-medium">
+                    Vapi
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {conversation.provider === 'vapi' && conversation.conversation_metadata?.duration_seconds != null && (
+                  <span className="text-[10px] text-slate-500">
+                    {formatDuration(conversation.conversation_metadata.duration_seconds as number)}
+                  </span>
+                )}
+                <span className="text-xs text-slate-500 whitespace-nowrap">
+                  {formatRelativeTime(conversation.last_message_at)}
+                </span>
+              </div>
             </div>
+
+            {conversation.provider === 'vapi' && conversation.conversation_metadata?.assistant_name && (
+              <div className="text-[11px] text-teal-400/70 truncate mb-0.5">
+                {conversation.conversation_metadata.assistant_name as string}
+              </div>
+            )}
 
             <div className="flex items-center gap-2">
               <ChannelIcon
@@ -481,4 +501,10 @@ function formatRelativeTime(dateString: string): string {
   if (diffDays < 7) return `${diffDays}d`;
 
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${String(secs).padStart(2, '0')}`;
 }

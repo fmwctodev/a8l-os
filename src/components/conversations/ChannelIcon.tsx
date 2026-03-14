@@ -1,4 +1,4 @@
-import { Phone, Mail, PhoneCall, MessageCircle, Share2 } from 'lucide-react';
+import { Phone, Mail, PhoneCall, MessageCircle, Share2, Mic, Bot } from 'lucide-react';
 import type { MessageChannel } from '../../types';
 
 interface ChannelIconProps {
@@ -14,6 +14,9 @@ const channelConfig: Record<MessageChannel, { icon: typeof Phone; color: string;
   voice: { icon: PhoneCall, color: 'text-teal-400', label: 'Voice' },
   webchat: { icon: MessageCircle, color: 'text-sky-400', label: 'Webchat' },
   social_dm: { icon: Share2, color: 'text-blue-400', label: 'Social DM' },
+  vapi_voice: { icon: Mic, color: 'text-teal-400', label: 'Vapi Voice' },
+  vapi_sms: { icon: Bot, color: 'text-teal-400', label: 'Vapi SMS' },
+  vapi_webchat: { icon: Bot, color: 'text-teal-400', label: 'Vapi Chat' },
 };
 
 const PLATFORM_LABEL: Record<string, string> = {

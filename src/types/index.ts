@@ -395,7 +395,7 @@ export interface ContactTimelineEvent {
   user?: User | null;
 }
 
-export type MessageChannel = 'sms' | 'email' | 'voice' | 'webchat' | 'social_dm';
+export type MessageChannel = 'sms' | 'email' | 'voice' | 'webchat' | 'social_dm' | 'vapi_voice' | 'vapi_sms' | 'vapi_webchat';
 export type MessageDirection = 'inbound' | 'outbound' | 'system';
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'failed' | 'read';
 export type ConversationStatus = 'open' | 'pending' | 'closed';
@@ -414,6 +414,12 @@ export interface Conversation {
   updated_at: string;
   late_conversation_id?: string | null;
   late_dm_platform?: string | null;
+  provider?: string | null;
+  external_call_id?: string | null;
+  external_session_id?: string | null;
+  external_assistant_id?: string | null;
+  external_binding_id?: string | null;
+  conversation_metadata?: Record<string, unknown>;
   contact?: Contact;
   assigned_user?: User | null;
   department?: Department | null;
@@ -437,6 +443,9 @@ export interface Message {
   hidden_at: string | null;
   hidden_by_user_id: string | null;
   media_urls?: string[] | null;
+  message_type?: string;
+  sender_name?: string | null;
+  sender_identifier?: string | null;
   contact?: Contact;
 }
 
@@ -540,6 +549,27 @@ export interface ConversationFilters {
   departmentId?: string;
   unreadOnly?: boolean;
   search?: string;
+  provider?: string;
+}
+
+export interface ConversationParticipant {
+  id: string;
+  conversation_id: string;
+  role: 'customer' | 'assistant' | 'user' | 'system';
+  name: string | null;
+  identifier: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface VapiConversationSettings {
+  org_id: string;
+  auto_create_contacts: boolean;
+  store_call_recordings: boolean;
+  store_call_summaries: boolean;
+  show_tool_events: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export type SnippetScope = 'personal' | 'team' | 'system';

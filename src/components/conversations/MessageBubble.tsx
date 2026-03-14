@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Phone, Mail, PhoneCall, MessageCircle, Share2, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal, Paperclip, Download, FileText, Image, File, ChevronDown, ChevronUp, StickyNote, ExternalLink, RefreshCw, X } from 'lucide-react';
+import { Phone, Mail, PhoneCall, MessageCircle, Share2, Check, CheckCheck, Clock, AlertCircle, Eye, Archive, Trash2, MoreHorizontal, Paperclip, Download, FileText, Image, File, ChevronDown, ChevronUp, StickyNote, ExternalLink, RefreshCw, X, Mic, Bot, FileAudio } from 'lucide-react';
 import { trashGmailMessage, archiveGmailMessage, downloadAttachment, listMessageAttachments } from '../../services/gmailApi';
 import { retrySms } from '../../services/sendSms';
 import type { Message, MessageChannel, MessageStatus } from '../../types';
@@ -81,6 +81,14 @@ export function MessageBubble({ message, onMessageAction, onOpenThread, onRetry 
     }
   };
 
+  if (message.message_type === 'call_event') {
+    return <VapiCallEventBubble message={message} />;
+  }
+
+  if (message.message_type === 'summary') {
+    return <VapiSummaryBubble message={message} />;
+  }
+
   if (isSystem) {
     const isInternalComment = metadata?.type === 'internal_comment';
     if (isInternalComment) {
@@ -141,6 +149,8 @@ export function MessageBubble({ message, onMessageAction, onOpenThread, onRetry 
     ? message.media_urls
     : (metadata?.media_urls as string[] | undefined) || [];
 
+  const isVapiChannel = message.channel === 'vapi_voice' || message.channel === 'vapi_sms' || message.channel === 'vapi_webchat';
+
   return (
     <div
       className={`group flex ${isOutbound ? 'justify-end' : 'justify-start'}`}
@@ -153,6 +163,15 @@ export function MessageBubble({ message, onMessageAction, onOpenThread, onRetry 
             : 'bg-slate-700 text-white rounded-bl-md'
         }`}
       >
+        {isVapiChannel && isOutbound && message.sender_name && (
+          <div className="px-4 pt-2 pb-0">
+            <div className="flex items-center gap-1.5">
+              <Bot size={12} className="text-cyan-200" />
+              <span className="text-[11px] font-medium text-cyan-200">{message.sender_name}</span>
+            </div>
+          </div>
+        )}
+
         {mediaUrls.length > 0 && (
           <MmsMediaGallery urls={mediaUrls} isOutbound={isOutbound} />
         )}
@@ -277,6 +296,37 @@ function InternalCommentBubble({ message, metadata }: { message: Message; metada
         </div>
         <div className="px-4 pb-2">
           <span className="text-[10px] text-amber-500 italic">Internal note - not visible to contact</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VapiCallEventBubble({ message }: { message: Message }) {
+  return (
+    <div className="flex items-center justify-center my-2">
+      <span className="inline-flex items-center gap-1.5 text-xs text-slate-400 bg-slate-700/80 px-3 py-1.5 rounded-full">
+        <PhoneCall size={12} />
+        {message.body}
+        <span className="text-slate-500 ml-1">{formatTime(message.sent_at)}</span>
+      </span>
+    </div>
+  );
+}
+
+function VapiSummaryBubble({ message }: { message: Message }) {
+  return (
+    <div className="flex justify-center my-3">
+      <div className="max-w-[85%] w-full rounded-lg border border-teal-600/40 bg-teal-900/20 overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-teal-600/30 bg-teal-900/30">
+          <FileAudio size={14} className="text-teal-400" />
+          <span className="text-xs font-medium text-teal-300">Call Summary</span>
+          <span className="text-xs text-teal-500 ml-auto">{formatTime(message.sent_at)}</span>
+        </div>
+        <div className="px-4 py-3">
+          <p className="text-sm text-teal-100 whitespace-pre-wrap break-words leading-relaxed">
+            {message.body}
+          </p>
         </div>
       </div>
     </div>
@@ -527,6 +577,11 @@ function ChannelIndicator({ channel, isOutbound }: { channel: MessageChannel; is
       return <MessageCircle className={iconClass} />;
     case 'social_dm':
       return <Share2 className={iconClass} />;
+    case 'vapi_voice':
+      return <Mic className={iconClass} />;
+    case 'vapi_sms':
+    case 'vapi_webchat':
+      return <Bot className={iconClass} />;
     default:
       return null;
   }
