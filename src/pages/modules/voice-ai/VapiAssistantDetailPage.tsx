@@ -13,6 +13,8 @@ import { hasSmsNumberForAssistant } from '../../../services/vapiNumbers';
 import { listTools } from '../../../services/vapiTools';
 import type { VapiAssistant, VapiAssistantVersion } from '../../../services/vapiAssistants';
 import type { VapiTool } from '../../../services/vapiTools';
+import { VoiceTabPanel } from '../../../components/voice-ai/VoiceTabPanel';
+import { ModelTabPanel } from '../../../components/voice-ai/ModelTabPanel';
 
 const editorTabs = [
   { key: 'basics', label: 'Basics', icon: FileText },
@@ -21,46 +23,6 @@ const editorTabs = [
   { key: 'tools', label: 'Tools', icon: Wrench },
   { key: 'channels', label: 'Channels', icon: Radio },
   { key: 'publish', label: 'Publish', icon: Upload },
-];
-
-const llmProviders = [
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'groq', label: 'Groq' },
-  { value: 'google', label: 'Google Gemini' },
-];
-
-const llmModels: Record<string, { value: string; label: string }[]> = {
-  openai: [
-    { value: 'gpt-4o', label: 'GPT-4o' },
-    { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-  ],
-  anthropic: [
-    { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
-    { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' },
-  ],
-  groq: [
-    { value: 'llama-3.1-70b-versatile', label: 'Llama 3.1 70B' },
-    { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B' },
-  ],
-  google: [
-    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-    { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
-  ],
-};
-
-const voiceProviders = [
-  { value: 'elevenlabs', label: 'ElevenLabs' },
-  { value: 'playht', label: 'PlayHT' },
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'cartesia', label: 'Cartesia' },
-];
-
-const transcriberProviders = [
-  { value: 'deepgram', label: 'Deepgram' },
-  { value: 'google', label: 'Google' },
-  { value: 'assemblyai', label: 'AssemblyAI' },
 ];
 
 function generateSlug(name: string): string {
@@ -380,94 +342,25 @@ export function VapiAssistantDetailPage() {
         )}
 
         {tab === 'model' && (
-          <div className="space-y-5 max-w-2xl">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">LLM Provider</label>
-                <select
-                  value={form.llm_provider}
-                  onChange={e => setForm(prev => ({
-                    ...prev,
-                    llm_provider: e.target.value,
-                    llm_model: (llmModels[e.target.value]?.[0]?.value) || prev.llm_model,
-                  }))}
-                  className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                >
-                  {llmProviders.map(p => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">LLM Model</label>
-                <select
-                  value={form.llm_model}
-                  onChange={e => setForm(prev => ({ ...prev, llm_model: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                >
-                  {(llmModels[form.llm_provider] || []).map(m => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Transcriber Provider</label>
-                <select
-                  value={form.transcriber_provider}
-                  onChange={e => setForm(prev => ({ ...prev, transcriber_provider: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                >
-                  {transcriberProviders.map(p => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Transcriber Model</label>
-                <input
-                  type="text"
-                  value={form.transcriber_model}
-                  onChange={e => setForm(prev => ({ ...prev, transcriber_model: e.target.value }))}
-                  placeholder="nova-2"
-                  className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                />
-              </div>
-            </div>
-          </div>
+          <ModelTabPanel
+            llmProvider={form.llm_provider}
+            llmModel={form.llm_model}
+            transcriberProvider={form.transcriber_provider}
+            transcriberModel={form.transcriber_model}
+            onLlmProviderChange={v => setForm(prev => ({ ...prev, llm_provider: v }))}
+            onLlmModelChange={v => setForm(prev => ({ ...prev, llm_model: v }))}
+            onTranscriberProviderChange={v => setForm(prev => ({ ...prev, transcriber_provider: v }))}
+            onTranscriberModelChange={v => setForm(prev => ({ ...prev, transcriber_model: v }))}
+          />
         )}
 
         {tab === 'voice' && (
-          <div className="space-y-5 max-w-2xl">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Voice Provider</label>
-                <select
-                  value={form.voice_provider}
-                  onChange={e => setForm(prev => ({ ...prev, voice_provider: e.target.value, voice_id: '' }))}
-                  className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                >
-                  {voiceProviders.map(p => (
-                    <option key={p.value} value={p.value}>{p.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Voice ID</label>
-                <input
-                  type="text"
-                  value={form.voice_id}
-                  onChange={e => setForm(prev => ({ ...prev, voice_id: e.target.value }))}
-                  placeholder="Enter voice ID from provider"
-                  className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                />
-                <p className="text-xs text-slate-500 mt-1">
-                  Voice ID from your {form.voice_provider} account. Check provider dashboard for available voices.
-                </p>
-              </div>
-            </div>
-          </div>
+          <VoiceTabPanel
+            voiceProvider={form.voice_provider}
+            voiceId={form.voice_id}
+            onProviderChange={v => setForm(prev => ({ ...prev, voice_provider: v }))}
+            onVoiceChange={v => setForm(prev => ({ ...prev, voice_id: v }))}
+          />
         )}
 
         {tab === 'tools' && (

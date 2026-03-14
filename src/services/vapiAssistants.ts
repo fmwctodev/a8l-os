@@ -179,6 +179,14 @@ export async function updateAssistant(
   return data;
 }
 
+const VAPI_VOICE_PROVIDER_MAP: Record<string, string> = {
+  elevenlabs: '11labs',
+};
+
+function mapVoiceProvider(internal: string): string {
+  return VAPI_VOICE_PROVIDER_MAP[internal] || internal;
+}
+
 export async function publishAssistant(id: string, userId: string, notes?: string): Promise<VapiAssistant> {
   const assistant = await getAssistant(id);
   if (!assistant) throw new Error('Assistant not found');
@@ -202,12 +210,12 @@ export async function publishAssistant(id: string, userId: string, notes?: strin
 
   if (assistant.voice_id) {
     vapiConfig.voice = {
-      provider: assistant.voice_provider,
+      provider: mapVoiceProvider(assistant.voice_provider),
       voiceId: assistant.voice_id,
     };
   } else if (assistant.voice_provider) {
     vapiConfig.voice = {
-      provider: assistant.voice_provider,
+      provider: mapVoiceProvider(assistant.voice_provider),
     };
   }
 

@@ -10,7 +10,7 @@ const corsHeaders = {
 interface RequestPayload {
   action: "fetch-models" | "sync-catalog";
   org_id: string;
-  provider: "openai" | "google";
+  provider: "openai" | "google" | "anthropic" | "groq";
 }
 
 interface ProviderModel {
@@ -232,6 +232,10 @@ async function fetchModelsFromProvider(
       return await fetchOpenAIModels(apiKey, baseUrl);
     case "google":
       return await fetchGoogleModels(apiKey);
+    case "anthropic":
+      return await fetchAnthropicModels(apiKey);
+    case "groq":
+      return await fetchGroqModels(apiKey);
     default:
       throw new Error(`Unsupported provider: ${provider}`);
   }
@@ -337,6 +341,147 @@ async function fetchGoogleModels(apiKey: string): Promise<ProviderModel[]> {
   });
 
   return models;
+}
+
+async function fetchAnthropicModels(apiKey: string): Promise<ProviderModel[]> {
+  const response = await fetch("https://api.anthropic.com/v1/models", {
+    method: "GET",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error?.message || `Anthropic API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const models: ProviderModel[] = [];
+
+  const chatModels = (data.data || []).filter((m: { id: string; type?: string }) => {
+    const id = m.id.toLowerCase();
+    return id.includes("claude") && !id.includes("instant");
+  });
+
+  for (const model of chatModels) {
+    models.push({
+      model_key: model.id,
+      display_name: model.display_name || formatAnthropicModelName(model.id),
+      context_window: getAnthropicContextWindow(model.id),
+      capabilities: {
+        streaming: true,
+        function_calling: true,
+        vision: model.id.includes("claude-3") || model.id.includes("claude-4"),
+      },
+      is_deprecated: false,
+    });
+  }
+
+  models.sort((a, b) => {
+    const aScore = getModelSortScore(a.model_key, "anthropic");
+    const bScore = getModelSortScore(b.model_key, "anthropic");
+    return bScore - aScore;
+  });
+
+  return models;
+}
+
+async function fetchGroqModels(apiKey: string): Promise<ProviderModel[]> {
+  const response = await fetch("https://api.groq.com/openai/v1/models", {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error?.message || `Groq API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const models: ProviderModel[] = [];
+
+  const chatModels = (data.data || []).filter((m: { id: string }) => {
+    const id = m.id.toLowerCase();
+    return !id.includes("whisper") && !id.includes("tts") && !id.includes("guard");
+  });
+
+  for (const model of chatModels) {
+    models.push({
+      model_key: model.id,
+      display_name: formatGroqModelName(model.id),
+      context_window: model.context_window || null,
+      capabilities: {
+        streaming: true,
+        function_calling: true,
+      },
+      is_deprecated: false,
+    });
+  }
+
+  models.sort((a, b) => {
+    const aScore = getModelSortScore(a.model_key, "groq");
+    const bScore = getModelSortScore(b.model_key, "groq");
+    return bScore - aScore;
+  });
+
+  return models;
+}
+
+function getAnthropicContextWindow(modelId: string): number {
+  if (modelId.includes("claude-4") || modelId.includes("claude-sonnet-4")) return 200000;
+  if (modelId.includes("claude-3-7")) return 200000;
+  if (modelId.includes("claude-3-5")) return 200000;
+  if (modelId.includes("claude-3-opus")) return 200000;
+  if (modelId.includes("claude-3-haiku")) return 200000;
+  if (modelId.includes("claude-3")) return 200000;
+  return 100000;
+}
+
+function formatAnthropicModelName(modelId: string): string {
+  const mappings: Record<string, string> = {
+    "claude-sonnet-4": "Claude Sonnet 4",
+    "claude-4-opus": "Claude 4 Opus",
+    "claude-4-sonnet": "Claude 4 Sonnet",
+    "claude-3-7-sonnet": "Claude 3.7 Sonnet",
+    "claude-3-5-sonnet": "Claude 3.5 Sonnet",
+    "claude-3-5-haiku": "Claude 3.5 Haiku",
+    "claude-3-opus": "Claude 3 Opus",
+    "claude-3-sonnet": "Claude 3 Sonnet",
+    "claude-3-haiku": "Claude 3 Haiku",
+  };
+
+  for (const [key, value] of Object.entries(mappings)) {
+    if (modelId.startsWith(key)) {
+      if (modelId === key) return value;
+      const suffix = modelId.replace(key, "").replace(/^-/, "");
+      if (suffix && !suffix.match(/^\d{8}/)) {
+        return `${value} (${suffix})`;
+      }
+      return value;
+    }
+  }
+  return modelId;
+}
+
+function formatGroqModelName(modelId: string): string {
+  const mappings: Record<string, string> = {
+    "llama-3.3-70b-versatile": "Llama 3.3 70B",
+    "llama-3.3-70b-specdec": "Llama 3.3 70B SpecDec",
+    "llama-3.1-70b-versatile": "Llama 3.1 70B",
+    "llama-3.1-8b-instant": "Llama 3.1 8B Instant",
+    "llama3-70b-8192": "Llama 3 70B",
+    "llama3-8b-8192": "Llama 3 8B",
+    "mixtral-8x7b-32768": "Mixtral 8x7B",
+    "gemma2-9b-it": "Gemma 2 9B",
+    "gemma-7b-it": "Gemma 7B",
+  };
+  return mappings[modelId] || modelId;
 }
 
 function getOpenAIContextWindow(modelId: string): number {
@@ -456,6 +601,29 @@ function getModelSortScore(modelId: string, provider: string): number {
     if (modelId.includes("1.5-pro")) return 70;
     if (modelId.includes("1.5-flash")) return 65;
     if (modelId.includes("1.0-pro")) return 40;
+    return 0;
+  }
+
+  if (provider === "anthropic") {
+    if (modelId.includes("claude-4") || modelId.includes("claude-sonnet-4")) return 110;
+    if (modelId.includes("claude-3-7")) return 100;
+    if (modelId.includes("claude-3-5-sonnet")) return 90;
+    if (modelId.includes("claude-3-5-haiku")) return 85;
+    if (modelId.includes("claude-3-opus")) return 80;
+    if (modelId.includes("claude-3-sonnet")) return 70;
+    if (modelId.includes("claude-3-haiku")) return 60;
+    return 0;
+  }
+
+  if (provider === "groq") {
+    if (modelId.includes("llama-3.3-70b")) return 100;
+    if (modelId.includes("llama-3.1-70b")) return 90;
+    if (modelId.includes("llama-3.1-8b")) return 80;
+    if (modelId.includes("mixtral")) return 70;
+    if (modelId.includes("gemma2")) return 60;
+    if (modelId.includes("gemma")) return 50;
+    if (modelId.includes("llama3-70b")) return 40;
+    if (modelId.includes("llama3-8b")) return 30;
     return 0;
   }
 
