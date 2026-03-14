@@ -110,12 +110,7 @@ export async function getUserChannels(): Promise<ChannelWithDetails[]> {
       .eq('channel_id', channel.id)
       .order('created_at', { ascending: false })
       .limit(1)
-      .single();
-
-    const { data: memberCount } = await supabase
-      .from('team_channel_members')
-      .select('id', { count: 'exact', head: true })
-      .eq('channel_id', channel.id);
+      .maybeSingle();
 
     const { data: channelMembers } = await supabase
       .from('team_channel_members')
@@ -144,7 +139,7 @@ export async function getUserChannels(): Promise<ChannelWithDetails[]> {
         email: m.users?.email || '',
         avatar_url: m.users?.avatar_url || null,
       })),
-      member_count: memberCount?.length || 0,
+      member_count: channelMembers?.length || 0,
     });
   }
 
