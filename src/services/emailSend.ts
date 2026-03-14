@@ -33,7 +33,7 @@ export async function getTestEmailLogs(orgId: string, limit = 10): Promise<Email
     .select(`
       *,
       from_address:email_from_addresses(email, display_name),
-      sent_by_user:users(full_name, email)
+      sent_by_user:users(name, email)
     `)
     .eq('org_id', orgId)
     .order('sent_at', { ascending: false })

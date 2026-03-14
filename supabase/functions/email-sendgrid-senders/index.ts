@@ -33,7 +33,11 @@ interface DeleteRequest {
   addressId: string;
 }
 
-type RequestPayload = CreateRequest | UpdateRequest | SetDefaultRequest | DeleteRequest;
+interface SyncRequest {
+  action: "sync";
+}
+
+type RequestPayload = CreateRequest | UpdateRequest | SetDefaultRequest | DeleteRequest | SyncRequest;
 
 async function getDecryptedApiKey(
   orgId: string,
@@ -93,9 +97,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
-    const userClient = createClient(supabaseUrl, authHeader.replace("Bearer ", ""), {
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
+      auth: { autoRefreshToken: false, persistSession: false },
     });
 
     const { data: { user }, error: userError } = await userClient.auth.getUser();
@@ -108,9 +117,9 @@ Deno.serve(async (req: Request) => {
 
     const { data: userData } = await supabase
       .from("users")
-      .select("org_id")
+      .select("organization_id")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     if (!userData) {
       return new Response(
@@ -131,7 +140,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const orgId = userData.org_id;
+    const orgId = userData.organization_id;
     const apiKey = await getDecryptedApiKey(orgId, supabase, supabaseUrl, serviceRoleKey);
 
     if (!apiKey) {
@@ -378,6 +387,88 @@ Deno.serve(async (req: Request) => {
 
       return new Response(
         JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (payload.action === "sync") {
+      const sgResponse = await fetch("https://api.sendgrid.com/v3/verified_senders", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      });
+
+      if (!sgResponse.ok) {
+        return new Response(
+          JSON.stringify({ error: "Failed to fetch verified senders from SendGrid" }),
+          { status: sgResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const sgData = await sgResponse.json();
+      const sgSenders = sgData.results || [];
+
+      const { data: orgDomains } = await supabase
+        .from("email_domains")
+        .select("id, domain")
+        .eq("org_id", orgId);
+
+      const domainMap = new Map<string, string>();
+      for (const d of orgDomains || []) {
+        domainMap.set(d.domain, d.id);
+      }
+
+      const { data: existingAddresses } = await supabase
+        .from("email_from_addresses")
+        .select("id")
+        .eq("org_id", orgId);
+
+      const hasExisting = existingAddresses && existingAddresses.length > 0;
+      let synced = 0;
+
+      for (let i = 0; i < sgSenders.length; i++) {
+        const sender = sgSenders[i];
+        if (!sender.verified) continue;
+
+        const senderEmail = sender.from_email;
+        const senderDomain = senderEmail.split("@")[1];
+        const domainId = domainMap.get(senderDomain) || null;
+
+        await supabase
+          .from("email_from_addresses")
+          .upsert({
+            org_id: orgId,
+            email: senderEmail,
+            display_name: sender.from_name || sender.nickname || senderEmail.split("@")[0],
+            reply_to: sender.reply_to || null,
+            sendgrid_sender_id: String(sender.id),
+            domain_id: domainId,
+            active: true,
+            is_default: !hasExisting && i === 0,
+          }, { onConflict: "org_id,email" });
+
+        synced++;
+      }
+
+      if (!hasExisting && synced > 0) {
+        const { data: firstAddr } = await supabase
+          .from("email_from_addresses")
+          .select("id")
+          .eq("org_id", orgId)
+          .eq("is_default", true)
+          .maybeSingle();
+
+        if (firstAddr) {
+          await supabase
+            .from("email_defaults")
+            .update({ default_from_address_id: firstAddr.id })
+            .eq("org_id", orgId);
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, synced }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

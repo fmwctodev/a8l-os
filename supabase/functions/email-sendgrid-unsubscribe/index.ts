@@ -98,9 +98,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
-    const userClient = createClient(supabaseUrl, authHeader.replace("Bearer ", ""), {
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
+      auth: { autoRefreshToken: false, persistSession: false },
     });
 
     const { data: { user }, error: userError } = await userClient.auth.getUser();
@@ -113,9 +118,9 @@ Deno.serve(async (req: Request) => {
 
     const { data: userData } = await supabase
       .from("users")
-      .select("org_id")
+      .select("organization_id")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     if (!userData) {
       return new Response(
@@ -136,7 +141,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const orgId = userData.org_id;
+    const orgId = userData.organization_id;
     const apiKey = await getDecryptedApiKey(orgId, supabase, supabaseUrl, serviceRoleKey);
 
     if (!apiKey) {

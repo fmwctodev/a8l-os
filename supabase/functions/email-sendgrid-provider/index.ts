@@ -106,9 +106,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
-    const userClient = createClient(supabaseUrl, authHeader.replace("Bearer ", ""), {
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
+      auth: { autoRefreshToken: false, persistSession: false },
     });
 
     const { data: { user }, error: userError } = await userClient.auth.getUser();
@@ -119,13 +124,13 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { data: userData, error: userDataError } = await supabase
+    const { data: userData } = await supabase
       .from("users")
-      .select("org_id, role_id")
+      .select("organization_id, role_id")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
-    if (userDataError || !userData) {
+    if (!userData) {
       return new Response(
         JSON.stringify({ error: "User not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -145,7 +150,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const payload: RequestPayload = await req.json();
-    const orgId = userData.org_id;
+    const orgId = userData.organization_id;
 
     if (payload.action === "connect") {
       const validation = await validateSendGridApiKey(payload.apiKey);

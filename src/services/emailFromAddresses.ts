@@ -69,3 +69,10 @@ export async function deleteFromAddress(
   if (!response.ok) return { success: false, error: result.error };
   return { success: true };
 }
+
+export async function syncFromAddresses(): Promise<{ success: boolean; synced?: number; error?: string }> {
+  const response = await fetchEdge(SLUG, { body: { action: 'sync' } });
+  const result = await response.json();
+  if (!response.ok) return { success: false, error: result.error };
+  return { success: true, synced: result.synced };
+}

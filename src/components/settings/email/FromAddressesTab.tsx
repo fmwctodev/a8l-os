@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Plus, CheckCircle, Trash2, Pencil, X } from 'lucide-react';
+import { Plus, CheckCircle, Trash2, Pencil, X, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
-import { getFromAddresses, createFromAddress, updateFromAddress, setDefaultFromAddress, deleteFromAddress } from '../../../services/emailFromAddresses';
+import { getFromAddresses, createFromAddress, updateFromAddress, setDefaultFromAddress, deleteFromAddress, syncFromAddresses } from '../../../services/emailFromAddresses';
 import { getDomains } from '../../../services/emailDomains';
 import type { EmailFromAddress, EmailDomain } from '../../../types';
 
@@ -14,6 +14,7 @@ export function FromAddressesTab() {
   const [editing, setEditing] = useState<EmailFromAddress | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
@@ -151,6 +152,23 @@ export function FromAddressesTab() {
     }
   };
 
+  const handleSync = async () => {
+    setSyncing(true);
+    setError(null);
+    try {
+      const result = await syncFromAddresses();
+      if (!result.success) {
+        setError(result.error || 'Failed to sync');
+      } else {
+        await loadData();
+      }
+    } catch {
+      setError('Failed to sync from addresses');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const getSelectedDomain = () => {
     return verifiedDomains.find(d => d.id === formData.domainId);
   };
@@ -168,14 +186,26 @@ export function FromAddressesTab() {
       <div className="bg-slate-800 border border-slate-700 rounded-lg">
         <div className="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
           <h3 className="text-lg font-medium text-white">From Addresses</h3>
-          {isAdmin && verifiedDomains.length > 0 && (
-            <button
-              onClick={() => handleOpenModal()}
-              className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-cyan-600 hover:bg-cyan-500"
-            >
-              <Plus className="h-4 w-4 mr-1.5" />
-              Add Address
-            </button>
+          {isAdmin && (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="inline-flex items-center px-3 py-1.5 border border-slate-600 text-sm font-medium rounded-md text-slate-300 bg-slate-700 hover:bg-slate-600 disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Syncing...' : 'Sync from SendGrid'}
+              </button>
+              {verifiedDomains.length > 0 && (
+                <button
+                  onClick={() => handleOpenModal()}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-cyan-600 hover:bg-cyan-500"
+                >
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Add Address
+                </button>
+              )}
+            </div>
           )}
         </div>
 
