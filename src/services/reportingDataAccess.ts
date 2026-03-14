@@ -99,7 +99,7 @@ const DATA_SOURCE_CONFIG: Record<DataSource, {
       'lead_score', 'created_at', 'updated_at', 'last_activity_at',
     ],
     joinSpecs: [
-      { table: 'users', alias: 'owner', on: 'contacts.owner_id = owner.id', fields: ['owner.first_name as owner_first_name', 'owner.last_name as owner_last_name'] },
+      { table: 'users', alias: 'owner', on: 'contacts.owner_id = owner.id', fields: ['owner.name as owner_name'] },
       { table: 'departments', alias: 'dept', on: 'contacts.department_id = dept.id', fields: ['dept.name as department_name'] },
     ],
   },

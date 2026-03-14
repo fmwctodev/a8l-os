@@ -648,7 +648,7 @@ export function VapiAssistantDetailPage() {
                       </div>
                       {v.created_by && (
                         <span className="text-xs text-slate-500">
-                          by {v.created_by.first_name} {v.created_by.last_name}
+                          by {v.created_by.name}
                         </span>
                       )}
                     </div>

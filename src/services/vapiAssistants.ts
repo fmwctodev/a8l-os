@@ -21,7 +21,7 @@ export interface VapiAssistant {
   created_at: string;
   updated_at: string;
   bindings_count?: number;
-  created_by?: { first_name: string; last_name: string } | null;
+  created_by?: { name: string } | null;
 }
 
 export interface VapiAssistantVersion {
@@ -32,7 +32,7 @@ export interface VapiAssistantVersion {
   notes: string | null;
   created_by_user_id: string | null;
   created_at: string;
-  created_by?: { first_name: string; last_name: string } | null;
+  created_by?: { name: string } | null;
 }
 
 export interface VapiAssistantFilters {
@@ -69,7 +69,7 @@ export async function listAssistants(
 ): Promise<VapiAssistant[]> {
   let query = supabase
     .from('vapi_assistants')
-    .select('*, created_by:users!vapi_assistants_created_by_user_id_fkey(first_name, last_name)')
+    .select('*, created_by:users!vapi_assistants_created_by_user_id_fkey(name)')
     .eq('org_id', orgId)
     .order('updated_at', { ascending: false });
 
@@ -115,7 +115,7 @@ export async function listAssistants(
 export async function getAssistant(id: string): Promise<VapiAssistant | null> {
   const { data, error } = await supabase
     .from('vapi_assistants')
-    .select('*, created_by:users!vapi_assistants_created_by_user_id_fkey(first_name, last_name)')
+    .select('*, created_by:users!vapi_assistants_created_by_user_id_fkey(name)')
     .eq('id', id)
     .maybeSingle();
 
@@ -315,7 +315,7 @@ export async function duplicateAssistant(id: string, userId: string): Promise<Va
 export async function getAssistantVersions(assistantId: string): Promise<VapiAssistantVersion[]> {
   const { data, error } = await supabase
     .from('vapi_assistant_versions')
-    .select('*, created_by:users!vapi_assistant_versions_created_by_user_id_fkey(first_name, last_name)')
+    .select('*, created_by:users!vapi_assistant_versions_created_by_user_id_fkey(name)')
     .eq('assistant_id', assistantId)
     .order('version_number', { ascending: false });
 

@@ -35,7 +35,7 @@ export function AdjustmentsTab() {
         .select(`
           *,
           scoring_rules(name),
-          users:created_by(id, first_name, last_name, email)
+          users:created_by(id, name, email)
         `)
         .eq('source', sourceFilter)
         .order('created_at', { ascending: false })
@@ -178,7 +178,7 @@ export function AdjustmentsTab() {
                         <div className="flex items-center gap-2">
                           <User className="h-4 w-4 text-slate-500" />
                           <span className="text-sm text-slate-300">
-                            {[event.users.first_name, event.users.last_name].filter(Boolean).join(' ') || event.users.email}
+                            {event.users.name || event.users.email}
                           </span>
                         </div>
                       ) : (

@@ -74,7 +74,7 @@ export interface ScoreEvent {
   created_by: string | null;
   created_at: string;
   scoring_rules?: { name: string } | null;
-  users?: { id: string; first_name: string; last_name: string; email: string } | null;
+  users?: { id: string; name: string; email: string } | null;
 }
 
 export interface AdjustmentLimits {
