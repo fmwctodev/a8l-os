@@ -84,9 +84,122 @@ async function getDecryptedApiKey(
   return data.plaintext;
 }
 
+async function autoSyncFromSendGrid(
+  orgId: string,
+  apiKey: string,
+  supabase: ReturnType<typeof createClient>
+): Promise<void> {
+  try {
+    const sgDomainsRes = await fetch("https://api.sendgrid.com/v3/whitelabel/domains", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (sgDomainsRes.ok) {
+      const sgDomains = await sgDomainsRes.json();
+      for (const sgDomain of sgDomains) {
+        const dnsRecords = [
+          ...(sgDomain.dns?.mail_cname ? [{
+            type: "CNAME",
+            host: sgDomain.dns.mail_cname.host,
+            value: sgDomain.dns.mail_cname.data,
+            valid: sgDomain.dns.mail_cname.valid,
+          }] : []),
+          ...(sgDomain.dns?.dkim1 ? [{
+            type: "CNAME",
+            host: sgDomain.dns.dkim1.host,
+            value: sgDomain.dns.dkim1.data,
+            valid: sgDomain.dns.dkim1.valid,
+          }] : []),
+          ...(sgDomain.dns?.dkim2 ? [{
+            type: "CNAME",
+            host: sgDomain.dns.dkim2.host,
+            value: sgDomain.dns.dkim2.data,
+            valid: sgDomain.dns.dkim2.valid,
+          }] : []),
+        ];
+
+        await supabase
+          .from("email_domains")
+          .upsert({
+            org_id: orgId,
+            domain: sgDomain.domain,
+            sendgrid_domain_id: String(sgDomain.id),
+            status: sgDomain.valid ? "verified" : "pending",
+            dns_records: dnsRecords,
+            last_checked_at: new Date().toISOString(),
+          }, { onConflict: "org_id,domain" });
+      }
+    }
+
+    const { data: orgDomains } = await supabase
+      .from("email_domains")
+      .select("id, domain")
+      .eq("org_id", orgId);
+
+    const domainMap = new Map<string, string>();
+    for (const d of orgDomains || []) {
+      domainMap.set(d.domain, d.id);
+    }
+
+    const sgSendersRes = await fetch("https://api.sendgrid.com/v3/verified_senders", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (sgSendersRes.ok) {
+      const sgData = await sgSendersRes.json();
+      const sgSenders = sgData.results || [];
+      let synced = 0;
+
+      for (let i = 0; i < sgSenders.length; i++) {
+        const sender = sgSenders[i];
+        if (!sender.verified) continue;
+
+        const senderEmail = sender.from_email;
+        const senderDomain = senderEmail.split("@")[1];
+        const domainId = domainMap.get(senderDomain) || null;
+
+        await supabase
+          .from("email_from_addresses")
+          .upsert({
+            org_id: orgId,
+            email: senderEmail,
+            display_name: sender.from_name || sender.nickname || senderEmail.split("@")[0],
+            reply_to: sender.reply_to || null,
+            sendgrid_sender_id: String(sender.id),
+            domain_id: domainId,
+            active: true,
+            is_default: synced === 0,
+          }, { onConflict: "org_id,email" });
+
+        synced++;
+      }
+
+      if (synced > 0) {
+        const { data: firstAddr } = await supabase
+          .from("email_from_addresses")
+          .select("id")
+          .eq("org_id", orgId)
+          .eq("is_default", true)
+          .maybeSingle();
+
+        if (firstAddr) {
+          await supabase
+            .from("email_defaults")
+            .update({ default_from_address_id: firstAddr.id })
+            .eq("org_id", orgId);
+        }
+      }
+    }
+  } catch {
+    // auto-sync is best-effort; don't block check-status
+  }
+}
+
 async function getEmailSetupStatus(
   orgId: string,
-  supabase: ReturnType<typeof createClient>
+  supabase: ReturnType<typeof createClient>,
+  supabaseUrl?: string,
+  serviceRoleKey?: string
 ): Promise<EmailSetupStatus> {
   const status: EmailSetupStatus = {
     isConfigured: false,
@@ -108,6 +221,7 @@ async function getEmailSetupStatus(
   status.providerConnected = conn?.status === "connected";
   if (!status.providerConnected) {
     status.blockingReasons.push("SendGrid is not connected");
+    return status;
   }
 
   const { data: domains } = await supabase
@@ -116,16 +230,59 @@ async function getEmailSetupStatus(
     .eq("org_id", orgId)
     .eq("status", "verified");
 
-  status.verifiedDomainsCount = domains?.length || 0;
-  if (status.verifiedDomainsCount === 0) {
-    status.blockingReasons.push("No verified domains");
-  }
-
   const { data: fromAddresses } = await supabase
     .from("email_from_addresses")
     .select("id, is_default")
     .eq("org_id", orgId)
     .eq("active", true);
+
+  const domainsEmpty = !domains || domains.length === 0;
+  const sendersEmpty = !fromAddresses || fromAddresses.length === 0;
+
+  if ((domainsEmpty || sendersEmpty) && supabaseUrl && serviceRoleKey) {
+    const apiKey = await getDecryptedApiKey(orgId, supabase, supabaseUrl, serviceRoleKey);
+    if (apiKey) {
+      await autoSyncFromSendGrid(orgId, apiKey, supabase);
+
+      const { data: freshDomains } = await supabase
+        .from("email_domains")
+        .select("id")
+        .eq("org_id", orgId)
+        .eq("status", "verified");
+
+      const { data: freshAddresses } = await supabase
+        .from("email_from_addresses")
+        .select("id, is_default")
+        .eq("org_id", orgId)
+        .eq("active", true);
+
+      status.verifiedDomainsCount = freshDomains?.length || 0;
+      status.activeFromAddressesCount = freshAddresses?.length || 0;
+      status.hasDefaultFromAddress = freshAddresses?.some(a => a.is_default) || false;
+
+      if (status.verifiedDomainsCount === 0) {
+        status.blockingReasons.push("No verified domains");
+      }
+      if (status.activeFromAddressesCount === 0) {
+        status.blockingReasons.push("No active from addresses");
+      }
+
+      const { data: defaults } = await supabase
+        .from("email_defaults")
+        .select("default_unsubscribe_group_id")
+        .eq("org_id", orgId)
+        .maybeSingle();
+
+      status.hasDefaultUnsubscribeGroup = !!defaults?.default_unsubscribe_group_id;
+      status.isConfigured = status.blockingReasons.length === 0;
+      return status;
+    }
+  }
+
+  status.verifiedDomainsCount = domains?.length || 0;
+  if (status.verifiedDomainsCount === 0) {
+    status.blockingReasons.push("No verified domains");
+  }
 
   status.activeFromAddressesCount = fromAddresses?.length || 0;
   status.hasDefaultFromAddress = fromAddresses?.some(a => a.is_default) || false;
@@ -138,7 +295,7 @@ async function getEmailSetupStatus(
     .from("email_defaults")
     .select("default_unsubscribe_group_id")
     .eq("org_id", orgId)
-    .single();
+    .maybeSingle();
 
   status.hasDefaultUnsubscribeGroup = !!defaults?.default_unsubscribe_group_id;
 
@@ -214,7 +371,7 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const status = await getEmailSetupStatus(orgId, supabase);
+      const status = await getEmailSetupStatus(orgId, supabase, supabaseUrl, serviceRoleKey);
       return new Response(
         JSON.stringify({ success: true, status }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
