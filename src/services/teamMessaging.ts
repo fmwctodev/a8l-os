@@ -413,10 +413,17 @@ export async function uploadTeamAttachment(file: File, orgId: string): Promise<T
 
   if (error) throw new Error(`Attachment upload failed: ${error.message}`);
 
-  const { data } = supabase.storage.from('team-attachments').getPublicUrl(path);
+  const TEN_YEARS = 60 * 60 * 24 * 365 * 10;
+  const { data: signedData, error: signError } = await supabase.storage
+    .from('team-attachments')
+    .createSignedUrl(path, TEN_YEARS);
+
+  if (signError || !signedData?.signedUrl) {
+    throw new Error(`Failed to generate download URL: ${signError?.message}`);
+  }
 
   return {
-    url: data.publicUrl,
+    url: signedData.signedUrl,
     name: file.name,
     size: file.size,
     type: file.type,
