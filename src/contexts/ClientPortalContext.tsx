@@ -150,7 +150,11 @@ export function ClientPortalProvider({ children }: { children: React.ReactNode }
 
     if (result.success && result.sessionToken) {
       storeSession(portalToken, result.sessionToken, result.expiresAt!);
-      const portalData = await fetchPortalData(portalToken, result.sessionToken).catch(() => null);
+      let portalData = await fetchPortalData(portalToken, result.sessionToken).catch(() => null);
+      if (!portalData) {
+        await new Promise(r => setTimeout(r, 1000));
+        portalData = await fetchPortalData(portalToken, result.sessionToken).catch(() => null);
+      }
       if (portalData) {
         setPortal(portalData);
         setAuthInfo(prev => prev ? {
@@ -161,7 +165,7 @@ export function ClientPortalProvider({ children }: { children: React.ReactNode }
         setState('authenticated');
       } else {
         clearSession(portalToken);
-        setState('awaiting_code');
+        setState('needs_verification');
       }
     } else {
       setState('awaiting_code');

@@ -56,6 +56,7 @@ export interface PortalTokenInfo {
 
 export async function validatePortalToken(portalToken: string): Promise<PortalTokenInfo> {
   const res = await callPortalAuth({ action: 'validate-token', portalToken });
+  if (!res.ok) return { valid: false, reason: 'invalid' };
   return res.json();
 }
 
@@ -88,6 +89,9 @@ export interface VerifyCodeResult {
 
 export async function verifyCode(portalId: string, code: string, rememberDevice: boolean): Promise<VerifyCodeResult> {
   const res = await callPortalAuth({ action: 'verify-code', portalId, code, rememberDevice });
+  if (!res.ok) {
+    return { success: false, error: 'Server error. Please try again.' };
+  }
   return res.json();
 }
 
@@ -102,6 +106,7 @@ export interface ValidateSessionResult {
 
 export async function validateSession(portalId: string, sessionToken: string): Promise<ValidateSessionResult> {
   const res = await callPortalAuth({ action: 'validate-session', portalId, sessionToken });
+  if (!res.ok) return { valid: false, reason: 'server_error' };
   return res.json();
 }
 
@@ -142,6 +147,7 @@ export interface FetchPortalDataResult {
 
 export async function fetchPortalData(portalToken: string, sessionToken: string): Promise<import('./projectClientPortals').ClientPortalWithProject | null> {
   const res = await callPortalAuth({ action: 'get-portal-data', portalToken, sessionToken });
+  if (!res.ok) return null;
   const json: FetchPortalDataResult = await res.json();
   return json.data ?? null;
 }
