@@ -68,7 +68,7 @@ import { SocialGuidelines } from './pages/modules/social/SocialGuidelines';
 import { SocialAccounts } from './pages/modules/social/SocialAccounts';
 import { SocialAnalytics } from './pages/modules/social/SocialAnalytics';
 import { Automation } from './pages/modules/Automation';
-import { WorkflowBuilder } from './pages/modules/WorkflowBuilder';
+import { WorkflowBuilderV2 } from './pages/modules/WorkflowBuilderV2';
 import { WorkflowEnrollments } from './pages/modules/WorkflowEnrollments';
 import WorkflowRuns from './pages/modules/WorkflowRuns';
 import WorkflowRunDetail from './pages/modules/WorkflowRunDetail';
@@ -480,7 +480,7 @@ function App() {
                 path="/automation/:id"
                 element={
                   <ProtectedRoute permission="automation.view" featureFlag="automation">
-                    <WorkflowBuilder />
+                    <WorkflowBuilderV2 />
                   </ProtectedRoute>
                 }
               />

@@ -1200,7 +1200,7 @@ export type WorkflowActionType =
   | 'ai_decision_step'
   | 'generate_meeting_follow_up';
 
-export type WorkflowNodeType = 'trigger' | 'condition' | 'delay' | 'action' | 'end';
+export type WorkflowNodeType = 'trigger' | 'condition' | 'delay' | 'action' | 'goal' | 'end';
 
 export type DelayType = 'wait_duration' | 'wait_until_datetime' | 'wait_until_weekday_time';
 
@@ -1339,6 +1339,12 @@ export interface InternalNotificationConfig {
   message: string;
 }
 
+export interface GoalNodeData {
+  goalCondition: ConditionGroup;
+  continueOnMet: boolean;
+  skipAheadTargetNodeId?: string;
+}
+
 export interface EndNodeData {
   label?: string;
 }
@@ -1348,6 +1354,7 @@ export type WorkflowNodeData =
   | ConditionNodeData
   | DelayNodeData
   | ActionNodeData
+  | GoalNodeData
   | EndNodeData;
 
 export interface WorkflowNode {
@@ -1355,6 +1362,8 @@ export interface WorkflowNode {
   type: WorkflowNodeType;
   position: WorkflowNodePosition;
   data: WorkflowNodeData;
+  label?: string;
+  description?: string;
 }
 
 export interface WorkflowEdge {
@@ -1399,6 +1408,8 @@ export interface WorkflowVersion {
   created_by_user_id: string | null;
   created_at: string;
   created_by?: User | null;
+  notes?: string | null;
+  status?: string;
 }
 
 export interface WorkflowTrigger {
