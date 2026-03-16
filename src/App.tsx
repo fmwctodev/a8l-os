@@ -114,6 +114,8 @@ import PublicProposalPage from './pages/public/PublicProposalPage';
 import { PublicProposalSignPage } from './pages/public/PublicProposalSignPage';
 import PostApprovalPage from './pages/public/PostApprovalPage';
 import { OAuthCallbackPage } from './pages/public/OAuthCallbackPage';
+import { PublicChangeRequestPage } from './pages/public/PublicChangeRequestPage';
+import { PublicChangeRequestStatusPage } from './pages/public/PublicChangeRequestStatusPage';
 
 function App() {
   return (
@@ -724,6 +726,8 @@ function App() {
             <Route path="/sign/proposal/:requestId" element={<PublicProposalSignPage />} />
             <Route path="/marketing/social/approve/:token" element={<PostApprovalPage />} />
             <Route path="/oauth/google-calendar/callback" element={<OAuthCallbackPage />} />
+            <Route path="/project-change/submit" element={<PublicChangeRequestPage />} />
+            <Route path="/project-change/status/:requestId" element={<PublicChangeRequestStatusPage />} />
             <Route path="*" element={<NotFound />} />
             </Routes>
           </SidebarProvider>

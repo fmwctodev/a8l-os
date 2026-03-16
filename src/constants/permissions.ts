@@ -269,6 +269,17 @@ export const Permissions = {
     RUN: 'personal_assistant.run',
     CONFIGURE: 'personal_assistant.configure',
   },
+
+  PROJECTS: {
+    VIEW: 'projects.view',
+    EDIT: 'projects.edit',
+    DELETE: 'projects.delete',
+    CLOSE: 'projects.close',
+    TASKS_MANAGE: 'projects.tasks.manage',
+    CHANGE_REQUESTS_VIEW: 'projects.change_requests.view',
+    CHANGE_REQUESTS_MANAGE: 'projects.change_requests.manage',
+    CHANGE_REQUESTS_APPROVE: 'projects.change_requests.approve',
+  },
 } as const;
 
 export type PermissionKey =
@@ -310,7 +321,8 @@ export type PermissionKey =
   | typeof Permissions.SNIPPETS[keyof typeof Permissions.SNIPPETS]
   | typeof Permissions.STAFF[keyof typeof Permissions.STAFF]
   | typeof Permissions.USERS[keyof typeof Permissions.USERS]
-  | typeof Permissions.PERSONAL_ASSISTANT[keyof typeof Permissions.PERSONAL_ASSISTANT];
+  | typeof Permissions.PERSONAL_ASSISTANT[keyof typeof Permissions.PERSONAL_ASSISTANT]
+  | typeof Permissions.PROJECTS[keyof typeof Permissions.PROJECTS];
 
 export const ALL_PERMISSIONS: PermissionKey[] = Object.values(Permissions).flatMap(
   module => Object.values(module)

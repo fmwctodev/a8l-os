@@ -12,6 +12,7 @@ import {
   Users,
   DollarSign,
   Lock,
+  Link2,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermission } from '../../hooks/usePermission';
@@ -24,8 +25,10 @@ import { ProjectTasksTab } from '../../components/projects/ProjectTasksTab';
 import { ProjectNotesTab } from '../../components/projects/ProjectNotesTab';
 import { ProjectTimelineTab } from '../../components/projects/ProjectTimelineTab';
 import { ProjectFinancialsTab } from '../../components/projects/ProjectFinancialsTab';
+import { ProjectChangeRequestsTab } from '../../components/projects/ProjectChangeRequestsTab';
+import { generateProjectClientLink } from '../../services/projectChangeRequests';
 
-type TabId = 'overview' | 'tasks' | 'notes' | 'timeline' | 'financials';
+type TabId = 'overview' | 'tasks' | 'notes' | 'timeline' | 'financials' | 'change_requests';
 
 const STATUS_STYLES: Record<string, string> = {
   active: 'bg-cyan-500/20 text-cyan-400',
@@ -42,12 +45,16 @@ export function ProjectDetail() {
   const canClose = usePermission('projects.close');
   const canDelete = usePermission('projects.delete');
   const canManageTasks = usePermission('projects.tasks.manage');
+  const canViewChangeRequests = usePermission('projects.change_requests.view');
+  const canManageChangeRequests = usePermission('projects.change_requests.manage');
+  const canApproveChangeRequests = usePermission('projects.change_requests.approve');
   const canAccessPayments = usePaymentsAccess();
 
   const [project, setProject] = useState<Project | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     loadProject();
@@ -105,6 +112,15 @@ export function ProjectDetail() {
     }
   }
 
+  function handleCopyClientLink() {
+    if (!project) return;
+    const url = generateProjectClientLink(project.id, project.org_id);
+    navigator.clipboard.writeText(url).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
+  }
+
   async function handleDelete() {
     if (!project) return;
     if (!confirm('Permanently delete this project? This cannot be undone.')) return;
@@ -132,6 +148,7 @@ export function ProjectDetail() {
     { id: 'notes', label: 'Notes' },
     { id: 'timeline', label: 'Timeline' },
     ...(canAccessPayments ? [{ id: 'financials' as const, label: 'Financials' }] : []),
+    ...(canViewChangeRequests ? [{ id: 'change_requests' as const, label: 'Change Requests' }] : []),
   ];
 
   return (
@@ -178,6 +195,15 @@ export function ProjectDetail() {
               {(project.status === 'completed' || project.status === 'cancelled') && canClose && (
                 <button onClick={handleReopen} className="flex items-center gap-2 px-3 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500 text-sm">
                   <RotateCcw className="w-4 h-4" /> Reopen
+                </button>
+              )}
+              {canManageChangeRequests && (
+                <button
+                  onClick={handleCopyClientLink}
+                  className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white text-sm rounded-lg transition-colors"
+                >
+                  <Link2 className="w-4 h-4" />
+                  {linkCopied ? 'Copied!' : 'Client Link'}
                 </button>
               )}
               {canDelete && (
@@ -247,6 +273,17 @@ export function ProjectDetail() {
               canEdit={canEdit}
               currentUserId={user!.id}
               onCostChange={loadProject}
+            />
+          )}
+          {activeTab === 'change_requests' && (
+            <ProjectChangeRequestsTab
+              projectId={project.id}
+              orgId={project.org_id}
+              users={users}
+              canManage={canManageChangeRequests}
+              canApprove={canApproveChangeRequests}
+              currentUserId={user!.id}
+              currentUserName={user!.name || user!.email || ''}
             />
           )}
         </div>

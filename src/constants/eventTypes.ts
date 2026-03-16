@@ -55,6 +55,18 @@ export const WorkflowTriggerType = {
   PROJECT_OVERDUE: 'project_overdue',
   PROJECT_COMPLETED: 'project_completed',
 
+  PROJECT_CHANGE_REQUEST_SUBMITTED: 'project_change_request.submitted',
+  PROJECT_CHANGE_REQUEST_REVIEW_STARTED: 'project_change_request.review_started',
+  PROJECT_CHANGE_REQUEST_NEEDS_INFO: 'project_change_request.needs_info',
+  PROJECT_CHANGE_REQUEST_QUOTED: 'project_change_request.quoted',
+  PROJECT_CHANGE_REQUEST_APPROVED: 'project_change_request.approved',
+  PROJECT_CHANGE_REQUEST_REJECTED: 'project_change_request.rejected',
+  PROJECT_CHANGE_REQUEST_SCHEDULED: 'project_change_request.scheduled',
+  PROJECT_CHANGE_REQUEST_IN_PROGRESS: 'project_change_request.in_progress',
+  PROJECT_CHANGE_REQUEST_COMPLETED: 'project_change_request.completed',
+  PROJECT_CHANGE_ORDER_SIGNED: 'project_change_order.signed',
+  PROJECT_CHANGE_ORDER_DECLINED: 'project_change_order.declined',
+
   MANUAL_TRIGGER: 'manual_trigger',
   SCHEDULED_TRIGGER: 'scheduled_trigger',
   WEBHOOK_RECEIVED: 'webhook_received',

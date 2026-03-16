@@ -5853,7 +5853,14 @@ export type ProjectActivityEventType =
   | 'financial_updated'
   | 'cost_added'
   | 'automation_triggered'
-  | 'project_overdue';
+  | 'project_overdue'
+  | 'change_request_submitted'
+  | 'change_request_reviewed'
+  | 'change_request_approved'
+  | 'change_request_rejected'
+  | 'change_request_completed'
+  | 'change_order_signed'
+  | 'change_order_declined';
 
 export interface ProjectActivityEvent {
   id: string;
@@ -6050,4 +6057,175 @@ export interface SocialCommentFilters {
   search?: string;
   startDate?: string;
   endDate?: string;
+}
+
+// ============================================================
+// Project Change Control System
+// ============================================================
+
+export type ProjectChangeRequestStatus =
+  | 'submitted'
+  | 'under_review'
+  | 'needs_more_info'
+  | 'quoted_awaiting_approval'
+  | 'approved'
+  | 'rejected'
+  | 'scheduled'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled';
+
+export type ProjectChangeRequestType =
+  | 'scope'
+  | 'timeline'
+  | 'design'
+  | 'feature'
+  | 'bugfix'
+  | 'support'
+  | 'other';
+
+export type ProjectChangeRequestPriority = 'low' | 'medium' | 'high' | 'critical';
+
+export type ProjectChangeRequestSource = 'public_form' | 'internal' | 'ai';
+
+export type ChangeOrderStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'declined' | 'voided';
+
+export interface ProjectChangeRequest {
+  id: string;
+  org_id: string;
+  project_id: string;
+  client_name: string;
+  client_email: string | null;
+  client_phone: string | null;
+  title: string;
+  request_type: ProjectChangeRequestType;
+  priority: ProjectChangeRequestPriority;
+  description: string;
+  requested_due_date: string | null;
+  attachments: { name: string; url: string; size?: number }[];
+  status: ProjectChangeRequestStatus;
+  scope_impact: string | null;
+  timeline_impact_days: number;
+  cost_impact: number;
+  internal_summary: string | null;
+  client_decision: 'pending' | 'approved' | 'declined' | null;
+  reviewer_user_id: string | null;
+  approver_user_id: string | null;
+  source: ProjectChangeRequestSource;
+  access_token_hash: string | null;
+  reviewed_at: string | null;
+  approved_at: string | null;
+  rejected_at: string | null;
+  completed_at: string | null;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+  reviewer?: User | null;
+  approver?: User | null;
+  created_by_user?: User | null;
+  project?: { id: string; name: string; org_id: string } | null;
+  change_orders?: ProjectChangeOrder[];
+}
+
+export interface ProjectChangeOrder {
+  id: string;
+  org_id: string;
+  project_id: string;
+  change_request_id: string;
+  title: string;
+  description: string | null;
+  scope_changes: string | null;
+  timeline_extension_days: number;
+  cost_amount: number;
+  currency: string;
+  terms_and_conditions: string | null;
+  status: ChangeOrderStatus;
+  frozen_html_snapshot: string | null;
+  frozen_document_hash: string | null;
+  signer_name: string | null;
+  signer_email: string | null;
+  access_token_hash: string | null;
+  expires_at: string | null;
+  signature_type: 'typed' | 'drawn' | null;
+  signature_text: string | null;
+  signature_image_url: string | null;
+  consent_text: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  sent_at: string | null;
+  viewed_at: string | null;
+  signed_at: string | null;
+  declined_at: string | null;
+  decline_reason: string | null;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectChangeRequestComment {
+  id: string;
+  org_id: string;
+  change_request_id: string;
+  body: string;
+  is_internal: boolean;
+  author_type: 'user' | 'client' | 'system';
+  author_user_id: string | null;
+  author_name: string | null;
+  attachments: { name: string; url: string }[];
+  created_at: string;
+  updated_at: string;
+  author_user?: User | null;
+}
+
+export interface ProjectChangeRequestAuditEvent {
+  id: string;
+  org_id: string;
+  change_request_id: string;
+  event_type: string;
+  actor_type: 'user' | 'client' | 'system';
+  actor_user_id: string | null;
+  actor_name: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ProjectChangeRequestStats {
+  total: number;
+  open: number;
+  approved: number;
+  rejected: number;
+  completed: number;
+  total_approved_value: number;
+  total_timeline_extension_days: number;
+}
+
+export interface CreateChangeRequestInput {
+  project_id: string;
+  org_id: string;
+  client_name: string;
+  client_email?: string;
+  client_phone?: string;
+  title: string;
+  request_type: ProjectChangeRequestType;
+  priority: ProjectChangeRequestPriority;
+  description: string;
+  requested_due_date?: string;
+  attachments?: { name: string; url: string; size?: number }[];
+  source?: ProjectChangeRequestSource;
+}
+
+export interface UpdateChangeRequestInput {
+  title?: string;
+  request_type?: ProjectChangeRequestType;
+  priority?: ProjectChangeRequestPriority;
+  description?: string;
+  requested_due_date?: string | null;
+  status?: ProjectChangeRequestStatus;
+  scope_impact?: string;
+  timeline_impact_days?: number;
+  cost_impact?: number;
+  internal_summary?: string;
+  reviewer_user_id?: string | null;
+  approver_user_id?: string | null;
+  client_decision?: 'pending' | 'approved' | 'declined' | null;
 }
