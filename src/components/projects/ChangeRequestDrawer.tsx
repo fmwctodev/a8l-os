@@ -107,6 +107,7 @@ export function ChangeRequestDrawer({
   const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'audit'>('details');
   const [commentTab, setCommentTab] = useState<'internal' | 'client'>('internal');
   const [newComment, setNewComment] = useState('');
+  const [newCommentClientVisible, setNewCommentClientVisible] = useState(false);
   const [addingComment, setSavingComment] = useState(false);
   const [showAssessment, setShowAssessment] = useState(false);
   const [assessment, setAssessment] = useState({
@@ -114,6 +115,9 @@ export function ChangeRequestDrawer({
     timeline_impact_days: request.timeline_impact_days ?? 0,
     cost_impact: request.cost_impact ?? 0,
     internal_summary: request.internal_summary ?? '',
+    client_summary: request.client_summary ?? '',
+    cost_impact_visible_to_client: request.cost_impact_visible_to_client ?? false,
+    timeline_impact_visible_to_client: request.timeline_impact_visible_to_client ?? false,
   });
   const [savingAssessment, setSavingAssessment] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
@@ -186,6 +190,9 @@ export function ChangeRequestDrawer({
           timeline_impact_days: assessment.timeline_impact_days,
           cost_impact: assessment.cost_impact,
           internal_summary: assessment.internal_summary || undefined,
+          client_summary: assessment.client_summary || undefined,
+          cost_impact_visible_to_client: assessment.cost_impact_visible_to_client,
+          timeline_impact_visible_to_client: assessment.timeline_impact_visible_to_client,
         },
         currentUserId,
         currentUserName
@@ -214,18 +221,21 @@ export function ChangeRequestDrawer({
   async function handleAddComment() {
     if (!newComment.trim()) return;
     setSavingComment(true);
+    const isInternal = commentTab === 'internal';
     try {
       const comment = await addComment({
         changeRequestId: request.id,
         orgId: request.org_id,
         body: newComment,
-        isInternal: commentTab === 'internal',
+        isInternal,
+        clientVisible: isInternal ? newCommentClientVisible : true,
         authorType: 'user',
         authorUserId: currentUserId,
         authorName: currentUserName,
       });
       setComments((c) => [...c, comment]);
       setNewComment('');
+      setNewCommentClientVisible(false);
     } catch (err) {
       console.error(err);
     } finally {
@@ -432,6 +442,37 @@ export function ChangeRequestDrawer({
                           className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-cyan-500 resize-none"
                         />
                       </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Client-Facing Summary</label>
+                        <textarea
+                          value={assessment.client_summary}
+                          onChange={(e) => setAssessment((a) => ({ ...a, client_summary: e.target.value }))}
+                          rows={2}
+                          placeholder="What the client sees in their portal..."
+                          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 resize-none"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <label className="text-xs text-slate-400 font-medium">Portal Visibility</label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={assessment.cost_impact_visible_to_client}
+                            onChange={(e) => setAssessment((a) => ({ ...a, cost_impact_visible_to_client: e.target.checked }))}
+                            className="rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          <span className="text-xs text-slate-300">Show cost impact to client</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={assessment.timeline_impact_visible_to_client}
+                            onChange={(e) => setAssessment((a) => ({ ...a, timeline_impact_visible_to_client: e.target.checked }))}
+                            className="rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          <span className="text-xs text-slate-300">Show timeline impact to client</span>
+                        </label>
+                      </div>
                       <div className="flex justify-end gap-2">
                         <button onClick={() => setShowAssessment(false)} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg">Cancel</button>
                         <button onClick={handleSaveAssessment} disabled={savingAssessment} className="px-3 py-1.5 text-xs bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg disabled:opacity-50">
@@ -624,21 +665,35 @@ export function ChangeRequestDrawer({
                 </div>
 
                 {canManage && (
-                  <div className="flex gap-2 mt-2">
+                  <div className="flex flex-col gap-2 mt-2">
                     <textarea
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
                       rows={2}
                       placeholder={`Add ${commentTab === 'internal' ? 'internal note' : 'client-visible comment'}...`}
-                      className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 resize-none"
+                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 resize-none"
                     />
-                    <button
-                      onClick={handleAddComment}
-                      disabled={addingComment || !newComment.trim()}
-                      className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white rounded-lg self-end transition-colors"
-                    >
-                      <Send className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center justify-between">
+                      {commentTab === 'internal' && (
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={newCommentClientVisible}
+                            onChange={(e) => setNewCommentClientVisible(e.target.checked)}
+                            className="rounded border-slate-600 bg-slate-800 text-cyan-500 focus:ring-cyan-500"
+                          />
+                          <span className="text-xs text-slate-400">Also visible to client in portal</span>
+                        </label>
+                      )}
+                      {commentTab !== 'internal' && <div />}
+                      <button
+                        onClick={handleAddComment}
+                        disabled={addingComment || !newComment.trim()}
+                        className="px-3 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white rounded-lg transition-colors flex items-center gap-1.5 text-xs"
+                      >
+                        <Send className="w-3.5 h-3.5" /> Send
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

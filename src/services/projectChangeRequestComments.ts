@@ -24,6 +24,7 @@ export async function addComment(params: {
   orgId: string;
   body: string;
   isInternal: boolean;
+  clientVisible?: boolean;
   authorType: 'user' | 'client' | 'system';
   authorUserId?: string;
   authorName?: string;
@@ -35,6 +36,7 @@ export async function addComment(params: {
       org_id: params.orgId,
       body: params.body,
       is_internal: params.isInternal,
+      client_visible: params.clientVisible ?? !params.isInternal,
       author_type: params.authorType,
       author_user_id: params.authorUserId ?? null,
       author_name: params.authorName ?? null,

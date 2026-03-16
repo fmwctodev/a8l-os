@@ -116,6 +116,11 @@ import PostApprovalPage from './pages/public/PostApprovalPage';
 import { OAuthCallbackPage } from './pages/public/OAuthCallbackPage';
 import { PublicChangeRequestPage } from './pages/public/PublicChangeRequestPage';
 import { PublicChangeRequestStatusPage } from './pages/public/PublicChangeRequestStatusPage';
+import { ClientPortalLayout } from './layouts/ClientPortalLayout';
+import { ClientPortalHomePage } from './pages/public/portal/ClientPortalHomePage';
+import { ClientPortalChangeRequestsPage } from './pages/public/portal/ClientPortalChangeRequestsPage';
+import { ClientPortalChangeRequestDetailPage } from './pages/public/portal/ClientPortalChangeRequestDetailPage';
+import { ClientPortalDocumentsPage } from './pages/public/portal/ClientPortalDocumentsPage';
 
 function App() {
   return (
@@ -728,6 +733,12 @@ function App() {
             <Route path="/oauth/google-calendar/callback" element={<OAuthCallbackPage />} />
             <Route path="/project-change/submit" element={<PublicChangeRequestPage />} />
             <Route path="/project-change/status/:requestId" element={<PublicChangeRequestStatusPage />} />
+            <Route path="/portal/project/:portalToken" element={<ClientPortalLayout />}>
+              <Route index element={<ClientPortalHomePage />} />
+              <Route path="change-requests" element={<ClientPortalChangeRequestsPage />} />
+              <Route path="change-requests/:requestId" element={<ClientPortalChangeRequestDetailPage />} />
+              <Route path="documents" element={<ClientPortalDocumentsPage />} />
+            </Route>
             <Route path="*" element={<NotFound />} />
             </Routes>
           </SidebarProvider>

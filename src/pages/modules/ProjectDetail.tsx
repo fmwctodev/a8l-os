@@ -279,6 +279,7 @@ export function ProjectDetail() {
             <ProjectChangeRequestsTab
               projectId={project.id}
               orgId={project.org_id}
+              contactId={project.contact_id}
               users={users}
               canManage={canManageChangeRequests}
               canApprove={canApproveChangeRequests}

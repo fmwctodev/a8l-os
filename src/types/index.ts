@@ -6108,6 +6108,9 @@ export interface ProjectChangeRequest {
   timeline_impact_days: number;
   cost_impact: number;
   internal_summary: string | null;
+  client_summary: string | null;
+  cost_impact_visible_to_client: boolean;
+  timeline_impact_visible_to_client: boolean;
   client_decision: 'pending' | 'approved' | 'declined' | null;
   reviewer_user_id: string | null;
   approver_user_id: string | null;
@@ -6168,6 +6171,8 @@ export interface ProjectChangeRequestComment {
   change_request_id: string;
   body: string;
   is_internal: boolean;
+  client_visible: boolean;
+  portal_reply: boolean;
   author_type: 'user' | 'client' | 'system';
   author_user_id: string | null;
   author_name: string | null;
@@ -6225,6 +6230,9 @@ export interface UpdateChangeRequestInput {
   timeline_impact_days?: number;
   cost_impact?: number;
   internal_summary?: string;
+  client_summary?: string;
+  cost_impact_visible_to_client?: boolean;
+  timeline_impact_visible_to_client?: boolean;
   reviewer_user_id?: string | null;
   approver_user_id?: string | null;
   client_decision?: 'pending' | 'approved' | 'declined' | null;

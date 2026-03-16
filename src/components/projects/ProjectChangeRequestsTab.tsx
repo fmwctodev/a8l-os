@@ -15,6 +15,7 @@ import type { ProjectChangeRequest, ProjectChangeRequestStats, User } from '../.
 import { getChangeRequests, getChangeRequestStats, createChangeRequest } from '../../services/projectChangeRequests';
 import { ChangeRequestStatusBadge } from './ChangeRequestStatusBadge';
 import { ChangeRequestDrawer } from './ChangeRequestDrawer';
+import { ClientPortalManagementPanel } from './ClientPortalManagementPanel';
 
 const PRIORITY_COLORS: Record<string, string> = {
   low: 'text-slate-400',
@@ -36,6 +37,7 @@ const TYPE_LABELS: Record<string, string> = {
 interface Props {
   projectId: string;
   orgId: string;
+  contactId?: string | null;
   users: User[];
   canManage: boolean;
   canApprove: boolean;
@@ -46,6 +48,7 @@ interface Props {
 export function ProjectChangeRequestsTab({
   projectId,
   orgId,
+  contactId,
   users,
   canManage,
   canApprove,
@@ -301,6 +304,16 @@ export function ProjectChangeRequestsTab({
             </tbody>
           </table>
         </div>
+      )}
+
+      {canManage && (
+        <ClientPortalManagementPanel
+          projectId={projectId}
+          orgId={orgId}
+          contactId={contactId ?? null}
+          currentUserId={currentUserId}
+          canManage={canManage}
+        />
       )}
 
       {selectedRequest && (
