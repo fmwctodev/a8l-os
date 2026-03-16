@@ -196,7 +196,7 @@ Deno.serve(async (req: Request) => {
           metadata: {},
           ip_address: ipAddress,
           user_agent: userAgent,
-        }).catch(() => {});
+        }).then(() => {}, () => {});
         return new Response(JSON.stringify({ valid: false, reason: "invalid" }), { status: 200, headers: noCache });
       }
 
@@ -209,7 +209,7 @@ Deno.serve(async (req: Request) => {
           metadata: {},
           ip_address: ipAddress,
           user_agent: userAgent,
-        }).catch(() => {});
+        }).then(() => {}, () => {});
         return new Response(JSON.stringify({ valid: false, reason: "revoked" }), { status: 200, headers: noCache });
       }
 
@@ -226,7 +226,7 @@ Deno.serve(async (req: Request) => {
           metadata: {},
           ip_address: ipAddress,
           user_agent: userAgent,
-        }).catch(() => {});
+        }).then(() => {}, () => {});
         return new Response(JSON.stringify({ valid: false, reason: "expired" }), { status: 200, headers: noCache });
       }
 
@@ -249,7 +249,7 @@ Deno.serve(async (req: Request) => {
         metadata: {},
         ip_address: ipAddress,
         user_agent: userAgent,
-      }).catch(() => {});
+      }).then(() => {}, () => {});
 
       return new Response(JSON.stringify({
         valid: true,
@@ -401,7 +401,7 @@ Deno.serve(async (req: Request) => {
         metadata: { masked_email: maskEmail(contactEmail) },
         ip_address: ipAddress,
         user_agent: userAgent,
-      }).catch(() => {});
+      }).then(() => {}, () => {});
 
       return new Response(JSON.stringify({
         success: true,
@@ -453,7 +453,7 @@ Deno.serve(async (req: Request) => {
           metadata: { reason: "no_valid_code" },
           ip_address: ipAddress,
           user_agent: userAgent,
-        }).catch(() => {});
+        }).then(() => {}, () => {});
         return new Response(JSON.stringify({
           success: false,
           error: "Verification code expired or not found. Please request a new code.",
@@ -471,7 +471,7 @@ Deno.serve(async (req: Request) => {
           metadata: { reason: "max_attempts_exceeded" },
           ip_address: ipAddress,
           user_agent: userAgent,
-        }).catch(() => {});
+        }).then(() => {}, () => {});
         return new Response(JSON.stringify({
           success: false,
           error: "Too many incorrect attempts. Please request a new code.",
@@ -497,7 +497,7 @@ Deno.serve(async (req: Request) => {
           metadata: { attempts: newAttempts, max_attempts: authCode.max_attempts },
           ip_address: ipAddress,
           user_agent: userAgent,
-        }).catch(() => {});
+        }).then(() => {}, () => {});
 
         return new Response(JSON.stringify({
           success: false,
@@ -549,7 +549,7 @@ Deno.serve(async (req: Request) => {
         metadata: { session_id: newSession.id, remember_device: !!rememberDevice },
         ip_address: ipAddress,
         user_agent: userAgent,
-      }).catch(() => {});
+      }).then(() => {}, () => {});
 
       await supabase.from("project_client_portal_events").insert({
         portal_id: portalId,
@@ -559,7 +559,7 @@ Deno.serve(async (req: Request) => {
         metadata: { session_id: newSession.id, remember_device: !!rememberDevice },
         ip_address: ipAddress,
         user_agent: userAgent,
-      }).catch(() => {});
+      }).then(() => {}, () => {});
 
       await supabase.from("project_client_portal_events").insert({
         portal_id: portalId,
@@ -569,7 +569,7 @@ Deno.serve(async (req: Request) => {
         metadata: {},
         ip_address: ipAddress,
         user_agent: userAgent,
-      }).catch(() => {});
+      }).then(() => {}, () => {});
 
       return new Response(JSON.stringify({
         success: true,
@@ -670,7 +670,7 @@ Deno.serve(async (req: Request) => {
           metadata: { session_id: session.id },
           ip_address: ipAddress,
           user_agent: userAgent,
-        }).catch(() => {});
+        }).then(() => {}, () => {});
       }
 
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: noCache });
@@ -715,7 +715,7 @@ Deno.serve(async (req: Request) => {
         metadata: { session_id: sessionId, revoked_by: "admin" },
         ip_address: ipAddress,
         user_agent: userAgent,
-      }).catch(() => {});
+      }).then(() => {}, () => {});
 
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: noCache });
     }
@@ -751,7 +751,7 @@ Deno.serve(async (req: Request) => {
         metadata: { revoked_by: "admin", count, scope: "all" },
         ip_address: ipAddress,
         user_agent: userAgent,
-      }).catch(() => {});
+      }).then(() => {}, () => {});
 
       return new Response(JSON.stringify({ success: true, revokedCount: count }), { status: 200, headers: noCache });
     }
