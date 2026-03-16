@@ -420,6 +420,8 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: "Missing portalId or code" }), { status: 400, headers: noCache });
       }
 
+      try {
+
       const codeHash = await sha256(String(code).trim());
       const now = new Date().toISOString();
 
@@ -469,7 +471,7 @@ Deno.serve(async (req: Request) => {
           metadata: { reason: "max_attempts_exceeded" },
           ip_address: ipAddress,
           user_agent: userAgent,
-        });
+        }).catch(() => {});
         return new Response(JSON.stringify({
           success: false,
           error: "Too many incorrect attempts. Please request a new code.",
@@ -576,6 +578,11 @@ Deno.serve(async (req: Request) => {
         expiresAt: sessionExpiry,
         rememberDevice: !!rememberDevice,
       }), { status: 200, headers: noCache });
+
+      } catch (verifyError) {
+        const msg = verifyError instanceof Error ? verifyError.message : String(verifyError);
+        return new Response(JSON.stringify({ error: "verify-code internal error", detail: msg }), { status: 500, headers: noCache });
+      }
     }
 
     // ──────────────────────────────────────────────
