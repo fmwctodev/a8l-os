@@ -495,7 +495,7 @@ Deno.serve(async (req: Request) => {
           metadata: { attempts: newAttempts, max_attempts: authCode.max_attempts },
           ip_address: ipAddress,
           user_agent: userAgent,
-        });
+        }).catch(() => {});
 
         return new Response(JSON.stringify({
           success: false,
@@ -547,7 +547,7 @@ Deno.serve(async (req: Request) => {
         metadata: { session_id: newSession.id, remember_device: !!rememberDevice },
         ip_address: ipAddress,
         user_agent: userAgent,
-      });
+      }).catch(() => {});
 
       await supabase.from("project_client_portal_events").insert({
         portal_id: portalId,
@@ -557,7 +557,7 @@ Deno.serve(async (req: Request) => {
         metadata: { session_id: newSession.id, remember_device: !!rememberDevice },
         ip_address: ipAddress,
         user_agent: userAgent,
-      });
+      }).catch(() => {});
 
       await supabase.from("project_client_portal_events").insert({
         portal_id: portalId,
@@ -567,7 +567,7 @@ Deno.serve(async (req: Request) => {
         metadata: {},
         ip_address: ipAddress,
         user_agent: userAgent,
-      });
+      }).catch(() => {});
 
       return new Response(JSON.stringify({
         success: true,
