@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { verifyPortalToken, logPortalEvent } from '../services/projectClientPortals';
+import { logPortalEvent } from '../services/projectClientPortals';
 import type { ClientPortalWithProject } from '../services/projectClientPortals';
 import {
   validatePortalToken,
@@ -13,6 +13,7 @@ import {
   getStoredSession,
   storeSession,
   clearSession,
+  fetchPortalData,
   type SendCodeResult,
   type VerifyCodeResult,
 } from '../services/portalAuth';
@@ -100,7 +101,7 @@ export function ClientPortalProvider({ children }: { children: React.ReactNode }
       if (stored) {
         const sessionResult = await validateSession(tokenInfo.portalId!, stored.token);
         if (sessionResult.valid) {
-          const portalData = await verifyPortalToken(portalToken).catch(() => null);
+          const portalData = await fetchPortalData(portalToken, stored.token).catch(() => null);
           setPortal(portalData);
           setAuthInfo({
             ...baseAuthInfo,
@@ -146,7 +147,7 @@ export function ClientPortalProvider({ children }: { children: React.ReactNode }
 
     if (result.success && result.sessionToken) {
       storeSession(portalToken, result.sessionToken, result.expiresAt!);
-      const portalData = await verifyPortalToken(portalToken).catch(() => null);
+      const portalData = await fetchPortalData(portalToken, result.sessionToken).catch(() => null);
       setPortal(portalData);
       setAuthInfo(prev => prev ? {
         ...prev,

@@ -790,6 +790,65 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: noCache });
     }
 
+    // ──────────────────────────────────────────────
+    // get-portal-data
+    // Returns full portal + project + contact + org data
+    // after verifying the session token is valid.
+    // Uses service role to bypass RLS on joined tables.
+    // ──────────────────────────────────────────────
+    if (action === "get-portal-data") {
+      const { portalToken, sessionToken } = body;
+      if (!portalToken || !sessionToken) {
+        return new Response(JSON.stringify({ error: "Missing portalToken or sessionToken" }), { status: 400, headers: noCache });
+      }
+
+      const portalTokenHash = await sha256(portalToken);
+      const sessionTokenHash = await sha256(sessionToken);
+      const now = new Date().toISOString();
+
+      const { data: portal } = await supabase
+        .from("project_client_portals")
+        .select("id, org_id, project_id, contact_id, status, expires_at")
+        .eq("portal_token_hash", portalTokenHash)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (!portal) {
+        return new Response(JSON.stringify({ data: null, error: "Portal not found or inactive" }), { status: 200, headers: noCache });
+      }
+
+      const { data: session } = await supabase
+        .from("project_client_portal_sessions")
+        .select("id, expires_at, revoked_at")
+        .eq("session_token_hash", sessionTokenHash)
+        .eq("portal_id", portal.id)
+        .is("revoked_at", null)
+        .maybeSingle();
+
+      if (!session || new Date(session.expires_at) < new Date()) {
+        return new Response(JSON.stringify({ data: null, error: "Invalid or expired session" }), { status: 200, headers: noCache });
+      }
+
+      const { data: fullPortal } = await supabase
+        .from("project_client_portals")
+        .select(`
+          *,
+          project:projects(id, name, status, description, start_date, estimated_end_date, updated_at, org_id, contact_id),
+          contact:contacts(id, first_name, last_name, email, phone),
+          organization:organizations(id, name, email, phone, website),
+          created_by_user:users!project_client_portals_created_by_user_id_fkey(id, name, email)
+        `)
+        .eq("id", portal.id)
+        .maybeSingle();
+
+      await supabase
+        .from("project_client_portals")
+        .update({ last_accessed_at: now, updated_at: now })
+        .eq("id", portal.id);
+
+      return new Response(JSON.stringify({ data: fullPortal }), { status: 200, headers: noCache });
+    }
+
     return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400, headers: noCache });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

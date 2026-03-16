@@ -135,6 +135,17 @@ export async function listSessions(portalId: string): Promise<PortalSession[]> {
   return data.sessions || [];
 }
 
+export interface FetchPortalDataResult {
+  data: import('./projectClientPortals').ClientPortalWithProject | null;
+  error?: string;
+}
+
+export async function fetchPortalData(portalToken: string, sessionToken: string): Promise<import('./projectClientPortals').ClientPortalWithProject | null> {
+  const res = await callPortalAuth({ action: 'get-portal-data', portalToken, sessionToken });
+  const json: FetchPortalDataResult = await res.json();
+  return json.data ?? null;
+}
+
 export async function markStepUpVerified(portalId: string, sessionToken: string): Promise<void> {
   await callPortalAuth({ action: 'step-up-verified', portalId, sessionToken });
 }
