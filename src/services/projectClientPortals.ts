@@ -21,7 +21,7 @@ export interface ClientPortalWithProject extends ClientPortal {
     status: string;
     description: string | null;
     start_date: string | null;
-    estimated_end_date: string | null;
+    target_end_date: string | null;
     updated_at: string;
     org_id: string;
     contact_id: string | null;
@@ -114,7 +114,7 @@ export async function verifyPortalToken(rawToken: string): Promise<ClientPortalW
     .from('project_client_portals')
     .select(`
       *,
-      project:projects(id, name, status, description, start_date, estimated_end_date, updated_at, org_id, contact_id),
+      project:projects(id, name, status, description, start_date, target_end_date, updated_at, org_id, contact_id),
       contact:contacts(id, first_name, last_name, email, phone),
       organization:organizations(id, name, email, phone, website),
       created_by_user:users!project_client_portals_created_by_user_id_fkey(id, name, email)

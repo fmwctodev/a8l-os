@@ -841,7 +841,7 @@ Deno.serve(async (req: Request) => {
           .from("project_client_portals")
           .select(`
             *,
-            project:projects(id, name, status, description, start_date, estimated_end_date, updated_at, org_id, contact_id),
+            project:projects(id, name, status, description, start_date, target_end_date, updated_at, org_id, contact_id),
             contact:contacts(id, first_name, last_name, email, phone),
             organization:organizations(id, name, email, phone, website),
             created_by_user:users!project_client_portals_created_by_user_id_fkey(id, name, email)

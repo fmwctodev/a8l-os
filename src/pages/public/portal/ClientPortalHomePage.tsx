@@ -127,13 +127,13 @@ export function ClientPortalHomePage() {
                 </div>
               </div>
             )}
-            {project?.estimated_end_date && (
+            {project?.target_end_date && (
               <div className="flex items-center gap-2 text-sm">
                 <Clock className="w-4 h-4 text-gray-400" />
                 <div>
                   <div className="text-xs text-gray-400">Est. Completion</div>
                   <div className="text-gray-700 font-medium">
-                    {new Date(project.estimated_end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {new Date(project.target_end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </div>
                 </div>
               </div>
