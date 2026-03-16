@@ -102,14 +102,17 @@ export function ClientPortalProvider({ children }: { children: React.ReactNode }
         const sessionResult = await validateSession(tokenInfo.portalId!, stored.token);
         if (sessionResult.valid) {
           const portalData = await fetchPortalData(portalToken, stored.token).catch(() => null);
-          setPortal(portalData);
-          setAuthInfo({
-            ...baseAuthInfo,
-            sessionToken: stored.token,
-            lastOtpVerifiedAt: sessionResult.lastOtpVerifiedAt || null,
-          });
-          setState('authenticated');
-          return;
+          if (portalData) {
+            setPortal(portalData);
+            setAuthInfo({
+              ...baseAuthInfo,
+              sessionToken: stored.token,
+              lastOtpVerifiedAt: sessionResult.lastOtpVerifiedAt || null,
+            });
+            setState('authenticated');
+            return;
+          }
+          clearSession(portalToken);
         } else {
           clearSession(portalToken);
           if (sessionResult.reason === 'expired') {
@@ -148,13 +151,18 @@ export function ClientPortalProvider({ children }: { children: React.ReactNode }
     if (result.success && result.sessionToken) {
       storeSession(portalToken, result.sessionToken, result.expiresAt!);
       const portalData = await fetchPortalData(portalToken, result.sessionToken).catch(() => null);
-      setPortal(portalData);
-      setAuthInfo(prev => prev ? {
-        ...prev,
-        sessionToken: result.sessionToken!,
-        lastOtpVerifiedAt: new Date().toISOString(),
-      } : prev);
-      setState('authenticated');
+      if (portalData) {
+        setPortal(portalData);
+        setAuthInfo(prev => prev ? {
+          ...prev,
+          sessionToken: result.sessionToken!,
+          lastOtpVerifiedAt: new Date().toISOString(),
+        } : prev);
+        setState('authenticated');
+      } else {
+        clearSession(portalToken);
+        setState('awaiting_code');
+      }
     } else {
       setState('awaiting_code');
     }
