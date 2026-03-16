@@ -1,22 +1,7 @@
 import { useState, useEffect } from 'react';
-import {
-  X,
-  Plus,
-  GripVertical,
-  Trash2,
-  Edit2,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Settings,
-  Columns,
-  Clock,
-  AlertCircle,
-  Save
-} from 'lucide-react';
-import type { Pipeline, PipelineStage, PipelineCustomField, Department } from '../../types';
+import { X, Plus, GripVertical, Trash2, CreditCard as Edit2, Check, ChevronDown, ChevronUp, Settings, Columns2 as Columns, Clock } from 'lucide-react';
+import type { Pipeline, PipelineCustomField } from '../../types';
 import * as pipelinesService from '../../services/pipelines';
-import { getDepartments } from '../../services/departments';
 
 interface PipelineManageModalProps {
   orgId: string;
@@ -24,37 +9,12 @@ interface PipelineManageModalProps {
   onPipelineSelect?: (pipeline: Pipeline) => void;
 }
 
-interface DraftStage {
-  id: string;
-  name: string;
-  aging_threshold_days?: number | null;
-}
-
-interface DraftPipeline {
-  name: string;
-  stages: DraftStage[];
-}
-
-const DEFAULT_STAGES: DraftStage[] = [
-  { id: 'draft-1', name: 'New Lead' },
-  { id: 'draft-2', name: 'Qualified' },
-  { id: 'draft-3', name: 'Proposal' },
-  { id: 'draft-4', name: 'Negotiation' },
-  { id: 'draft-5', name: 'Closed Won' },
-  { id: 'draft-6', name: 'Closed Lost' }
-];
-
 export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: PipelineManageModalProps) {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'stages' | 'fields'>('stages');
-
-  const [draftPipeline, setDraftPipeline] = useState<DraftPipeline | null>(null);
-  const [showNewPipelineForm, setShowNewPipelineForm] = useState(false);
-  const [newPipelineName, setNewPipelineName] = useState('');
 
   const [newStageName, setNewStageName] = useState('');
   const [editingStageId, setEditingStageId] = useState<string | null>(null);
@@ -72,11 +32,6 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
   const [showNewFieldForm, setShowNewFieldForm] = useState(false);
   const [newOption, setNewOption] = useState('');
 
-  const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
-
-  const isDraftMode = draftPipeline !== null;
-  const canSaveDraft = isDraftMode && draftPipeline.name.trim() && draftPipeline.stages.length > 0;
-
   useEffect(() => {
     if (orgId) {
       loadData();
@@ -86,13 +41,9 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
   async function loadData() {
     if (!orgId) return;
     try {
-      const [pipelinesData, departmentsData] = await Promise.all([
-        pipelinesService.getPipelines(),
-        getDepartments(orgId)
-      ]);
+      const pipelinesData = await pipelinesService.getPipelines();
       setPipelines(pipelinesData);
-      setDepartments(departmentsData);
-      if (pipelinesData.length > 0 && !selectedPipeline) {
+      if (pipelinesData.length > 0) {
         await selectPipeline(pipelinesData[0]);
       }
     } catch (error) {
@@ -103,10 +54,6 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
   }
 
   async function selectPipeline(pipeline: Pipeline) {
-    if (isDraftMode) {
-      setShowUnsavedWarning(true);
-      return;
-    }
     try {
       const fullPipeline = await pipelinesService.getPipelineById(pipeline.id);
       if (fullPipeline) {
@@ -114,131 +61,6 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
       }
     } catch (error) {
       console.error('Failed to load pipeline:', error);
-    }
-  }
-
-  function handleStartNewPipeline() {
-    if (isDraftMode) return;
-    setShowNewPipelineForm(true);
-  }
-
-  function handleCreateDraft() {
-    if (!newPipelineName.trim()) return;
-    setDraftPipeline({
-      name: newPipelineName.trim(),
-      stages: DEFAULT_STAGES.map((s, i) => ({ ...s, id: `draft-${i}` }))
-    });
-    setSelectedPipeline(null);
-    setShowNewPipelineForm(false);
-    setNewPipelineName('');
-  }
-
-  function handleCancelDraft() {
-    setDraftPipeline(null);
-    setShowNewPipelineForm(false);
-    setNewPipelineName('');
-    if (pipelines.length > 0) {
-      selectPipeline(pipelines[0]);
-    }
-  }
-
-  async function handleSaveDraft() {
-    if (!draftPipeline || !canSaveDraft) return;
-    setSaving(true);
-    try {
-      const pipeline = await pipelinesService.createPipelineWithStages({
-        org_id: orgId,
-        name: draftPipeline.name,
-        stages: draftPipeline.stages.map(s => ({
-          name: s.name,
-          aging_threshold_days: s.aging_threshold_days
-        }))
-      });
-      setPipelines([...pipelines, pipeline]);
-      setDraftPipeline(null);
-      setSelectedPipeline(pipeline);
-      setShowUnsavedWarning(false);
-      onClose();
-    } catch (error) {
-      console.error('Failed to save pipeline:', error);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function handleAddDraftStage() {
-    if (!newStageName.trim() || !draftPipeline) return;
-    setDraftPipeline({
-      ...draftPipeline,
-      stages: [
-        ...draftPipeline.stages,
-        { id: `draft-${Date.now()}`, name: newStageName.trim() }
-      ]
-    });
-    setNewStageName('');
-  }
-
-  function handleUpdateDraftStage(stageId: string, name: string) {
-    if (!name.trim() || !draftPipeline) return;
-    setDraftPipeline({
-      ...draftPipeline,
-      stages: draftPipeline.stages.map(s =>
-        s.id === stageId ? { ...s, name: name.trim() } : s
-      )
-    });
-    setEditingStageId(null);
-    setEditingStageName('');
-  }
-
-  function handleDeleteDraftStage(stageId: string) {
-    if (!draftPipeline) return;
-    setDraftPipeline({
-      ...draftPipeline,
-      stages: draftPipeline.stages.filter(s => s.id !== stageId)
-    });
-  }
-
-  function handleMoveDraftStage(stageId: string, direction: 'up' | 'down') {
-    if (!draftPipeline) return;
-    const stages = [...draftPipeline.stages];
-    const idx = stages.findIndex(s => s.id === stageId);
-    if (idx === -1) return;
-    if (direction === 'up' && idx === 0) return;
-    if (direction === 'down' && idx === stages.length - 1) return;
-
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    [stages[idx], stages[swapIdx]] = [stages[swapIdx], stages[idx]];
-    setDraftPipeline({ ...draftPipeline, stages });
-  }
-
-  function handleUpdateDraftAgingThreshold(stageId: string, days: number | null) {
-    if (!draftPipeline) return;
-    setDraftPipeline({
-      ...draftPipeline,
-      stages: draftPipeline.stages.map(s =>
-        s.id === stageId ? { ...s, aging_threshold_days: days } : s
-      )
-    });
-  }
-
-  async function handleDeletePipeline(pipelineId: string) {
-    if (!confirm('Are you sure? This will delete all stages and opportunities in this pipeline.')) return;
-    setSaving(true);
-    try {
-      await pipelinesService.deletePipeline(pipelineId);
-      const remaining = pipelines.filter(p => p.id !== pipelineId);
-      setPipelines(remaining);
-      if (selectedPipeline?.id === pipelineId) {
-        if (remaining.length > 0) {
-          await selectPipeline(remaining[0]);
-        } else {
-          setSelectedPipeline(null);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to delete pipeline:', error);
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -405,32 +227,7 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
     });
   }
 
-  function handleCloseAttempt() {
-    if (isDraftMode) {
-      setShowUnsavedWarning(true);
-    } else {
-      onClose();
-    }
-  }
-
-  function handleDiscardAndClose() {
-    setShowUnsavedWarning(false);
-    setDraftPipeline(null);
-    onClose();
-  }
-
-  function handleDiscardAndSelect(pipeline: Pipeline) {
-    setShowUnsavedWarning(false);
-    setDraftPipeline(null);
-    pipelinesService.getPipelineById(pipeline.id).then(fullPipeline => {
-      if (fullPipeline) {
-        setSelectedPipeline(fullPipeline);
-      }
-    });
-  }
-
-  const currentStages = isDraftMode ? draftPipeline.stages : (selectedPipeline?.stages || []);
-  const currentName = isDraftMode ? draftPipeline.name : selectedPipeline?.name;
+  const currentStages = selectedPipeline?.stages || [];
 
   if (loading) {
     return (
@@ -447,104 +244,40 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
       <div className="bg-slate-800 rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
           <h2 className="text-lg font-semibold text-white">Manage Pipelines</h2>
-          <button onClick={handleCloseAttempt} className="p-1 hover:bg-slate-700 rounded">
+          <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded">
             <X className="w-5 h-5 text-slate-400" />
           </button>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
           <div className="w-64 border-r border-slate-700 p-4 overflow-y-auto">
-            <div className="space-y-2">
+            <div className="space-y-1">
               {pipelines.map(pipeline => (
                 <div
                   key={pipeline.id}
-                  className={`flex items-center justify-between p-2 rounded cursor-pointer group ${
-                    !isDraftMode && selectedPipeline?.id === pipeline.id
-                      ? 'bg-cyan-500/20 text-cyan-400'
-                      : 'hover:bg-slate-700 text-slate-300'
+                  className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                    selectedPipeline?.id === pipeline.id
+                      ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                      : 'hover:bg-slate-700/50 text-slate-300 border border-transparent'
                   }`}
-                  onClick={() => isDraftMode ? setShowUnsavedWarning(true) : selectPipeline(pipeline)}
+                  onClick={() => selectPipeline(pipeline)}
                 >
-                  <span className="truncate">{pipeline.name}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeletePipeline(pipeline.id);
-                    }}
-                    className="p-1 opacity-0 group-hover:opacity-100 hover:bg-slate-600 rounded"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-400" />
-                  </button>
-                </div>
-              ))}
-
-              {isDraftMode && (
-                <div className="flex items-center justify-between p-2 rounded bg-amber-500/20 text-amber-400">
-                  <span className="truncate flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4" />
-                    {draftPipeline.name}
-                    <span className="text-xs bg-amber-500/30 px-1.5 py-0.5 rounded">Draft</span>
+                  <span className="block truncate font-medium">{pipeline.name}</span>
+                  <span className="text-xs text-slate-500 mt-0.5 block">
+                    {pipeline.stages?.length || 0} stages
                   </span>
                 </div>
-              )}
+              ))}
             </div>
-
-            {showNewPipelineForm ? (
-              <div className="mt-4 space-y-2">
-                <input
-                  type="text"
-                  value={newPipelineName}
-                  onChange={(e) => setNewPipelineName(e.target.value)}
-                  placeholder="Pipeline name"
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm"
-                  autoFocus
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreateDraft()}
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleCreateDraft}
-                    disabled={!newPipelineName.trim()}
-                    className="flex-1 px-3 py-1.5 bg-cyan-600 text-white rounded text-sm hover:bg-cyan-700 disabled:opacity-50"
-                  >
-                    Continue
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowNewPipelineForm(false);
-                      setNewPipelineName('');
-                    }}
-                    className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded text-sm hover:bg-slate-600"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={handleStartNewPipeline}
-                disabled={isDraftMode}
-                className="mt-4 w-full flex items-center justify-center gap-2 px-3 py-2 bg-slate-700 text-slate-300 rounded hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Plus className="w-4 h-4" />
-                New Pipeline
-              </button>
-            )}
           </div>
 
           <div className="flex-1 flex flex-col overflow-hidden">
-            {(selectedPipeline || isDraftMode) ? (
+            {selectedPipeline ? (
               <>
                 <div className="flex-1 overflow-y-auto p-4">
                   <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-medium text-white">{currentName}</h3>
-                      {isDraftMode && (
-                        <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-1 rounded">
-                          Unsaved Draft
-                        </span>
-                      )}
-                    </div>
-                    {!isDraftMode && onPipelineSelect && selectedPipeline && (
+                    <h3 className="text-lg font-medium text-white">{selectedPipeline.name}</h3>
+                    {onPipelineSelect && (
                       <button
                         onClick={() => {
                           onPipelineSelect(selectedPipeline);
@@ -557,21 +290,6 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
                     )}
                   </div>
 
-                  {isDraftMode && (
-                    <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                      <div className="flex items-start gap-2">
-                        <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-                        <div className="text-sm text-amber-200">
-                          <p className="font-medium">Configure your pipeline stages</p>
-                          <p className="text-amber-300/80 mt-1">
-                            Default stages have been added. You can add, edit, remove, or reorder stages before saving.
-                            At least one stage is required.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   <div className="flex gap-2 mb-4">
                     <button
                       onClick={() => setActiveTab('stages')}
@@ -583,25 +301,21 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
                     >
                       <Columns className="w-4 h-4" />
                       Stages
-                      {isDraftMode && (
-                        <span className="text-xs bg-slate-600 px-1.5 py-0.5 rounded">
-                          {draftPipeline.stages.length}
-                        </span>
-                      )}
+                      <span className="text-xs bg-slate-600 px-1.5 py-0.5 rounded">
+                        {currentStages.length}
+                      </span>
                     </button>
-                    {!isDraftMode && (
-                      <button
-                        onClick={() => setActiveTab('fields')}
-                        className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm ${
-                          activeTab === 'fields'
-                            ? 'bg-cyan-500/20 text-cyan-400'
-                            : 'text-slate-400 hover:bg-slate-700'
-                        }`}
-                      >
-                        <Settings className="w-4 h-4" />
-                        Custom Fields
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setActiveTab('fields')}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm ${
+                        activeTab === 'fields'
+                          ? 'bg-cyan-500/20 text-cyan-400'
+                          : 'text-slate-400 hover:bg-slate-700'
+                      }`}
+                    >
+                      <Settings className="w-4 h-4" />
+                      Custom Fields
+                    </button>
                   </div>
 
                   {activeTab === 'stages' && (
@@ -619,18 +333,15 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
                                   className="flex-1 px-2 py-1 bg-slate-600 border border-slate-500 rounded text-white text-sm"
                                   autoFocus
                                   onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      isDraftMode
-                                        ? handleUpdateDraftStage(stage.id, editingStageName)
-                                        : handleUpdateStage(stage.id, editingStageName);
+                                    if (e.key === 'Enter') handleUpdateStage(stage.id, editingStageName);
+                                    if (e.key === 'Escape') {
+                                      setEditingStageId(null);
+                                      setEditingStageName('');
                                     }
                                   }}
                                 />
                                 <button
-                                  onClick={() => isDraftMode
-                                    ? handleUpdateDraftStage(stage.id, editingStageName)
-                                    : handleUpdateStage(stage.id, editingStageName)
-                                  }
+                                  onClick={() => handleUpdateStage(stage.id, editingStageName)}
                                   className="p-1 hover:bg-slate-600 rounded"
                                 >
                                   <Check className="w-4 h-4 text-emerald-400" />
@@ -665,20 +376,14 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
                                     <Settings className="w-4 h-4 text-slate-400" />
                                   </button>
                                   <button
-                                    onClick={() => isDraftMode
-                                      ? handleMoveDraftStage(stage.id, 'up')
-                                      : handleMoveStage(stage.id, 'up')
-                                    }
+                                    onClick={() => handleMoveStage(stage.id, 'up')}
                                     disabled={index === 0}
                                     className="p-1 hover:bg-slate-600 rounded disabled:opacity-30"
                                   >
                                     <ChevronUp className="w-4 h-4 text-slate-400" />
                                   </button>
                                   <button
-                                    onClick={() => isDraftMode
-                                      ? handleMoveDraftStage(stage.id, 'down')
-                                      : handleMoveStage(stage.id, 'down')
-                                    }
+                                    onClick={() => handleMoveStage(stage.id, 'down')}
                                     disabled={index === currentStages.length - 1}
                                     className="p-1 hover:bg-slate-600 rounded disabled:opacity-30"
                                   >
@@ -694,13 +399,8 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
                                     <Edit2 className="w-4 h-4 text-slate-400" />
                                   </button>
                                   <button
-                                    onClick={() => isDraftMode
-                                      ? handleDeleteDraftStage(stage.id)
-                                      : handleDeleteStage(stage.id)
-                                    }
-                                    disabled={isDraftMode && draftPipeline.stages.length <= 1}
-                                    className="p-1 hover:bg-slate-600 rounded disabled:opacity-30"
-                                    title={isDraftMode && draftPipeline.stages.length <= 1 ? 'At least one stage is required' : ''}
+                                    onClick={() => handleDeleteStage(stage.id)}
+                                    className="p-1 hover:bg-slate-600 rounded"
                                   >
                                     <Trash2 className="w-4 h-4 text-red-400" />
                                   </button>
@@ -720,9 +420,7 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
                                   value={stage.aging_threshold_days || ''}
                                   onChange={(e) => {
                                     const val = e.target.value ? parseInt(e.target.value, 10) : null;
-                                    isDraftMode
-                                      ? handleUpdateDraftAgingThreshold(stage.id, val)
-                                      : handleUpdateAgingThreshold(stage.id, val);
+                                    handleUpdateAgingThreshold(stage.id, val);
                                   }}
                                   placeholder="No limit"
                                   className="w-24 px-2 py-1 bg-slate-600 border border-slate-500 rounded text-white text-sm"
@@ -730,10 +428,7 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
                                 <span className="text-sm text-slate-400">days</span>
                                 {stage.aging_threshold_days && (
                                   <button
-                                    onClick={() => isDraftMode
-                                      ? handleUpdateDraftAgingThreshold(stage.id, null)
-                                      : handleUpdateAgingThreshold(stage.id, null)
-                                    }
+                                    onClick={() => handleUpdateAgingThreshold(stage.id, null)}
                                     className="text-xs text-slate-500 hover:text-slate-300"
                                   >
                                     Clear
@@ -755,14 +450,10 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
                           onChange={(e) => setNewStageName(e.target.value)}
                           placeholder="New stage name"
                           className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white text-sm"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              isDraftMode ? handleAddDraftStage() : handleCreateStage();
-                            }
-                          }}
+                          onKeyDown={(e) => e.key === 'Enter' && handleCreateStage()}
                         />
                         <button
-                          onClick={isDraftMode ? handleAddDraftStage : handleCreateStage}
+                          onClick={handleCreateStage}
                           disabled={saving || !newStageName.trim()}
                           className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700 disabled:opacity-50"
                         >
@@ -772,7 +463,7 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
                     </div>
                   )}
 
-                  {activeTab === 'fields' && !isDraftMode && selectedPipeline && (
+                  {activeTab === 'fields' && selectedPipeline && (
                     <div className="space-y-3">
                       {(selectedPipeline.custom_fields || []).map(field => (
                         <div
@@ -918,83 +609,15 @@ export function PipelineManageModal({ orgId, onClose, onPipelineSelect }: Pipeli
                     </div>
                   )}
                 </div>
-
-                {isDraftMode && (
-                  <div className="flex-none p-4 border-t border-slate-700 bg-slate-800/80">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm text-slate-400">
-                        {draftPipeline.stages.length === 0 ? (
-                          <span className="text-red-400">At least one stage is required</span>
-                        ) : (
-                          <span>{draftPipeline.stages.length} stage{draftPipeline.stages.length !== 1 ? 's' : ''} configured</span>
-                        )}
-                      </div>
-                      <div className="flex gap-3">
-                        <button
-                          onClick={handleCancelDraft}
-                          className="px-4 py-2 text-slate-300 hover:bg-slate-700 rounded"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleSaveDraft}
-                          disabled={!canSaveDraft || saving}
-                          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Save className="w-4 h-4" />
-                          {saving ? 'Saving...' : 'Save Pipeline'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-slate-400">
                 <p>No pipeline selected</p>
-                <p className="text-sm">Create a pipeline to get started</p>
               </div>
             )}
           </div>
         </div>
       </div>
-
-      {showUnsavedWarning && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60]">
-          <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full mx-4">
-            <div className="flex items-start gap-3 mb-4">
-              <AlertCircle className="w-6 h-6 text-amber-400 flex-shrink-0" />
-              <div>
-                <h3 className="text-lg font-semibold text-white">Unsaved Changes</h3>
-                <p className="text-slate-400 mt-1">
-                  You have an unsaved pipeline draft. What would you like to do?
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={handleSaveDraft}
-                disabled={!canSaveDraft || saving}
-                className="w-full px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save Pipeline'}
-              </button>
-              <button
-                onClick={handleDiscardAndClose}
-                className="w-full px-4 py-2 bg-red-600/20 text-red-400 border border-red-600/30 rounded hover:bg-red-600/30"
-              >
-                Discard Changes
-              </button>
-              <button
-                onClick={() => setShowUnsavedWarning(false)}
-                className="w-full px-4 py-2 text-slate-300 hover:bg-slate-700 rounded"
-              >
-                Continue Editing
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
