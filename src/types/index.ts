@@ -1077,11 +1077,21 @@ export type WorkflowJobStatus = 'pending' | 'running' | 'done' | 'failed';
 export type WorkflowTriggerType =
   | 'contact_created'
   | 'contact_updated'
+  | 'contact_changed'
   | 'contact_tag_added'
   | 'contact_tag_removed'
+  | 'contact_tag_changed'
   | 'contact_owner_changed'
   | 'contact_department_changed'
   | 'contact_status_changed'
+  | 'contact_dnd_changed'
+  | 'contact_custom_date_reminder'
+  | 'contact_note_added'
+  | 'contact_note_changed'
+  | 'contact_task_added'
+  | 'contact_task_reminder'
+  | 'contact_task_completed'
+  | 'contact_engagement_score'
   | 'conversation_message_received'
   | 'conversation_status_changed'
   | 'conversation_assigned'
@@ -1093,12 +1103,17 @@ export type WorkflowTriggerType =
   | 'appointment_canceled'
   | 'appointment_completed'
   | 'appointment_no_show'
+  | 'appointment_status_changed'
+  | 'appointment_customer_booked'
   | 'opportunity_created'
   | 'opportunity_updated'
+  | 'opportunity_changed'
   | 'opportunity_stage_changed'
+  | 'opportunity_status_changed'
   | 'opportunity_won'
   | 'opportunity_lost'
   | 'opportunity_value_changed'
+  | 'opportunity_stale'
   | 'proposal_sent'
   | 'proposal_viewed'
   | 'proposal_accepted'
@@ -1125,13 +1140,23 @@ export type WorkflowTriggerType =
   | 'ai_agent_completed'
   | 'ai_agent_failed'
   | 'score_threshold_reached'
+  | 'event_scheduler'
+  | 'event_call_details'
+  | 'event_email'
+  | 'event_customer_replied'
+  | 'event_conversation_ai'
+  | 'event_custom'
+  | 'event_form_submitted'
+  | 'event_survey_submitted'
+  | 'event_review_received'
+  | 'event_prospect_generated'
   | 'scheduled'
   | 'webhook_received'
   | 'manual_trigger';
 
 export type TriggerCategory = 'event' | 'scheduled' | 'webhook';
 
-export type ScheduledTriggerCadence = 'daily' | 'weekly' | 'monthly' | 'custom_cron';
+export type ScheduledTriggerCadence = 'once' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'custom_cron';
 
 export type ReEnrollmentPolicy = 'never' | 'always' | 'after_completion';
 
@@ -1233,6 +1258,7 @@ export interface TriggerNodeData {
   filters?: ConditionGroup;
   scheduledConfig?: ScheduledTriggerConfig;
   webhookConfig?: WebhookTriggerConfig;
+  triggerConfig?: Record<string, unknown>;
 }
 
 export interface ConditionRule {

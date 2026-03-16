@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, createElement } from 'react';
 import { X, Trash2, Zap, GitBranch, Clock, Target, Square, AlertCircle } from 'lucide-react';
 import type { BuilderNode, BuilderNodeData } from '../../../../types/workflowBuilder';
 import type {
@@ -10,6 +10,7 @@ import type {
   ConditionRule,
 } from '../../../../types';
 import { TRIGGER_OPTIONS, ACTION_OPTIONS } from '../../../../types/workflowBuilder';
+import { TRIGGER_CONFIG_MAP } from '../triggerConfigs';
 
 interface NodeConfigDrawerProps {
   node: BuilderNode;
@@ -146,6 +147,7 @@ export function NodeConfigDrawer({ node, onUpdate, onDelete, onClose }: NodeConf
 
 function TriggerConfig({ data, onUpdate }: { data: TriggerNodeData; onUpdate: (u: any) => void }) {
   const current = TRIGGER_OPTIONS.find(t => t.type === data.triggerType);
+  const configEntry = TRIGGER_CONFIG_MAP[data.triggerType];
 
   return (
     <div className="space-y-4">
@@ -165,23 +167,30 @@ function TriggerConfig({ data, onUpdate }: { data: TriggerNodeData; onUpdate: (u
         )}
       </div>
 
-      {data.triggerType === 'scheduled' && (
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Schedule</label>
-            <select
-              value={(data.scheduledConfig as any)?.cadence ?? 'daily'}
-              onChange={e => onUpdate({ scheduledConfig: { ...(data.scheduledConfig || {}), cadence: e.target.value } })}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-            >
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="custom_cron">Custom (Cron)</option>
-            </select>
+      {configEntry
+        ? createElement(configEntry.component, {
+            data,
+            onUpdate,
+            ...(configEntry.props ?? {}),
+          } as any)
+        : data.triggerType === 'scheduled' && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Schedule</label>
+              <select
+                value={(data.scheduledConfig as any)?.cadence ?? 'daily'}
+                onChange={e => onUpdate({ scheduledConfig: { ...(data.scheduledConfig || {}), cadence: e.target.value } })}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+              >
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+                <option value="custom_cron">Custom (Cron)</option>
+              </select>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       <div className="p-3 bg-emerald-50 rounded-lg">
         <p className="text-xs text-emerald-700">

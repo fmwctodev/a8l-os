@@ -1,10 +1,11 @@
 import { useState, useCallback } from 'react';
-import { X, Play, Search, User, CheckCircle2, XCircle, Clock, Zap, ArrowRight, AlertTriangle } from 'lucide-react';
+import { X, Play, Search, User, CheckCircle2, XCircle, Clock, Zap, ArrowRight, AlertTriangle, FileText } from 'lucide-react';
 import type { BuilderNode } from '../../../../types/workflowBuilder';
 import type { TriggerNodeData, ConditionNodeData, DelayNodeData } from '../../../../types';
 import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { TRIGGER_OPTIONS, ACTION_OPTIONS } from '../../../../types/workflowBuilder';
+import { matchesTrigger } from '../../../../services/triggerMatcher';
 
 interface TestWorkflowModalProps {
   nodes: BuilderNode[];
@@ -30,6 +31,8 @@ export function TestWorkflowModal({ nodes, edges, onClose }: TestWorkflowModalPr
   const [selectedTriggerId, setSelectedTriggerId] = useState<string | null>(null);
   const [testSteps, setTestSteps] = useState<TestStep[]>([]);
   const [searching, setSearching] = useState(false);
+  const [payloadJson, setPayloadJson] = useState('{}');
+  const [payloadError, setPayloadError] = useState('');
 
   const triggers = nodes.filter(n => n.data.nodeType === 'trigger');
 
@@ -49,6 +52,15 @@ export function TestWorkflowModal({ nodes, edges, onClose }: TestWorkflowModalPr
   const runTest = useCallback(() => {
     if (!selectedContact || !selectedTriggerId) return;
 
+    let testPayload: Record<string, unknown> = {};
+    try {
+      testPayload = JSON.parse(payloadJson);
+      setPayloadError('');
+    } catch {
+      setPayloadError('Invalid JSON');
+      return;
+    }
+
     setStep('running');
     const steps: TestStep[] = [];
 
@@ -56,13 +68,21 @@ export function TestWorkflowModal({ nodes, edges, onClose }: TestWorkflowModalPr
     if (triggerNode) {
       const td = triggerNode.data.nodeData as TriggerNodeData;
       const opt = TRIGGER_OPTIONS.find(t => t.type === td.triggerType);
+      const triggerMatched = matchesTrigger(td, testPayload);
       steps.push({
         nodeId: triggerNode.id,
         label: opt?.label ?? 'Trigger',
         type: 'trigger',
-        status: 'executed',
-        detail: `Trigger "${opt?.label}" matched`,
+        status: triggerMatched ? 'executed' : 'skipped',
+        detail: triggerMatched
+          ? `Trigger "${opt?.label}" matched with test payload`
+          : `Trigger "${opt?.label}" did NOT match - workflow would not fire`,
       });
+      if (!triggerMatched) {
+        setTestSteps(steps);
+        setStep('results');
+        return;
+      }
     }
 
     let currentNodeId = selectedTriggerId;
@@ -147,7 +167,7 @@ export function TestWorkflowModal({ nodes, edges, onClose }: TestWorkflowModalPr
 
     setTestSteps(steps);
     setStep('results');
-  }, [selectedContact, selectedTriggerId, nodes, edges]);
+  }, [selectedContact, selectedTriggerId, nodes, edges, payloadJson]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -235,14 +255,16 @@ export function TestWorkflowModal({ nodes, edges, onClose }: TestWorkflowModalPr
                 {triggers.map(t => {
                   const td = t.data.nodeData as TriggerNodeData;
                   const opt = TRIGGER_OPTIONS.find(o => o.type === td.triggerType);
+                  const isSelected = selectedTriggerId === t.id;
                   return (
                     <button
                       key={t.id}
-                      onClick={() => {
-                        setSelectedTriggerId(t.id);
-                        runTest();
-                      }}
-                      className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:bg-emerald-50 hover:border-emerald-200 transition-colors text-left"
+                      onClick={() => setSelectedTriggerId(t.id)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors text-left ${
+                        isSelected
+                          ? 'border-emerald-300 bg-emerald-50'
+                          : 'border-gray-100 hover:bg-emerald-50 hover:border-emerald-200'
+                      }`}
                     >
                       <div className="w-8 h-8 rounded-md bg-emerald-500 flex items-center justify-center">
                         <Zap className="w-4 h-4 text-white" />
@@ -261,6 +283,37 @@ export function TestWorkflowModal({ nodes, edges, onClose }: TestWorkflowModalPr
                   </div>
                 )}
               </div>
+
+              {selectedTriggerId && (
+                <div className="space-y-2 pt-2 border-t border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-3.5 h-3.5 text-gray-400" />
+                    <label className="text-xs font-medium text-gray-700">Test Payload (JSON)</label>
+                  </div>
+                  <textarea
+                    value={payloadJson}
+                    onChange={e => {
+                      setPayloadJson(e.target.value);
+                      setPayloadError('');
+                    }}
+                    rows={5}
+                    placeholder='{"changed_fields": ["email"], "source": "web"}'
+                    className="w-full px-3 py-2 text-xs font-mono border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                  />
+                  {payloadError && (
+                    <p className="text-xs text-red-500">{payloadError}</p>
+                  )}
+                  <p className="text-[11px] text-gray-400">
+                    Provide sample event data to test trigger matching against your configuration.
+                  </p>
+                  <button
+                    onClick={runTest}
+                    className="w-full py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
+                  >
+                    Run Simulation
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

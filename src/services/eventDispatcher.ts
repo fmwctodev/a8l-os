@@ -40,6 +40,10 @@ const eventRoutingMap: Record<string, EventRouting> = {
     auditAction: 'update',
     webhookEvent: 'contact.updated',
   },
+  'contact.changed': {
+    workflowTrigger: 'contact_changed',
+    activityEvent: 'field_updated',
+  },
   'contact.deleted': {
     auditAction: 'delete',
     webhookEvent: 'contact.deleted',
@@ -51,6 +55,17 @@ const eventRoutingMap: Record<string, EventRouting> = {
   'contact.tag_removed': {
     workflowTrigger: 'contact_tag_removed',
     activityEvent: 'tag_removed',
+  },
+  'contact.tag_changed': {
+    workflowTrigger: 'contact_tag_changed',
+    activityEvent: 'tag_added',
+  },
+  'contact.dnd_changed': {
+    workflowTrigger: 'contact_dnd_changed',
+    activityEvent: 'field_updated',
+  },
+  'contact.custom_date_reminder': {
+    workflowTrigger: 'contact_custom_date_reminder',
   },
   'contact.status_changed': {
     workflowTrigger: 'contact_status_changed',
@@ -246,9 +261,11 @@ const eventRoutingMap: Record<string, EventRouting> = {
   },
 
   'note.added': {
+    workflowTrigger: 'contact_note_added',
     activityEvent: 'note_added',
   },
   'note.updated': {
+    workflowTrigger: 'contact_note_changed',
     activityEvent: 'note_updated',
   },
   'note.deleted': {
@@ -256,10 +273,15 @@ const eventRoutingMap: Record<string, EventRouting> = {
   },
 
   'task.created': {
+    workflowTrigger: 'contact_task_added',
     activityEvent: 'task_created',
   },
   'task.completed': {
+    workflowTrigger: 'contact_task_completed',
     activityEvent: 'task_completed',
+  },
+  'task.reminder': {
+    workflowTrigger: 'contact_task_reminder',
   },
 
   'file.uploaded': {
@@ -288,6 +310,66 @@ const eventRoutingMap: Record<string, EventRouting> = {
   },
   'score.threshold_reached': {
     workflowTrigger: 'score_threshold_reached',
+  },
+
+  'contact.engagement_score': {
+    workflowTrigger: 'contact_engagement_score',
+    activityEvent: 'score_adjusted',
+  },
+
+  'event.scheduler': {
+    workflowTrigger: 'event_scheduler',
+  },
+  'event.call_details': {
+    workflowTrigger: 'event_call_details',
+    activityEvent: 'call_completed',
+  },
+  'event.email': {
+    workflowTrigger: 'event_email',
+  },
+  'event.customer_replied': {
+    workflowTrigger: 'event_customer_replied',
+  },
+  'event.conversation_ai': {
+    workflowTrigger: 'event_conversation_ai',
+  },
+  'event.custom': {
+    workflowTrigger: 'event_custom',
+  },
+  'event.form_submitted': {
+    workflowTrigger: 'event_form_submitted',
+    webhookEvent: 'form.submitted',
+  },
+  'event.survey_submitted': {
+    workflowTrigger: 'event_survey_submitted',
+    webhookEvent: 'survey.completed',
+  },
+  'event.review_received': {
+    workflowTrigger: 'event_review_received',
+    webhookEvent: 'review.received',
+  },
+  'event.prospect_generated': {
+    workflowTrigger: 'event_prospect_generated',
+  },
+
+  'appointment.status_changed': {
+    workflowTrigger: 'appointment_status_changed',
+  },
+  'appointment.customer_booked': {
+    workflowTrigger: 'appointment_customer_booked',
+    activityEvent: 'meeting_scheduled',
+  },
+
+  'opportunity.changed': {
+    workflowTrigger: 'opportunity_changed',
+    activityEvent: 'field_updated',
+  },
+  'opportunity.status_changed': {
+    workflowTrigger: 'opportunity_status_changed',
+    activityEvent: 'status_changed',
+  },
+  'opportunity.stale': {
+    workflowTrigger: 'opportunity_stale',
   },
 };
 

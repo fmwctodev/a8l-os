@@ -18,6 +18,23 @@ export function validateWorkflow(nodes: BuilderNode[], edges: BuilderEdge[]): Va
         const td = nodeData as TriggerNodeData;
         if (!td.triggerType) {
           issues.push({ nodeId: node.id, nodeLabel: label, severity: 'error', message: 'Trigger type not configured' });
+        } else {
+          const cfg = td.triggerConfig ?? {};
+          if (td.triggerType === 'event_custom' && !cfg.eventName) {
+            issues.push({ nodeId: node.id, nodeLabel: label, severity: 'error', message: 'Custom trigger requires an event name' });
+          }
+          if (td.triggerType === 'event_scheduler' && !cfg.cronExpression && !cfg.scheduleDate) {
+            issues.push({ nodeId: node.id, nodeLabel: label, severity: 'warning', message: 'Scheduler trigger has no schedule configured' });
+          }
+          if (td.triggerType === 'opportunity_stale') {
+            const basedOn = (cfg.basedOn as string[]) ?? [];
+            if (basedOn.length === 0) {
+              issues.push({ nodeId: node.id, nodeLabel: label, severity: 'warning', message: 'Stale opportunity trigger should specify at least one inactivity type' });
+            }
+          }
+          if (td.triggerType === 'contact_engagement_score' && !cfg.scoreValue && cfg.scoreValue !== 0) {
+            issues.push({ nodeId: node.id, nodeLabel: label, severity: 'warning', message: 'Engagement score trigger has no score threshold set' });
+          }
         }
         break;
       }

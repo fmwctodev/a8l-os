@@ -86,6 +86,16 @@ Deno.serve(async (req: Request) => {
             if (!matches) continue;
           }
 
+          const triggerSpecificConfig = (trigger.trigger_specific_config ?? config) as Record<string, unknown>;
+          if (triggerSpecificConfig && Object.keys(triggerSpecificConfig).length > 0) {
+            const specificMatch = evaluateTriggerSpecificConfig(
+              event.event_type,
+              triggerSpecificConfig,
+              event.payload
+            );
+            if (!specificMatch) continue;
+          }
+
           const contactId = event.contact_id;
           if (!contactId) continue;
 
@@ -492,6 +502,191 @@ function evaluateTriggerConditions(
   });
 
   return config.logic === "or" ? results.some((r) => r) : results.every((r) => r);
+}
+
+function evaluateTriggerSpecificConfig(
+  triggerType: string,
+  config: Record<string, unknown>,
+  payload: Record<string, unknown>
+): boolean {
+  switch (triggerType) {
+    case "contact_changed": {
+      const watchedFields = (config.watchedFields as string[]) ?? [];
+      const matchMode = (config.matchMode as string) ?? "any";
+      const changedFields = (payload.changed_fields as string[]) ?? [];
+      if (watchedFields.length === 0) return true;
+      const hits = watchedFields.filter((f) => changedFields.includes(f));
+      return matchMode === "all" ? hits.length === watchedFields.length : hits.length > 0;
+    }
+    case "contact_tag_changed": {
+      const tagName = (config.tagName as string) ?? "";
+      const action = (config.action as string) ?? "added";
+      if (tagName && payload.tag !== tagName) return false;
+      if (action !== "either" && payload.action !== action) return false;
+      return true;
+    }
+    case "contact_dnd_changed": {
+      const channel = (config.channel as string) ?? "all";
+      const state = (config.state as string) ?? "any";
+      if (channel !== "all" && payload.channel !== channel) return false;
+      if (state === "turned_on" && payload.new_state !== true) return false;
+      if (state === "turned_off" && payload.new_state !== false) return false;
+      return true;
+    }
+    case "contact_engagement_score": {
+      const operator = (config.operator as string) ?? "greater_than";
+      const scoreValue = (config.scoreValue as number) ?? 0;
+      const newScore = (payload.new_score as number) ?? 0;
+      const oldScore = (payload.old_score as number) ?? 0;
+      switch (operator) {
+        case "equals": return newScore === scoreValue;
+        case "greater_than": return newScore > scoreValue;
+        case "less_than": return newScore < scoreValue;
+        case "crosses_above": return oldScore < scoreValue && newScore >= scoreValue;
+        case "crosses_below": return oldScore >= scoreValue && newScore < scoreValue;
+        default: return false;
+      }
+    }
+    case "event_call_details": {
+      const direction = (config.direction as string) ?? "any";
+      const answeredStatus = (config.answeredStatus as string) ?? "any";
+      const minDuration = (config.minDuration as number) ?? 0;
+      const maxDuration = (config.maxDuration as number) ?? 0;
+      const outcome = (config.outcome as string[]) ?? [];
+      if (direction !== "any" && payload.direction !== direction) return false;
+      if (answeredStatus !== "any" && payload.answered_status !== answeredStatus) return false;
+      const dur = (payload.duration as number) ?? 0;
+      if (minDuration > 0 && dur < minDuration) return false;
+      if (maxDuration > 0 && dur > maxDuration) return false;
+      if (outcome.length > 0 && !outcome.includes(payload.outcome as string)) return false;
+      return true;
+    }
+    case "event_email": {
+      const eventTypes = (config.eventTypes as string[]) ?? [];
+      const templateFilter = (config.templateFilter as string) ?? "";
+      if (eventTypes.length > 0 && !eventTypes.includes(payload.event_type as string)) return false;
+      if (templateFilter && payload.template_id !== templateFilter) return false;
+      return true;
+    }
+    case "event_customer_replied": {
+      const channels = (config.channels as string[]) ?? [];
+      const replyContains = (config.replyContains as string) ?? "";
+      if (channels.length > 0 && !channels.includes(payload.channel as string)) return false;
+      if (replyContains) {
+        const content = ((payload.content as string) ?? "").toLowerCase();
+        if (!content.includes(replyContains.toLowerCase())) return false;
+      }
+      return true;
+    }
+    case "event_form_submitted": {
+      const formId = (config.formId as string) ?? "";
+      if (formId && payload.form_id !== formId) return false;
+      return true;
+    }
+    case "event_survey_submitted": {
+      const surveyId = (config.surveyId as string) ?? "";
+      const minScore = (config.minScore as number) ?? 0;
+      const maxScore = (config.maxScore as number) ?? 0;
+      if (surveyId && payload.survey_id !== surveyId) return false;
+      const score = (payload.score as number) ?? 0;
+      if (minScore > 0 && score < minScore) return false;
+      if (maxScore > 0 && score > maxScore) return false;
+      return true;
+    }
+    case "event_review_received": {
+      const platforms = (config.platforms as string[]) ?? [];
+      const minRating = (config.minRating as number) ?? 0;
+      const maxRating = (config.maxRating as number) ?? 0;
+      if (platforms.length > 0 && !platforms.includes(payload.platform as string)) return false;
+      const rating = (payload.rating as number) ?? 0;
+      if (minRating > 0 && rating < minRating) return false;
+      if (maxRating > 0 && rating > maxRating) return false;
+      return true;
+    }
+    case "event_conversation_ai": {
+      const classificationFilter = (config.classificationFilter as string) ?? "";
+      const confidenceThreshold = (config.confidenceThreshold as number) ?? 0;
+      if (classificationFilter && payload.ai_classification !== classificationFilter) return false;
+      if (confidenceThreshold > 0) {
+        const confidence = (payload.confidence as number) ?? 0;
+        if (confidence < confidenceThreshold / 100) return false;
+      }
+      return true;
+    }
+    case "event_custom": {
+      const eventName = (config.eventName as string) ?? "";
+      if (eventName && payload.event_name !== eventName) return false;
+      const keyFilters = (config.payloadKeyFilters as Array<{ key: string; operator: string; value: string }>) ?? [];
+      for (const filter of keyFilters) {
+        if (!filter.key) continue;
+        const val = String(payload[filter.key] ?? "");
+        if (filter.operator === "equals" && val !== filter.value) return false;
+        if (filter.operator === "contains" && !val.includes(filter.value)) return false;
+        if (filter.operator === "not_empty" && !val) return false;
+      }
+      return true;
+    }
+    case "appointment_status_changed": {
+      const statuses = (config.statuses as string[]) ?? [];
+      const calendarFilter = (config.calendarFilter as string) ?? "";
+      if (statuses.length > 0 && !statuses.includes(payload.new_status as string)) return false;
+      if (calendarFilter && payload.calendar_id !== calendarFilter) return false;
+      return true;
+    }
+    case "appointment_customer_booked": {
+      const calendarFilter = (config.calendarFilter as string) ?? "";
+      const appointmentTypeFilter = (config.appointmentTypeFilter as string) ?? "";
+      if (calendarFilter && payload.calendar_id !== calendarFilter) return false;
+      if (appointmentTypeFilter && payload.appointment_type_id !== appointmentTypeFilter) return false;
+      return true;
+    }
+    case "opportunity_status_changed": {
+      const statuses = (config.statuses as string[]) ?? [];
+      const pipelineFilter = (config.pipelineFilter as string) ?? "";
+      if (statuses.length > 0 && !statuses.includes(payload.new_status as string)) return false;
+      if (pipelineFilter && payload.pipeline_id !== pipelineFilter) return false;
+      return true;
+    }
+    case "opportunity_created": {
+      const pipelineFilter = (config.pipelineFilter as string) ?? "";
+      const stageFilter = (config.stageFilter as string) ?? "";
+      const ownerFilter = (config.ownerFilter as string) ?? "";
+      if (pipelineFilter && payload.pipeline_id !== pipelineFilter) return false;
+      if (stageFilter && payload.stage_id !== stageFilter) return false;
+      if (ownerFilter && payload.owner_id !== ownerFilter) return false;
+      return true;
+    }
+    case "opportunity_changed": {
+      const watchedFields = (config.watchedFields as string[]) ?? [];
+      const matchMode = (config.matchMode as string) ?? "any";
+      const pipelineFilter = (config.pipelineFilter as string) ?? "";
+      const changedFields = (payload.changed_fields as string[]) ?? [];
+      if (pipelineFilter && payload.pipeline_id !== pipelineFilter) return false;
+      if (watchedFields.length === 0) return true;
+      const hits = watchedFields.filter((f) => changedFields.includes(f));
+      return matchMode === "all" ? hits.length === watchedFields.length : hits.length > 0;
+    }
+    case "opportunity_stage_changed": {
+      const pipelineFilter = (config.pipelineFilter as string) ?? "";
+      const anyStageMove = (config.anyStageMove as boolean) ?? true;
+      const fromStage = (config.fromStage as string) ?? "";
+      const toStage = (config.toStage as string) ?? "";
+      if (pipelineFilter && payload.pipeline_id !== pipelineFilter) return false;
+      if (anyStageMove) return true;
+      if (fromStage && payload.old_stage_id !== fromStage) return false;
+      if (toStage && payload.new_stage_id !== toStage) return false;
+      return true;
+    }
+    case "opportunity_stale": {
+      const pipelineFilter = (config.pipelineFilter as string) ?? "";
+      const stageFilter = (config.stageFilter as string) ?? "";
+      if (pipelineFilter && payload.pipeline_id !== pipelineFilter) return false;
+      if (stageFilter && payload.stage_id !== stageFilter) return false;
+      return true;
+    }
+    default:
+      return true;
+  }
 }
 
 function evaluateCondition(
