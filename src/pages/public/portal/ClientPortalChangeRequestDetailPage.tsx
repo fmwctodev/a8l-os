@@ -28,6 +28,7 @@ import { PortalStatusBadge } from '../../../components/portal/PortalStatusBadge'
 import { ApproveChangeModal } from '../../../components/portal/ApproveChangeModal';
 import { RejectChangeModal } from '../../../components/portal/RejectChangeModal';
 import { ClarificationModal } from '../../../components/portal/ClarificationModal';
+import { PortalStepUpModal } from '../../../components/portal/PortalStepUpModal';
 import { SignatureCapture } from '../../../components/proposals/SignatureCapture';
 import { signChangeOrder, declineChangeOrder, uploadChangeOrderSignatureImage } from '../../../services/projectChangeOrders';
 import type { ProjectChangeRequest, ProjectChangeRequestComment, ProjectChangeOrder } from '../../../types';
@@ -57,10 +58,11 @@ interface SignatureData {
 
 type ActionState = 'idle' | 'approving' | 'rejecting' | 'clarifying';
 type SigningState = 'idle' | 'signing' | 'signed' | 'declined';
+type StepUpPending = 'approve' | 'reject' | 'sign' | 'decline' | null;
 
 export function ClientPortalChangeRequestDetailPage() {
   const { portalToken, requestId } = useParams<{ portalToken: string; requestId: string }>();
-  const { portal } = useClientPortal();
+  const { portal, needsStepUp, completeStepUp } = useClientPortal();
   const navigate = useNavigate();
 
   const [request, setRequest] = useState<ProjectChangeRequest | null>(null);
@@ -74,6 +76,8 @@ export function ClientPortalChangeRequestDetailPage() {
   const [consentChecked, setConsentChecked] = useState(false);
   const [signingError, setSigningError] = useState('');
   const [processingSign, setProcessingSign] = useState(false);
+  const [stepUpPending, setStepUpPending] = useState<StepUpPending>(null);
+  const [pendingRejectReason, setPendingRejectReason] = useState<string | null>(null);
 
   useEffect(() => {
     if (!requestId || !portal) return;
@@ -94,6 +98,36 @@ export function ClientPortalChangeRequestDetailPage() {
     : 'Client';
 
   const base = `/portal/project/${portalToken}`;
+
+  function requestWithStepUp(action: StepUpPending, onProceed: () => void) {
+    if (needsStepUp()) {
+      setStepUpPending(action);
+    } else {
+      onProceed();
+    }
+  }
+
+  function handleStepUpSuccess() {
+    const pending = stepUpPending;
+    setStepUpPending(null);
+    completeStepUp();
+    if (pending === 'approve') {
+      setActionState('approving');
+    } else if (pending === 'reject') {
+      setActionState('rejecting');
+    } else if (pending === 'sign') {
+      void handleSignChangeOrder();
+    } else if (pending === 'decline') {
+      void handleDeclineChangeOrder();
+    }
+  }
+
+  const STEP_UP_LABELS: Record<NonNullable<StepUpPending>, string> = {
+    approve: 'approving this change request',
+    reject: 'rejecting this change request',
+    sign: 'signing this change order',
+    decline: 'declining this change order',
+  };
 
   async function handleApprove() {
     if (!request || !portal) return;
@@ -118,6 +152,7 @@ export function ClientPortalChangeRequestDetailPage() {
     });
     setRequest((r) => r ? { ...r, status: 'rejected', client_decision: 'declined' } : r);
     setActionState('idle');
+    setPendingRejectReason(null);
   }
 
   async function handleClarification(message: string) {
@@ -385,7 +420,7 @@ export function ClientPortalChangeRequestDetailPage() {
 
             <div className="flex gap-3">
               <button
-                onClick={handleSignChangeOrder}
+                onClick={() => requestWithStepUp('sign', () => void handleSignChangeOrder())}
                 disabled={processingSign || !signatureData || !consentChecked}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-sm rounded-xl transition-colors"
               >
@@ -393,7 +428,7 @@ export function ClientPortalChangeRequestDetailPage() {
                 {processingSign ? 'Processing...' : 'Approve & Sign'}
               </button>
               <button
-                onClick={handleDeclineChangeOrder}
+                onClick={() => requestWithStepUp('decline', () => void handleDeclineChangeOrder())}
                 disabled={processingSign}
                 className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-xl transition-colors"
               >
@@ -431,14 +466,14 @@ export function ClientPortalChangeRequestDetailPage() {
           </p>
           <div className="flex gap-3 flex-wrap">
             <button
-              onClick={() => setActionState('approving')}
+              onClick={() => requestWithStepUp('approve', () => setActionState('approving'))}
               className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors"
             >
               <CheckCircle2 className="w-4 h-4" />
               Approve Change
             </button>
             <button
-              onClick={() => setActionState('rejecting')}
+              onClick={() => requestWithStepUp('reject', () => setActionState('rejecting'))}
               className="flex items-center gap-2 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-xl transition-colors"
             >
               <XCircle className="w-4 h-4" />
@@ -577,7 +612,7 @@ export function ClientPortalChangeRequestDetailPage() {
         <RejectChangeModal
           request={request}
           onConfirm={handleReject}
-          onClose={() => setActionState('idle')}
+          onClose={() => { setActionState('idle'); setPendingRejectReason(null); }}
         />
       )}
 
@@ -586,6 +621,14 @@ export function ClientPortalChangeRequestDetailPage() {
           authorName={contactName}
           onSend={handleClarification}
           onClose={() => setActionState('idle')}
+        />
+      )}
+
+      {stepUpPending && (
+        <PortalStepUpModal
+          actionLabel={STEP_UP_LABELS[stepUpPending]}
+          onSuccess={handleStepUpSuccess}
+          onCancel={() => setStepUpPending(null)}
         />
       )}
     </div>

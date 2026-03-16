@@ -1,6 +1,9 @@
 import { Outlet, NavLink, useParams } from 'react-router-dom';
-import { AlertCircle, Clock, Building2, ExternalLink } from 'lucide-react';
+import { AlertCircle, Clock, Building2, ExternalLink, LogOut } from 'lucide-react';
 import { ClientPortalProvider, useClientPortal } from '../contexts/ClientPortalContext';
+import { PortalVerificationScreen } from '../components/portal/PortalVerificationScreen';
+import { PortalCodeEntryScreen } from '../components/portal/PortalCodeEntryScreen';
+import { PortalSessionExpiredScreen } from '../components/portal/PortalSessionExpiredScreen';
 
 function InvalidState({ message, subtext }: { message: string; subtext: string }) {
   return (
@@ -33,7 +36,7 @@ function ExpiredState() {
 }
 
 function PortalContent() {
-  const { state, portal } = useClientPortal();
+  const { state, portal, authInfo, logout } = useClientPortal();
   const { portalToken } = useParams<{ portalToken: string }>();
 
   if (state === 'loading') {
@@ -60,11 +63,32 @@ function PortalContent() {
     return <ExpiredState />;
   }
 
-  if (state === 'invalid' || !portal) {
+  if (state === 'invalid') {
     return (
       <InvalidState
         message="Invalid or Expired Link"
         subtext="This portal link is invalid or has already expired. Please contact your project team for a new link."
+      />
+    );
+  }
+
+  if (state === 'needs_verification' || state === 'sending_code') {
+    return <PortalVerificationScreen />;
+  }
+
+  if (state === 'awaiting_code' || state === 'verifying') {
+    return <PortalCodeEntryScreen />;
+  }
+
+  if (state === 'session_expired') {
+    return <PortalSessionExpiredScreen />;
+  }
+
+  if (state !== 'authenticated' || !portal) {
+    return (
+      <InvalidState
+        message="Access Required"
+        subtext="Please use your portal link to access this page."
       />
     );
   }
@@ -74,9 +98,8 @@ function PortalContent() {
   const contact = portal.contact;
   const base = `/portal/project/${portalToken}`;
 
-  const contactName = contact
-    ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Client'
-    : 'Client';
+  const contactName = authInfo?.contactName ||
+    (contact ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Client' : 'Client');
 
   const statusColors: Record<string, string> = {
     active: 'bg-emerald-100 text-emerald-700',
@@ -114,9 +137,18 @@ function PortalContent() {
                 )}
               </div>
             </div>
-            <div className="text-right hidden sm:block">
-              <div className="text-sm text-gray-500">Welcome back,</div>
-              <div className="text-sm font-medium text-gray-900">{contactName}</div>
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <div className="text-xs text-gray-400">Signed in as</div>
+                <div className="text-sm font-medium text-gray-900">{contactName}</div>
+              </div>
+              <button
+                onClick={logout}
+                title="Sign out"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
