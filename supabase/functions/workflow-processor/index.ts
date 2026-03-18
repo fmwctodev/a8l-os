@@ -1348,6 +1348,506 @@ async function executeAction(
 
       return { shouldWait: true };
     }
+
+    case "create_contact": {
+      const email = resolveMergeFields((config.email as string) || "", contact);
+      const phone = resolveMergeFields((config.phone as string) || "", contact);
+      const duplicateRule = (config.duplicateRule as string) || "skip";
+
+      let existingId: string | null = null;
+      if (email || phone) {
+        const query = supabase.from("contacts").select("id").eq("org_id", orgId);
+        if (email) query.eq("email", email);
+        else if (phone) query.eq("phone", phone);
+        const { data: existing } = await query.maybeSingle();
+        existingId = existing?.id || null;
+      }
+
+      if (existingId && duplicateRule === "skip") break;
+
+      if (existingId && duplicateRule === "update") {
+        await supabase.from("contacts").update({
+          first_name: resolveMergeFields((config.firstName as string) || "", contact) || undefined,
+          last_name: resolveMergeFields((config.lastName as string) || "", contact) || undefined,
+          company: resolveMergeFields((config.company as string) || "", contact) || undefined,
+          source: (config.source as string) || undefined,
+          updated_at: new Date().toISOString(),
+        }).eq("id", existingId);
+        break;
+      }
+
+      const { data: newContact } = await supabase.from("contacts").insert({
+        org_id: orgId,
+        first_name: resolveMergeFields((config.firstName as string) || "", contact),
+        last_name: resolveMergeFields((config.lastName as string) || "", contact),
+        email,
+        phone,
+        company: resolveMergeFields((config.company as string) || "", contact),
+        source: (config.source as string) || "workflow",
+      }).select("id").single();
+
+      if (newContact && config.tags) {
+        const tags = config.tags as string[];
+        for (const tagName of tags) {
+          const { data: tag } = await supabase.from("tags").select("id").eq("org_id", orgId).eq("name", tagName).maybeSingle();
+          if (tag) await supabase.from("contact_tags").upsert({ contact_id: newContact.id, tag_id: tag.id }, { onConflict: "contact_id,tag_id" });
+        }
+      }
+      break;
+    }
+
+    case "find_contact": {
+      const lookupField = (config.lookupField as string) || "email";
+      const lookupValue = resolveMergeFields((config.lookupValue as string) || "", contact);
+      const fallbackBehavior = (config.fallbackBehavior as string) || "skip";
+      const storeResultAs = (config.storeResultAs as string) || "found_contact_id";
+
+      let query = supabase.from("contacts").select("id").eq("org_id", orgId);
+      if (lookupField === "custom_field") {
+        query = query.contains("custom_field_values", { [config.customFieldKey as string]: lookupValue });
+      } else {
+        query = query.eq(lookupField === "id" ? "id" : lookupField, lookupValue);
+      }
+
+      const matchMode = (config.matchMode as string) || "first";
+      query = query.order("created_at", { ascending: matchMode !== "last" && matchMode !== "newest" });
+
+      const { data: found } = await query.limit(1).maybeSingle();
+
+      if (!found) {
+        if (fallbackBehavior === "stop") return { shouldStop: true };
+        break;
+      }
+
+      const ctx = (enrollment.context_data as Record<string, unknown>) || {};
+      ctx[storeResultAs] = found.id;
+      await supabase.from("workflow_enrollments").update({ context_data: ctx }).eq("id", enrollment.id);
+      break;
+    }
+
+    case "delete_contact": {
+      const mode = (config.mode as string) || "soft";
+      if (mode === "soft") {
+        await supabase.from("contacts").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", contactId);
+      } else {
+        await supabase.from("contacts").delete().eq("id", contactId);
+      }
+      break;
+    }
+
+    case "modify_engagement_score": {
+      const operation = (config.operation as string) || "increase";
+      const value = (config.value as number) || 0;
+      const floor = config.floor as number | undefined;
+      const ceiling = config.ceiling as number | undefined;
+
+      const { data: current } = await supabase.from("contacts").select("lead_score").eq("id", contactId).single();
+      let score = current?.lead_score || 0;
+
+      if (operation === "set") score = value;
+      else if (operation === "increase") score += value;
+      else if (operation === "decrease") score -= value;
+
+      if (floor !== undefined) score = Math.max(floor, score);
+      if (ceiling !== undefined) score = Math.min(ceiling, score);
+
+      await supabase.from("contacts").update({ lead_score: score }).eq("id", contactId);
+
+      await supabase.from("scoring_history").insert({
+        org_id: orgId,
+        contact_id: contactId,
+        previous_score: current?.lead_score || 0,
+        new_score: score,
+        change_reason: (config.reason as string) || "Modified by workflow",
+        change_source: "workflow",
+      });
+      break;
+    }
+
+    case "modify_followers": {
+      const action = (config.action as string) || "add";
+      const followerType = (config.followerType as string) || "specific_user";
+      let userIds: string[] = [];
+
+      if (followerType === "specific_user") {
+        userIds = (config.userIds as string[]) || [];
+      } else if (followerType === "contact_owner") {
+        const owner = contact.assigned_user_id as string;
+        if (owner) userIds = [owner];
+      } else if (followerType === "role") {
+        const roleNames = (config.roleNames as string[]) || [];
+        const { data: roleUsers } = await supabase.from("users").select("id, role:roles!inner(name)").eq("org_id", orgId).in("roles.name", roleNames);
+        userIds = roleUsers?.map((u: Record<string, unknown>) => u.id as string) || [];
+      }
+
+      for (const userId of userIds) {
+        if (action === "add") {
+          await supabase.from("contact_followers").upsert({ contact_id: contactId, user_id: userId, org_id: orgId }, { onConflict: "contact_id,user_id" });
+        } else {
+          await supabase.from("contact_followers").delete().eq("contact_id", contactId).eq("user_id", userId);
+        }
+      }
+      break;
+    }
+
+    case "add_note": {
+      const visibility = (config.visibility as string) || "internal";
+      let noteContent = resolveMergeFields((config.content as string) || "", contact);
+      if (config.prependTimestamp) {
+        noteContent = `[${new Date().toLocaleString()}] ${noteContent}`;
+      }
+      await supabase.from("contact_notes").insert({
+        contact_id: contactId,
+        content: noteContent,
+        visibility,
+        is_pinned: false,
+      });
+      break;
+    }
+
+    case "edit_conversation": {
+      const operation = (config.operation as string) || "mark_read";
+      const conversationSource = (config.conversationSource as string) || "most_recent";
+
+      let conversationId: string | null = null;
+      if (conversationSource === "context") {
+        conversationId = ((enrollment.context_data as Record<string, unknown>)?.conversationId as string) || null;
+      } else {
+        const { data: conv } = await supabase.from("conversations").select("id").eq("org_id", orgId).eq("contact_id", contactId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+        conversationId = conv?.id || null;
+      }
+
+      if (!conversationId) break;
+
+      const updateMap: Record<string, unknown> = {};
+      if (operation === "mark_read") updateMap.unread_count = 0;
+      else if (operation === "archive" || operation === "close") updateMap.status = "archived";
+      else if (operation === "reopen") updateMap.status = "open";
+
+      if (Object.keys(updateMap).length) {
+        await supabase.from("conversations").update(updateMap).eq("id", conversationId);
+      }
+      break;
+    }
+
+    case "send_internal_notification": {
+      const recipientType = (config.recipientType as string) || "contact_owner";
+      let userIds: string[] = [];
+
+      if (recipientType === "specific_user") {
+        userIds = (config.recipientIds as string[]) || [];
+      } else if (recipientType === "contact_owner") {
+        const owner = contact.assigned_user_id as string;
+        if (owner) userIds = [owner];
+      } else if (recipientType === "role") {
+        const roleNames = (config.roleNames as string[]) || [];
+        const { data: roleUsers } = await supabase.from("users").select("id, role:roles!inner(name)").eq("org_id", orgId).in("roles.name", roleNames);
+        userIds = roleUsers?.map((u: Record<string, unknown>) => u.id as string) || [];
+      }
+
+      const title = resolveMergeFields((config.title as string) || "Workflow Notification", contact);
+      const body = resolveMergeFields((config.body as string) || "", contact);
+
+      for (const userId of userIds) {
+        await supabase.from("notifications").insert({
+          org_id: orgId,
+          user_id: userId,
+          title,
+          body,
+          type: "workflow",
+          metadata: { contact_id: contactId, enrollment_id: enrollment.id, urgency: config.urgency },
+          read: false,
+        });
+      }
+      break;
+    }
+
+    case "send_slack_message": {
+      const webhookUrl = config.webhookUrl as string;
+      const message = resolveMergeFields((config.message as string) || "", contact);
+
+      if (webhookUrl) {
+        await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: message }),
+        });
+      }
+      break;
+    }
+
+    case "conversation_ai_reply": {
+      const agentId = config.agentId as string;
+      const mode = (config.mode as string) || "draft";
+
+      if (mode === "draft" || mode === "auto_reply") {
+        const { data: agentData } = await supabase.from("ai_agents").select("id, name").eq("id", agentId).maybeSingle();
+        if (agentData) {
+          await supabase.from("ai_drafts").insert({
+            org_id: orgId,
+            contact_id: contactId,
+            agent_id: agentId,
+            status: mode === "draft" ? "draft" : "approved",
+            content: `AI ${mode} generated for contact ${contactId}`,
+            metadata: { enrollment_id: enrollment.id },
+          });
+        }
+      }
+      break;
+    }
+
+    case "manual_action": {
+      const assigneeType = (config.assigneeType as string) || "contact_owner";
+      let assigneeId: string | null = null;
+
+      if (assigneeType === "specific_user") {
+        assigneeId = config.assigneeId as string;
+      } else {
+        assigneeId = contact.assigned_user_id as string || null;
+      }
+
+      const dueAt = new Date();
+      dueAt.setHours(dueAt.getHours() + ((config.dueHours as number) || 24));
+
+      await supabase.from("contact_tasks").insert({
+        org_id: orgId,
+        contact_id: contactId,
+        title: (config.instructionText as string) || "Manual action required",
+        description: `Workflow manual action: ${config.instructionText}`,
+        assigned_to: assigneeId,
+        due_date: dueAt.toISOString(),
+        status: "pending",
+        source: "workflow",
+        metadata: { enrollment_id: enrollment.id, manual_action: true },
+      });
+
+      return { shouldWait: true };
+    }
+
+    case "update_custom_value": {
+      const key = config.customValueKey as string;
+      const operation = (config.operation as string) || "set";
+      const value = resolveMergeFields((config.value as string) || "", contact);
+
+      const { data: existing } = await supabase.from("custom_values").select("id, value").eq("org_id", orgId).eq("key", key).maybeSingle();
+
+      if (operation === "set" || !existing) {
+        await supabase.from("custom_values").upsert({ org_id: orgId, key, value }, { onConflict: "org_id,key" });
+      } else if (operation === "append") {
+        await supabase.from("custom_values").update({ value: (existing.value || "") + value }).eq("id", existing.id);
+      }
+      break;
+    }
+
+    case "text_formatter": {
+      const inputValue = resolveMergeFields((config.inputValue as string) || "", contact);
+      const operation = (config.operation as string) || "uppercase";
+      const outputKey = (config.outputKey as string) || "formatted_text";
+      let result = inputValue;
+
+      switch (operation) {
+        case "uppercase": result = inputValue.toUpperCase(); break;
+        case "lowercase": result = inputValue.toLowerCase(); break;
+        case "capitalize": result = inputValue.replace(/\b\w/g, (c) => c.toUpperCase()); break;
+        case "trim": result = inputValue.trim(); break;
+        case "find_replace": result = inputValue.replace(new RegExp(config.findText as string || "", "g"), (config.replaceText as string) || ""); break;
+        case "append": result = inputValue + ((config.appendText as string) || ""); break;
+        case "extract_pattern": {
+          const match = inputValue.match(new RegExp(config.extractPattern as string || "(.*)"));
+          result = match ? match[1] || match[0] : inputValue;
+          break;
+        }
+      }
+
+      const ctx = (enrollment.context_data as Record<string, unknown>) || {};
+      ctx[outputKey] = result;
+      await supabase.from("workflow_enrollments").update({ context_data: ctx }).eq("id", enrollment.id);
+      break;
+    }
+
+    case "ai_prompt": {
+      const promptTemplate = resolveMergeFields((config.promptTemplate as string) || "", contact);
+      const outputMode = (config.outputMode as string) || "plain_text";
+      const saveOutputTo = (config.saveOutputTo as string) || "variable";
+      const saveOutputKey = (config.saveOutputKey as string) || "ai_output";
+
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+      const aiResponse = await fetch(`${supabaseUrl}/functions/v1/assistant-chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceRoleKey}` },
+        body: JSON.stringify({ org_id: orgId, message: promptTemplate, mode: outputMode, source: "workflow" }),
+      });
+
+      const aiResult = await aiResponse.json();
+      const aiOutput = aiResult.content || aiResult.message || "";
+
+      if (saveOutputTo === "variable") {
+        const ctx = (enrollment.context_data as Record<string, unknown>) || {};
+        ctx[saveOutputKey] = aiOutput;
+        await supabase.from("workflow_enrollments").update({ context_data: ctx }).eq("id", enrollment.id);
+      } else if (saveOutputTo === "contact_field") {
+        await supabase.from("contacts").update({ [saveOutputKey]: aiOutput, updated_at: new Date().toISOString() }).eq("id", contactId);
+      } else if (saveOutputTo === "note") {
+        await supabase.from("contact_notes").insert({ contact_id: contactId, content: aiOutput, is_pinned: false });
+      }
+      break;
+    }
+
+    case "update_appointment_status": {
+      const appointmentSource = (config.appointmentSource as string) || "most_recent";
+      const newStatus = (config.newStatus as string) || "confirmed";
+
+      let appointmentId: string | null = null;
+      if (appointmentSource === "specific" && config.appointmentId) {
+        appointmentId = config.appointmentId as string;
+      } else {
+        const { data: appt } = await supabase.from("appointments").select("id").eq("org_id", orgId).eq("contact_id", contactId).order("start_time", { ascending: false }).limit(1).maybeSingle();
+        appointmentId = appt?.id || null;
+      }
+
+      if (appointmentId) {
+        await supabase.from("appointments").update({ status: newStatus, updated_at: new Date().toISOString() }).eq("id", appointmentId);
+        if (config.notifyContact && contact.email) {
+          const reason = (config.reason as string) || "";
+          await sendEmail(supabase, orgId, contactId, contact.email as string, `Appointment ${newStatus}`, `Your appointment has been ${newStatus}. ${reason}`);
+        }
+      }
+      break;
+    }
+
+    case "generate_booking_link": {
+      const calendarId = config.calendarId as string;
+      const appointmentTypeId = config.appointmentTypeId as string;
+      const saveToField = (config.saveToField as string) || "booking_link";
+      const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+      const bookingUrl = `${supabaseUrl}/booking/${orgId}/${calendarId}/${appointmentTypeId}?contact=${contactId}`;
+
+      const ctx = (enrollment.context_data as Record<string, unknown>) || {};
+      ctx[saveToField] = bookingUrl;
+      await supabase.from("workflow_enrollments").update({ context_data: ctx }).eq("id", enrollment.id);
+      break;
+    }
+
+    case "create_or_update_opportunity": {
+      const mode = (config.mode as string) || "create";
+      const titleTemplate = resolveMergeFields((config.titleTemplate as string) || "New Opportunity", contact);
+
+      let closeDate: string | null = null;
+      if (config.closeDateDays) {
+        const d = new Date();
+        d.setDate(d.getDate() + (config.closeDateDays as number));
+        closeDate = d.toISOString().split("T")[0];
+      }
+
+      if (mode === "create" || mode === "upsert") {
+        await supabase.from("opportunities").insert({
+          org_id: orgId,
+          contact_id: contactId,
+          pipeline_id: config.pipelineId,
+          stage_id: config.stageId,
+          name: titleTemplate,
+          value_amount: (config.value as number) || 0,
+          currency: "USD",
+          status: (config.status as string) || "open",
+          close_date: closeDate,
+        });
+      } else if (mode === "update") {
+        const { data: opp } = await supabase.from("opportunities").select("id").eq("org_id", orgId).eq("contact_id", contactId).eq("status", "open").order("created_at", { ascending: false }).limit(1).maybeSingle();
+        if (opp) {
+          await supabase.from("opportunities").update({ name: titleTemplate, stage_id: config.stageId, value_amount: (config.value as number) || 0, updated_at: new Date().toISOString() }).eq("id", opp.id);
+        }
+      }
+      break;
+    }
+
+    case "remove_opportunity": {
+      const scope = (config.scope as string) || "current";
+      const removeMode = (config.mode as string) || "archive";
+
+      let query = supabase.from("opportunities").select("id").eq("org_id", orgId);
+      if (scope === "current") query = query.eq("contact_id", contactId).eq("status", "open").order("created_at", { ascending: false });
+
+      const { data: opps } = await query.limit(scope === "current" ? 1 : 100);
+
+      for (const opp of opps || []) {
+        if (removeMode === "archive") {
+          await supabase.from("opportunities").update({ status: "lost", closed_at: new Date().toISOString() }).eq("id", opp.id);
+        } else {
+          await supabase.from("opportunities").delete().eq("id", opp.id);
+        }
+      }
+      break;
+    }
+
+    case "send_documents_and_contracts": {
+      const templateId = config.templateId as string;
+      const deliveryChannel = (config.deliveryChannel as string) || "email";
+      const requireSignature = (config.requireSignature as boolean) ?? true;
+      const expirationDays = (config.expirationDays as number) || 30;
+
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + expirationDays);
+
+      const { data: proposal } = await supabase.from("proposals").insert({
+        org_id: orgId,
+        contact_id: contactId,
+        title: `Document from workflow`,
+        status: "sent",
+        template_id: templateId || null,
+        requires_signature: requireSignature,
+        expires_at: expiresAt.toISOString(),
+        source: "workflow",
+        metadata: { enrollment_id: enrollment.id },
+      }).select("id").single();
+
+      if (proposal && (deliveryChannel === "email" || deliveryChannel === "both") && contact.email) {
+        await sendEmail(supabase, orgId, contactId, contact.email as string, "Please review and sign your document", `Please review your document here: ${Deno.env.get("SUPABASE_URL")}/proposals/${proposal.id}`);
+      }
+      break;
+    }
+
+    case "go_to": {
+      const destinationType = (config.destinationType as string) || "node";
+      if (destinationType === "workflow" && config.targetWorkflowId) {
+        return { branch: "default", redirectWorkflow: config.targetWorkflowId };
+      }
+      if (destinationType === "node" && config.targetNodeId) {
+        return { branch: "default", redirectNode: config.targetNodeId };
+      }
+      break;
+    }
+
+    case "remove_from_workflow_action": {
+      const target = (config.target as string) || "current";
+      if (target === "current") {
+        await supabase.from("workflow_enrollments").update({ status: "stopped", stopped_reason: "Removed by workflow action" }).eq("id", enrollment.id);
+        return { shouldStop: true };
+      }
+      break;
+    }
+
+    case "split_test":
+    case "drip_mode":
+    case "array_operation":
+    case "send_messenger":
+    case "send_gmb_message":
+    case "facebook_interactive_messenger":
+    case "instagram_interactive_messenger":
+    case "reply_in_comments":
+    case "send_live_chat_message":
+    case "copy_contact": {
+      await supabase.from("workflow_action_logs").insert({
+        org_id: orgId,
+        enrollment_id: enrollment.id,
+        action_type: actionType,
+        status: "skipped",
+        notes: `Action type '${actionType}' requires external integration`,
+        metadata: { config, contact_id: contactId },
+      });
+      break;
+    }
   }
 }
 

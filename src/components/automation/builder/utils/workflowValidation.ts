@@ -42,19 +42,11 @@ export function validateWorkflow(nodes: BuilderNode[], edges: BuilderEdge[]): Va
         const ad = nodeData as ActionNodeData;
         if (!ad.actionType) {
           issues.push({ nodeId: node.id, nodeLabel: label, severity: 'error', message: 'Action type not configured' });
-        }
-        if (ad.actionType === 'send_email') {
-          const cfg = ad.config as { subject?: string; body?: string };
-          if (!cfg?.subject) issues.push({ nodeId: node.id, nodeLabel: label, severity: 'error', message: 'Email subject is required' });
-          if (!cfg?.body) issues.push({ nodeId: node.id, nodeLabel: label, severity: 'error', message: 'Email body is required' });
-        }
-        if (ad.actionType === 'send_sms') {
-          const cfg = ad.config as { body?: string };
-          if (!cfg?.body) issues.push({ nodeId: node.id, nodeLabel: label, severity: 'error', message: 'SMS body is required' });
-        }
-        if ((ad.actionType as string) === 'webhook') {
-          const cfg = ad.config as { url?: string };
-          if (!cfg?.url) issues.push({ nodeId: node.id, nodeLabel: label, severity: 'error', message: 'Webhook URL is required' });
+        } else {
+          const actionIssues = validateActionConfig(ad.actionType as string, (ad.config as Record<string, unknown>) ?? {});
+          for (const msg of actionIssues) {
+            issues.push({ nodeId: node.id, nodeLabel: label, severity: 'error', message: msg });
+          }
         }
         break;
       }
@@ -95,4 +87,95 @@ export function validateWorkflow(nodes: BuilderNode[], edges: BuilderEdge[]): Va
 
 export function hasBlockingErrors(issues: ValidationIssue[]): boolean {
   return issues.some(i => i.severity === 'error');
+}
+
+export function validateActionConfig(actionType: string, cfg: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+
+  switch (actionType) {
+    case 'send_email':
+      if (!cfg.subject) errors.push('Email subject is required');
+      if (!cfg.body) errors.push('Email body is required');
+      break;
+    case 'send_sms':
+      if (!cfg.body) errors.push('SMS message body is required');
+      break;
+    case 'webhook':
+    case 'webhook_post':
+      if (!cfg.url) errors.push('Webhook URL is required');
+      break;
+    case 'create_contact':
+      if (!cfg.email && !cfg.phone) errors.push('Email or phone is required to create a contact');
+      break;
+    case 'find_contact':
+      if (!cfg.lookupValue) errors.push('Lookup value is required');
+      break;
+    case 'add_note':
+      if (!cfg.content) errors.push('Note content is required');
+      break;
+    case 'send_slack_message':
+      if (!cfg.message) errors.push('Slack message content is required');
+      if (!cfg.webhookUrl && !cfg.channelId && !cfg.userId) errors.push('Slack destination (webhook, channel, or user) is required');
+      break;
+    case 'send_messenger':
+      if (!cfg.message) errors.push('Messenger message content is required');
+      break;
+    case 'send_gmb_message':
+      if (!cfg.message) errors.push('GMB message content is required');
+      break;
+    case 'send_internal_notification':
+      if (!cfg.title) errors.push('Notification title is required');
+      if (!cfg.body) errors.push('Notification body is required');
+      break;
+    case 'conversation_ai_reply':
+      if (!cfg.agentId) errors.push('AI agent must be selected');
+      break;
+    case 'ai_prompt':
+      if (!cfg.promptTemplate) errors.push('Prompt template is required');
+      break;
+    case 'split_test': {
+      const variants = (cfg.variants as Array<{ percentage: number }>) ?? [];
+      if (variants.length < 2) errors.push('Split test requires at least 2 variants');
+      const total = variants.reduce((sum, v) => sum + (v.percentage || 0), 0);
+      if (Math.abs(total - 100) > 1) errors.push(`Variant percentages must total 100% (currently ${total}%)`);
+      break;
+    }
+    case 'go_to':
+      if (!cfg.targetNodeId && !cfg.targetWorkflowId) errors.push('Go To destination must be specified');
+      break;
+    case 'update_custom_value':
+      if (!cfg.customValueKey) errors.push('Custom value key is required');
+      if (!cfg.value) errors.push('Value is required');
+      break;
+    case 'text_formatter':
+      if (!cfg.inputValue) errors.push('Input value is required');
+      if (!cfg.outputKey) errors.push('Output variable key is required');
+      break;
+    case 'array_operation':
+      if (!cfg.inputKey) errors.push('Input array source key is required');
+      if (!cfg.outputKey) errors.push('Output key is required');
+      break;
+    case 'update_appointment_status':
+      if (!cfg.newStatus) errors.push('New appointment status is required');
+      break;
+    case 'generate_booking_link':
+      if (!cfg.calendarId) errors.push('Calendar ID is required');
+      break;
+    case 'create_or_update_opportunity':
+      if (!cfg.pipelineId) errors.push('Pipeline ID is required');
+      if (!cfg.stageId) errors.push('Stage ID is required');
+      break;
+    case 'send_documents_and_contracts':
+      if (!cfg.templateId) errors.push('Document template ID is required');
+      break;
+    case 'manual_action':
+      if (!cfg.instructionText) errors.push('Instruction text is required for manual actions');
+      break;
+    case 'drip_mode':
+      if (!cfg.batchSize || (cfg.batchSize as number) < 1) errors.push('Batch size must be at least 1');
+      if (!cfg.intervalValue || (cfg.intervalValue as number) < 1) errors.push('Interval value must be at least 1');
+      break;
+  }
+
+  return errors;
 }

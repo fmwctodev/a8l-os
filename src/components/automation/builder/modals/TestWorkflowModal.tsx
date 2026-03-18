@@ -142,6 +142,7 @@ export function TestWorkflowModal({ nodes, edges, onClose }: TestWorkflowModalPr
         });
       } else if (nextNode.data.nodeType === 'action') {
         const actionType = (nextNode.data.nodeData as any)?.actionType;
+        const cfg = (nextNode.data.nodeData as any)?.config ?? {};
         const opt = ACTION_OPTIONS.find(a => a.type === actionType);
         steps.push({
           nodeId: nextNode.id,
@@ -149,7 +150,7 @@ export function TestWorkflowModal({ nodes, edges, onClose }: TestWorkflowModalPr
           type: 'action',
           status: nextNode.data.isValid ? 'executed' : 'failed',
           detail: nextNode.data.isValid
-            ? `Would execute "${opt?.label ?? 'action'}"`
+            ? getActionSimulationDetail(actionType, cfg)
             : 'Node has incomplete configuration',
         });
       } else if (nextNode.data.nodeType === 'goal') {
@@ -168,6 +169,54 @@ export function TestWorkflowModal({ nodes, edges, onClose }: TestWorkflowModalPr
     setTestSteps(steps);
     setStep('results');
   }, [selectedContact, selectedTriggerId, nodes, edges, payloadJson]);
+
+  function getActionSimulationDetail(actionType: string, cfg: Record<string, unknown>): string {
+    switch (actionType) {
+      case 'send_email': return `Would send email: "${cfg.subject ?? '(no subject)'}"`;
+      case 'send_sms': return `Would send SMS: "${String(cfg.body ?? '').substring(0, 60)}"`;
+      case 'add_tag': return `Would add tag "${cfg.tagName ?? cfg.tagId ?? '?'}"`;
+      case 'remove_tag': return `Would remove tag "${cfg.tagName ?? cfg.tagId ?? '?'}"`;
+      case 'webhook':
+      case 'webhook_post': return `Would POST to ${cfg.url ?? '(no URL)'}`;
+      case 'notify_user': return `Would notify user: "${String(cfg.message ?? '').substring(0, 60)}"`;
+      case 'trigger_another_workflow': return `Would trigger workflow: ${cfg.workflowId ?? '?'}`;
+      case 'create_contact': return `Would create contact: ${cfg.firstName ?? ''} ${cfg.lastName ?? ''} <${cfg.email ?? cfg.phone ?? '?'}>`;
+      case 'find_contact': return `Would look up contact by ${cfg.lookupField ?? 'email'}: "${cfg.lookupValue ?? '?'}"`;
+      case 'copy_contact': return `Would copy contact fields to a new record`;
+      case 'delete_contact': return `Would ${cfg.mode === 'hard' ? 'permanently delete' : 'archive'} contact`;
+      case 'modify_engagement_score': return `Would ${cfg.operation ?? 'increase'} engagement score by ${cfg.value ?? 0}`;
+      case 'modify_followers': return `Would ${cfg.action ?? 'add'} followers (${cfg.followerType ?? 'specific_user'})`;
+      case 'add_note': return `Would add note: "${String(cfg.content ?? '').substring(0, 60)}"`;
+      case 'edit_conversation': return `Would ${cfg.operation ?? 'mark_read'} conversation`;
+      case 'send_slack_message': return `Would send Slack message to ${cfg.channelType === 'webhook' ? 'webhook' : (cfg.channelId ?? 'channel')}`;
+      case 'send_messenger': return `Would send ${cfg.channel ?? 'Facebook'} Messenger message`;
+      case 'send_gmb_message': return `Would send Google Business Profile message`;
+      case 'send_internal_notification': return `Would notify: "${cfg.title ?? '?'}"`;
+      case 'conversation_ai_reply': return `Would ${cfg.mode === 'auto_reply' ? 'auto-reply' : 'draft reply'} using AI agent`;
+      case 'facebook_interactive_messenger': return `Would send interactive Facebook message`;
+      case 'instagram_interactive_messenger': return `Would send interactive Instagram message`;
+      case 'reply_in_comments': return `Would reply to ${cfg.platform ?? 'social'} comment`;
+      case 'send_live_chat_message': return `Would send live chat message`;
+      case 'manual_action': return `Would pause workflow for manual task: "${String(cfg.instructionText ?? '').substring(0, 60)}"`;
+      case 'split_test': {
+        const variants = (cfg.variants as Array<{ label: string; percentage: number }>) ?? [];
+        return `Would A/B split into ${variants.length} variants`;
+      }
+      case 'go_to': return `Would jump to ${cfg.destinationType === 'workflow' ? `workflow ${cfg.targetWorkflowId ?? '?'}` : `node ${cfg.targetNodeId ?? '?'}`}`;
+      case 'remove_from_workflow_action': return `Would remove contact from ${cfg.target === 'current' ? 'current' : 'selected'} workflow(s)`;
+      case 'drip_mode': return `Would schedule ${cfg.batchSize ?? 1}/batch every ${cfg.intervalValue ?? 1} ${cfg.intervalUnit ?? 'hours'}`;
+      case 'update_custom_value': return `Would ${cfg.operation ?? 'set'} custom value "${cfg.customValueKey ?? '?'}" = "${cfg.value ?? '?'}"`;
+      case 'array_operation': return `Would ${cfg.operation ?? 'create'} array → save to "${cfg.outputKey ?? '?'}"`;
+      case 'text_formatter': return `Would ${cfg.operation ?? 'format'} text → save to "${cfg.outputKey ?? '?'}"`;
+      case 'ai_prompt': return `Would run AI prompt → save ${cfg.outputMode ?? 'text'} to "${cfg.saveOutputKey ?? 'ai_output'}"`;
+      case 'update_appointment_status': return `Would set appointment status to "${cfg.newStatus ?? '?'}"`;
+      case 'generate_booking_link': return `Would generate booking link → save to "${cfg.saveToField ?? 'booking_link'}"`;
+      case 'create_or_update_opportunity': return `Would ${cfg.mode ?? 'create'} opportunity "${cfg.titleTemplate ?? 'New Opportunity'}"`;
+      case 'remove_opportunity': return `Would ${cfg.mode === 'delete' ? 'delete' : 'archive'} ${cfg.scope ?? 'current'} opportunity`;
+      case 'send_documents_and_contracts': return `Would send document via ${cfg.deliveryChannel ?? 'email'}${cfg.requireSignature ? ', signature required' : ''}`;
+      default: return `Would execute action: ${actionType}`;
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">

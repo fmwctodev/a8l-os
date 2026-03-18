@@ -287,6 +287,53 @@ export const ACTION_OPTIONS: ActionOption[] = [
   { type: 'webhook', label: 'Webhook', description: 'Send data to external URL', category: 'system' },
   { type: 'log_custom_event', label: 'Log Event', description: 'Log a custom event', category: 'system' },
   { type: 'set_dnd', label: 'Set DND', description: 'Enable Do Not Disturb', category: 'system' },
+
+  // New GHL-Style Contact Actions
+  { type: 'create_contact', label: 'Create Contact', description: 'Create a new contact record', category: 'contact_management' },
+  { type: 'find_contact', label: 'Find Contact', description: 'Lookup a contact by field value', category: 'contact_management' },
+  { type: 'copy_contact', label: 'Copy Contact', description: 'Duplicate a contact with selected fields', category: 'contact_management' },
+  { type: 'delete_contact', label: 'Delete Contact', description: 'Remove a contact from the system', category: 'contact_management' },
+  { type: 'modify_engagement_score', label: 'Modify Engagement Score', description: 'Set, increase, or decrease engagement score', category: 'contact_management' },
+  { type: 'modify_followers', label: 'Modify Followers', description: 'Add or remove contact followers', category: 'contact_management' },
+  { type: 'add_note', label: 'Add Note', description: 'Add a note to the contact record', category: 'contact_management' },
+  { type: 'edit_conversation', label: 'Edit Conversation', description: 'Update conversation status or read state', category: 'contact_management' },
+
+  // New GHL-Style Communication Actions
+  { type: 'send_slack_message', label: 'Send Slack Message', description: 'Send a message to a Slack channel or user', category: 'communication' },
+  { type: 'send_messenger', label: 'Send Messenger', description: 'Send a message via Facebook/Instagram/WhatsApp', category: 'communication' },
+  { type: 'send_gmb_message', label: 'Send GMB Message', description: 'Send a Google Business Profile message', category: 'communication' },
+  { type: 'send_internal_notification', label: 'Send Internal Notification', description: 'Notify team members via multiple channels', category: 'communication' },
+  { type: 'conversation_ai_reply', label: 'Conversation AI Reply', description: 'Use AI agent to draft or auto-reply', category: 'ai' },
+  { type: 'facebook_interactive_messenger', label: 'Facebook Interactive', description: 'Send an interactive Facebook Messenger message', category: 'communication' },
+  { type: 'instagram_interactive_messenger', label: 'Instagram Interactive', description: 'Send an interactive Instagram message', category: 'communication' },
+  { type: 'reply_in_comments', label: 'Reply in Comments', description: 'Reply to a social media comment', category: 'communication' },
+  { type: 'send_live_chat_message', label: 'Send Live Chat', description: 'Send a message in a live chat widget', category: 'communication' },
+
+  // Internal / Logic Actions
+  { type: 'manual_action', label: 'Manual Action', description: 'Pause and assign a manual task', category: 'system' },
+  { type: 'split_test', label: 'A/B Split Test', description: 'Randomly split contacts into test variants', category: 'flow_control' },
+  { type: 'go_to', label: 'Go To', description: 'Jump to a specific node or workflow', category: 'flow_control' },
+  { type: 'remove_from_workflow_action', label: 'Remove from Workflow', description: 'Remove contact from workflows', category: 'flow_control' },
+  { type: 'drip_mode', label: 'Drip Mode', description: 'Schedule contacts in timed batches', category: 'flow_control' },
+
+  // Data Actions
+  { type: 'update_custom_value', label: 'Update Custom Value', description: 'Set or modify a custom value field', category: 'system' },
+  { type: 'array_operation', label: 'Array Operation', description: 'Manipulate array data in workflow context', category: 'system' },
+  { type: 'text_formatter', label: 'Text Formatter', description: 'Transform text with formatting operations', category: 'system' },
+
+  // AI Actions
+  { type: 'ai_prompt', label: 'AI Prompt', description: 'Run a custom AI prompt and capture the output', category: 'ai' },
+
+  // Extended Appointment Actions
+  { type: 'update_appointment_status', label: 'Update Appointment Status', description: 'Change the status of an appointment', category: 'appointments' },
+  { type: 'generate_booking_link', label: 'Generate Booking Link', description: 'Create a one-time booking link', category: 'appointments' },
+
+  // Extended Opportunity Actions
+  { type: 'create_or_update_opportunity', label: 'Create/Update Opportunity', description: 'Create or update an opportunity', category: 'opportunities' },
+  { type: 'remove_opportunity', label: 'Remove Opportunity', description: 'Archive or delete an opportunity', category: 'opportunities' },
+
+  // Extended Payment Actions
+  { type: 'send_documents_and_contracts', label: 'Send Documents & Contracts', description: 'Send a document or contract for signing', category: 'payments' },
 ];
 
 export function getNodeTypeForAction(actionType: string): WorkflowNodeType {

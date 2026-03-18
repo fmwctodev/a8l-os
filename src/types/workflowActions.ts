@@ -88,7 +88,46 @@ export type WorkflowActionType =
   // Goal Actions
   | 'goal_check'
   // Meeting Actions
-  | 'generate_meeting_follow_up';
+  | 'generate_meeting_follow_up'
+  // New GHL-Style Contact Actions
+  | 'create_contact'
+  | 'find_contact'
+  | 'copy_contact'
+  | 'delete_contact'
+  | 'modify_engagement_score'
+  | 'modify_followers'
+  | 'add_note'
+  | 'edit_conversation'
+  // New GHL-Style Communication Actions
+  | 'send_slack_message'
+  | 'send_messenger'
+  | 'send_gmb_message'
+  | 'send_internal_notification'
+  | 'conversation_ai_reply'
+  | 'facebook_interactive_messenger'
+  | 'instagram_interactive_messenger'
+  | 'reply_in_comments'
+  | 'send_live_chat_message'
+  // Internal / Logic Actions
+  | 'manual_action'
+  | 'split_test'
+  | 'go_to'
+  | 'remove_from_workflow_action'
+  | 'drip_mode'
+  // Data Actions
+  | 'update_custom_value'
+  | 'array_operation'
+  | 'text_formatter'
+  // AI Actions
+  | 'ai_prompt'
+  // Extended Appointment Actions
+  | 'update_appointment_status'
+  | 'generate_booking_link'
+  // Extended Opportunity Actions
+  | 'create_or_update_opportunity'
+  | 'remove_opportunity'
+  // Extended Payment Actions
+  | 'send_documents_and_contracts';
 
 export type ActionCategory =
   | 'communication'
@@ -639,6 +678,262 @@ export interface WebhookConfig {
   timeoutSeconds?: number;
 }
 
+export interface CreateContactConfig {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  source?: string;
+  tags?: string[];
+  assigneeType?: AssigneeType;
+  assigneeId?: string;
+  customFields?: Record<string, unknown>;
+  duplicateRule?: 'skip' | 'update' | 'create_new';
+}
+
+export interface FindContactConfig {
+  lookupField: 'email' | 'phone' | 'id' | 'custom_field';
+  lookupValue: string;
+  customFieldKey?: string;
+  matchMode?: 'first' | 'last' | 'newest';
+  fallbackBehavior?: FallbackBehavior;
+  storeResultAs?: string;
+}
+
+export interface CopyContactConfig {
+  fieldsToCopy: string[];
+  newTags?: string[];
+  assigneeType?: AssigneeType;
+  assigneeId?: string;
+  overwriteExisting?: boolean;
+}
+
+export interface DeleteContactConfig {
+  mode: 'soft' | 'hard';
+  requireApproval?: boolean;
+  reason?: string;
+}
+
+export interface ModifyEngagementScoreConfig {
+  operation: 'set' | 'increase' | 'decrease';
+  value: number;
+  floor?: number;
+  ceiling?: number;
+  modelId?: string;
+  reason?: string;
+}
+
+export interface ModifyFollowersConfig {
+  action: 'add' | 'remove';
+  followerType: 'specific_user' | 'role' | 'contact_owner';
+  userIds?: string[];
+  roleNames?: string[];
+}
+
+export interface AddNoteConfig {
+  content: string;
+  visibility?: 'public' | 'private' | 'internal';
+  prependTimestamp?: boolean;
+}
+
+export interface EditConversationConfig {
+  operation: 'mark_read' | 'mark_unread' | 'archive' | 'close' | 'reopen';
+  conversationSource?: 'current' | 'most_recent';
+}
+
+export interface SendSlackMessageConfig {
+  channelType: 'channel' | 'webhook' | 'user';
+  channelId?: string;
+  webhookUrl?: string;
+  userId?: string;
+  message: string;
+  includeContactLink?: boolean;
+  includeRecordLinks?: boolean;
+}
+
+export interface SendMessengerConfig {
+  accountId: string;
+  message: string;
+  channel: 'facebook' | 'instagram' | 'whatsapp';
+}
+
+export interface SendGmbMessageConfig {
+  accountId: string;
+  message: string;
+}
+
+export interface SendInternalNotificationConfig {
+  recipientType: RecipientType;
+  recipientIds?: string[];
+  roleNames?: string[];
+  title: string;
+  body: string;
+  urgency?: 'low' | 'normal' | 'high' | 'urgent';
+  channels: Array<'in_app' | 'email' | 'sms' | 'slack'>;
+  includeContactLink?: boolean;
+}
+
+export interface ConversationAIReplyConfig {
+  agentId: string;
+  mode: 'draft' | 'auto_reply' | 'classify' | 'summarize';
+  requireApproval?: boolean;
+  outputField?: string;
+}
+
+export interface FacebookInteractiveConfig {
+  accountId: string;
+  responseText?: string;
+  templateId?: string;
+}
+
+export interface InstagramInteractiveConfig {
+  accountId: string;
+  responseText?: string;
+  templateId?: string;
+}
+
+export interface ReplyInCommentsConfig {
+  platform: 'facebook' | 'instagram';
+  accountId: string;
+  replyText: string;
+}
+
+export interface SendLiveChatConfig {
+  widgetId?: string;
+  message: string;
+  conversationTarget?: 'current' | 'most_recent';
+}
+
+export interface ManualActionConfig {
+  instructionText: string;
+  assigneeType: AssigneeType;
+  assigneeId?: string;
+  dueHours?: number;
+  completionRule?: 'any_user' | 'assigned_user';
+}
+
+export interface SplitTestConfig {
+  splitType: 'percentage' | 'random';
+  variants: Array<{
+    id: string;
+    label: string;
+    percentage: number;
+  }>;
+}
+
+export interface GoToConfig {
+  destinationType: 'node' | 'workflow';
+  targetNodeId?: string;
+  targetWorkflowId?: string;
+  maxJumps?: number;
+}
+
+export interface RemoveFromWorkflowActionConfig {
+  target: 'current' | 'selected';
+  workflowIds?: string[];
+}
+
+export interface DripModeConfig {
+  batchSize: number;
+  intervalValue: number;
+  intervalUnit: 'minutes' | 'hours' | 'days';
+  queueOrdering: 'fifo' | 'lifo' | 'random';
+  startTime?: string;
+  endTime?: string;
+}
+
+export interface UpdateCustomValueConfig {
+  customValueId: string;
+  customValueKey?: string;
+  operation: 'set' | 'append' | 'replace_token';
+  value: string;
+  token?: string;
+}
+
+export interface ArrayOperationConfig {
+  inputSource: 'variable' | 'custom_field';
+  inputKey: string;
+  operation: 'create' | 'append' | 'remove' | 'sort' | 'dedupe' | 'iterate' | 'contains' | 'join';
+  operandValue?: string;
+  sortDirection?: 'asc' | 'desc';
+  joinSeparator?: string;
+  outputKey: string;
+}
+
+export interface TextFormatterConfig {
+  inputValue: string;
+  operation: 'uppercase' | 'lowercase' | 'title_case' | 'trim' | 'replace' | 'concatenate' | 'extract' | 'format_phone' | 'format_date';
+  findText?: string;
+  replaceText?: string;
+  appendText?: string;
+  extractPattern?: string;
+  dateFormat?: string;
+  outputKey: string;
+}
+
+export interface AIPromptConfig {
+  promptTemplate: string;
+  inputVariables?: Array<{ key: string; source: string }>;
+  outputMode: 'plain_text' | 'json' | 'summary' | 'classification';
+  saveOutputTo?: 'variable' | 'contact_field' | 'note';
+  saveOutputKey?: string;
+  requireApproval?: boolean;
+  modelId?: string;
+}
+
+export interface UpdateAppointmentStatusConfig {
+  appointmentSource: AppointmentSource;
+  appointmentId?: string;
+  newStatus: 'confirmed' | 'cancelled' | 'no_show' | 'completed' | 'rescheduled';
+  reason?: string;
+  notifyContact?: boolean;
+}
+
+export interface GenerateBookingLinkConfig {
+  calendarId: string;
+  appointmentTypeId: string;
+  expirationHours?: number;
+  usageLimit?: number;
+  saveToField?: string;
+}
+
+export interface CreateOrUpdateOpportunityConfig {
+  mode: 'create' | 'update' | 'upsert';
+  pipelineId?: string;
+  stageId?: string;
+  title?: string;
+  titleTemplate?: string;
+  status?: 'open' | 'won' | 'lost' | 'abandoned';
+  value?: number;
+  closeDate?: string;
+  closeDateDays?: number;
+  assigneeType?: AssigneeType;
+  assigneeId?: string;
+  duplicateRule?: 'skip' | 'update' | 'create_new';
+  customFields?: Record<string, unknown>;
+}
+
+export interface RemoveOpportunityConfig {
+  opportunitySource: OpportunitySource;
+  opportunityId?: string;
+  scope?: 'current' | 'all_pipelines' | 'selected_pipelines';
+  pipelineIds?: string[];
+  mode?: 'archive' | 'delete';
+  requireApproval?: boolean;
+}
+
+export interface SendDocumentsAndContractsConfig {
+  templateId: string;
+  recipientType: RecipientType;
+  recipientIds?: string[];
+  deliveryChannel: 'email' | 'sms' | 'both';
+  requireSignature?: boolean;
+  linkedEntityType?: 'contact' | 'opportunity' | 'project';
+  linkedEntityId?: string;
+  expirationDays?: number;
+}
+
 export interface GenerateMeetingFollowUpConfig {
   channel: 'sms' | 'email' | 'both';
   delayMinutes: number;
@@ -705,7 +1000,38 @@ export type ActionConfig =
   | NotifyUserConfig
   | LogEventConfig
   | WebhookConfig
-  | GenerateMeetingFollowUpConfig;
+  | GenerateMeetingFollowUpConfig
+  | CreateContactConfig
+  | FindContactConfig
+  | CopyContactConfig
+  | DeleteContactConfig
+  | ModifyEngagementScoreConfig
+  | ModifyFollowersConfig
+  | AddNoteConfig
+  | EditConversationConfig
+  | SendSlackMessageConfig
+  | SendMessengerConfig
+  | SendGmbMessageConfig
+  | SendInternalNotificationConfig
+  | ConversationAIReplyConfig
+  | FacebookInteractiveConfig
+  | InstagramInteractiveConfig
+  | ReplyInCommentsConfig
+  | SendLiveChatConfig
+  | ManualActionConfig
+  | SplitTestConfig
+  | GoToConfig
+  | RemoveFromWorkflowActionConfig
+  | DripModeConfig
+  | UpdateCustomValueConfig
+  | ArrayOperationConfig
+  | TextFormatterConfig
+  | AIPromptConfig
+  | UpdateAppointmentStatusConfig
+  | GenerateBookingLinkConfig
+  | CreateOrUpdateOpportunityConfig
+  | RemoveOpportunityConfig
+  | SendDocumentsAndContractsConfig;
 
 export interface WorkflowActionDefinition {
   type: WorkflowActionType;
@@ -822,6 +1148,53 @@ export const WORKFLOW_ACTION_DEFINITIONS: WorkflowActionDefinition[] = [
 
   // Meeting Actions
   { type: 'generate_meeting_follow_up', label: 'Generate Meeting Follow-Up', description: 'Generate and send AI follow-up messages after a meeting', category: 'ai', icon: 'Video' },
+
+  // New GHL-Style Contact Actions
+  { type: 'create_contact', label: 'Create Contact', description: 'Create a new contact record', category: 'contact_management', icon: 'UserPlus2' },
+  { type: 'find_contact', label: 'Find Contact', description: 'Lookup a contact by field value', category: 'contact_management', icon: 'UserSearch' },
+  { type: 'copy_contact', label: 'Copy Contact', description: 'Duplicate a contact with selected fields', category: 'contact_management', icon: 'Copy' },
+  { type: 'delete_contact', label: 'Delete Contact', description: 'Remove a contact from the system', category: 'contact_management', icon: 'UserX' },
+  { type: 'modify_engagement_score', label: 'Modify Engagement Score', description: 'Set, increase, or decrease engagement score', category: 'contact_management', icon: 'TrendingUp' },
+  { type: 'modify_followers', label: 'Modify Followers', description: 'Add or remove contact followers', category: 'contact_management', icon: 'Users2' },
+  { type: 'add_note', label: 'Add Note', description: 'Add a note to the contact record', category: 'contact_management', icon: 'StickyNote' },
+  { type: 'edit_conversation', label: 'Edit Conversation', description: 'Update conversation status or read state', category: 'contact_management', icon: 'MessageSquarePen' },
+
+  // New GHL-Style Communication Actions
+  { type: 'send_slack_message', label: 'Send Slack Message', description: 'Send a message to a Slack channel or user', category: 'communication', icon: 'Slack', isPro: true },
+  { type: 'send_messenger', label: 'Send Messenger', description: 'Send a message via Facebook/Instagram/WhatsApp', category: 'communication', icon: 'MessageCircle', isPro: true },
+  { type: 'send_gmb_message', label: 'Send GMB Message', description: 'Send a Google Business Profile message', category: 'communication', icon: 'MapPin', isPro: true },
+  { type: 'send_internal_notification', label: 'Send Internal Notification', description: 'Notify team members via multiple channels', category: 'communication', icon: 'BellDot' },
+  { type: 'conversation_ai_reply', label: 'Conversation AI Reply', description: 'Use AI agent to draft or auto-reply in a conversation', category: 'ai', icon: 'BotMessageSquare', isPro: true },
+  { type: 'facebook_interactive_messenger', label: 'Facebook Interactive', description: 'Send an interactive Facebook Messenger message', category: 'communication', icon: 'Facebook', isPro: true },
+  { type: 'instagram_interactive_messenger', label: 'Instagram Interactive', description: 'Send an interactive Instagram message', category: 'communication', icon: 'Instagram', isPro: true },
+  { type: 'reply_in_comments', label: 'Reply in Comments', description: 'Reply to a social media comment', category: 'communication', icon: 'Reply', isPro: true },
+  { type: 'send_live_chat_message', label: 'Send Live Chat Message', description: 'Send a message in a live chat widget', category: 'communication', icon: 'MessageSquareDot' },
+
+  // Internal / Logic Actions
+  { type: 'manual_action', label: 'Manual Action', description: 'Pause and assign a manual task to a team member', category: 'system', icon: 'HandMetal' },
+  { type: 'split_test', label: 'A/B Split Test', description: 'Randomly split contacts into test variants', category: 'flow_control', icon: 'Split' },
+  { type: 'go_to', label: 'Go To', description: 'Jump to a specific node or trigger another workflow', category: 'flow_control', icon: 'CornerDownRight' },
+  { type: 'remove_from_workflow_action', label: 'Remove from Workflow', description: 'Remove contact from current or other workflows', category: 'flow_control', icon: 'LogOut' },
+  { type: 'drip_mode', label: 'Drip Mode', description: 'Schedule contacts in timed batches', category: 'flow_control', icon: 'Droplets' },
+
+  // Data Actions
+  { type: 'update_custom_value', label: 'Update Custom Value', description: 'Set or modify a custom value field', category: 'system', icon: 'Database' },
+  { type: 'array_operation', label: 'Array Operation', description: 'Manipulate array data in workflow context', category: 'system', icon: 'Brackets' },
+  { type: 'text_formatter', label: 'Text Formatter', description: 'Transform text with formatting operations', category: 'system', icon: 'Type' },
+
+  // AI Actions
+  { type: 'ai_prompt', label: 'AI Prompt', description: 'Run a custom AI prompt and capture the output', category: 'ai', icon: 'Sparkles', isPro: true },
+
+  // Extended Appointment Actions
+  { type: 'update_appointment_status', label: 'Update Appointment Status', description: 'Change the status of an appointment', category: 'appointments', icon: 'CalendarCheck2' },
+  { type: 'generate_booking_link', label: 'Generate Booking Link', description: 'Create a one-time booking link for the contact', category: 'appointments', icon: 'Link2' },
+
+  // Extended Opportunity Actions
+  { type: 'create_or_update_opportunity', label: 'Create/Update Opportunity', description: 'Create a new opportunity or update existing one', category: 'opportunities', icon: 'PlusCircle' },
+  { type: 'remove_opportunity', label: 'Remove Opportunity', description: 'Archive or delete an opportunity', category: 'opportunities', icon: 'MinusCircle' },
+
+  // Extended Payment Actions
+  { type: 'send_documents_and_contracts', label: 'Send Documents & Contracts', description: 'Send a document or contract for signing', category: 'payments', icon: 'FileSignature' },
 ];
 
 export const ACTION_CATEGORY_LABELS: Record<ActionCategory, string> = {

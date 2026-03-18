@@ -11,6 +11,7 @@ import type {
 } from '../../../../types';
 import { TRIGGER_OPTIONS, ACTION_OPTIONS } from '../../../../types/workflowBuilder';
 import { TRIGGER_CONFIG_MAP } from '../triggerConfigs';
+import { ACTION_CONFIG_MAP } from '../actionConfigs';
 
 interface NodeConfigDrawerProps {
   node: BuilderNode;
@@ -208,6 +209,7 @@ function ActionConfig({ data, onUpdate, onUpdateLabel }: {
 }) {
   const config = data.config as Record<string, any> || {};
   const actionType = data.actionType as string;
+  const configEntry = ACTION_CONFIG_MAP[actionType];
 
   return (
     <div className="space-y-4">
@@ -228,112 +230,123 @@ function ActionConfig({ data, onUpdate, onUpdateLabel }: {
         </select>
       </div>
 
-      {actionType === 'send_email' && (
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Subject</label>
-            <input
-              type="text"
-              value={config.subject ?? ''}
-              onChange={e => onUpdate({ config: { ...config, subject: e.target.value } })}
-              placeholder="Email subject..."
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Body</label>
-            <textarea
-              value={config.body ?? ''}
-              onChange={e => onUpdate({ config: { ...config, body: e.target.value } })}
-              placeholder="Email body... Use {{contact.first_name}} for merge fields"
-              rows={5}
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
-            />
-          </div>
-        </div>
-      )}
+      {configEntry
+        ? createElement(configEntry.component, {
+            data,
+            onUpdate,
+            ...(configEntry.props ?? {}),
+          } as any)
+        : (
+          <>
+            {actionType === 'send_email' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Subject</label>
+                  <input
+                    type="text"
+                    value={config.subject ?? ''}
+                    onChange={e => onUpdate({ config: { ...config, subject: e.target.value } })}
+                    placeholder="Email subject..."
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Body</label>
+                  <textarea
+                    value={config.body ?? ''}
+                    onChange={e => onUpdate({ config: { ...config, body: e.target.value } })}
+                    placeholder="Email body... Use {{contact.first_name}} for merge fields"
+                    rows={5}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                  />
+                </div>
+              </div>
+            )}
 
-      {actionType === 'send_sms' && (
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Message</label>
-          <textarea
-            value={config.body ?? ''}
-            onChange={e => onUpdate({ config: { ...config, body: e.target.value } })}
-            placeholder="SMS message... Use {{contact.first_name}} for merge fields"
-            rows={3}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
-          />
-        </div>
-      )}
+            {actionType === 'send_sms' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Message</label>
+                <textarea
+                  value={config.body ?? ''}
+                  onChange={e => onUpdate({ config: { ...config, body: e.target.value } })}
+                  placeholder="SMS message... Use {{contact.first_name}} for merge fields"
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                />
+              </div>
+            )}
 
-      {(actionType === 'add_tag' || actionType === 'remove_tag') && (
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Tag Name</label>
-          <input
-            type="text"
-            value={config.tagName ?? ''}
-            onChange={e => onUpdate({ config: { ...config, tagName: e.target.value, tagId: e.target.value } })}
-            placeholder="Enter tag name..."
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          />
-        </div>
-      )}
+            {(actionType === 'add_tag' || actionType === 'remove_tag') && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Tag Name</label>
+                <input
+                  type="text"
+                  value={config.tagName ?? ''}
+                  onChange={e => onUpdate({ config: { ...config, tagName: e.target.value, tagId: e.target.value } })}
+                  placeholder="Enter tag name..."
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+            )}
 
-      {actionType === 'webhook' && (
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">URL</label>
-            <input
-              type="url"
-              value={config.url ?? ''}
-              onChange={e => onUpdate({ config: { ...config, url: e.target.value } })}
-              placeholder="https://..."
-              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Payload (JSON)</label>
-            <textarea
-              value={config.payload ? JSON.stringify(config.payload, null, 2) : ''}
-              onChange={e => {
-                try {
-                  const parsed = JSON.parse(e.target.value);
-                  onUpdate({ config: { ...config, payload: parsed } });
-                } catch {}
-              }}
-              placeholder='{"key": "value"}'
-              rows={4}
-              className="w-full px-3 py-2 text-sm font-mono border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
-            />
-          </div>
-        </div>
-      )}
+            {actionType === 'webhook' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">URL</label>
+                  <input
+                    type="url"
+                    value={config.url ?? ''}
+                    onChange={e => onUpdate({ config: { ...config, url: e.target.value } })}
+                    placeholder="https://..."
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Payload (JSON)</label>
+                  <textarea
+                    value={config.payload ? JSON.stringify(config.payload, null, 2) : ''}
+                    onChange={e => {
+                      try {
+                        const parsed = JSON.parse(e.target.value);
+                        onUpdate({ config: { ...config, payload: parsed } });
+                      } catch {}
+                    }}
+                    placeholder='{"key": "value"}'
+                    rows={4}
+                    className="w-full px-3 py-2 text-sm font-mono border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                  />
+                </div>
+              </div>
+            )}
 
-      {actionType === 'notify_user' && (
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Notification Message</label>
-          <textarea
-            value={config.message ?? ''}
-            onChange={e => onUpdate({ config: { ...config, message: e.target.value } })}
-            placeholder="Notification message..."
-            rows={3}
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
-          />
-        </div>
-      )}
+            {actionType === 'notify_user' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Notification Message</label>
+                <textarea
+                  value={config.message ?? ''}
+                  onChange={e => onUpdate({ config: { ...config, message: e.target.value } })}
+                  placeholder="Notification message..."
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+                />
+              </div>
+            )}
 
-      {actionType === 'trigger_another_workflow' && (
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Target Workflow ID</label>
-          <input
-            type="text"
-            value={config.workflowId ?? ''}
-            onChange={e => onUpdate({ config: { ...config, workflowId: e.target.value } })}
-            placeholder="Enter workflow ID..."
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          />
-        </div>
-      )}
+            {actionType === 'trigger_another_workflow' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Target Workflow ID</label>
+                <input
+                  type="text"
+                  value={config.workflowId ?? ''}
+                  onChange={e => onUpdate({ config: { ...config, workflowId: e.target.value } })}
+                  placeholder="Enter workflow ID..."
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+            )}
+          </>
+        )
+      }
     </div>
   );
 }
