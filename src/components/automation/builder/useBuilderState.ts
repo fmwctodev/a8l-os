@@ -189,20 +189,21 @@ export function useBuilderState(initialDefinition?: WorkflowDefinition) {
 
   const addTrigger = useCallback((triggerType: string) => {
     const id = `trigger_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const endId = `end_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const triggers = typedNodes.filter(n => n.data.nodeType === 'trigger');
+
+    const triggerX = triggers.length > 0 ? triggers[triggers.length - 1].position.x + 300 : 200;
+    const triggerY = 40;
 
     const triggerData: TriggerNodeData = {
       triggerType: triggerType as any,
       triggerCategory: 'event',
     };
 
-    const newNode: BuilderNode = {
+    const newTriggerNode: BuilderNode = {
       id,
       type: 'trigger',
-      position: {
-        x: triggers.length > 0 ? triggers[triggers.length - 1].position.x + 300 : 200,
-        y: 40,
-      },
+      position: { x: triggerX, y: triggerY },
       data: {
         nodeType: 'trigger',
         nodeData: triggerData,
@@ -212,12 +213,34 @@ export function useBuilderState(initialDefinition?: WorkflowDefinition) {
       },
     };
 
-    setNodes((nds) => [...nds, newNode as Node] as typeof nds);
+    const newEndNode: BuilderNode = {
+      id: endId,
+      type: 'end',
+      position: { x: triggerX, y: triggerY + 140 },
+      data: {
+        nodeType: 'end',
+        nodeData: {},
+        label: 'End',
+        isValid: true,
+        validationErrors: [],
+      },
+    };
+
+    const newEdge: BuilderEdge = {
+      id: `edge_${Date.now()}_trigger_end`,
+      source: id,
+      target: endId,
+      type: 'insertable',
+      data: { insertable: true },
+    };
+
+    setNodes((nds) => [...nds, newTriggerNode as Node, newEndNode as Node] as typeof nds);
+    setEdges((eds) => [...eds, newEdge as typeof eds[0]] as typeof eds);
     markChanged();
 
     setDrawerMode({ type: 'node-config', nodeId: id });
     return id;
-  }, [typedNodes, setNodes, markChanged]);
+  }, [typedNodes, setNodes, setEdges, markChanged]);
 
   const updateNodeData = useCallback((nodeId: string, updater: (data: BuilderNodeData) => BuilderNodeData) => {
     setNodes((nds) =>
