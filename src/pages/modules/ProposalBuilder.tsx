@@ -70,6 +70,7 @@ export function ProposalBuilder() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [driveConnected, setDriveConnected] = useState<boolean | null>(null);
+  const [driveTokenExpired, setDriveTokenExpired] = useState(false);
   const [loadingRecordings, setLoadingRecordings] = useState(false);
   const [syncingRecordings, setSyncingRecordings] = useState(false);
   const [syncResult, setSyncResult] = useState<{ imported: number; skipped: number } | null>(null);
@@ -100,7 +101,7 @@ export function ProposalBuilder() {
       }
 
       if (proposalData?.org_id) {
-        await loadGoogleMeetRecordings(proposalData.org_id, undefined, true);
+        await loadGoogleMeetRecordings(proposalData.org_id, undefined, true, user?.id);
       }
     } catch (err) {
       console.error('Failed to load data:', err);
@@ -109,21 +110,22 @@ export function ProposalBuilder() {
     }
   };
 
-  const loadGoogleMeetRecordings = async (orgId: string, search?: string, autoEnrich = false) => {
+  const loadGoogleMeetRecordings = async (orgId: string, search?: string, autoEnrich = false, userId?: string) => {
     try {
       setLoadingRecordings(true);
       const [status, recordings] = await Promise.all([
-        checkDriveConnectionStatus(orgId),
-        getGoogleMeetRecordingsForOrg(orgId, search),
+        checkDriveConnectionStatus(orgId, userId),
+        getGoogleMeetRecordingsForOrg(orgId, search, userId),
       ]);
       setDriveConnected(status.connected);
+      setDriveTokenExpired(status.tokenExpired);
       setGoogleMeetRecordings(recordings);
 
       if (autoEnrich && status.connected && recordings.some(r => !r.processed_at)) {
         setEnrichingRecordings(true);
         try {
           await enrichAllUnprocessedRecordings(orgId);
-          const refreshed = await getGoogleMeetRecordingsForOrg(orgId, search);
+          const refreshed = await getGoogleMeetRecordingsForOrg(orgId, search, userId);
           setGoogleMeetRecordings(refreshed);
         } catch {
           // enrichment is best-effort
@@ -134,6 +136,7 @@ export function ProposalBuilder() {
     } catch (err) {
       console.error('Failed to load Google Meet recordings:', err);
       setDriveConnected(false);
+      setDriveTokenExpired(false);
       setGoogleMeetRecordings([]);
     } finally {
       setLoadingRecordings(false);
@@ -148,12 +151,12 @@ export function ProposalBuilder() {
       setSyncError(null);
       const result = await syncMeetRecordings(proposal.org_id, user.id);
       setSyncResult(result);
-      await loadGoogleMeetRecordings(proposal.org_id, recordingSearch);
+      await loadGoogleMeetRecordings(proposal.org_id, recordingSearch, false, user.id);
 
       setEnrichingRecordings(true);
       try {
         await enrichAllUnprocessedRecordings(proposal.org_id);
-        await loadGoogleMeetRecordings(proposal.org_id, recordingSearch);
+        await loadGoogleMeetRecordings(proposal.org_id, recordingSearch, false, user.id);
       } catch {
         // enrichment is best-effort
       } finally {
@@ -171,7 +174,7 @@ export function ProposalBuilder() {
     try {
       await enrichMeetingRecording(meetingId);
       if (proposal?.org_id) {
-        await loadGoogleMeetRecordings(proposal.org_id, recordingSearch);
+        await loadGoogleMeetRecordings(proposal.org_id, recordingSearch, false, user?.id);
       }
     } catch {
       // enrichment is best-effort
@@ -184,7 +187,7 @@ export function ProposalBuilder() {
     (value: string) => {
       setRecordingSearch(value);
       if (proposal?.org_id) {
-        loadGoogleMeetRecordings(proposal.org_id, value);
+        loadGoogleMeetRecordings(proposal.org_id, value, false, user?.id);
       }
     },
     [proposal?.org_id]
@@ -570,10 +573,14 @@ export function ProposalBuilder() {
                       <span className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium ${
                         driveConnected
                           ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
+                          : driveTokenExpired
+                          ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
                           : 'bg-slate-700 text-slate-400 border border-slate-600'
                       }`}>
                         {driveConnected ? (
                           <><Wifi className="w-3 h-3" /> Connected</>
+                        ) : driveTokenExpired ? (
+                          <><AlertCircle className="w-3 h-3" /> Session expired</>
                         ) : (
                           <><WifiOff className="w-3 h-3" /> Not connected</>
                         )}
@@ -614,21 +621,48 @@ export function ProposalBuilder() {
                 )}
 
                   {!driveConnected && driveConnected !== null && filteredGoogleMeetRecordings.length === 0 && (
-                  <div className="rounded-xl border border-slate-700 bg-slate-800/40 p-6 text-center">
-                    <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-slate-700/60 flex items-center justify-center">
-                      <WifiOff className="w-6 h-6 text-slate-400" />
+                  <div className={`rounded-xl border p-6 text-center ${
+                    driveTokenExpired
+                      ? 'border-amber-500/25 bg-amber-500/5'
+                      : 'border-slate-700 bg-slate-800/40'
+                  }`}>
+                    <div className={`w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center ${
+                      driveTokenExpired ? 'bg-amber-500/15' : 'bg-slate-700/60'
+                    }`}>
+                      {driveTokenExpired
+                        ? <AlertCircle className="w-6 h-6 text-amber-400" />
+                        : <WifiOff className="w-6 h-6 text-slate-400" />
+                      }
                     </div>
-                    <p className="text-white font-medium mb-1">Google Drive Not Connected</p>
-                    <p className="text-slate-400 text-sm mb-4">
-                      Connect Google Drive to sync new Meet recordings, summaries, and action items.
-                    </p>
-                    <Link
-                      to="/settings/integrations"
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg transition-colors"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      Connect in Integrations
-                    </Link>
+                    {driveTokenExpired ? (
+                      <>
+                        <p className="text-white font-medium mb-1">Google Session Expired</p>
+                        <p className="text-slate-400 text-sm mb-4">
+                          Your Google Workspace session has expired. Reconnect to restore access to Meet recordings, summaries, and action items.
+                        </p>
+                        <Link
+                          to="/settings/profile?tab=connected-accounts"
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm rounded-lg transition-colors"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          Reconnect Google Workspace
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-white font-medium mb-1">Google Drive Not Connected</p>
+                        <p className="text-slate-400 text-sm mb-4">
+                          Connect Google Drive to sync Meet recordings, summaries, and action items.
+                        </p>
+                        <Link
+                          to="/settings/profile?tab=connected-accounts"
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg transition-colors"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          Connect Google Workspace
+                        </Link>
+                      </>
+                    )}
                   </div>
                 )}
 

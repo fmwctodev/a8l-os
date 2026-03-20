@@ -162,19 +162,25 @@ export async function getRecordingDriveLink(
   return details?.driveUrl || null;
 }
 
-export async function checkDriveConnectionStatus(orgId: string): Promise<{
+export async function checkDriveConnectionStatus(orgId: string, userId?: string): Promise<{
   connected: boolean;
+  tokenExpired: boolean;
   hasRecordingsAccess: boolean;
   email?: string;
 }> {
-  const { data, error } = await supabase
+  let query = supabase
     .from('drive_connections')
     .select('email, is_active, token_expiry, scopes')
-    .eq('organization_id', orgId)
-    .maybeSingle();
+    .eq('organization_id', orgId);
+
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
+
+  const { data, error } = await query.maybeSingle();
 
   if (error || !data) {
-    return { connected: false, hasRecordingsAccess: false };
+    return { connected: false, tokenExpired: false, hasRecordingsAccess: false };
   }
 
   const tokenExpiry = new Date(data.token_expiry);
@@ -185,6 +191,7 @@ export async function checkDriveConnectionStatus(orgId: string): Promise<{
 
   return {
     connected: data.is_active && isTokenValid,
+    tokenExpired: data.is_active && !isTokenValid,
     hasRecordingsAccess,
     email: data.email,
   };

@@ -13,6 +13,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+const MAX_FAIL_COUNT = 5;
+
 function getServiceClient() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -33,8 +35,9 @@ Deno.serve(async (req: Request) => {
 
     const { data: staleRows, error: fetchError } = await supabase
       .from("google_oauth_master")
-      .select("id, org_id, user_id, email, granted_scopes, token_expiry, encrypted_refresh_token")
+      .select("id, org_id, user_id, email, granted_scopes, token_expiry, encrypted_refresh_token, refresh_fail_count")
       .lt("token_expiry", new Date(Date.now() + 10 * 60 * 1000).toISOString())
+      .lt("refresh_fail_count", MAX_FAIL_COUNT)
       .order("token_expiry", { ascending: true })
       .limit(MAX_BATCH);
 
@@ -69,15 +72,33 @@ Deno.serve(async (req: Request) => {
 
         const resolved = await resolveRefreshToken(supabase, row.user_id, row.org_id);
         if (!resolved) {
-          errors.push(`No refresh token for user ${row.user_id}`);
+          const msg = `No refresh token for user ${row.user_id}`;
+          errors.push(msg);
           failed++;
+          await supabase
+            .from("google_oauth_master")
+            .update({
+              refresh_fail_count: (row.refresh_fail_count || 0) + 1,
+              refresh_failed_at: new Date().toISOString(),
+            })
+            .eq("id", row.id);
+          console.warn(`[TokenRefreshCron] ${msg}`);
           continue;
         }
 
         const result = await refreshAccessToken(resolved.refreshToken);
         if (!result) {
-          errors.push(`Google rejected refresh for user ${row.user_id}`);
+          const msg = `Google rejected refresh for user ${row.user_id}`;
+          errors.push(msg);
           failed++;
+          await supabase
+            .from("google_oauth_master")
+            .update({
+              refresh_fail_count: (row.refresh_fail_count || 0) + 1,
+              refresh_failed_at: new Date().toISOString(),
+            })
+            .eq("id", row.id);
+          console.warn(`[TokenRefreshCron] ${msg}`);
           continue;
         }
 
@@ -88,12 +109,25 @@ Deno.serve(async (req: Request) => {
         await writeMasterToken(supabase, row.org_id, row.user_id, row.email, result.access_token, newRefreshToken, newExpiry, scopes);
         await crossPopulateServiceTables(supabase, row.org_id, row.user_id, row.email, result.access_token, newRefreshToken, newExpiry, scopes);
 
+        await supabase
+          .from("google_oauth_master")
+          .update({ refresh_fail_count: 0, refresh_failed_at: null })
+          .eq("id", row.id);
+
         refreshed++;
         console.log(`[TokenRefreshCron] Refreshed token for user ${row.user_id}`);
       } catch (err) {
         const msg = (err as Error).message || String(err);
         errors.push(`User ${row.user_id}: ${msg}`);
         failed++;
+        await supabase
+          .from("google_oauth_master")
+          .update({
+            refresh_fail_count: (row.refresh_fail_count || 0) + 1,
+            refresh_failed_at: new Date().toISOString(),
+          })
+          .eq("id", row.id)
+          .catch(() => {});
         console.error(`[TokenRefreshCron] Failed for user ${row.user_id}:`, msg);
       }
     }

@@ -107,7 +107,8 @@ export async function getMeetingTranscriptionsByContact(contactId: string): Prom
 
 export async function getGoogleMeetRecordingsForOrg(
   orgId: string,
-  search?: string
+  search?: string,
+  userId?: string
 ): Promise<MeetingTranscription[]> {
   let query = supabase
     .from('meeting_transcriptions')
@@ -116,6 +117,10 @@ export async function getGoogleMeetRecordingsForOrg(
     .eq('meeting_source', 'google_meet')
     .order('meeting_date', { ascending: false })
     .limit(100);
+
+  if (userId) {
+    query = query.eq('imported_by', userId);
+  }
 
   if (search) {
     query = query.ilike('meeting_title', `%${search}%`);
