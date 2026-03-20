@@ -1,74 +1,102 @@
-export const CLARA_MODEL = "gpt-5.1";
+export const CLARA_MODEL = "claude-sonnet-4-20250514";
+export const CLARA_MODEL_HEAVY = "claude-opus-4-20250514";
 export const CLARA_TEMPERATURE = 0.2;
 export const CLARA_MAX_TOKENS = 4096;
+export const ANTHROPIC_API_VERSION = "2023-06-01";
 
-if (CLARA_MODEL !== "gpt-5.1") {
-  throw new Error("Clara model mismatch. Must use gpt-5.1.");
+export function getAnthropicMessagesUrl(): string {
+  return "https://api.anthropic.com/v1/messages";
 }
 
-export function getResponsesApiUrl(baseUrl?: string): string {
-  return baseUrl
-    ? `${baseUrl}/v1/responses`
-    : "https://api.openai.com/v1/responses";
-}
-
-export interface ResponsesApiInput {
-  role: "system" | "user" | "assistant" | "developer";
+export interface AnthropicMessage {
+  role: "user" | "assistant";
   content: string;
 }
 
-export interface ResponsesApiRequest {
+export interface AnthropicRequest {
   model: string;
-  input: ResponsesApiInput[];
-  temperature: number;
-  max_output_tokens: number;
-  text?: { format?: { type: string } };
-  tools?: unknown[];
-  tool_choice?: string;
+  max_tokens: number;
+  temperature?: number;
+  system?: string;
+  messages: AnthropicMessage[];
+  tools?: AnthropicTool[];
+  tool_choice?: { type: string; name?: string };
+  stream?: boolean;
 }
 
-export interface ResponsesApiOutput {
-  type: string;
-  content?: Array<{ type: string; text?: string }>;
-  name?: string;
-  arguments?: string;
-  call_id?: string;
+export interface AnthropicTool {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+}
+
+export interface AnthropicContentBlock {
+  type: "text" | "tool_use";
+  text?: string;
   id?: string;
+  name?: string;
+  input?: Record<string, unknown>;
 }
 
-export interface ResponsesApiResponse {
+export interface AnthropicResponse {
   id: string;
-  output: ResponsesApiOutput[];
+  type: string;
+  role: string;
+  content: AnthropicContentBlock[];
   model: string;
+  stop_reason: string | null;
   usage?: { input_tokens: number; output_tokens: number };
 }
 
-export function extractTextFromResponse(response: ResponsesApiResponse): string {
-  for (const item of response.output) {
-    if (item.type === "message" && item.content) {
-      for (const block of item.content) {
-        if (block.type === "output_text" && block.text) {
-          return block.text;
-        }
-      }
+export function extractTextFromResponse(response: AnthropicResponse): string {
+  for (const block of response.content) {
+    if (block.type === "text" && block.text) {
+      return block.text;
     }
   }
   return "";
 }
 
 export function extractToolCallsFromResponse(
-  response: ResponsesApiResponse
-): Array<{ id: string; name: string; arguments: string; call_id: string }> {
-  const calls: Array<{ id: string; name: string; arguments: string; call_id: string }> = [];
-  for (const item of response.output) {
-    if (item.type === "function_call" && item.name && item.arguments) {
+  response: AnthropicResponse
+): Array<{ id: string; name: string; arguments: string }> {
+  const calls: Array<{ id: string; name: string; arguments: string }> = [];
+  for (const block of response.content) {
+    if (block.type === "tool_use" && block.name && block.id) {
       calls.push({
-        id: item.id || crypto.randomUUID(),
-        name: item.name,
-        arguments: item.arguments,
-        call_id: item.call_id || item.id || crypto.randomUUID(),
+        id: block.id,
+        name: block.name,
+        arguments: JSON.stringify(block.input || {}),
       });
     }
   }
   return calls;
+}
+
+export function buildAnthropicHeaders(apiKey: string): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    "x-api-key": apiKey,
+    "anthropic-version": ANTHROPIC_API_VERSION,
+  };
+}
+
+export function convertToAnthropicMessages(
+  messages: Array<{ role: string; content: string }>
+): { system: string | undefined; messages: AnthropicMessage[] } {
+  let system: string | undefined;
+  const anthropicMessages: AnthropicMessage[] = [];
+
+  for (const m of messages) {
+    if (m.role === "system" || m.role === "developer") {
+      system = system ? `${system}\n\n${m.content}` : m.content;
+    } else {
+      anthropicMessages.push({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: m.content,
+      });
+    }
+  }
+
+  return { system, messages: anthropicMessages };
 }

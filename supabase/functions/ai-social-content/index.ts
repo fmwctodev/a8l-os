@@ -146,9 +146,9 @@ Deno.serve(async (req: Request) => {
     if (dbProvider?.api_key_encrypted) {
       providerConfig = dbProvider;
     } else {
-      const envKey = Deno.env.get("OPENAI_API_KEY");
+      const envKey = Deno.env.get("ANTHROPIC_API_KEY");
       if (envKey) {
-        providerConfig = { provider: "openai", api_key_encrypted: envKey };
+        providerConfig = { provider: "anthropic", api_key_encrypted: envKey };
       }
     }
 
@@ -512,28 +512,29 @@ async function callLLM(
 ): Promise<string> {
   const apiKey = providerConfig.api_key_encrypted;
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`,
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "gpt-5.1",
+      model: "claude-sonnet-4-20250514",
+      system: systemPrompt,
       messages: [
-        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       temperature: 0.7,
-      max_completion_tokens: 2000,
+      max_tokens: 2000,
     }),
   });
 
   if (response.ok) {
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || "";
+    return data.content?.[0]?.text || "";
   }
-  throw new Error("OpenAI API request failed");
+  throw new Error("Anthropic API request failed");
 }
 
 function buildQuickSuggestionPrompt(

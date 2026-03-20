@@ -2,8 +2,10 @@ import {
   CLARA_MODEL,
   CLARA_TEMPERATURE,
   extractTextFromResponse,
-  type ResponsesApiInput,
-  type ResponsesApiResponse,
+  getAnthropicMessagesUrl,
+  buildAnthropicHeaders,
+  convertToAnthropicMessages,
+  type AnthropicResponse,
 } from "./claraConfig.ts";
 
 const MAX_OUTPUT_TOKENS = 2000;
@@ -14,42 +16,34 @@ export interface TextCompletionResult {
 }
 
 export async function generateText(
-  apiUrl: string,
+  _apiUrl: string,
   apiKey: string,
   messages: Array<{ role: string; content: string }>
 ): Promise<TextCompletionResult> {
-  const url = apiUrl.replace(/\/v1\/chat\/completions\/?$/, "/v1/responses");
-
-  console.log("Clara using model:", CLARA_MODEL);
-
-  const input: ResponsesApiInput[] = messages.map((m) => ({
-    role: (m.role === "system" ? "developer" : m.role === "assistant" ? "assistant" : "user") as ResponsesApiInput["role"],
-    content: m.content,
-  }));
+  const url = getAnthropicMessagesUrl();
+  const { system, messages: anthropicMessages } = convertToAnthropicMessages(messages);
 
   const response = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: buildAnthropicHeaders(apiKey),
     body: JSON.stringify({
       model: CLARA_MODEL,
-      input,
+      max_tokens: MAX_OUTPUT_TOKENS,
       temperature: CLARA_TEMPERATURE,
-      max_output_tokens: MAX_OUTPUT_TOKENS,
+      ...(system ? { system } : {}),
+      messages: anthropicMessages,
     }),
   });
 
   if (!response.ok) {
     const errText = await response.text();
-    console.error("[openaiTextClient] OpenAI error:", response.status, errText);
+    console.error("[anthropicTextClient] Anthropic error:", response.status, errText);
     throw new Error(
-      `AI generation failed (OpenAI ${response.status}): ${errText.slice(0, 200)}`
+      `AI generation failed (Anthropic ${response.status}): ${errText.slice(0, 200)}`
     );
   }
 
-  const data = await response.json() as ResponsesApiResponse;
+  const data = await response.json() as AnthropicResponse;
   return {
     content: extractTextFromResponse(data),
     model: CLARA_MODEL,

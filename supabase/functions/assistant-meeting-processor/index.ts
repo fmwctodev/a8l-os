@@ -4,10 +4,10 @@ import {
   CLARA_MODEL,
   CLARA_TEMPERATURE,
   CLARA_MAX_TOKENS,
-  getResponsesApiUrl,
+  getAnthropicMessagesUrl,
   extractTextFromResponse,
-  type ResponsesApiInput,
-  type ResponsesApiResponse,
+  buildAnthropicHeaders,
+  type AnthropicResponse,
 } from "../_shared/claraConfig.ts";
 
 const corsHeaders = {
@@ -134,10 +134,9 @@ Only return valid JSON, no markdown.`;
 });
 
 interface LLMConfig {
-  provider: "openai";
+  provider: "anthropic";
   model: string;
   apiKey: string;
-  baseUrl?: string;
 }
 
 async function resolveLLMConfig(
@@ -153,20 +152,19 @@ async function resolveLLMConfig(
 
   if (providers && providers.length > 0) {
     for (const p of providers) {
-      if (p.provider === "openai" && p.api_key_encrypted) {
+      if (p.provider === "anthropic" && p.api_key_encrypted) {
         return {
-          provider: "openai",
+          provider: "anthropic",
           model: CLARA_MODEL,
           apiKey: p.api_key_encrypted,
-          baseUrl: p.base_url || undefined,
         };
       }
     }
   }
 
-  const openaiKey = Deno.env.get("OPENAI_API_KEY");
-  if (openaiKey) {
-    return { provider: "openai", model: CLARA_MODEL, apiKey: openaiKey };
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (anthropicKey) {
+    return { provider: "anthropic", model: CLARA_MODEL, apiKey: anthropicKey };
   }
 
   throw new Error("No LLM provider configured");
@@ -177,31 +175,24 @@ async function callLLM(
   systemPrompt: string,
   transcript: string
 ): Promise<string> {
-  const url = getResponsesApiUrl(config.baseUrl);
+  const url = getAnthropicMessagesUrl();
 
   console.log("Clara using model:", CLARA_MODEL);
 
-  const input: ResponsesApiInput[] = [
-    { role: "developer", content: systemPrompt },
-    { role: "user", content: transcript.slice(0, 100000) },
-  ];
-
   const res = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
-    },
+    headers: buildAnthropicHeaders(config.apiKey),
     body: JSON.stringify({
       model: CLARA_MODEL,
-      input,
+      system: systemPrompt,
+      messages: [{ role: "user", content: transcript.slice(0, 100000) }],
       temperature: CLARA_TEMPERATURE,
-      max_output_tokens: CLARA_MAX_TOKENS,
+      max_tokens: CLARA_MAX_TOKENS,
     }),
   });
 
-  if (!res.ok) throw new Error(`OpenAI error: ${res.status}`);
-  const data = await res.json() as ResponsesApiResponse;
+  if (!res.ok) throw new Error(`Anthropic error: ${res.status}`);
+  const data = await res.json() as AnthropicResponse;
   return extractTextFromResponse(data);
 }
 

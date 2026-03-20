@@ -104,6 +104,8 @@ async function testProviderConnection(provider: Provider): Promise<{ success: bo
     switch (providerType) {
       case "openai":
         return await testOpenAI(apiKey, baseUrl);
+      case "anthropic":
+        return await testAnthropic(apiKey);
       case "google":
         return await testGoogle(apiKey);
       default:
@@ -124,6 +126,27 @@ async function testOpenAI(apiKey: string, baseUrl: string | null): Promise<{ suc
     method: "GET",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    return {
+      success: false,
+      error: errorData.error?.message || `API returned status ${response.status}`,
+    };
+  }
+
+  return { success: true };
+}
+
+async function testAnthropic(apiKey: string): Promise<{ success: boolean; error?: string }> {
+  const response = await fetch("https://api.anthropic.com/v1/models", {
+    method: "GET",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
       "Content-Type": "application/json",
     },
   });

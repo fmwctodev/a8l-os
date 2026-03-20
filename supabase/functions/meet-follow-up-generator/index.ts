@@ -4,7 +4,9 @@ import {
   CLARA_MODEL,
   CLARA_TEMPERATURE,
   extractTextFromResponse,
-  type ResponsesApiResponse,
+  getAnthropicMessagesUrl,
+  buildAnthropicHeaders,
+  type AnthropicResponse,
 } from "../_shared/claraConfig.ts";
 
 const corsHeaders = {
@@ -213,13 +215,13 @@ Deno.serve(async (req: Request) => {
     const contactName = [contact.first_name, contact.last_name].filter(Boolean).join(" ") || "there";
     const actionItems = (meeting.action_items || []) as { description: string; assignee?: string; due_date?: string }[];
     const keyPoints = (meeting.key_points || []) as string[];
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
 
     let aiDraftContent = "";
     let aiDraftSubject: string | null = null;
 
     if (channel === "sms") {
-      if (openaiKey) {
+      if (anthropicKey) {
         const prompt = buildSmsPrompt(
           contactName,
           meeting.meeting_title,
@@ -230,22 +232,19 @@ Deno.serve(async (req: Request) => {
 
         console.log("Clara using model:", CLARA_MODEL);
 
-        const response = await fetch("https://api.openai.com/v1/responses", {
+        const response = await fetch(getAnthropicMessagesUrl(), {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${openaiKey}`,
-          },
+          headers: buildAnthropicHeaders(anthropicKey),
           body: JSON.stringify({
             model: CLARA_MODEL,
-            max_output_tokens: 256,
+            max_tokens: 256,
             temperature: CLARA_TEMPERATURE,
-            input: [{ role: "user", content: prompt }],
+            messages: [{ role: "user", content: prompt }],
           }),
         });
 
         if (response.ok) {
-          const result = await response.json() as ResponsesApiResponse;
+          const result = await response.json() as AnthropicResponse;
           aiDraftContent = extractTextFromResponse(result).trim();
         }
       }
@@ -254,7 +253,7 @@ Deno.serve(async (req: Request) => {
         aiDraftContent = generateMockSms(contactName, meeting.meeting_title);
       }
     } else {
-      if (openaiKey) {
+      if (anthropicKey) {
         const prompt = buildEmailPrompt(
           contactName,
           meeting.meeting_title,
@@ -272,22 +271,19 @@ Deno.serve(async (req: Request) => {
 
         console.log("Clara using model:", CLARA_MODEL);
 
-        const response = await fetch("https://api.openai.com/v1/responses", {
+        const response = await fetch(getAnthropicMessagesUrl(), {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${openaiKey}`,
-          },
+          headers: buildAnthropicHeaders(anthropicKey),
           body: JSON.stringify({
             model: CLARA_MODEL,
-            max_output_tokens: 1024,
+            max_tokens: 1024,
             temperature: CLARA_TEMPERATURE,
-            input: [{ role: "user", content: prompt }],
+            messages: [{ role: "user", content: prompt }],
           }),
         });
 
         if (response.ok) {
-          const result = await response.json() as ResponsesApiResponse;
+          const result = await response.json() as AnthropicResponse;
           const fullText = extractTextFromResponse(result).trim();
           const subjectMatch = fullText.match(/^Subject:\s*(.+)/im);
           if (subjectMatch) {

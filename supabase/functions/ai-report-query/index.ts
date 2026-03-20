@@ -1,5 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  CLARA_MODEL_HEAVY,
+  buildAnthropicHeaders,
+  type AnthropicResponse,
+} from "../_shared/claraConfig.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -229,7 +234,9 @@ Choose chart_type based on:
 - "table" for raw data listings
 - "bar" for comparing categories
 - "line" for time series data
-- "pie" for showing proportions of a whole`;
+- "pie" for showing proportions of a whole
+
+You MUST respond with valid JSON only. Do not include any text outside the JSON object.`;
 }
 
 function buildUserPrompt(
@@ -275,31 +282,30 @@ async function callLLM(
   let response: Response;
   let tokensUsed = 0;
 
-  response = await fetch("https://api.openai.com/v1/chat/completions", {
+  response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      ...buildAnthropicHeaders(apiKey),
     },
     body: JSON.stringify({
-      model,
+      model: CLARA_MODEL_HEAVY,
+      system: systemPrompt,
       messages: [
-        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       temperature: 0.1,
-      response_format: { type: "json_object" },
+      max_tokens: 4096,
     }),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+    throw new Error(`Anthropic API error: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json();
-  tokensUsed = data.usage?.total_tokens || 0;
-  const content = data.choices[0].message.content;
+  tokensUsed = (data as AnthropicResponse).usage ? ((data as AnthropicResponse).usage!.input_tokens + (data as AnthropicResponse).usage!.output_tokens) : 0;
+  const content = (data as AnthropicResponse).content.find((b) => b.type === "text")?.text || "";
   return { plan: JSON.parse(content), tokensUsed };
 }
 
@@ -444,17 +450,17 @@ Return JSON:
   let response: Response;
   let tokensUsed = 0;
 
-  response = await fetch("https://api.openai.com/v1/chat/completions", {
+  response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      ...buildAnthropicHeaders(apiKey),
     },
     body: JSON.stringify({
-      model,
+      system: "You are a data analytics assistant. Analyze query results and provide natural language answers. You MUST respond with valid JSON only.",
       messages: [{ role: "user", content: prompt }],
+      model: CLARA_MODEL_HEAVY,
+      max_tokens: 2048,
       temperature: 0.3,
-      response_format: { type: "json_object" },
     }),
   });
 
@@ -463,8 +469,8 @@ Return JSON:
   }
 
   const data = await response.json();
-  tokensUsed = data.usage?.total_tokens || 0;
-  const content = data.choices[0].message.content;
+  tokensUsed = (data as AnthropicResponse).usage ? ((data as AnthropicResponse).usage!.input_tokens + (data as AnthropicResponse).usage!.output_tokens) : 0;
+  const content = (data as AnthropicResponse).content.find((b) => b.type === "text")?.text || "";
   const parsed = JSON.parse(content);
   return { answer: parsed.answer, insights: parsed.insights || [], tokensUsed };
 }

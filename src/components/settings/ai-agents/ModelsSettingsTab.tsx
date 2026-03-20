@@ -20,9 +20,15 @@ const PROVIDER_CONFIGS: Array<{
   docsUrl: string;
 }> = [
   {
+    id: 'anthropic',
+    name: 'Anthropic',
+    description: 'Claude Sonnet 4, Claude Opus 4, and other Claude models',
+    docsUrl: 'https://console.anthropic.com/settings/keys',
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
-    description: 'GPT-5.2 and other OpenAI models',
+    description: 'GPT models (used for embeddings and STT)',
     docsUrl: 'https://platform.openai.com/api-keys',
   },
   {

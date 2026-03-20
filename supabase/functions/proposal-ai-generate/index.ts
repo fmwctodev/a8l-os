@@ -1,5 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  CLARA_MODEL_HEAVY,
+  buildAnthropicHeaders,
+  type AnthropicResponse,
+} from "../_shared/claraConfig.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -459,6 +464,8 @@ Return a JSON array of sections, each with:
 - title: section heading
 - content: the section content in HTML format (use <p>, <h3>, <ul>, <li> tags)`;
 
+  prompt += `\n\nYou MUST respond with valid JSON only. Do not include any text outside the JSON array.`;
+
   return prompt;
 }
 
@@ -543,30 +550,30 @@ async function callLLM(
   let response: Response;
   let responseText: string;
 
-  response = await fetch("https://api.openai.com/v1/chat/completions", {
+  response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      ...buildAnthropicHeaders(apiKey),
     },
     body: JSON.stringify({
-      model,
+      model: CLARA_MODEL_HEAVY,
+      system: systemPrompt,
       messages: [
-        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       temperature: 0.7,
-      response_format: { type: "json_object" },
+      max_tokens: 8192,
     }),
   });
 
   if (!response.ok) {
     const errBody = await response.text();
-    throw new Error(`OpenAI API error ${response.status}: ${errBody}`);
+    throw new Error(`Anthropic API error ${response.status}: ${errBody}`);
   }
 
-  const data = await response.json();
-  responseText = data.choices[0].message.content;
+  const data = await response.json() as AnthropicResponse;
+  responseText = data.content.find((b) => b.type === "text")?.text || "";
 
   try {
     const parsed = JSON.parse(responseText);

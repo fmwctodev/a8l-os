@@ -1,6 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { getSupabaseClient, extractUserContext, requireAuth } from "../_shared/auth.ts";
 import { handleCors, jsonResponse, errorResponse } from "../_shared/cors.ts";
+import {
+  CLARA_MODEL_HEAVY,
+  buildAnthropicHeaders,
+  type AnthropicResponse,
+} from "../_shared/claraConfig.ts";
 
 interface RequestPayload {
   prompt: string;
@@ -253,7 +258,9 @@ You MUST output valid JSON in this exact format:
   "kpi_queries": [
     { "id": "kpi_id", "label": "KPI Label", "sql": "SELECT COUNT(*) as value FROM ...", "format": "number|currency|percentage" }
   ]
-}`;
+}
+
+You MUST respond with valid JSON only. Do not include any text outside the JSON object.`;
 }
 
 function buildComposeSystemPrompt(): string {
@@ -300,41 +307,41 @@ RULES:
 5. Recommendations should be actionable business advice
 6. Dashboard cards should be 2-4 key metrics suitable for a dashboard widget
 7. All numeric values should be actual numbers, not strings
-8. Format currency values as plain numbers (formatting happens on frontend)`;
+8. Format currency values as plain numbers (formatting happens on frontend)
+
+You MUST respond with valid JSON only. Do not include any text outside the JSON object.`;
 }
 
-async function callOpenAI(
+async function callAnthropic(
   apiKey: string,
-  model: string,
   systemPrompt: string,
   userPrompt: string
 ): Promise<{ content: string; tokensUsed: number }> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers: buildAnthropicHeaders(apiKey),
     body: JSON.stringify({
-      model,
+      model: CLARA_MODEL_HEAVY,
+      system: systemPrompt,
       messages: [
-        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       temperature: 0.15,
-      response_format: { type: "json_object" },
+      max_tokens: 8192,
     }),
   });
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`OpenAI API error ${response.status}: ${errText}`);
+    throw new Error(`Anthropic API error ${response.status}: ${errText}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as AnthropicResponse;
+  const content = data.content.find((b: { type: string }) => b.type === "text")?.text || "";
+  const tokensUsed = (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0);
   return {
-    content: data.choices[0].message.content,
-    tokensUsed: data.usage?.total_tokens || 0,
+    content,
+    tokensUsed,
   };
 }
 
@@ -509,9 +516,8 @@ Deno.serve(async (req: Request) => {
     const planSystemPrompt = buildPlanSystemPrompt(scope, timeRangeDates);
     const planUserPrompt = `Generate a report plan for this request: "${prompt}"${parentContext}`;
 
-    const { content: planContent, tokensUsed: planTokens } = await callOpenAI(
+    const { content: planContent, tokensUsed: planTokens } = await callAnthropic(
       llmProvider.api_key_encrypted,
-      defaultModel.model_key,
       planSystemPrompt,
       planUserPrompt
     );
@@ -577,9 +583,8 @@ ${Object.entries(queryResults).map(([id, rows]) => `\n--- ${id} (${(rows as unkn
 
 Compose the full report with all sections. Make sure chart data arrays match the chart type and contain actual data points from the results.`;
 
-    const { content: composeContent, tokensUsed: composeTokens } = await callOpenAI(
+    const { content: composeContent, tokensUsed: composeTokens } = await callAnthropic(
       llmProvider.api_key_encrypted,
-      defaultModel.model_key,
       composeSystemPrompt,
       composeUserPrompt
     );

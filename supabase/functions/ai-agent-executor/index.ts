@@ -1,12 +1,15 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
-  CLARA_MODEL,
+  CLARA_MODEL_HEAVY,
   CLARA_TEMPERATURE,
   extractTextFromResponse,
   extractToolCallsFromResponse,
-  type ResponsesApiInput,
-  type ResponsesApiResponse,
+  getAnthropicMessagesUrl,
+  buildAnthropicHeaders,
+  type AnthropicMessage,
+  type AnthropicTool,
+  type AnthropicResponse,
 } from "../_shared/claraConfig.ts";
 
 const corsHeaders = {
@@ -218,14 +221,14 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
+    const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY");
 
     if (!supabaseUrl || !serviceRoleKey) {
       throw new Error("Missing Supabase environment variables");
     }
 
-    if (!openaiApiKey) {
-      throw new Error("Missing OPENAI_API_KEY environment variable");
+    if (!anthropicApiKey) {
+      throw new Error("Missing ANTHROPIC_API_KEY environment variable");
     }
 
     const authHeader = req.headers.get("Authorization");
@@ -752,12 +755,11 @@ Deno.serve(async (req: Request) => {
       }
     };
 
-    const responsesTools = tools.length > 0
+    const anthropicTools: AnthropicTool[] | undefined = tools.length > 0
       ? tools.map((t) => ({
-          type: "function" as const,
           name: t.name,
           description: t.description,
-          parameters: t.input_schema,
+          input_schema: t.input_schema,
         }))
       : undefined;
 
@@ -769,54 +771,59 @@ Deno.serve(async (req: Request) => {
         throw new Error("Execution timeout exceeded");
       }
 
-      const input: Array<ResponsesApiInput | { type: string; call_id: string; output: string }> = [
-        { role: "developer" as const, content: agent.system_prompt },
-        ...llmMessages.map((m) => {
-          if ((m as { type?: string }).type === "function_call_output") {
-            return m as { type: string; call_id: string; output: string };
-          }
-          return {
-            role: (m.role === "assistant" ? "assistant" : "user") as ResponsesApiInput["role"],
-            content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
-          };
-        }),
-      ];
+      const anthropicMessages: Array<AnthropicMessage | { role: "user"; content: Array<{ type: "tool_result"; tool_use_id: string; content: string }> }> = [];
 
-      console.log("Clara using model:", CLARA_MODEL);
+      for (const m of llmMessages) {
+        if ((m as { type?: string }).type === "tool_result_message") {
+          anthropicMessages.push(m as { role: "user"; content: Array<{ type: "tool_result"; tool_use_id: string; content: string }> });
+        } else {
+          anthropicMessages.push({
+            role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
+            content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+          });
+        }
+      }
+
+      console.log("Clara using model:", CLARA_MODEL_HEAVY);
 
       const requestBody: Record<string, unknown> = {
-        model: CLARA_MODEL,
-        input,
-        max_output_tokens: agent.max_tokens || 1024,
+        model: CLARA_MODEL_HEAVY,
+        system: agent.system_prompt,
+        messages: anthropicMessages,
+        max_tokens: agent.max_tokens || 1024,
         temperature: CLARA_TEMPERATURE,
       };
 
-      if (responsesTools) {
-        requestBody.tools = responsesTools;
+      if (anthropicTools) {
+        requestBody.tools = anthropicTools;
       }
 
-      const openaiResponse = await fetch("https://api.openai.com/v1/responses", {
+      const anthropicResponse = await fetch(getAnthropicMessagesUrl(), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${openaiApiKey}`,
-        },
+        headers: buildAnthropicHeaders(anthropicApiKey),
         body: JSON.stringify(requestBody),
       });
 
-      if (!openaiResponse.ok) {
-        const errorBody = await openaiResponse.text();
-        throw new Error(`OpenAI API error: ${openaiResponse.status} - ${errorBody}`);
+      if (!anthropicResponse.ok) {
+        const errorBody = await anthropicResponse.text();
+        throw new Error(`Anthropic API error: ${anthropicResponse.status} - ${errorBody}`);
       }
 
-      const openaiData = await openaiResponse.json() as ResponsesApiResponse;
-      const functionCalls = extractToolCallsFromResponse(openaiData);
-      const textContent = extractTextFromResponse(openaiData);
+      const anthropicData = await anthropicResponse.json() as AnthropicResponse;
+      const functionCalls = extractToolCallsFromResponse(anthropicData);
+      const textContent = extractTextFromResponse(anthropicData);
 
       if (functionCalls.length === 0) {
         outputSummary = textContent;
         continueProcessing = false;
       } else {
+        llmMessages.push({
+          role: "assistant",
+          content: anthropicData.content,
+        } as unknown as Record<string, unknown>);
+
+        const toolResultContents: Array<{ type: "tool_result"; tool_use_id: string; content: string }> = [];
+
         for (const fc of functionCalls) {
           toolCallsCount++;
           const toolName = fc.name;
@@ -828,17 +835,23 @@ Deno.serve(async (req: Request) => {
           const result = await executeToolCall(toolName, toolInput);
           toolResults.push({ name: toolName, result });
 
-          llmMessages.push({
-            type: "function_call_output",
-            call_id: fc.call_id,
-            output: JSON.stringify(result),
-          } as unknown as { role: string; content: unknown });
+          toolResultContents.push({
+            type: "tool_result",
+            tool_use_id: fc.id,
+            content: JSON.stringify(result),
+          });
 
           if (!result.success) {
             continueProcessing = false;
             break;
           }
         }
+
+        llmMessages.push({
+          type: "tool_result_message",
+          role: "user",
+          content: toolResultContents,
+        } as unknown as Record<string, unknown>);
       }
     }
 

@@ -67,46 +67,44 @@ ${tone === "professional" ? "Maintain a formal, business-appropriate tone." : ""
 Respond with ONLY the reply text, no additional commentary or formatting.`;
 }
 
-async function generateWithOpenAI(
+async function generateWithAnthropic(
   prompt: string,
   apiKey: string
 ): Promise<{ reply: string; tokens: number; model: string }> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-5.1",
+      model: "claude-sonnet-4-20250514",
+      system: "You are an expert at writing professional, empathetic responses to customer reviews. Your replies are always helpful, specific, and match the requested tone.",
       messages: [
-        {
-          role: "system",
-          content: "You are an expert at writing professional, empathetic responses to customer reviews. Your replies are always helpful, specific, and match the requested tone.",
-        },
         { role: "user", content: prompt },
       ],
       temperature: 0.7,
-      max_completion_tokens: 500,
+      max_tokens: 500,
     }),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`OpenAI API error: ${response.status} - ${error}`);
+    throw new Error(`Anthropic API error: ${response.status} - ${error}`);
   }
 
   const data = await response.json();
-  const reply = data.choices[0]?.message?.content?.trim();
+  const reply = data.content[0]?.text?.trim();
 
   if (!reply) {
-    throw new Error("No content in OpenAI response");
+    throw new Error("No content in Anthropic response");
   }
 
   return {
     reply,
-    tokens: data.usage?.total_tokens || 0,
-    model: "gpt-5.1",
+    tokens: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0),
+    model: "claude-sonnet-4-20250514",
   };
 }
 
@@ -164,7 +162,7 @@ Deno.serve(async (req: Request) => {
       .single();
 
     const tone = overrideTone || settings?.response_tone || "professional";
-    const provider = overrideProvider || settings?.ai_provider || "openai";
+    const provider = overrideProvider || settings?.ai_provider || "anthropic";
     const prompt = buildReplyPrompt(
       review as Review,
       settings as ReputationSettings | null,
@@ -172,11 +170,11 @@ Deno.serve(async (req: Request) => {
       tone
     );
 
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
 
-    if (!openaiKey) {
+    if (!anthropicKey) {
       return new Response(
-        JSON.stringify({ error: "OpenAI API key not configured" }),
+        JSON.stringify({ error: "Anthropic API key not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -184,7 +182,7 @@ Deno.serve(async (req: Request) => {
     let result: { reply: string; tokens: number; model: string };
 
     try {
-      result = await generateWithOpenAI(prompt, openaiKey);
+      result = await generateWithAnthropic(prompt, anthropicKey);
     } catch (error) {
       return new Response(
         JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
@@ -195,7 +193,7 @@ Deno.serve(async (req: Request) => {
     await supabase.from("ai_usage_logs").insert({
       organization_id: review.organization_id,
       feature: "review_reply",
-      provider: "openai",
+      provider: "anthropic",
       model: result.model,
       tokens_used: result.tokens,
       metadata: {
@@ -209,7 +207,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         reply: result.reply,
-        provider: "openai",
+        provider: "anthropic",
         model: result.model,
         tokens: result.tokens,
       }),

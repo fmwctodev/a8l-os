@@ -53,7 +53,7 @@ Important guidelines:
 
 Respond ONLY with valid JSON, no additional text.`;
 
-async function analyzeWithOpenAI(
+async function analyzeWithAnthropic(
   review: Review,
   apiKey: string
 ): Promise<{ result: AIAnalysisResult; tokens: number; model: string }> {
@@ -62,47 +62,45 @@ async function analyzeWithOpenAI(
     .replace("{comment}", review.comment || "No text provided")
     .replace("{reviewer_name}", review.reviewer_name);
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-5.1",
+      model: "claude-sonnet-4-20250514",
+      system: "You are an expert at analyzing customer reviews. Always respond with valid JSON only.",
       messages: [
-        {
-          role: "system",
-          content: "You are an expert at analyzing customer reviews. Always respond with valid JSON only.",
-        },
         { role: "user", content: prompt },
       ],
       temperature: 0.3,
-      max_completion_tokens: 1000,
+      max_tokens: 1000,
     }),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`OpenAI API error: ${response.status} - ${error}`);
+    throw new Error(`Anthropic API error: ${response.status} - ${error}`);
   }
 
   const data = await response.json();
-  const content = data.choices[0]?.message?.content;
+  const content = data.content[0]?.text;
 
   if (!content) {
-    throw new Error("No content in OpenAI response");
+    throw new Error("No content in Anthropic response");
   }
 
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    throw new Error("Could not parse JSON from OpenAI response");
+    throw new Error("Could not parse JSON from Anthropic response");
   }
 
   const result = JSON.parse(jsonMatch[0]) as AIAnalysisResult;
-  const tokens = data.usage?.total_tokens || 0;
+  const tokens = (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0);
 
-  return { result, tokens, model: "gpt-5.1" };
+  return { result, tokens, model: "claude-sonnet-4-20250514" };
 }
 
 async function analyzeReview(
@@ -110,13 +108,13 @@ async function analyzeReview(
   _provider: "openai" | "anthropic" | "both",
   supabase: ReturnType<typeof createClient>
 ): Promise<{ success: boolean; analysis_id?: string; error?: string }> {
-  const openaiKey = Deno.env.get("OPENAI_API_KEY");
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
 
   let analysisResult: { result: AIAnalysisResult; tokens: number; model: string };
 
   try {
-    if (!openaiKey) throw new Error("OpenAI API key not configured");
-    analysisResult = await analyzeWithOpenAI(review, openaiKey);
+    if (!anthropicKey) throw new Error("Anthropic API key not configured");
+    analysisResult = await analyzeWithAnthropic(review, anthropicKey);
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -134,7 +132,7 @@ async function analyzeReview(
         summary: analysisResult!.result.summary,
         key_phrases: analysisResult!.result.key_phrases,
         suggested_reply: analysisResult!.result.suggested_reply,
-        ai_provider: "openai",
+        ai_provider: "anthropic",
         model_used: analysisResult!.model,
         tokens_used: analysisResult!.tokens,
         analyzed_at: new Date().toISOString(),

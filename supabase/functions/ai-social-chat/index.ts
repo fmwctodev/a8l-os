@@ -58,7 +58,7 @@ Deno.serve(async (req: Request) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
 
     const supabase = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -252,28 +252,28 @@ Only use multi_prompt when the user explicitly asks for multi-scene or multi-sho
       .select("provider, api_key_encrypted, base_url")
       .eq("org_id", orgId)
       .eq("enabled", true)
-      .in("provider", ["openai"])
+      .in("provider", ["anthropic"])
       .order("created_at", { ascending: true });
 
     const providers = (llmProviders || []).filter(
       (p: Record<string, unknown>) => p.api_key_encrypted
     );
 
-    if (providers.length === 0 && !openaiKey) {
+    if (providers.length === 0 && !anthropicKey) {
       return json({ error: "No AI API key configured" }, 500);
     }
 
-    if (providers.length === 0 && openaiKey) {
+    if (providers.length === 0 && anthropicKey) {
       providers.push({
-        provider: "openai",
-        api_key_encrypted: openaiKey,
+        provider: "anthropic",
+        api_key_encrypted: anthropicKey,
         base_url: null,
       });
     }
 
     const provider = providers[0];
     const apiUrl =
-      provider.base_url || "https://api.openai.com/v1/chat/completions";
+      provider.base_url || "https://api.anthropic.com/v1/messages";
 
     const textResult = await generateText(
       apiUrl,
@@ -304,7 +304,7 @@ Only use multi_prompt when the user explicitly asks for multi-scene or multi-sho
     let mediaSkippedReason: string | null = null;
 
     // --- Model Routing Rules (immutable) ---
-    // TEXT:  OpenAI gpt-5.1 via openaiTextClient.ts -- locked, no override
+    // TEXT:  Anthropic Claude via openaiTextClient.ts (Anthropic internally) -- locked, no override
     // IMAGE: Kie.ai nano-banana-2 -- locked, enforced here + kieAdapter.ts
     // VIDEO: Kie.ai with user-selected video model from kie_models table
     if (auto_generate_media) {

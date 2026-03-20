@@ -3246,7 +3246,7 @@ export interface DriveConnectionStatus {
   lastSyncAt: string | null;
 }
 
-export type LLMProviderType = 'openai' | 'google' | 'custom';
+export type LLMProviderType = 'openai' | 'anthropic' | 'google' | 'custom';
 
 export interface LLMProvider {
   id: string;
@@ -3902,6 +3902,7 @@ export const PROMPT_CATEGORY_LABELS: Record<PromptCategory, string> = {
 
 export const LLM_PROVIDER_LABELS: Record<LLMProviderType, string> = {
   openai: 'OpenAI',
+  anthropic: 'Anthropic',
   google: 'Google AI',
   custom: 'Custom'
 };

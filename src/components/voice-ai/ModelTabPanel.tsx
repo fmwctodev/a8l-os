@@ -22,10 +22,10 @@ const FALLBACK_MODELS: Record<string, { value: string; label: string }[]> = {
   ],
   anthropic: [
     { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
+    { value: 'claude-opus-4-20250514', label: 'Claude Opus 4' },
     { value: 'claude-3-7-sonnet-20250219', label: 'Claude 3.7 Sonnet' },
     { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
     { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku' },
-    { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' },
   ],
   groq: [
     { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B' },
@@ -117,7 +117,7 @@ export function ModelTabPanel({
   };
 
   const handleSyncModels = async () => {
-    if (!orgId || (llmProvider !== 'openai' && llmProvider !== 'google')) return;
+    if (!orgId || (llmProvider !== 'openai' && llmProvider !== 'anthropic' && llmProvider !== 'google')) return;
     setFetchingFromApi(true);
     try {
       const response = await callEdgeFunction('fetch-provider-models', {
@@ -165,7 +165,7 @@ export function ModelTabPanel({
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="block text-sm font-medium text-slate-300">LLM Model</label>
-            {(llmProvider === 'openai' || llmProvider === 'google') && (
+            {(llmProvider === 'openai' || llmProvider === 'anthropic' || llmProvider === 'google') && (
               <button
                 onClick={handleSyncModels}
                 disabled={fetchingFromApi}

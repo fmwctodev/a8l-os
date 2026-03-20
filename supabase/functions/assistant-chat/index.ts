@@ -14,10 +14,11 @@ import {
   CLARA_MODEL,
   CLARA_TEMPERATURE,
   CLARA_MAX_TOKENS,
-  getResponsesApiUrl,
+  getAnthropicMessagesUrl,
   extractTextFromResponse,
-  type ResponsesApiInput,
-  type ResponsesApiResponse,
+  buildAnthropicHeaders,
+  type AnthropicMessage,
+  type AnthropicResponse,
 } from "../_shared/claraConfig.ts";
 
 interface PageContext {
@@ -62,10 +63,9 @@ const READ_ACTION_TYPES = new Set([
 ]);
 
 interface LLMConfig {
-  provider: "openai";
+  provider: "anthropic";
   model: string;
   apiKey: string;
-  baseUrl?: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -135,7 +135,7 @@ Deno.serve(async (req: Request) => {
     if (content) {
       try {
         const retrieved = await retrieveRelevantMemories(
-          supabase, user.id, content, llmConfig.apiKey, 5
+          supabase, user.id, content, Deno.env.get("OPENAI_API_KEY") || "", 5
         );
         semanticMemories = retrieved.map((m) => ({
           memory_type: m.memory_type,
@@ -443,36 +443,31 @@ async function handleStreamingChat(
   userContent: string,
   profile: Record<string, unknown> | null
 ): Promise<Response> {
-  const url = getResponsesApiUrl(llmConfig.baseUrl);
+  const url = getAnthropicMessagesUrl();
 
-  const input: ResponsesApiInput[] = [
-    { role: "developer", content: systemPrompt },
-    ...conversationHistory.map((m) => ({
-      role: (m.role === "assistant" ? "assistant" : "user") as ResponsesApiInput["role"],
-      content: m.content,
-    })),
-  ];
+  const anthropicMessages: AnthropicMessage[] = conversationHistory.map((m) => ({
+    role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
+    content: m.content,
+  }));
 
-  const body: Record<string, unknown> = {
+  const body = {
     model: CLARA_MODEL,
-    input,
+    system: systemPrompt,
+    messages: anthropicMessages,
     temperature: CLARA_TEMPERATURE,
-    max_output_tokens: CLARA_MAX_TOKENS,
+    max_tokens: CLARA_MAX_TOKENS,
     stream: true,
   };
 
-  const openaiRes = await fetch(url, {
+  const anthropicRes = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${llmConfig.apiKey}`,
-    },
+    headers: buildAnthropicHeaders(llmConfig.apiKey),
     body: JSON.stringify(body),
   });
 
-  if (!openaiRes.ok) {
-    const errText = await openaiRes.text();
-    const errMsg = `OpenAI API error ${openaiRes.status}: ${errText.slice(0, 200)}`;
+  if (!anthropicRes.ok) {
+    const errText = await anthropicRes.text();
+    const errMsg = `Anthropic API error ${anthropicRes.status}: ${errText.slice(0, 200)}`;
     return new Response(sseEvent({ type: "error", message: errMsg }) + "data: [DONE]\n\n", {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
     });
@@ -485,8 +480,9 @@ async function handleStreamingChat(
       let fullText = "";
 
       try {
-        const reader = openaiRes.body!.getReader();
+        const reader = anthropicRes.body!.getReader();
         let sseBuffer = "";
+        let currentEventType = "";
 
         while (true) {
           const { done, value } = await reader.read();
@@ -498,15 +494,22 @@ async function handleStreamingChat(
 
           for (const line of lines) {
             const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith("data: ")) continue;
+            if (!trimmed) continue;
+
+            if (trimmed.startsWith("event: ")) {
+              currentEventType = trimmed.slice(7);
+              continue;
+            }
+
+            if (!trimmed.startsWith("data: ")) continue;
             const json = trimmed.slice(6);
             if (json === "[DONE]") continue;
 
             try {
               const evt = JSON.parse(json);
-              if (evt.type === "response.output_text.delta" && evt.delta) {
-                fullText += evt.delta;
-                controller.enqueue(encoder.encode(sseEvent({ type: "token", text: evt.delta })));
+              if (currentEventType === "content_block_delta" && evt.delta?.type === "text_delta" && evt.delta?.text) {
+                fullText += evt.delta.text;
+                controller.enqueue(encoder.encode(sseEvent({ type: "token", text: evt.delta.text })));
               }
             } catch {
               // skip malformed
@@ -1454,7 +1457,7 @@ async function executeITSAction(
 
     case "store_memory": {
       const { storeMemory } = await import("../_shared/claraMemoryService.ts");
-      const apiKey = llmConfig?.apiKey || Deno.env.get("OPENAI_API_KEY") || "";
+      const apiKey = Deno.env.get("OPENAI_API_KEY") || "";
       const result = await storeMemory(supabase, apiKey, {
         userId: user.id,
         orgId: user.orgId,
@@ -1889,20 +1892,19 @@ async function resolveLLMConfig(
 
   if (providers && providers.length > 0) {
     for (const p of providers) {
-      if (p.provider === "openai" && p.api_key_encrypted) {
+      if (p.provider === "anthropic" && p.api_key_encrypted) {
         return {
-          provider: "openai",
+          provider: "anthropic",
           model: CLARA_MODEL,
           apiKey: p.api_key_encrypted,
-          baseUrl: p.base_url || undefined,
         };
       }
     }
   }
 
-  const openaiKey = Deno.env.get("OPENAI_API_KEY");
-  if (openaiKey) {
-    return { provider: "openai", model: CLARA_MODEL, apiKey: openaiKey };
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (anthropicKey) {
+    return { provider: "anthropic", model: CLARA_MODEL, apiKey: anthropicKey };
   }
 
   throw new Error("No LLM provider configured");
@@ -1919,52 +1921,44 @@ async function callLLM(
   messages: { role: string; content: string }[],
   jsonMode = true
 ): Promise<LLMResult> {
-  return callOpenAI(config, systemPrompt, messages, jsonMode);
+  return callAnthropic(config, systemPrompt, messages, jsonMode);
 }
 
-async function callOpenAI(
+async function callAnthropic(
   config: LLMConfig,
   systemPrompt: string,
   messages: { role: string; content: string }[],
-  jsonMode = true
+  _jsonMode = true
 ): Promise<LLMResult> {
-  const url = getResponsesApiUrl(config.baseUrl);
+  const url = getAnthropicMessagesUrl();
 
   console.log("Clara using model:", CLARA_MODEL);
 
-  const input: ResponsesApiInput[] = [
-    { role: "developer", content: systemPrompt },
-    ...messages.map((m) => ({
-      role: (m.role === "assistant" ? "assistant" : "user") as ResponsesApiInput["role"],
-      content: m.content,
-    })),
-  ];
+  const anthropicMessages: AnthropicMessage[] = messages.map((m) => ({
+    role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
+    content: m.content,
+  }));
 
   const body: Record<string, unknown> = {
     model: CLARA_MODEL,
-    input,
+    system: systemPrompt,
+    messages: anthropicMessages,
     temperature: CLARA_TEMPERATURE,
-    max_output_tokens: CLARA_MAX_TOKENS,
+    max_tokens: CLARA_MAX_TOKENS,
   };
-  if (jsonMode) {
-    body.text = { format: { type: "json_object" } };
-  }
 
   const res = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
-    },
+    headers: buildAnthropicHeaders(config.apiKey),
     body: JSON.stringify(body),
   });
 
   if (!res.ok) {
     const errText = await res.text();
-    return { text: "", error: `OpenAI API error ${res.status}: ${errText}` };
+    return { text: "", error: `Anthropic API error ${res.status}: ${errText}` };
   }
 
-  const data = await res.json() as ResponsesApiResponse;
+  const data = await res.json() as AnthropicResponse;
   const text = extractTextFromResponse(data);
   return { text };
 }

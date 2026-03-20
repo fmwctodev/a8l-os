@@ -109,33 +109,34 @@ async function generateDraft(
   apiKey: string,
   temperature: number
 ): Promise<{ text: string; tokens: number }> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-5.1",
+      model: "claude-sonnet-4-20250514",
+      system: systemPrompt,
       messages: [
-        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       temperature,
-      max_completion_tokens: 400,
+      max_tokens: 400,
     }),
   });
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`OpenAI API error ${response.status}: ${errText}`);
+    throw new Error(`Anthropic API error ${response.status}: ${errText}`);
   }
 
   const data = await response.json();
-  const text = data.choices?.[0]?.message?.content?.trim();
-  if (!text) throw new Error("Empty response from OpenAI");
+  const text = data.content?.[0]?.text?.trim();
+  if (!text) throw new Error("Empty response from Anthropic");
 
-  return { text, tokens: data.usage?.total_tokens || 0 };
+  return { text, tokens: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0) };
 }
 
 Deno.serve(async (req: Request) => {
@@ -156,11 +157,11 @@ Deno.serve(async (req: Request) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
 
-    if (!openaiKey) {
+    if (!anthropicKey) {
       return new Response(
-        JSON.stringify({ error: "OpenAI API key not configured" }),
+        JSON.stringify({ error: "Anthropic API key not configured" }),
         {
           status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -298,7 +299,7 @@ Deno.serve(async (req: Request) => {
       const result = await generateDraft(
         systemPrompt,
         userPrompt,
-        openaiKey,
+        anthropicKey,
         temperature
       );
 
@@ -308,7 +309,7 @@ Deno.serve(async (req: Request) => {
           org_id: orgId,
           review_id,
           draft_text: result.text,
-          model: "gpt-5.1",
+          model: "claude-sonnet-4-20250514",
           tone_preset: tone.key,
           created_by_user_id: userId,
           applied: false,
@@ -330,8 +331,8 @@ Deno.serve(async (req: Request) => {
     await supabase.from("ai_usage_logs").insert({
       organization_id: orgId,
       feature: "reputation_ai_draft",
-      provider: "openai",
-      model: "gpt-5.1",
+      provider: "anthropic",
+      model: "claude-sonnet-4-20250514",
       tokens_used: totalTokens,
       metadata: {
         review_id,
@@ -361,7 +362,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         drafts,
-        model: "gpt-5.1",
+        model: "claude-sonnet-4-20250514",
         total_tokens: totalTokens,
       }),
       {

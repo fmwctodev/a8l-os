@@ -95,7 +95,7 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -165,16 +165,17 @@ Deno.serve(async (req: Request) => {
     let aiResponse: string;
     let tokensUsed = 0;
 
-    if (openaiKey) {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    if (anthropicKey) {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${openaiKey}`,
+          "x-api-key": anthropicKey,
+          "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "gpt-5.1",
-          max_completion_tokens: agent.max_tokens || 1024,
+          model: "claude-sonnet-4-20250514",
+          max_tokens: agent.max_tokens || 1024,
           temperature: agent.temperature || 0.7,
           messages: [{ role: "user", content: prompt }],
         }),
@@ -182,12 +183,12 @@ Deno.serve(async (req: Request) => {
 
       if (!response.ok) {
         const error = await response.text();
-        throw new Error(`OpenAI API error: ${error}`);
+        throw new Error(`Anthropic API error: ${error}`);
       }
 
       const result = await response.json();
-      aiResponse = result.choices?.[0]?.message?.content || "";
-      tokensUsed = result.usage?.total_tokens || 0;
+      aiResponse = result.content?.[0]?.text || "";
+      tokensUsed = (result.usage?.input_tokens || 0) + (result.usage?.output_tokens || 0);
     } else {
       aiResponse = generateMockResponse(action_type, context);
       tokensUsed = 100;
@@ -287,7 +288,7 @@ Deno.serve(async (req: Request) => {
         output_structured: structuredOutput,
         tokens_used: tokensUsed,
         latency_ms: latencyMs,
-        model_used: "gpt-5.1",
+        model_used: "claude-sonnet-4-20250514",
         temperature_used: agent.temperature || 0.7,
         guardrails_applied: guardrailResult.appliedGuardrails,
         completed_at: new Date().toISOString(),
