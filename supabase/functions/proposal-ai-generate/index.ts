@@ -268,19 +268,25 @@ Deno.serve(async (req: Request) => {
 
     const brandVoiceVersion = activeBrandVoice?.latest_version?.[0] || null;
 
-    const { data: llmProviders } = await supabase
-      .from("llm_providers")
-      .select("*, models:llm_models(*)")
-      .eq("org_id", proposal.org_id)
-      .eq("enabled", true)
-      .order("created_at", { ascending: true });
-
-    if (!llmProviders || llmProviders.length === 0) {
+    const anthropicApiKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!anthropicApiKey) {
       return new Response(
-        JSON.stringify({ error: "No LLM provider configured" }),
+        JSON.stringify({ error: "Anthropic API key not configured" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const { data: llmProvider } = await supabase
+      .from("llm_providers")
+      .select("*, models:llm_models(*)")
+      .eq("org_id", proposal.org_id)
+      .eq("provider", "anthropic")
+      .eq("enabled", true)
+      .maybeSingle();
+
+    const defaultModel = llmProvider?.models?.find((m: { is_default: boolean }) => m.is_default)
+      || llmProvider?.models?.[0];
+    const modelKey = defaultModel?.model_key || "claude-sonnet-4-20250514";
 
     const systemPrompt = buildSystemPrompt(
       org?.name || "Our Company",
@@ -299,31 +305,17 @@ Deno.serve(async (req: Request) => {
       uploaded_documents
     );
 
-    let generatedSections: GeneratedSection[] | null = null;
-    let lastError = "";
-
-    for (const provider of llmProviders) {
-      const model = provider.models?.find((m: { is_default: boolean }) => m.is_default) || provider.models?.[0];
-      if (!model) continue;
-
-      try {
-        generatedSections = await callLLM(
-          provider.provider,
-          provider.api_key_encrypted,
-          model.model_key,
-          systemPrompt,
-          userPrompt
-        );
-        break;
-      } catch (err) {
-        lastError = String(err);
-        console.error(`Provider ${provider.provider} failed: ${lastError}`);
-      }
-    }
-
-    if (!generatedSections) {
+    let generatedSections: GeneratedSection[];
+    try {
+      generatedSections = await callLLM(
+        anthropicApiKey,
+        modelKey,
+        systemPrompt,
+        userPrompt
+      );
+    } catch (err) {
       return new Response(
-        JSON.stringify({ error: `All LLM providers failed. Last error: ${lastError}` }),
+        JSON.stringify({ error: `AI generation failed: ${String(err)}` }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -540,62 +532,32 @@ Client Information:
 }
 
 async function callLLM(
-  provider: string,
   apiKey: string,
   model: string,
   systemPrompt: string,
   userPrompt: string
 ): Promise<GeneratedSection[]> {
-  let responseText: string;
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: buildAnthropicHeaders(apiKey),
+    body: JSON.stringify({
+      model,
+      system: systemPrompt,
+      messages: [
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 8192,
+    }),
+  });
 
-  if (provider === "openai") {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.7,
-        max_tokens: 8192,
-      }),
-    });
-
-    if (!response.ok) {
-      const errBody = await response.text();
-      throw new Error(`OpenAI API error ${response.status}: ${errBody}`);
-    }
-
-    const data = await response.json();
-    responseText = data.choices?.[0]?.message?.content || "";
-  } else {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: buildAnthropicHeaders(apiKey),
-      body: JSON.stringify({
-        model,
-        system: systemPrompt,
-        messages: [
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.7,
-        max_tokens: 8192,
-      }),
-    });
-
-    if (!response.ok) {
-      const errBody = await response.text();
-      throw new Error(`Anthropic API error ${response.status}: ${errBody}`);
-    }
-
-    const data = await response.json() as AnthropicResponse;
-    responseText = data.content.find((b) => b.type === "text")?.text || "";
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`Anthropic API error ${response.status}: ${errBody}`);
   }
+
+  const data = await response.json() as AnthropicResponse;
+  const responseText = data.content.find((b) => b.type === "text")?.text || "";
 
   try {
     const parsed = JSON.parse(responseText);
