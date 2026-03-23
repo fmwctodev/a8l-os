@@ -1,7 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
-  CLARA_MODEL_HEAVY,
   buildAnthropicHeaders,
   type AnthropicResponse,
 } from "../_shared/claraConfig.ts";
@@ -547,33 +546,56 @@ async function callLLM(
   systemPrompt: string,
   userPrompt: string
 ): Promise<GeneratedSection[]> {
-  let response: Response;
   let responseText: string;
 
-  response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...buildAnthropicHeaders(apiKey),
-    },
-    body: JSON.stringify({
-      model: CLARA_MODEL_HEAVY,
-      system: systemPrompt,
-      messages: [
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 8192,
-    }),
-  });
+  if (provider === "openai") {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 8192,
+      }),
+    });
 
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(`Anthropic API error ${response.status}: ${errBody}`);
+    if (!response.ok) {
+      const errBody = await response.text();
+      throw new Error(`OpenAI API error ${response.status}: ${errBody}`);
+    }
+
+    const data = await response.json();
+    responseText = data.choices?.[0]?.message?.content || "";
+  } else {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: buildAnthropicHeaders(apiKey),
+      body: JSON.stringify({
+        model,
+        system: systemPrompt,
+        messages: [
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 8192,
+      }),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text();
+      throw new Error(`Anthropic API error ${response.status}: ${errBody}`);
+    }
+
+    const data = await response.json() as AnthropicResponse;
+    responseText = data.content.find((b) => b.type === "text")?.text || "";
   }
-
-  const data = await response.json() as AnthropicResponse;
-  responseText = data.content.find((b) => b.type === "text")?.text || "";
 
   try {
     const parsed = JSON.parse(responseText);
