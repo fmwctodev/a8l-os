@@ -37,6 +37,9 @@ import type { Proposal, ProposalComment, ProposalActivity, ProposalSection, Prop
 import { ArrowLeft, FileText, FileDown, Send, CreditCard as Edit3, Trash2, Loader2, User, Calendar, DollarSign, Clock, CheckCircle2, XCircle, Eye, AlertCircle, MessageSquare, Activity, Plus, GripVertical, Sparkles, ExternalLink, Copy, MoreVertical, Video, Archive, ArchiveRestore, Copy as CopyIcon, PenTool, Shield, Ban, RefreshCw, Mail } from 'lucide-react';
 import { exportProposalToPDF } from '../../services/proposalPdfExport';
 import { getBrandKits } from '../../services/brandboard';
+import { sanitizeProposalContent } from '../../utils/proposalContentSanitizer';
+
+const FALLBACK_LOGO = '/assets/logo/Autom8ion-White.png';
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; icon: typeof Clock; label: string }> = {
   draft: { bg: 'bg-slate-500/20', text: 'text-slate-300', icon: Clock, label: 'Draft' },
@@ -557,6 +560,14 @@ export function ProposalDetail() {
       <div className="flex-1 overflow-auto p-6">
         {activeTab === 'content' && (
           <div className="max-w-4xl mx-auto space-y-6">
+            <div className="flex items-center gap-3 pb-4 border-b border-slate-700/50">
+              <img
+                src={FALLBACK_LOGO}
+                alt="Autom8ion Lab"
+                className="h-8 object-contain"
+              />
+            </div>
+
             {proposal.meeting_contexts && proposal.meeting_contexts.length > 0 && (
               <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
                 <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
@@ -652,7 +663,7 @@ export function ProposalDetail() {
                         </div>
                       ) : (
                         <div className="proposal-content max-w-none text-sm">
-                          <div dangerouslySetInnerHTML={{ __html: section.content.replace(/\n/g, '<br>') }} />
+                          <div dangerouslySetInnerHTML={{ __html: sanitizeProposalContent(section.content).replace(/\n/g, '<br>') }} />
                         </div>
                       )}
                     </div>

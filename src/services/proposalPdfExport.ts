@@ -1,4 +1,7 @@
 import type { Proposal, ProposalSection, ProposalLineItem, BrandKitWithVersion } from '../types';
+import { sanitizeProposalContent } from '../utils/proposalContentSanitizer';
+
+const FALLBACK_LOGO = '/assets/logo/Autom8ion-White.png';
 
 const COMPANY = {
   name: 'Autom8ion Lab',
@@ -70,7 +73,7 @@ function getStatusBadgeStyle(status: string): string {
 }
 
 function buildSectionContent(section: ProposalSection): string {
-  let html = section.content || '';
+  let html = sanitizeProposalContent(section.content || '');
   html = html.replace(/<li>/g, `<li><span class="check-icon">${CHECK_SVG}</span><span class="check-text">`);
   html = html.replace(/<\/li>/g, '</span></li>');
   return html;
@@ -703,7 +706,7 @@ export function generateProposalHTML(
   brandKit?: BrandKitWithVersion | null
 ): string {
   const accentColor = brandKit?.latest_version?.colors?.primary?.hex || '#22d3ee';
-  const logoUrl = brandKit?.latest_version?.logos?.find(l => l.url)?.url || null;
+  const logoUrl = brandKit?.latest_version?.logos?.find(l => l.url)?.url || FALLBACK_LOGO;
 
   const sections = [...(proposal.sections || [])].sort((a, b) => a.sort_order - b.sort_order);
   const lineItems = proposal.line_items || [];

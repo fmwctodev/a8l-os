@@ -11,6 +11,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+const PROPOSAL_MODEL = "claude-opus-4-6";
+const PROPOSAL_MAX_TOKENS = 16384;
+const PROPOSAL_TEMPERATURE = 0.5;
+
 interface UploadedDocument {
   name: string;
   text: string;
@@ -240,7 +244,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: org } = await supabase
       .from("organizations")
-      .select("name")
+      .select("name, contact_email, contact_phone, website")
       .eq("id", proposal.org_id)
       .single();
 
@@ -276,20 +280,16 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { data: llmProvider } = await supabase
-      .from("llm_providers")
-      .select("*, models:llm_models(*)")
-      .eq("org_id", proposal.org_id)
-      .eq("provider", "anthropic")
-      .eq("enabled", true)
-      .maybeSingle();
-
-    const defaultModel = llmProvider?.models?.find((m: { is_default: boolean }) => m.is_default)
-      || llmProvider?.models?.[0];
-    const modelKey = defaultModel?.model_key || "claude-sonnet-4-20250514";
+    const companyName = org?.name || "Our Company";
+    const companyInfo = {
+      name: companyName,
+      email: org?.contact_email || "",
+      phone: org?.contact_phone || "",
+      website: org?.website || "",
+    };
 
     const systemPrompt = buildSystemPrompt(
-      org?.name || "Our Company",
+      companyInfo,
       brandVoiceVersion,
       brandKitVersion,
       templateContent
@@ -309,7 +309,7 @@ Deno.serve(async (req: Request) => {
     try {
       generatedSections = await callLLM(
         anthropicApiKey,
-        modelKey,
+        PROPOSAL_MODEL,
         systemPrompt,
         userPrompt
       );
@@ -377,20 +377,93 @@ Deno.serve(async (req: Request) => {
   }
 });
 
+interface CompanyInfo {
+  name: string;
+  email: string;
+  phone: string;
+  website: string;
+}
+
 function buildSystemPrompt(
-  companyName: string,
+  company: CompanyInfo,
   brandVoiceVersion: Record<string, unknown> | null,
   brandKitVersion: Record<string, unknown> | null,
   templateContent: string
 ): string {
-  let prompt = `You are a professional proposal writer for ${companyName}. Your task is to generate high-quality proposal content that is persuasive, professional, and tailored to the client.
+  let prompt = `You are an expert proposal writer for ${company.name}. You write proposals that close deals.
 
-Guidelines:
-- Write in a professional yet approachable tone
-- Focus on client benefits and value proposition
-- Use clear, concise language
-- Structure content with proper headings and bullet points where appropriate
-- Personalize content based on client information provided
+CORE PRINCIPLE: A proposal is a decision document, not a brochure. Every section must help the client say YES by answering: what is the problem, how will you solve it, what will it cost, and when will it be done.
+
+COMPANY INFORMATION:
+- Company: ${company.name}
+- Email: ${company.email}
+- Phone: ${company.phone}
+- Website: ${company.website}
+
+SECTION-BY-SECTION WRITING RULES:
+
+Executive Summary (section_type: "intro"):
+- 2-4 sentences maximum
+- State the problem, proposed solution, primary outcome, and investment amount or range
+- Must stand alone -- a decision-maker reading only this section should understand the entire proposal
+- Write this with the knowledge of all other sections so it accurately summarizes the whole proposal
+
+Scope of Work (section_type: "scope"):
+- Describe your approach at a high level
+- Explain WHY this approach works, not just WHAT you will do
+- Connect the solution directly back to the stated problem
+- Use the client's own language from meeting context if available
+- Never blame the client for the problem
+- One clear approach -- do not present multiple solution options here
+- Break into logical phases with clear descriptions of what each phase includes
+
+Deliverables (section_type: "deliverables"):
+- Every deliverable must be a tangible thing the client receives (a file, a system, a report, a design, a tool)
+- "Strategy sessions" or "consulting hours" are NOT deliverables on their own -- tie them to a specific output
+- Include a timeline per deliverable, not just for the whole project
+- Use an HTML table or structured list so each item is clear
+- Be specific: "4 SEO blog posts per month, 1,200-1,500 words each" NOT "marketing support"
+
+Project Timeline (section_type: "timeline"):
+- Milestones must be concrete checkpoints, not vague phases
+- "Design mockups delivered" is a milestone; "Design phase" is not
+- Include a start date assumption
+- Use an HTML table with columns: Phase, Milestone, Duration, Target Date
+- Include a total project duration note
+
+Pricing / Investment (section_type: "pricing"):
+- Always present pricing AFTER deliverables so the reader understands value before seeing the number
+- Round to clean numbers ($5,000 not $4,850; $3,000/mo not $2,975/mo)
+- NEVER list hourly rates in a fixed-price proposal -- the client is buying an outcome, not your time
+- If there are ongoing operational costs, list them separately from the development investment
+- If presenting tiers, name them with descriptive labels (Foundation / Growth / Scale), not metals (Bronze / Silver / Gold)
+- For tiered pricing, the middle tier should be 1.5x-2x the base tier and marked as "Recommended"
+
+Terms & Conditions (section_type: "terms"):
+- Include: Payment Terms, Support & Maintenance, Technical Requirements, Security & Compliance, Project Success Criteria
+- For projects under $10K: 50% upfront, 50% on completion
+- For projects over $10K: 50% upfront, 25% at midpoint, 25% on completion
+- Terms must be specific to this project -- never generic boilerplate
+- Include what happens if scope changes (change order process)
+
+ANTI-PATTERNS -- NEVER DO THESE:
+- DO NOT pad the scope with unnecessary deliverables to inflate the price
+- DO NOT use jargon the client would not understand. "Responsive UI/UX with progressive enhancement" means nothing -- say "a website that works great on phones and desktops"
+- DO NOT use tentative language. "We might be able to..." or "We could possibly..." undermines confidence. State what you WILL do
+- DO NOT skip the executive summary or make it weak
+- DO NOT include multiple solution options in the Scope section (save options for pricing tiers only)
+- DO NOT write vague deliverables like "marketing support" or "ongoing assistance"
+
+QUALITY CHECKLIST (verify before outputting):
+- Executive summary stands alone and includes the investment amount
+- Problem statement uses the client's own language
+- Every deliverable is a tangible output the client receives
+- Pricing uses clean, round numbers
+- Timeline has concrete milestones with dates, not vague phase names
+- Payment terms match the pricing model
+- No jargon the client would need to Google
+- No placeholder text like [TBD] remains
+- Client name and company name are correct throughout
 `;
 
   if (brandVoiceVersion) {
@@ -400,25 +473,25 @@ Guidelines:
     const vocabPreferred = (brandVoiceVersion.vocabulary_preferred as string[]) || [];
     const vocabProhibited = (brandVoiceVersion.vocabulary_prohibited as string[]) || [];
 
-    prompt += `\nBrand Voice Guidelines:`;
+    prompt += `\nBRAND VOICE GUIDELINES:`;
 
     if (Object.keys(toneSettings).length > 0) {
       prompt += `\n- Tone Settings:`;
       if (toneSettings.formality !== undefined) {
         const level = toneSettings.formality > 0.5 ? "Formal" : "Casual";
-        prompt += `\n  • Formality: ${level}`;
+        prompt += `\n  - Formality: ${level}`;
       }
       if (toneSettings.friendliness !== undefined) {
         const level = toneSettings.friendliness > 0.5 ? "Warm and friendly" : "Direct and professional";
-        prompt += `\n  • Approach: ${level}`;
+        prompt += `\n  - Approach: ${level}`;
       }
       if (toneSettings.energy !== undefined) {
         const level = toneSettings.energy > 0.5 ? "Energetic and dynamic" : "Calm and measured";
-        prompt += `\n  • Energy: ${level}`;
+        prompt += `\n  - Energy: ${level}`;
       }
       if (toneSettings.confidence !== undefined) {
         const level = toneSettings.confidence > 0.5 ? "Assertive and confident" : "Humble and consultative";
-        prompt += `\n  • Confidence: ${level}`;
+        prompt += `\n  - Confidence: ${level}`;
       }
     }
 
@@ -438,24 +511,40 @@ Guidelines:
 
   if (brandKitVersion) {
     const colors = brandKitVersion.colors as Record<string, { hex: string }> || {};
-    prompt += `\nBrand Colors (for reference in describing visual elements):`;
+    prompt += `\nBRAND COLORS (for reference in describing visual elements):`;
     if (colors.primary) prompt += `\n- Primary: ${colors.primary.hex}`;
     if (colors.secondary) prompt += `\n- Secondary: ${colors.secondary.hex}`;
   }
 
   if (templateContent) {
-    prompt += `\nTemplate Structure to Follow:
+    prompt += `\nTEMPLATE STRUCTURE TO FOLLOW:
+Use this template as structural guidance. Replace all {{variable}} placeholders with actual content derived from the client data and meeting context. Do not leave any template variables in the output.
 ${templateContent}
 `;
   }
 
-  prompt += `\nOutput Format:
-Return a JSON array of sections, each with:
-- section_type: one of (intro, scope, deliverables, timeline, pricing, terms)
-- title: section heading
-- content: the section content in HTML format (use <p>, <h3>, <ul>, <li> tags)`;
+  prompt += `
 
-  prompt += `\n\nYou MUST respond with valid JSON only. Do not include any text outside the JSON array.`;
+OUTPUT FORMAT -- THIS IS CRITICAL, FOLLOW EXACTLY:
+
+Return ONLY a raw JSON array. Do NOT wrap it in markdown code fences. Do NOT include any text before or after the JSON array. Do NOT use \`\`\`json or \`\`\` markers.
+
+Each element in the array must be an object with exactly these three string fields:
+- "section_type": one of "intro", "scope", "deliverables", "timeline", "pricing", "terms"
+- "title": the section heading as a plain text string
+- "content": the section body as a well-formatted HTML string
+
+The "content" field MUST contain HTML markup. Use these tags:
+<p> for paragraphs
+<h3> and <h4> for sub-headings within a section
+<ul> and <ol> with <li> for lists
+<strong> for bold text, <em> for emphasis
+<table>, <thead>, <tbody>, <tr>, <th>, <td> for tables
+
+The "content" field must NEVER contain JSON, markdown, or code fences. It must be ready-to-render HTML.
+
+Example of correct output format:
+[{"section_type":"intro","title":"Executive Summary","content":"<p>Dear John, ...</p><p>Our proposed solution will...</p>"},{"section_type":"scope","title":"Scope of Work","content":"<h3>Phase 1: Discovery</h3><ul><li>Requirement gathering</li></ul>"}]`;
 
   return prompt;
 }
@@ -469,7 +558,9 @@ function buildUserPrompt(
   customInstructions?: string,
   uploadedDocuments?: UploadedDocument[]
 ): string {
-  let prompt = `Generate proposal content for the following sections: ${sectionsToGenerate.join(", ")}
+  let prompt = `Generate the following proposal sections: ${sectionsToGenerate.join(", ")}
+
+All content must be personalized for this client. Replace all template variables with real data.
 
 Client Information:
 - Name: ${contact.first_name} ${contact.last_name}
@@ -488,7 +579,7 @@ Client Information:
   }
 
   if (meetings.length > 0) {
-    prompt += `\nMeeting Context:`;
+    prompt += `\nMeeting Context (use this as the primary source for understanding the client's problem, needs, and goals):`;
     for (const meeting of meetings) {
       prompt += `\n\nMeeting: ${meeting.meeting_title} (${meeting.meeting_date})`;
       if (meeting.summary) {
@@ -514,7 +605,7 @@ Client Information:
   }
 
   if (uploadedDocuments && uploadedDocuments.length > 0) {
-    prompt += `\n\nUploaded Document Context:`;
+    prompt += `\n\nUploaded Document Context (reference material for the proposal):`;
     for (const doc of uploadedDocuments) {
       prompt += `\n\n--- Document: ${doc.name} ---\n${doc.text}`;
     }
@@ -525,10 +616,114 @@ Client Information:
   }
 
   if (customInstructions) {
-    prompt += `\n\nAdditional Instructions:\n${customInstructions}`;
+    prompt += `\n\nAdditional Instructions from the proposal author:\n${customInstructions}`;
   }
 
+  prompt += `\n\nRemember: Return ONLY the raw JSON array. No markdown fences. No text outside the array. Each section's "content" must be HTML.`;
+
   return prompt;
+}
+
+function stripCodeFences(text: string): string {
+  let cleaned = text.trim();
+  cleaned = cleaned.replace(/^```(?:json|JSON)?\s*\n?/m, '');
+  cleaned = cleaned.replace(/\n?\s*```\s*$/m, '');
+  return cleaned.trim();
+}
+
+function extractJsonArray(text: string): string | null {
+  const firstBracket = text.indexOf('[');
+  const lastBracket = text.lastIndexOf(']');
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    return text.substring(firstBracket, lastBracket + 1);
+  }
+  return null;
+}
+
+function validateSection(s: unknown): s is GeneratedSection {
+  if (!s || typeof s !== 'object') return false;
+  const obj = s as Record<string, unknown>;
+  return (
+    typeof obj.section_type === 'string' &&
+    typeof obj.title === 'string' &&
+    typeof obj.content === 'string' &&
+    obj.content.length > 0
+  );
+}
+
+function parseAIResponse(responseText: string): GeneratedSection[] {
+  let text = responseText.trim();
+
+  text = stripCodeFences(text);
+
+  try {
+    const parsed = JSON.parse(text);
+    const arr = Array.isArray(parsed) ? parsed : parsed?.sections;
+    if (Array.isArray(arr)) {
+      const validated = arr.filter(validateSection);
+      if (validated.length > 0) return validated;
+    }
+  } catch {
+    // first parse failed, try extracting the JSON array
+  }
+
+  const extracted = extractJsonArray(text);
+  if (extracted) {
+    try {
+      const parsed = JSON.parse(extracted);
+      if (Array.isArray(parsed)) {
+        const validated = parsed.filter(validateSection);
+        if (validated.length > 0) return validated;
+      }
+    } catch {
+      // extraction parse also failed
+    }
+  }
+
+  const sections: GeneratedSection[] = [];
+  const sectionMatches = responseText.match(/##\s*(.+?)\n([\s\S]*?)(?=##|$)/g);
+  if (sectionMatches) {
+    for (const match of sectionMatches) {
+      const titleMatch = match.match(/##\s*(.+?)\n/);
+      const content = match.replace(/##\s*.+?\n/, "").trim();
+      if (titleMatch && content) {
+        const htmlContent = content
+          .split('\n\n')
+          .map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+          .join('\n');
+        sections.push({
+          section_type: guessSectionType(titleMatch[1].trim()),
+          title: titleMatch[1].trim(),
+          content: htmlContent,
+        });
+      }
+    }
+  }
+
+  if (sections.length === 0 && responseText.trim().length > 0) {
+    const htmlContent = responseText
+      .split('\n\n')
+      .map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+      .join('\n');
+    sections.push({
+      section_type: "custom",
+      title: "Generated Content",
+      content: htmlContent,
+    });
+  }
+
+  return sections;
+}
+
+function guessSectionType(title: string): string {
+  const lower = title.toLowerCase();
+  if (lower.includes('executive') || lower.includes('summary') || lower.includes('introduction') || lower.includes('overview')) return 'intro';
+  if (lower.includes('scope') || lower.includes('solution') || lower.includes('approach')) return 'scope';
+  if (lower.includes('deliverable')) return 'deliverables';
+  if (lower.includes('timeline') || lower.includes('schedule') || lower.includes('milestone')) return 'timeline';
+  if (lower.includes('pricing') || lower.includes('investment') || lower.includes('cost') || lower.includes('budget')) return 'pricing';
+  if (lower.includes('terms') || lower.includes('condition') || lower.includes('payment') || lower.includes('legal')) return 'terms';
+  return 'custom';
 }
 
 async function callLLM(
@@ -546,8 +741,8 @@ async function callLLM(
       messages: [
         { role: "user", content: userPrompt },
       ],
-      temperature: 0.7,
-      max_tokens: 8192,
+      temperature: PROPOSAL_TEMPERATURE,
+      max_tokens: PROPOSAL_MAX_TOKENS,
     }),
   });
 
@@ -559,37 +754,7 @@ async function callLLM(
   const data = await response.json() as AnthropicResponse;
   const responseText = data.content.find((b) => b.type === "text")?.text || "";
 
-  try {
-    const parsed = JSON.parse(responseText);
-    return parsed.sections || parsed;
-  } catch {
-    const sections: GeneratedSection[] = [];
-    const sectionMatches = responseText.match(/##\s*(.+?)\n([\s\S]*?)(?=##|$)/g);
-
-    if (sectionMatches) {
-      for (const match of sectionMatches) {
-        const titleMatch = match.match(/##\s*(.+?)\n/);
-        const content = match.replace(/##\s*.+?\n/, "").trim();
-        if (titleMatch) {
-          sections.push({
-            section_type: "custom",
-            title: titleMatch[1].trim(),
-            content: content,
-          });
-        }
-      }
-    }
-
-    if (sections.length === 0) {
-      sections.push({
-        section_type: "custom",
-        title: "Generated Content",
-        content: responseText,
-      });
-    }
-
-    return sections;
-  }
+  return parseAIResponse(responseText);
 }
 
 async function getMaxSectionSortOrder(

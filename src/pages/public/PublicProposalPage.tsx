@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { getProposalByToken, updateProposalStatus, updateProposal } from '../../services/proposals';
 import { getBrandKits } from '../../services/brandboard';
 import { SignatureCanvas } from '../../components/proposals/SignatureCanvas';
+import { sanitizeProposalContent } from '../../utils/proposalContentSanitizer';
 import type { Proposal, BrandKitWithVersion } from '../../types';
 import {
   FileText,
@@ -13,6 +14,8 @@ import {
   Clock,
   DollarSign,
 } from 'lucide-react';
+
+const FALLBACK_LOGO = '/assets/logo/Autom8ion-White.png';
 
 export default function PublicProposalPage() {
   const { token } = useParams<{ token: string }>();
@@ -166,11 +169,9 @@ export default function PublicProposalPage() {
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-4xl mx-auto p-6 py-12">
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          {logoUrl && (
-            <div className="p-6 border-b border-slate-200 bg-white">
-              <img src={logoUrl} alt="Company Logo" className="h-12 object-contain" />
-            </div>
-          )}
+          <div className="p-6 border-b border-slate-200 bg-slate-900">
+            <img src={logoUrl || FALLBACK_LOGO} alt="Autom8ion Lab" className="h-10 object-contain" />
+          </div>
 
           <div className="p-8">
             <div className="flex items-start justify-between mb-6">
@@ -241,7 +242,7 @@ export default function PublicProposalPage() {
                       </h2>
                       <div
                         className="prose prose-slate max-w-none"
-                        dangerouslySetInnerHTML={{ __html: section.content }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeProposalContent(section.content) }}
                       />
                     </div>
                   ))}
