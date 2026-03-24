@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { SidebarProvider } from './contexts/SidebarContext';
@@ -9,118 +10,127 @@ import { DashboardLayout } from './layouts/DashboardLayout';
 import { Login } from './pages/Login';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { Dashboard } from './pages/Dashboard';
-import { Profile } from './pages/Profile';
 import { Unauthorized } from './pages/Unauthorized';
 import { FeatureDisabled } from './pages/FeatureDisabled';
 import { NotFound } from './pages/NotFound';
-import { Conversations } from './pages/modules/Conversations';
-import { Calendars } from './pages/modules/Calendars';
-import { Contacts } from './pages/modules/Contacts';
-import { ContactDetail } from './pages/modules/ContactDetail';
-import { Opportunities } from './pages/modules/Opportunities';
-import { OpportunitiesListPage } from './pages/modules/OpportunitiesListPage';
-import { OpportunityDetail } from './pages/modules/OpportunityDetail';
-import { PipelinesPage } from './pages/modules/PipelinesPage';
-import { OpportunitiesLayout } from './layouts/OpportunitiesLayout';
-import { ProjectsLayout } from './layouts/ProjectsLayout';
-import { Projects } from './pages/modules/Projects';
-import { ProjectsListPage } from './pages/modules/ProjectsListPage';
-import { ProjectPipelinesPage } from './pages/modules/ProjectPipelinesPage';
-import { ProjectProfitabilityPage } from './pages/modules/ProjectProfitabilityPage';
-import { ProjectDetail } from './pages/modules/ProjectDetail';
-import { Payments } from './pages/modules/Payments';
-import { InvoiceDetail } from './pages/modules/InvoiceDetail';
-import { Proposals } from './pages/modules/Proposals';
-import { ProposalDetail } from './pages/modules/ProposalDetail';
-import { ProposalBuilder } from './pages/modules/ProposalBuilder';
-import { AIAgents } from './pages/modules/AIAgents';
-import { AIAgentDetail } from './pages/modules/AIAgentDetail';
-import { AIAgentsLayout } from './layouts/AIAgentsLayout';
-import { AIAgentsGettingStarted } from './pages/modules/AIAgentsGettingStarted';
-import { VoiceAIPage } from './pages/modules/voice-ai/VoiceAIPage';
-import { VapiAssistantsListPage } from './pages/modules/voice-ai/VapiAssistantsListPage';
-import { VapiAssistantDetailPage } from './pages/modules/voice-ai/VapiAssistantDetailPage';
-import { VapiNumbersPage } from './pages/modules/voice-ai/VapiNumbersPage';
-import { VapiWidgetsPage } from './pages/modules/voice-ai/VapiWidgetsPage';
-import { VapiToolsPage } from './pages/modules/voice-ai/VapiToolsPage';
-import { VapiCallsPage } from './pages/modules/voice-ai/VapiCallsPage';
-import { VapiSessionsPage } from './pages/modules/voice-ai/VapiSessionsPage';
-import { VapiAnalyticsPage } from './pages/modules/voice-ai/VapiAnalyticsPage';
-import { VapiSettingsPage } from './pages/modules/voice-ai/VapiSettingsPage';
-import { AIAgentsConversation } from './pages/modules/AIAgentsConversation';
-import { AIAgentsKnowledge } from './pages/modules/AIAgentsKnowledge';
-import { AIAgentsTemplates } from './pages/modules/AIAgentsTemplates';
-import { AIAgentsContent } from './pages/modules/AIAgentsContent';
-import { ContentAIAnalytics } from './pages/modules/ContentAIAnalytics';
-import { Marketing } from './pages/modules/Marketing';
-import { MarketingForms } from './pages/modules/MarketingForms';
-import { FormBuilder } from './pages/modules/FormBuilder';
-import { MarketingSurveys } from './pages/modules/MarketingSurveys';
-import { SurveyBuilder } from './pages/modules/SurveyBuilder';
-import { AISocialManagerLayout } from './layouts/AISocialManagerLayout';
-import { PostComposer } from './pages/modules/PostComposer';
-import { SocialCalendar } from './pages/modules/SocialCalendar';
-import { SocialChat } from './pages/modules/social/SocialChat';
-import { SocialPosts } from './pages/modules/social/SocialPosts';
-import { SocialCampaigns } from './pages/modules/social/SocialCampaigns';
-import { SocialCampaignDetail } from './pages/modules/social/SocialCampaignDetail';
-import { SocialGuidelines } from './pages/modules/social/SocialGuidelines';
-import { SocialAccounts } from './pages/modules/social/SocialAccounts';
-import { SocialAnalytics } from './pages/modules/social/SocialAnalytics';
-import { Automation } from './pages/modules/Automation';
-import { WorkflowBuilderV2 } from './pages/modules/WorkflowBuilderV2';
-import { WorkflowEnrollments } from './pages/modules/WorkflowEnrollments';
-import WorkflowRuns from './pages/modules/WorkflowRuns';
-import WorkflowRunDetail from './pages/modules/WorkflowRunDetail';
-import WorkflowVersions from './pages/modules/WorkflowVersions';
-import WorkflowAnalytics from './pages/modules/WorkflowAnalytics';
-import AutomationTemplates from './pages/modules/AutomationTemplates';
-import AutomationTemplateViewer from './pages/modules/AutomationTemplateViewer';
-import AutomationTemplateEditor from './pages/modules/AutomationTemplateEditor';
-import AutomationApprovals from './pages/modules/AutomationApprovals';
-import AutomationLogs from './pages/modules/AutomationLogs';
-import { MediaStorage } from './pages/modules/MediaStorage';
-import { Reputation } from './pages/modules/Reputation';
-import { Reporting } from './pages/modules/Reporting';
-import { AIReporting } from './pages/modules/AIReporting';
-import { ReportView } from './pages/modules/ReportView';
-import { AuditLogsPage } from './pages/admin/AuditLogs';
-import { SettingsLayout } from './layouts/SettingsLayout';
-import { MyProfilePage } from './pages/settings/MyProfilePage';
-import { MyStaffPage } from './pages/settings/MyStaffPage';
-import { OrganizationSettingsPage } from './pages/settings/OrganizationSettingsPage';
-import { CalendarsSettingsPage } from './pages/settings/CalendarsSettingsPage';
-import { ConversationsSettingsPage } from './pages/settings/ConversationsSettingsPage';
-import { AIAgentsSettingsPage } from './pages/settings/AIAgentsSettingsPage';
-import { EmailServicesSettingsPage } from './pages/settings/EmailServicesSettingsPage';
-import PhoneSystemSettingsPage from './pages/settings/PhoneSystemSettingsPage';
-import { CustomFieldsSettingsPage } from './pages/settings/CustomFieldsSettingsPage';
-import { CustomValuesSettingsPage } from './pages/settings/CustomValuesSettingsPage';
-import ScoringSettingsPage from './pages/settings/ScoringSettingsPage';
-import { IntegrationsSettingsPage } from './pages/settings/IntegrationsSettingsPage';
-import { BrandboardSettingsPage } from './pages/settings/BrandboardSettingsPage';
-import { BrandKitDetailPage } from './pages/settings/BrandKitDetailPage';
-import { CRUDHealthCheckPage } from './pages/settings/CRUDHealthCheckPage';
-import { MeetingFollowUpSettingsPage } from './pages/settings/MeetingFollowUpSettingsPage';
-import AssistantSettingsPage from './pages/settings/AssistantSettingsPage';
-import { MediaStylePresetsPage } from './pages/settings/MediaStylePresetsPage';
-import { CalendarDetail } from './pages/modules/CalendarDetail';
-import { BookingPage } from './pages/public/BookingPage';
-import { CalendarLandingPage } from './pages/public/CalendarLandingPage';
-import { PublicFormPage } from './pages/public/PublicFormPage';
-import { PublicSurveyPage } from './pages/public/PublicSurveyPage';
-import { ReviewPage } from './pages/public/ReviewPage';
-import PublicProposalPage from './pages/public/PublicProposalPage';
-import { PublicProposalSignPage } from './pages/public/PublicProposalSignPage';
-import PostApprovalPage from './pages/public/PostApprovalPage';
-import { OAuthCallbackPage } from './pages/public/OAuthCallbackPage';
-import { PublicChangeRequestPage } from './pages/public/PublicChangeRequestPage';
-import { PublicChangeRequestStatusPage } from './pages/public/PublicChangeRequestStatusPage';
-import { ClientPortalLayout } from './layouts/ClientPortalLayout';
-import { ClientPortalHomePage } from './pages/public/portal/ClientPortalHomePage';
-import { ClientPortalChangeRequestsPage } from './pages/public/portal/ClientPortalChangeRequestsPage';
-import { ClientPortalChangeRequestDetailPage } from './pages/public/portal/ClientPortalChangeRequestDetailPage';
-import { ClientPortalDocumentsPage } from './pages/public/portal/ClientPortalDocumentsPage';
+
+// Lazy-loaded page components for code splitting
+const Profile = lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
+const Conversations = lazy(() => import('./pages/modules/Conversations').then(m => ({ default: m.Conversations })));
+const Calendars = lazy(() => import('./pages/modules/Calendars').then(m => ({ default: m.Calendars })));
+const CalendarDetail = lazy(() => import('./pages/modules/CalendarDetail').then(m => ({ default: m.CalendarDetail })));
+const Contacts = lazy(() => import('./pages/modules/Contacts').then(m => ({ default: m.Contacts })));
+const ContactDetail = lazy(() => import('./pages/modules/ContactDetail').then(m => ({ default: m.ContactDetail })));
+const Opportunities = lazy(() => import('./pages/modules/Opportunities').then(m => ({ default: m.Opportunities })));
+const OpportunitiesListPage = lazy(() => import('./pages/modules/OpportunitiesListPage').then(m => ({ default: m.OpportunitiesListPage })));
+const OpportunityDetail = lazy(() => import('./pages/modules/OpportunityDetail').then(m => ({ default: m.OpportunityDetail })));
+const PipelinesPage = lazy(() => import('./pages/modules/PipelinesPage').then(m => ({ default: m.PipelinesPage })));
+const OpportunitiesLayout = lazy(() => import('./layouts/OpportunitiesLayout').then(m => ({ default: m.OpportunitiesLayout })));
+const ProjectsLayout = lazy(() => import('./layouts/ProjectsLayout').then(m => ({ default: m.ProjectsLayout })));
+const Projects = lazy(() => import('./pages/modules/Projects').then(m => ({ default: m.Projects })));
+const ProjectsListPage = lazy(() => import('./pages/modules/ProjectsListPage').then(m => ({ default: m.ProjectsListPage })));
+const ProjectPipelinesPage = lazy(() => import('./pages/modules/ProjectPipelinesPage').then(m => ({ default: m.ProjectPipelinesPage })));
+const ProjectProfitabilityPage = lazy(() => import('./pages/modules/ProjectProfitabilityPage').then(m => ({ default: m.ProjectProfitabilityPage })));
+const ProjectDetail = lazy(() => import('./pages/modules/ProjectDetail').then(m => ({ default: m.ProjectDetail })));
+const Payments = lazy(() => import('./pages/modules/Payments').then(m => ({ default: m.Payments })));
+const InvoiceDetail = lazy(() => import('./pages/modules/InvoiceDetail').then(m => ({ default: m.InvoiceDetail })));
+const Proposals = lazy(() => import('./pages/modules/Proposals').then(m => ({ default: m.Proposals })));
+const ProposalDetail = lazy(() => import('./pages/modules/ProposalDetail').then(m => ({ default: m.ProposalDetail })));
+const ProposalBuilder = lazy(() => import('./pages/modules/ProposalBuilder').then(m => ({ default: m.ProposalBuilder })));
+const AIAgentsLayout = lazy(() => import('./layouts/AIAgentsLayout').then(m => ({ default: m.AIAgentsLayout })));
+const AIAgentsGettingStarted = lazy(() => import('./pages/modules/AIAgentsGettingStarted').then(m => ({ default: m.AIAgentsGettingStarted })));
+const AIAgentDetail = lazy(() => import('./pages/modules/AIAgentDetail').then(m => ({ default: m.AIAgentDetail })));
+const VoiceAIPage = lazy(() => import('./pages/modules/voice-ai/VoiceAIPage').then(m => ({ default: m.VoiceAIPage })));
+const VapiAssistantsListPage = lazy(() => import('./pages/modules/voice-ai/VapiAssistantsListPage').then(m => ({ default: m.VapiAssistantsListPage })));
+const VapiAssistantDetailPage = lazy(() => import('./pages/modules/voice-ai/VapiAssistantDetailPage').then(m => ({ default: m.VapiAssistantDetailPage })));
+const VapiNumbersPage = lazy(() => import('./pages/modules/voice-ai/VapiNumbersPage').then(m => ({ default: m.VapiNumbersPage })));
+const VapiWidgetsPage = lazy(() => import('./pages/modules/voice-ai/VapiWidgetsPage').then(m => ({ default: m.VapiWidgetsPage })));
+const VapiToolsPage = lazy(() => import('./pages/modules/voice-ai/VapiToolsPage').then(m => ({ default: m.VapiToolsPage })));
+const VapiCallsPage = lazy(() => import('./pages/modules/voice-ai/VapiCallsPage').then(m => ({ default: m.VapiCallsPage })));
+const VapiSessionsPage = lazy(() => import('./pages/modules/voice-ai/VapiSessionsPage').then(m => ({ default: m.VapiSessionsPage })));
+const VapiAnalyticsPage = lazy(() => import('./pages/modules/voice-ai/VapiAnalyticsPage').then(m => ({ default: m.VapiAnalyticsPage })));
+const VapiSettingsPage = lazy(() => import('./pages/modules/voice-ai/VapiSettingsPage').then(m => ({ default: m.VapiSettingsPage })));
+const AIAgentsConversation = lazy(() => import('./pages/modules/AIAgentsConversation').then(m => ({ default: m.AIAgentsConversation })));
+const AIAgentsKnowledge = lazy(() => import('./pages/modules/AIAgentsKnowledge').then(m => ({ default: m.AIAgentsKnowledge })));
+const AIAgentsTemplates = lazy(() => import('./pages/modules/AIAgentsTemplates').then(m => ({ default: m.AIAgentsTemplates })));
+const AIAgentsContent = lazy(() => import('./pages/modules/AIAgentsContent').then(m => ({ default: m.AIAgentsContent })));
+const ContentAIAnalytics = lazy(() => import('./pages/modules/ContentAIAnalytics').then(m => ({ default: m.ContentAIAnalytics })));
+const Marketing = lazy(() => import('./pages/modules/Marketing').then(m => ({ default: m.Marketing })));
+const MarketingForms = lazy(() => import('./pages/modules/MarketingForms').then(m => ({ default: m.MarketingForms })));
+const FormBuilder = lazy(() => import('./pages/modules/FormBuilder').then(m => ({ default: m.FormBuilder })));
+const MarketingSurveys = lazy(() => import('./pages/modules/MarketingSurveys').then(m => ({ default: m.MarketingSurveys })));
+const SurveyBuilder = lazy(() => import('./pages/modules/SurveyBuilder').then(m => ({ default: m.SurveyBuilder })));
+const AISocialManagerLayout = lazy(() => import('./layouts/AISocialManagerLayout').then(m => ({ default: m.AISocialManagerLayout })));
+const PostComposer = lazy(() => import('./pages/modules/PostComposer').then(m => ({ default: m.PostComposer })));
+const SocialCalendar = lazy(() => import('./pages/modules/SocialCalendar').then(m => ({ default: m.SocialCalendar })));
+const SocialChat = lazy(() => import('./pages/modules/social/SocialChat').then(m => ({ default: m.SocialChat })));
+const SocialPosts = lazy(() => import('./pages/modules/social/SocialPosts').then(m => ({ default: m.SocialPosts })));
+const SocialCampaigns = lazy(() => import('./pages/modules/social/SocialCampaigns').then(m => ({ default: m.SocialCampaigns })));
+const SocialCampaignDetail = lazy(() => import('./pages/modules/social/SocialCampaignDetail').then(m => ({ default: m.SocialCampaignDetail })));
+const SocialGuidelines = lazy(() => import('./pages/modules/social/SocialGuidelines').then(m => ({ default: m.SocialGuidelines })));
+const SocialAccounts = lazy(() => import('./pages/modules/social/SocialAccounts').then(m => ({ default: m.SocialAccounts })));
+const SocialAnalytics = lazy(() => import('./pages/modules/social/SocialAnalytics').then(m => ({ default: m.SocialAnalytics })));
+const Automation = lazy(() => import('./pages/modules/Automation').then(m => ({ default: m.Automation })));
+const WorkflowBuilderV2 = lazy(() => import('./pages/modules/WorkflowBuilderV2').then(m => ({ default: m.WorkflowBuilderV2 })));
+const WorkflowEnrollments = lazy(() => import('./pages/modules/WorkflowEnrollments').then(m => ({ default: m.WorkflowEnrollments })));
+const WorkflowRuns = lazy(() => import('./pages/modules/WorkflowRuns'));
+const WorkflowRunDetail = lazy(() => import('./pages/modules/WorkflowRunDetail'));
+const WorkflowVersions = lazy(() => import('./pages/modules/WorkflowVersions'));
+const WorkflowAnalytics = lazy(() => import('./pages/modules/WorkflowAnalytics'));
+const AutomationTemplates = lazy(() => import('./pages/modules/AutomationTemplates'));
+const AutomationTemplateViewer = lazy(() => import('./pages/modules/AutomationTemplateViewer'));
+const AutomationTemplateEditor = lazy(() => import('./pages/modules/AutomationTemplateEditor'));
+const AutomationApprovals = lazy(() => import('./pages/modules/AutomationApprovals'));
+const AutomationLogs = lazy(() => import('./pages/modules/AutomationLogs'));
+const MediaStorage = lazy(() => import('./pages/modules/MediaStorage').then(m => ({ default: m.MediaStorage })));
+const Reputation = lazy(() => import('./pages/modules/Reputation').then(m => ({ default: m.Reputation })));
+const Reporting = lazy(() => import('./pages/modules/Reporting').then(m => ({ default: m.Reporting })));
+const AIReporting = lazy(() => import('./pages/modules/AIReporting').then(m => ({ default: m.AIReporting })));
+const ReportView = lazy(() => import('./pages/modules/ReportView').then(m => ({ default: m.ReportView })));
+const AuditLogsPage = lazy(() => import('./pages/admin/AuditLogs').then(m => ({ default: m.AuditLogsPage })));
+const SettingsLayout = lazy(() => import('./layouts/SettingsLayout').then(m => ({ default: m.SettingsLayout })));
+const MyProfilePage = lazy(() => import('./pages/settings/MyProfilePage').then(m => ({ default: m.MyProfilePage })));
+const MyStaffPage = lazy(() => import('./pages/settings/MyStaffPage').then(m => ({ default: m.MyStaffPage })));
+const OrganizationSettingsPage = lazy(() => import('./pages/settings/OrganizationSettingsPage').then(m => ({ default: m.OrganizationSettingsPage })));
+const CalendarsSettingsPage = lazy(() => import('./pages/settings/CalendarsSettingsPage').then(m => ({ default: m.CalendarsSettingsPage })));
+const ConversationsSettingsPage = lazy(() => import('./pages/settings/ConversationsSettingsPage').then(m => ({ default: m.ConversationsSettingsPage })));
+const AIAgentsSettingsPage = lazy(() => import('./pages/settings/AIAgentsSettingsPage').then(m => ({ default: m.AIAgentsSettingsPage })));
+const EmailServicesSettingsPage = lazy(() => import('./pages/settings/EmailServicesSettingsPage').then(m => ({ default: m.EmailServicesSettingsPage })));
+const PhoneSystemSettingsPage = lazy(() => import('./pages/settings/PhoneSystemSettingsPage'));
+const CustomFieldsSettingsPage = lazy(() => import('./pages/settings/CustomFieldsSettingsPage').then(m => ({ default: m.CustomFieldsSettingsPage })));
+const CustomValuesSettingsPage = lazy(() => import('./pages/settings/CustomValuesSettingsPage').then(m => ({ default: m.CustomValuesSettingsPage })));
+const ScoringSettingsPage = lazy(() => import('./pages/settings/ScoringSettingsPage'));
+const IntegrationsSettingsPage = lazy(() => import('./pages/settings/IntegrationsSettingsPage').then(m => ({ default: m.IntegrationsSettingsPage })));
+const BrandboardSettingsPage = lazy(() => import('./pages/settings/BrandboardSettingsPage').then(m => ({ default: m.BrandboardSettingsPage })));
+const BrandKitDetailPage = lazy(() => import('./pages/settings/BrandKitDetailPage').then(m => ({ default: m.BrandKitDetailPage })));
+const CRUDHealthCheckPage = lazy(() => import('./pages/settings/CRUDHealthCheckPage').then(m => ({ default: m.CRUDHealthCheckPage })));
+const MeetingFollowUpSettingsPage = lazy(() => import('./pages/settings/MeetingFollowUpSettingsPage').then(m => ({ default: m.MeetingFollowUpSettingsPage })));
+const AssistantSettingsPage = lazy(() => import('./pages/settings/AssistantSettingsPage'));
+const MediaStylePresetsPage = lazy(() => import('./pages/settings/MediaStylePresetsPage').then(m => ({ default: m.MediaStylePresetsPage })));
+const BookingPage = lazy(() => import('./pages/public/BookingPage').then(m => ({ default: m.BookingPage })));
+const CalendarLandingPage = lazy(() => import('./pages/public/CalendarLandingPage').then(m => ({ default: m.CalendarLandingPage })));
+const PublicFormPage = lazy(() => import('./pages/public/PublicFormPage').then(m => ({ default: m.PublicFormPage })));
+const PublicSurveyPage = lazy(() => import('./pages/public/PublicSurveyPage').then(m => ({ default: m.PublicSurveyPage })));
+const ReviewPage = lazy(() => import('./pages/public/ReviewPage').then(m => ({ default: m.ReviewPage })));
+const PublicProposalPage = lazy(() => import('./pages/public/PublicProposalPage'));
+const PublicProposalSignPage = lazy(() => import('./pages/public/PublicProposalSignPage').then(m => ({ default: m.PublicProposalSignPage })));
+const PostApprovalPage = lazy(() => import('./pages/public/PostApprovalPage'));
+const OAuthCallbackPage = lazy(() => import('./pages/public/OAuthCallbackPage').then(m => ({ default: m.OAuthCallbackPage })));
+const PublicChangeRequestPage = lazy(() => import('./pages/public/PublicChangeRequestPage').then(m => ({ default: m.PublicChangeRequestPage })));
+const PublicChangeRequestStatusPage = lazy(() => import('./pages/public/PublicChangeRequestStatusPage').then(m => ({ default: m.PublicChangeRequestStatusPage })));
+const ClientPortalLayout = lazy(() => import('./layouts/ClientPortalLayout').then(m => ({ default: m.ClientPortalLayout })));
+const ClientPortalHomePage = lazy(() => import('./pages/public/portal/ClientPortalHomePage').then(m => ({ default: m.ClientPortalHomePage })));
+const ClientPortalChangeRequestsPage = lazy(() => import('./pages/public/portal/ClientPortalChangeRequestsPage').then(m => ({ default: m.ClientPortalChangeRequestsPage })));
+const ClientPortalChangeRequestDetailPage = lazy(() => import('./pages/public/portal/ClientPortalChangeRequestDetailPage').then(m => ({ default: m.ClientPortalChangeRequestDetailPage })));
+const ClientPortalDocumentsPage = lazy(() => import('./pages/public/portal/ClientPortalDocumentsPage').then(m => ({ default: m.ClientPortalDocumentsPage })));
+
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-64">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+    </div>
+  );
+}
 
 function App() {
   return (
@@ -129,6 +139,7 @@ function App() {
         <ThemeProvider>
           <ToastProvider>
           <SidebarProvider>
+            <Suspense fallback={<PageLoader />}>
             <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -741,6 +752,7 @@ function App() {
             </Route>
             <Route path="*" element={<NotFound />} />
             </Routes>
+            </Suspense>
           </SidebarProvider>
           </ToastProvider>
         </ThemeProvider>

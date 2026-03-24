@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { logPortalEvent } from '../services/projectClientPortals';
 import type { ClientPortalWithProject } from '../services/projectClientPortals';
@@ -205,19 +205,21 @@ export function ClientPortalProvider({ children }: { children: React.ReactNode }
     setAuthInfo(prev => prev ? { ...prev, lastOtpVerifiedAt: new Date().toISOString() } : prev);
   }, [authInfo]);
 
+  const value = useMemo(() => ({
+    state,
+    portal,
+    rawToken: portalToken,
+    authInfo,
+    sendCode,
+    submitCode,
+    logout,
+    logEvent,
+    needsStepUp,
+    completeStepUp,
+  }), [state, portal, portalToken, authInfo, sendCode, submitCode, logout, logEvent, needsStepUp, completeStepUp]);
+
   return (
-    <ClientPortalContext.Provider value={{
-      state,
-      portal,
-      rawToken: portalToken,
-      authInfo,
-      sendCode,
-      submitCode,
-      logout,
-      logEvent,
-      needsStepUp,
-      completeStepUp,
-    }}>
+    <ClientPortalContext.Provider value={value}>
       {children}
     </ClientPortalContext.Provider>
   );
