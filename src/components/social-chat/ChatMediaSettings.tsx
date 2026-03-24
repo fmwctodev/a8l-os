@@ -134,7 +134,7 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
       </button>
 
       {expanded && (
-        <div className="px-4 pb-3 space-y-3 max-h-[40vh] overflow-y-auto custom-scrollbar">
+        <div className="px-4 pb-3 space-y-3 overflow-y-auto custom-scrollbar" style={{ maxHeight: '40vh' }}>
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
               <input

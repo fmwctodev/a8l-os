@@ -1890,19 +1890,23 @@ async function resolveLLMConfig(
     .eq("enabled", true)
     .limit(10);
 
+  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+
   if (providers && providers.length > 0) {
     for (const p of providers) {
       if (p.provider === "anthropic" && p.api_key_encrypted) {
-        return {
-          provider: "anthropic",
-          model: CLARA_MODEL,
-          apiKey: p.api_key_encrypted,
-        };
+        const key = p.api_key_encrypted as string;
+        if (key.startsWith("sk-")) {
+          return {
+            provider: "anthropic",
+            model: CLARA_MODEL,
+            apiKey: key,
+          };
+        }
       }
     }
   }
 
-  const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (anthropicKey) {
     return { provider: "anthropic", model: CLARA_MODEL, apiKey: anthropicKey };
   }
