@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { sanitizeHtml } from '../../../utils/sanitizeHtml';
 import {
   Plus,
   BookOpen,
@@ -420,7 +421,7 @@ function VersionHistoryModal({ collection, versions, onClose }: VersionHistoryMo
           return (
             <div
               className="prose prose-invert max-w-none"
-              dangerouslySetInnerHTML={{ __html: richConfig.content }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(richConfig.content) }}
             />
           );
         }

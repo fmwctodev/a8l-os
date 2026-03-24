@@ -53,24 +53,27 @@ interface AttributionData {
   user_agent?: string;
 }
 
-const ipSubmissionCounts = new Map<string, { count: number; resetAt: number }>();
+async function checkRateLimit(
+  supabase: ReturnType<typeof createClient>,
+  formId: string,
+  ip: string,
+  limit: number,
+): Promise<boolean> {
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count, error } = await supabase
+    .from("form_submissions")
+    .select("id", { count: "exact", head: true })
+    .eq("form_id", formId)
+    .eq("ip_address", ip)
+    .gte("created_at", oneHourAgo);
 
-function checkRateLimit(ip: string, limit: number): boolean {
-  const now = Date.now();
-  const hourAgo = now - 60 * 60 * 1000;
-
-  const record = ipSubmissionCounts.get(ip);
-  if (!record || record.resetAt < now) {
-    ipSubmissionCounts.set(ip, { count: 1, resetAt: now + 60 * 60 * 1000 });
+  if (error) {
+    console.error("Rate limit check error:", error);
+    // Fail open - allow submission if check fails
     return true;
   }
 
-  if (record.count >= limit) {
-    return false;
-  }
-
-  record.count++;
-  return true;
+  return (count ?? 0) < limit;
 }
 
 function extractAttribution(req: Request, body: Record<string, unknown>): AttributionData {
@@ -341,7 +344,7 @@ Deno.serve(async (req: Request) => {
 
     const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0] || "unknown";
 
-    if (settings.rateLimitPerIp && !checkRateLimit(clientIp, settings.rateLimitPerIp)) {
+    if (settings.rateLimitPerIp && !(await checkRateLimit(supabase, typedForm.id, clientIp, settings.rateLimitPerIp))) {
       return new Response(
         JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
         { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }

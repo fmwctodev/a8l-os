@@ -23,7 +23,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useAssistant } from '../contexts/AssistantContext';
+import { useAssistantSafe } from '../contexts/AssistantContext';
 import { usePaymentsAccess } from '../hooks/usePaymentsAccess';
 import { supabase } from '../lib/supabase';
 
@@ -65,7 +65,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const navigate = useNavigate();
   const { user, hasPermission } = useAuth();
   const canAccessPayments = usePaymentsAccess();
-  const assistant = (() => { try { return useAssistant(); } catch { return null; } })();
+  const assistant = useAssistantSafe();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);

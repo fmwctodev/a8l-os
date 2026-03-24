@@ -4,6 +4,7 @@ import { getProposalByToken, updateProposalStatus, updateProposal } from '../../
 import { getBrandKits } from '../../services/brandboard';
 import { SignatureCanvas } from '../../components/proposals/SignatureCanvas';
 import { sanitizeProposalContent } from '../../utils/proposalContentSanitizer';
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 import type { Proposal, BrandKitWithVersion } from '../../types';
 import {
   FileText,
@@ -242,7 +243,7 @@ export default function PublicProposalPage() {
                       </h2>
                       <div
                         className="prose prose-slate max-w-none"
-                        dangerouslySetInnerHTML={{ __html: sanitizeProposalContent(section.content) }}
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(sanitizeProposalContent(section.content)) }}
                       />
                     </div>
                   ))}

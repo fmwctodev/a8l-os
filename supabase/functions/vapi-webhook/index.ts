@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { corsHeaders, handleCors } from "../_shared/cors.ts";
+import { corsHeaders, handleCors, errorResponse } from "../_shared/cors.ts";
+import { verifyWebhookSecret } from "../_shared/webhook-auth.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -330,6 +331,10 @@ async function normalizeCallEnd(
 Deno.serve(async (req: Request) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
+
+  if (!verifyWebhookSecret(req)) {
+    return errorResponse("UNAUTHORIZED", "Invalid webhook secret", 401);
+  }
 
   try {
     const payload: VapiWebhookPayload = await req.json();

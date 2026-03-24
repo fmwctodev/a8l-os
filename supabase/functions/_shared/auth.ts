@@ -221,7 +221,17 @@ export function isServiceRoleRequest(req: Request): boolean {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader) return false;
   const token = authHeader.replace("Bearer ", "");
-  return token === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const expected = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  // Constant-time comparison to prevent timing attacks
+  if (token.length !== expected.length) return false;
+  const encoder = new TextEncoder();
+  const a = encoder.encode(token);
+  const b = encoder.encode(expected);
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a[i] ^ b[i];
+  }
+  return result === 0;
 }
 
 export function requireAuth(userContext: UserContext | null): UserContext {

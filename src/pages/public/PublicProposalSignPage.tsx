@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 import { SignatureCapture } from '../../components/proposals/SignatureCapture';
 import type { Proposal, ProposalSignatureRequest } from '../../types';
 import {
@@ -487,7 +488,7 @@ export function PublicProposalSignPage() {
                   <div className="px-5 pb-5">
                     <div
                       className="prose prose-invert prose-sm max-w-none text-slate-300"
-                      dangerouslySetInnerHTML={{ __html: section.content }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(section.content) }}
                     />
                   </div>
                 )}

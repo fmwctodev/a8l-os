@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 import { useAuth } from '../../contexts/AuthContext';
 import { freezeProposal, createSignatureRequest, createAuditEvent } from '../../services/proposalSigning';
 import { buildSignatureRequestEmail } from '../../services/proposalSigningEmails';
@@ -325,7 +326,7 @@ export function SendForSignatureModal({ proposal, onClose, onSent }: SendForSign
                 </div>
                 <div
                   className="bg-white p-0 max-h-80 overflow-auto"
-                  dangerouslySetInnerHTML={{ __html: previewHtml }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(previewHtml) }}
                 />
               </div>
 

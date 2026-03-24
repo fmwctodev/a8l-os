@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { verifyWebhookSecret } from "../_shared/webhook-auth.ts";
 
 interface GoogleChatEvent {
   type: string;
@@ -43,6 +44,13 @@ interface GoogleChatEvent {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
+  if (!verifyWebhookSecret(req)) {
+    return new Response(
+      JSON.stringify({ error: "Invalid webhook secret" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }
 
   try {

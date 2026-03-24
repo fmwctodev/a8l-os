@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePaymentsAccess } from '../../hooks/usePaymentsAccess';
 import { SendForSignatureModal } from '../../components/proposals/SendForSignatureModal';
 import { ConvertToInvoiceModal } from '../../components/proposals/ConvertToInvoiceModal';
+import { sanitizeHtml } from '../../utils/sanitizeHtml';
 import {
   getProposalById,
   updateProposal,
@@ -663,7 +664,7 @@ export function ProposalDetail() {
                         </div>
                       ) : (
                         <div className="proposal-content max-w-none text-sm">
-                          <div dangerouslySetInnerHTML={{ __html: sanitizeProposalContent(section.content).replace(/\n/g, '<br>') }} />
+                          <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(sanitizeProposalContent(section.content).replace(/\n/g, '<br>')) }} />
                         </div>
                       )}
                     </div>

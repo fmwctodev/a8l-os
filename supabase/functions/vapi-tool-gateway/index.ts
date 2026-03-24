@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, handleCors, errorResponse } from "../_shared/cors.ts";
+import { verifyWebhookSecret } from "../_shared/webhook-auth.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -31,6 +32,10 @@ interface VapiToolCallPayload {
 Deno.serve(async (req: Request) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
+
+  if (!verifyWebhookSecret(req)) {
+    return errorResponse("UNAUTHORIZED", "Invalid webhook secret", 401);
+  }
 
   try {
     const payload: VapiToolCallPayload = await req.json();
@@ -84,12 +89,21 @@ Deno.serve(async (req: Request) => {
 
         switch (toolName) {
           case "lookup_contact": {
-            const { data: contacts } = await supabase
+            // Build safe filter conditions - avoid interpolating user input into .or() strings
+            const phone = String(args.phone || "").replace(/[%_\\]/g, "");
+            const email = String(args.email || "").replace(/[%_\\]/g, "");
+            let query = supabase
               .from("contacts")
               .select("id, first_name, last_name, email, phone, company, status")
-              .eq("org_id", orgId)
-              .or(`phone.ilike.%${args.phone || ""}%,email.ilike.%${args.email || ""}%`)
-              .limit(5);
+              .eq("org_id", orgId);
+            if (phone && email) {
+              query = query.or(`phone.ilike.%${phone}%,email.ilike.%${email}%`);
+            } else if (phone) {
+              query = query.ilike("phone", `%${phone}%`);
+            } else if (email) {
+              query = query.ilike("email", `%${email}%`);
+            }
+            const { data: contacts } = await query.limit(5);
             result = { contacts: contacts || [] };
             break;
           }

@@ -279,3 +279,7 @@ export function useAssistant(): AssistantContextValue {
   }
   return context;
 }
+
+export function useAssistantSafe(): AssistantContextValue | null {
+  return useContext(AssistantContext);
+}
