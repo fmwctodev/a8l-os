@@ -99,10 +99,10 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
   }
 
   return (
-    <div className="border-t border-slate-700 bg-slate-800/50 flex-shrink-0">
+    <div className="border-t border-slate-700 bg-slate-800/50 min-h-0 flex flex-col flex-shrink overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-2 text-xs text-slate-400 hover:text-slate-300 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-2 text-xs text-slate-400 hover:text-slate-300 transition-colors flex-shrink-0"
       >
         <div className="flex items-center gap-2">
           <Settings2 className="w-3.5 h-3.5" />
@@ -134,7 +134,7 @@ export function ChatMediaSettings({ preferences, onChange }: ChatMediaSettingsPr
       </button>
 
       {expanded && (
-        <div className="px-4 pb-3 space-y-3 max-h-[28rem] overflow-y-auto custom-scrollbar">
+        <div className="px-4 pb-3 space-y-3 overflow-y-auto custom-scrollbar min-h-0 flex-1">
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
               <input
