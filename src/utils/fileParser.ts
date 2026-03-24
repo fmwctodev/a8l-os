@@ -1,10 +1,16 @@
-import * as pdfjsLib from 'pdfjs-dist';
-import mammoth from 'mammoth';
+// Lazy-load heavy parsing libraries to avoid adding ~300KB to the main bundle
+let pdfjsLib: typeof import('pdfjs-dist') | null = null;
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url
-).toString();
+async function getPdfjs() {
+  if (!pdfjsLib) {
+    pdfjsLib = await import('pdfjs-dist');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+      'pdfjs-dist/build/pdf.worker.min.mjs',
+      import.meta.url
+    ).toString();
+  }
+  return pdfjsLib;
+}
 
 export interface ParsedFile {
   name: string;
@@ -50,8 +56,9 @@ export async function parseFile(file: File): Promise<ParsedFile> {
 }
 
 async function parsePDF(file: File): Promise<{ text: string; pageCount: number }> {
+  const pdfjs = await getPdfjs();
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
   const pages: string[] = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {
@@ -70,8 +77,9 @@ async function parsePDF(file: File): Promise<{ text: string; pageCount: number }
 }
 
 async function parseDOCX(file: File): Promise<string> {
+  const mammoth = await import('mammoth');
   const arrayBuffer = await file.arrayBuffer();
-  const result = await mammoth.extractRawText({ arrayBuffer });
+  const result = await mammoth.default.extractRawText({ arrayBuffer });
   return result.value;
 }
 
