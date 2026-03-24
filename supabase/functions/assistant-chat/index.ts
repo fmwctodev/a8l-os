@@ -1890,25 +1890,22 @@ async function resolveLLMConfig(
     .eq("enabled", true)
     .limit(10);
 
+  // Prefer platform-level env var (Supabase secrets) over per-org DB keys
   const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (anthropicKey) {
+    return { provider: "anthropic", model: CLARA_MODEL, apiKey: anthropicKey };
+  }
 
   if (providers && providers.length > 0) {
     for (const p of providers) {
       if (p.provider === "anthropic" && p.api_key_encrypted) {
-        const key = p.api_key_encrypted as string;
-        if (key.startsWith("sk-")) {
-          return {
-            provider: "anthropic",
-            model: CLARA_MODEL,
-            apiKey: key,
-          };
-        }
+        return {
+          provider: "anthropic",
+          model: CLARA_MODEL,
+          apiKey: p.api_key_encrypted,
+        };
       }
     }
-  }
-
-  if (anthropicKey) {
-    return { provider: "anthropic", model: CLARA_MODEL, apiKey: anthropicKey };
   }
 
   throw new Error("No LLM provider configured");
