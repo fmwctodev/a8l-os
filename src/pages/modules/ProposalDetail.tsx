@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePaymentsAccess } from '../../hooks/usePaymentsAccess';
 import { SendForSignatureModal } from '../../components/proposals/SendForSignatureModal';
 import { ConvertToInvoiceModal } from '../../components/proposals/ConvertToInvoiceModal';
+import { ConvertToContractModal } from '../../components/proposals/ConvertToContractModal';
 import { sanitizeHtml } from '../../utils/sanitizeHtml';
 import {
   getProposalById,
@@ -35,7 +36,7 @@ import {
   updateSignatureRequestSendStatus,
 } from '../../services/proposalSignatureEmail';
 import type { Proposal, ProposalComment, ProposalActivity, ProposalSection, ProposalLineItem, ProposalSignatureRequest, ProposalAuditEvent } from '../../types';
-import { ArrowLeft, FileText, FileDown, Send, CreditCard as Edit3, Trash2, Loader2, User, Calendar, DollarSign, Clock, CheckCircle2, XCircle, Eye, AlertCircle, MessageSquare, Activity, Plus, GripVertical, Sparkles, ExternalLink, Copy, MoreVertical, Video, Archive, ArchiveRestore, Copy as CopyIcon, PenTool, Shield, Ban, RefreshCw, Mail } from 'lucide-react';
+import { ArrowLeft, FileText, FileDown, Send, CreditCard as Edit3, Trash2, Loader2, User, Calendar, DollarSign, Clock, CheckCircle2, XCircle, Eye, AlertCircle, MessageSquare, Activity, Plus, GripVertical, Sparkles, ExternalLink, Copy, MoreVertical, Video, Archive, ArchiveRestore, Copy as CopyIcon, PenTool, Shield, Ban, RefreshCw, Mail, Scale } from 'lucide-react';
 import { exportProposalToPDF } from '../../services/proposalPdfExport';
 import { getBrandKits } from '../../services/brandboard';
 import { sanitizeProposalContent } from '../../utils/proposalContentSanitizer';
@@ -96,6 +97,7 @@ export function ProposalDetail() {
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [showConvertModal, setShowConvertModal] = useState(false);
+  const [showContractModal, setShowContractModal] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [signatureRequest, setSignatureRequest] = useState<ProposalSignatureRequest | null>(null);
   const [auditEvents, setAuditEvents] = useState<ProposalAuditEvent[]>([]);
@@ -441,6 +443,15 @@ export function ProposalDetail() {
               >
                 <DollarSign className="w-4 h-4" />
                 Convert to Invoice
+              </button>
+            )}
+            {['draft', 'sent', 'viewed', 'accepted'].includes(proposal.status) && hasPermission('contracts.create') && (
+              <button
+                onClick={() => setShowContractModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors border border-slate-600"
+              >
+                <Scale className="w-4 h-4" />
+                Convert to Contract
               </button>
             )}
             {proposal.status !== 'draft' && (
@@ -1048,6 +1059,17 @@ export function ProposalDetail() {
           onClose={() => setShowSignatureModal(false)}
           onSent={() => {
             setShowSignatureModal(false);
+            loadProposal();
+          }}
+        />
+      )}
+
+      {showContractModal && proposal && (
+        <ConvertToContractModal
+          proposal={proposal}
+          onClose={() => setShowContractModal(false)}
+          onConverted={() => {
+            setShowContractModal(false);
             loadProposal();
           }}
         />

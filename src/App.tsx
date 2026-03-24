@@ -114,6 +114,9 @@ const PublicSurveyPage = lazy(() => import('./pages/public/PublicSurveyPage').th
 const ReviewPage = lazy(() => import('./pages/public/ReviewPage').then(m => ({ default: m.ReviewPage })));
 const PublicProposalPage = lazy(() => import('./pages/public/PublicProposalPage'));
 const PublicProposalSignPage = lazy(() => import('./pages/public/PublicProposalSignPage').then(m => ({ default: m.PublicProposalSignPage })));
+const ContractDetail = lazy(() => import('./pages/modules/ContractDetail').then(m => ({ default: m.ContractDetail })));
+const PublicContractPage = lazy(() => import('./pages/public/PublicContractPage'));
+const PublicContractSignPage = lazy(() => import('./pages/public/PublicContractSignPage').then(m => ({ default: m.PublicContractSignPage })));
 const PostApprovalPage = lazy(() => import('./pages/public/PostApprovalPage'));
 const OAuthCallbackPage = lazy(() => import('./pages/public/OAuthCallbackPage').then(m => ({ default: m.OAuthCallbackPage })));
 const PublicChangeRequestPage = lazy(() => import('./pages/public/PublicChangeRequestPage').then(m => ({ default: m.PublicChangeRequestPage })));
@@ -286,6 +289,14 @@ function App() {
                 element={
                   <ProtectedRoute permission="proposals.edit" featureFlag="proposals">
                     <ProposalBuilder />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/contracts/:id"
+                element={
+                  <ProtectedRoute permission="contracts.view" featureFlag="contracts">
+                    <ContractDetail />
                   </ProtectedRoute>
                 }
               />
@@ -740,6 +751,8 @@ function App() {
             <Route path="/r/:slug" element={<ReviewPage />} />
             <Route path="/p/:token" element={<PublicProposalPage />} />
             <Route path="/sign/proposal/:requestId" element={<PublicProposalSignPage />} />
+            <Route path="/c/:token" element={<PublicContractPage />} />
+            <Route path="/sign/contract/:requestId" element={<PublicContractSignPage />} />
             <Route path="/marketing/social/approve/:token" element={<PostApprovalPage />} />
             <Route path="/oauth/google-calendar/callback" element={<OAuthCallbackPage />} />
             <Route path="/project-change/submit" element={<PublicChangeRequestPage />} />

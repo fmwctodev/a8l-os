@@ -165,7 +165,9 @@ export type PermissionKey =
   | 'project_pipelines.manage'
   | 'ai_agents.voice.view' | 'ai_agents.voice.create' | 'ai_agents.voice.edit'
   | 'ai_agents.voice.delete' | 'ai_agents.voice.publish' | 'ai_agents.voice.call'
-  | 'ai_agents.voice.tools' | 'ai_agents.voice.settings';
+  | 'ai_agents.voice.tools' | 'ai_agents.voice.settings'
+  | 'contracts.view' | 'contracts.create' | 'contracts.edit'
+  | 'contracts.send' | 'contracts.delete' | 'contracts.ai_generate';
 
 export interface InviteStaffInput {
   first_name: string;
@@ -6274,4 +6276,159 @@ export interface UpdateChangeRequestInput {
   reviewer_user_id?: string | null;
   approver_user_id?: string | null;
   client_decision?: 'pending' | 'approved' | 'declined' | null;
+}
+
+export type ContractType = 'freelance_service' | 'retainer' | 'partnership' | 'nda';
+export type ContractStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'declined' | 'expired' | 'voided';
+export type ContractSignatureStatus = 'not_sent' | 'pending_signature' | 'viewed' | 'signed' | 'declined' | 'expired' | 'voided';
+export type ContractSectionType =
+  | 'scope' | 'deliverables' | 'payment_terms' | 'timeline'
+  | 'intellectual_property' | 'confidentiality' | 'termination'
+  | 'liability' | 'dispute_resolution' | 'governing_law'
+  | 'general_provisions' | 'signatures' | 'custom';
+export type ContractActivityType = 'created' | 'edited' | 'section_added' | 'section_edited' | 'section_deleted' | 'status_changed' | 'sent' | 'viewed' | 'signed' | 'declined' | 'voided' | 'ai_generated' | 'exported_pdf' | 'comment_added' | 'archived' | 'unarchived';
+
+export interface Contract {
+  id: string;
+  org_id: string;
+  proposal_id: string;
+  contact_id: string | null;
+  opportunity_id: string | null;
+  title: string;
+  contract_type: ContractType;
+  status: ContractStatus;
+  content: string;
+  total_value: number;
+  currency: string;
+  effective_date: string | null;
+  governing_law_state: string | null;
+  public_token: string | null;
+  frozen_html_snapshot: string | null;
+  frozen_json_snapshot: Record<string, unknown> | null;
+  frozen_document_hash: string | null;
+  signature_status: ContractSignatureStatus;
+  signer_name: string | null;
+  signer_email: string | null;
+  signed_at: string | null;
+  declined_at: string | null;
+  expires_at: string | null;
+  final_signed_pdf_url: string | null;
+  signature_request_id: string | null;
+  ai_context: ContractAIContext;
+  custom_instructions: string | null;
+  created_by: string | null;
+  assigned_user_id: string | null;
+  archived_at: string | null;
+  party_a_name: string | null;
+  party_a_email: string | null;
+  party_b_name: string | null;
+  party_b_email: string | null;
+  created_at: string;
+  updated_at: string;
+  contact?: Contact | null;
+  opportunity?: Opportunity | null;
+  created_by_user?: User | null;
+  assigned_user?: User | null;
+  source_proposal?: Proposal | null;
+  sections?: ContractSection[];
+  comments?: ContractComment[];
+  activities?: ContractActivity[];
+}
+
+export interface ContractAIContext {
+  proposal_id?: string;
+  contract_type?: string;
+  custom_instructions?: string;
+  sections_generated?: string[];
+  generated_at?: string;
+  frozen_snapshot_used?: boolean;
+}
+
+export interface ContractSection {
+  id: string;
+  org_id: string;
+  contract_id: string;
+  title: string;
+  content: string;
+  section_type: ContractSectionType;
+  sort_order: number;
+  annotation: string | null;
+  ai_generated: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContractComment {
+  id: string;
+  org_id: string;
+  contract_id: string;
+  user_id: string | null;
+  is_client_comment: boolean;
+  client_name: string | null;
+  content: string;
+  created_at: string;
+  user?: User | null;
+}
+
+export interface ContractActivity {
+  id: string;
+  org_id: string;
+  contract_id: string;
+  activity_type: ContractActivityType;
+  description: string;
+  metadata: Record<string, unknown>;
+  actor_user_id: string | null;
+  created_at: string;
+  actor?: User | null;
+}
+
+export interface ContractSignatureRequest {
+  id: string;
+  org_id: string;
+  contract_id: string;
+  contact_id: string | null;
+  signer_name: string;
+  signer_email: string;
+  access_token_hash: string;
+  status: 'pending' | 'viewed' | 'signed' | 'declined' | 'expired' | 'voided';
+  expires_at: string;
+  viewed_at: string | null;
+  signed_at: string | null;
+  declined_at: string | null;
+  decline_reason: string | null;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+  contract?: Contract;
+  contact?: Contact;
+  created_by_user?: User;
+}
+
+export interface ContractSignature {
+  id: string;
+  org_id: string;
+  contract_id: string;
+  signature_request_id: string;
+  signature_type: 'typed' | 'drawn';
+  signature_text: string | null;
+  signature_image_url: string | null;
+  signer_name: string;
+  signer_email: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  consent_text: string;
+  signed_at: string;
+  document_hash: string;
+  created_at: string;
+}
+
+export interface ContractAuditEvent {
+  id: string;
+  org_id: string;
+  contract_id: string;
+  event_type: string;
+  actor_type: 'system' | 'user' | 'signer';
+  actor_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
 }
