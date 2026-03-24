@@ -89,13 +89,20 @@ export async function createContractFromProposal(
     custom_instructions?: string;
   }
 ): Promise<Contract> {
-  const { data: proposal, error: pError } = await supabase
-    .from('proposals')
-    .select('*, contact:contacts(*), opportunity:opportunities(*)')
-    .eq('id', proposalId)
-    .single();
+  const [proposalRes, orgRes, userRes] = await Promise.all([
+    supabase
+      .from('proposals')
+      .select('*, contact:contacts(*), opportunity:opportunities(*)')
+      .eq('id', proposalId)
+      .single(),
+    supabase.from('organizations').select('name').eq('id', orgId).maybeSingle(),
+    supabase.from('users').select('name, email').eq('id', userId).maybeSingle(),
+  ]);
 
-  if (pError || !proposal) throw new Error('Proposal not found');
+  if (proposalRes.error || !proposalRes.data) throw new Error('Proposal not found');
+  const proposal = proposalRes.data;
+  const partyAName = orgRes.data?.name || userRes.data?.name || 'Company';
+  const partyAEmail = userRes.data?.email || '';
 
   const title = `Contract — ${proposal.title}`;
 
@@ -115,8 +122,8 @@ export async function createContractFromProposal(
       governing_law_state: options.governing_law_state || null,
       public_token: generatePublicToken(),
       custom_instructions: options.custom_instructions || null,
-      party_a_name: null,
-      party_a_email: null,
+      party_a_name: partyAName,
+      party_a_email: partyAEmail,
       party_b_name: proposal.contact
         ? `${proposal.contact.first_name} ${proposal.contact.last_name}`.trim()
         : null,
