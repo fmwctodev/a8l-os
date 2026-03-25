@@ -772,6 +772,45 @@ export async function getStageHistory(
   return data || [];
 }
 
+export async function advanceOpportunityToStageByName(
+  opportunityId: string,
+  targetStageName: string,
+  actorUserId: string | null
+): Promise<void> {
+  const { data: opportunity, error: oppError } = await supabase
+    .from('opportunities')
+    .select('id, pipeline_id, stage_id, org_id, status')
+    .eq('id', opportunityId)
+    .maybeSingle();
+
+  if (oppError || !opportunity) return;
+
+  if (opportunity.status !== 'open') return;
+
+  const { data: stages, error: stagesError } = await supabase
+    .from('pipeline_stages')
+    .select('id, name, sort_order')
+    .eq('pipeline_id', opportunity.pipeline_id)
+    .order('sort_order', { ascending: true });
+
+  if (stagesError || !stages?.length) return;
+
+  const currentStage = stages.find(s => s.id === opportunity.stage_id);
+  const targetStage = stages.find(s =>
+    s.name.toLowerCase().includes(targetStageName.toLowerCase())
+  );
+
+  if (!targetStage) return;
+
+  if (currentStage && targetStage.sort_order <= currentStage.sort_order) return;
+
+  await moveOpportunityToStage(
+    opportunityId,
+    targetStage.id,
+    actorUserId || opportunity.org_id
+  );
+}
+
 export async function exportOpportunitiesToCSV(
   filters: OpportunityFilters = {}
 ): Promise<string> {

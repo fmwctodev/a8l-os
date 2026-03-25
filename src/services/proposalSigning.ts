@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import { generateProposalHTML } from './proposalPdfExport';
 import { getBrandKits } from './brandboard';
+import { advanceOpportunityToStageByName } from './opportunities';
 
 export async function computeDocumentHash(content: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -273,6 +274,20 @@ export async function submitSignature(params: {
       document_hash: params.documentHash,
     },
   });
+
+  try {
+    const { data: proposal } = await supabase
+      .from('proposals')
+      .select('opportunity_id')
+      .eq('id', params.proposalId)
+      .maybeSingle();
+
+    if (proposal?.opportunity_id) {
+      await advanceOpportunityToStageByName(proposal.opportunity_id, 'Agreement Signed', null);
+    }
+  } catch (err) {
+    console.error('Failed to advance opportunity stage on proposal signature:', err);
+  }
 
   return signature;
 }

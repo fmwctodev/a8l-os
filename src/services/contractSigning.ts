@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import { generateContractHTML } from './contractPdfExport';
 import { getBrandKits } from './brandboard';
+import { advanceOpportunityToStageByName } from './opportunities';
 
 export async function computeDocumentHash(content: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -264,6 +265,20 @@ export async function submitContractSignature(params: {
       document_hash: params.documentHash,
     },
   });
+
+  try {
+    const { data: contract } = await supabase
+      .from('contracts')
+      .select('opportunity_id')
+      .eq('id', params.contractId)
+      .maybeSingle();
+
+    if (contract?.opportunity_id) {
+      await advanceOpportunityToStageByName(contract.opportunity_id, 'Agreement Signed', null);
+    }
+  } catch (err) {
+    console.error('Failed to advance opportunity stage on contract signature:', err);
+  }
 
   return signature;
 }

@@ -12,7 +12,7 @@ import type {
   ProposalSectionType,
 } from '../types';
 import { emitEvent } from './eventDispatcher';
-import { createOpportunity } from './opportunities';
+import { createOpportunity, advanceOpportunityToStageByName } from './opportunities';
 
 const FROZEN_STATUSES = ['pending_signature', 'viewed', 'signed'] as const;
 
@@ -220,10 +220,10 @@ async function autoCreateOpportunity(proposal: {
   const stages = (pipeline.stages as Array<{ id: string; name: string; sort_order: number }>)
     .sort((a, b) => a.sort_order - b.sort_order);
 
-  const proposalStage = stages.find(s =>
-    s.name.toLowerCase().includes('proposal')
+  const discoveryCompletedStage = stages.find(s =>
+    s.name.toLowerCase().includes('discovery completed')
   );
-  const stageId = proposalStage?.id || stages[0].id;
+  const stageId = discoveryCompletedStage?.id || stages[0].id;
 
   const opp = await createOpportunity({
     org_id: proposal.org_id,
@@ -301,6 +301,14 @@ export async function updateProposalStatus(
     { new_status: status },
     actorUserId
   );
+
+  if (status === 'sent' && data.opportunity_id) {
+    try {
+      await advanceOpportunityToStageByName(data.opportunity_id, 'Proposal Sent', actorUserId);
+    } catch (err) {
+      console.error('Failed to advance opportunity stage on proposal send:', err);
+    }
+  }
 
   const statusEventMap: Record<string, string> = {
     sent: 'proposal.sent',
