@@ -114,6 +114,7 @@ const PublicSurveyPage = lazy(() => import('./pages/public/PublicSurveyPage').th
 const ReviewPage = lazy(() => import('./pages/public/ReviewPage').then(m => ({ default: m.ReviewPage })));
 const PublicProposalPage = lazy(() => import('./pages/public/PublicProposalPage'));
 const PublicProposalSignPage = lazy(() => import('./pages/public/PublicProposalSignPage').then(m => ({ default: m.PublicProposalSignPage })));
+const Contracts = lazy(() => import('./pages/modules/Contracts').then(m => ({ default: m.Contracts })));
 const ContractDetail = lazy(() => import('./pages/modules/ContractDetail').then(m => ({ default: m.ContractDetail })));
 const PublicContractPage = lazy(() => import('./pages/public/PublicContractPage'));
 const PublicContractSignPage = lazy(() => import('./pages/public/PublicContractSignPage').then(m => ({ default: m.PublicContractSignPage })));
@@ -289,6 +290,14 @@ function App() {
                 element={
                   <ProtectedRoute permission="proposals.edit" featureFlag="proposals">
                     <ProposalBuilder />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/contracts"
+                element={
+                  <ProtectedRoute permission="contracts.view" featureFlag="contracts">
+                    <Contracts />
                   </ProtectedRoute>
                 }
               />

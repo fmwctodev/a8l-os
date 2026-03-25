@@ -34,6 +34,81 @@ const CONTRACT_SELECT = `
   activities:contract_activities(*, actor:users(*))
 `;
 
+const CONTRACT_LIST_SELECT = `
+  *,
+  contact:contacts(id, first_name, last_name, email, company),
+  source_proposal:proposals!contracts_proposal_id_fkey(id, title)
+`;
+
+export interface ContractListFilters {
+  status?: ContractStatus[];
+  search?: string;
+  includeArchived?: boolean;
+}
+
+export interface ContractListResult {
+  data: Contract[];
+  total: number;
+}
+
+export interface ContractStats {
+  total: number;
+  draft: number;
+  sent: number;
+  signed: number;
+  totalValue: number;
+}
+
+export async function getContracts(
+  filters: ContractListFilters = {},
+  page = 1,
+  pageSize = 25
+): Promise<ContractListResult> {
+  let query = supabase
+    .from('contracts')
+    .select(CONTRACT_LIST_SELECT, { count: 'exact' });
+
+  if (!filters.includeArchived) {
+    query = query.is('archived_at', null);
+  }
+
+  if (filters.status && filters.status.length > 0) {
+    query = query.in('status', filters.status);
+  }
+
+  if (filters.search) {
+    query = query.or(`title.ilike.%${filters.search}%,party_b_name.ilike.%${filters.search}%`);
+  }
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const { data, error, count } = await query
+    .order('created_at', { ascending: false })
+    .range(from, to);
+
+  if (error) throw error;
+  return { data: data || [], total: count || 0 };
+}
+
+export async function getContractStats(): Promise<ContractStats> {
+  const { data, error } = await supabase
+    .from('contracts')
+    .select('status, total_value')
+    .is('archived_at', null);
+
+  if (error) throw error;
+
+  const contracts = data || [];
+  return {
+    total: contracts.length,
+    draft: contracts.filter(c => c.status === 'draft').length,
+    sent: contracts.filter(c => c.status === 'sent').length,
+    signed: contracts.filter(c => c.status === 'signed').length,
+    totalValue: contracts.reduce((sum, c) => sum + (c.total_value || 0), 0),
+  };
+}
+
 export async function getContractsByProposalId(proposalId: string): Promise<Contract[]> {
   const { data, error } = await supabase
     .from('contracts')

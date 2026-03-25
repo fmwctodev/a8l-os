@@ -14,6 +14,7 @@ import {
   Settings,
   Shield,
   FileText,
+  FileSignature,
   type LucideIcon,
 } from 'lucide-react';
 import type { PermissionKey } from '../types';
@@ -43,6 +44,7 @@ export const navigationConfig: NavSection[] = [
       { name: 'Contacts', path: '/contacts', icon: Users, permission: 'contacts.view', featureFlag: 'contacts' },
       { name: 'Payments', path: '/payments', icon: CreditCard, permission: 'payments.view', featureFlag: 'payments' },
       { name: 'Proposals', path: '/proposals', icon: FileText, permission: 'proposals.view', featureFlag: 'proposals' },
+      { name: 'Contracts', path: '/contracts', icon: FileSignature, permission: 'contracts.view', featureFlag: 'contracts' },
       { name: 'Projects', path: '/projects', icon: FolderKanban, permission: 'projects.view', featureFlag: 'projects' },
     ],
   },
