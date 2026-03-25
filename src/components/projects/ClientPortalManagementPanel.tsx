@@ -340,7 +340,7 @@ export function ClientPortalManagementPanel({ projectId, orgId, contactId, curre
       ) : (
         <div className="space-y-3">
           {activePortals.map((portal) => {
-            const rawToken = pendingRawTokens[portal.id];
+            const rawToken = portal.portal_token || pendingRawTokens[portal.id];
             const hasToken = !!rawToken;
             const securityExpanded = expandedSecurityPortal === portal.id;
             const portalSessions = sessions[portal.id] || [];
@@ -392,7 +392,7 @@ export function ClientPortalManagementPanel({ projectId, orgId, contactId, curre
                 ) : (
                   <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2">
                     <EyeOff className="w-3.5 h-3.5" />
-                    Token hidden for security. Regenerate to get a new link.
+                    Legacy link -- regenerate to create a permanent link.
                   </div>
                 )}
 

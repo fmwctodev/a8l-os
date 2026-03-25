@@ -6,6 +6,7 @@ export interface ClientPortal {
   project_id: string;
   contact_id: string | null;
   portal_token_hash: string;
+  portal_token: string | null;
   status: 'active' | 'revoked' | 'expired';
   expires_at: string | null;
   last_accessed_at: string | null;
@@ -91,6 +92,7 @@ export async function createPortal(params: {
       project_id: params.projectId,
       contact_id: params.contactId ?? null,
       portal_token_hash: tokenHash,
+      portal_token: token.raw,
       status: 'active',
       expires_at: params.expiresAt ?? null,
       created_by_user_id: params.createdByUserId,
@@ -182,7 +184,7 @@ export async function regeneratePortalToken(portalId: string): Promise<{ rawToke
 
   const { error } = await supabase
     .from('project_client_portals')
-    .update({ portal_token_hash: tokenHash, status: 'active', updated_at: new Date().toISOString() })
+    .update({ portal_token_hash: tokenHash, portal_token: token.raw, status: 'active', updated_at: new Date().toISOString() })
     .eq('id', portalId);
 
   if (error) throw error;
