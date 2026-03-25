@@ -12,6 +12,7 @@ import type {
   ProposalSectionType,
 } from '../types';
 import { emitEvent } from './eventDispatcher';
+import { createOpportunity } from './opportunities';
 
 const FROZEN_STATUSES = ['pending_signature', 'viewed', 'signed'] as const;
 
@@ -160,12 +161,22 @@ export async function createProposal(
     ai_context?: Record<string, unknown>;
   }
 ): Promise<Proposal> {
+  let opportunityId = proposal.opportunity_id || null;
+
+  if (!opportunityId) {
+    try {
+      opportunityId = await autoCreateOpportunity(proposal);
+    } catch (err) {
+      console.error('Auto-create opportunity failed, proceeding without:', err);
+    }
+  }
+
   const { data, error } = await supabase
     .from('proposals')
     .insert({
       org_id: proposal.org_id,
       contact_id: proposal.contact_id,
-      opportunity_id: proposal.opportunity_id || null,
+      opportunity_id: opportunityId,
       title: proposal.title,
       content: proposal.content || '',
       summary: proposal.summary || null,
@@ -186,6 +197,46 @@ export async function createProposal(
   await createProposalActivity(data.id, data.org_id, 'created', 'Proposal created', {}, proposal.created_by);
 
   return data;
+}
+
+async function autoCreateOpportunity(proposal: {
+  org_id: string;
+  contact_id: string;
+  title: string;
+  total_value?: number;
+  currency?: string;
+  created_by: string;
+}): Promise<string | null> {
+  const { data: pipeline } = await supabase
+    .from('pipelines')
+    .select('id, stages:pipeline_stages(id, name, sort_order)')
+    .eq('org_id', proposal.org_id)
+    .order('sort_order', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (!pipeline || !pipeline.stages?.length) return null;
+
+  const stages = (pipeline.stages as Array<{ id: string; name: string; sort_order: number }>)
+    .sort((a, b) => a.sort_order - b.sort_order);
+
+  const proposalStage = stages.find(s =>
+    s.name.toLowerCase().includes('proposal')
+  );
+  const stageId = proposalStage?.id || stages[0].id;
+
+  const opp = await createOpportunity({
+    org_id: proposal.org_id,
+    contact_id: proposal.contact_id,
+    pipeline_id: pipeline.id,
+    stage_id: stageId,
+    value_amount: proposal.total_value ?? 0,
+    currency: proposal.currency || 'USD',
+    source: 'proposal',
+    created_by: proposal.created_by,
+  });
+
+  return opp.id;
 }
 
 export async function updateProposal(
