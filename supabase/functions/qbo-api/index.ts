@@ -514,20 +514,6 @@ async function syncInvoicesFromQBO(
 
       if (matchedContact) {
         contactId = matchedContact.id;
-      } else {
-        const { data: newContact } = await supabase
-          .from("contacts")
-          .insert({
-            organization_id: orgId,
-            first_name: firstName || customerName,
-            last_name: lastName || "",
-            company: customerName,
-            source: "quickbooks",
-            status: "active",
-          })
-          .select("id")
-          .single();
-        contactId = newContact?.id || null;
       }
     }
 
