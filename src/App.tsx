@@ -127,6 +127,8 @@ const ClientPortalHomePage = lazy(() => import('./pages/public/portal/ClientPort
 const ClientPortalChangeRequestsPage = lazy(() => import('./pages/public/portal/ClientPortalChangeRequestsPage').then(m => ({ default: m.ClientPortalChangeRequestsPage })));
 const ClientPortalChangeRequestDetailPage = lazy(() => import('./pages/public/portal/ClientPortalChangeRequestDetailPage').then(m => ({ default: m.ClientPortalChangeRequestDetailPage })));
 const ClientPortalDocumentsPage = lazy(() => import('./pages/public/portal/ClientPortalDocumentsPage').then(m => ({ default: m.ClientPortalDocumentsPage })));
+const ClientPortalSupportTicketsPage = lazy(() => import('./pages/public/portal/ClientPortalSupportTicketsPage').then(m => ({ default: m.ClientPortalSupportTicketsPage })));
+const ClientPortalSupportTicketDetailPage = lazy(() => import('./pages/public/portal/ClientPortalSupportTicketDetailPage').then(m => ({ default: m.ClientPortalSupportTicketDetailPage })));
 
 function PageLoader() {
   return (
@@ -770,6 +772,8 @@ function App() {
               <Route index element={<ClientPortalHomePage />} />
               <Route path="change-requests" element={<ClientPortalChangeRequestsPage />} />
               <Route path="change-requests/:requestId" element={<ClientPortalChangeRequestDetailPage />} />
+              <Route path="support-tickets" element={<ClientPortalSupportTicketsPage />} />
+              <Route path="support-tickets/:ticketId" element={<ClientPortalSupportTicketDetailPage />} />
               <Route path="documents" element={<ClientPortalDocumentsPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />

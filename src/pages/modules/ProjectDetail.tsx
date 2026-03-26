@@ -26,9 +26,10 @@ import { ProjectNotesTab } from '../../components/projects/ProjectNotesTab';
 import { ProjectTimelineTab } from '../../components/projects/ProjectTimelineTab';
 import { ProjectFinancialsTab } from '../../components/projects/ProjectFinancialsTab';
 import { ProjectChangeRequestsTab } from '../../components/projects/ProjectChangeRequestsTab';
+import { ProjectSupportTicketsTab } from '../../components/projects/ProjectSupportTicketsTab';
 import { generateProjectClientLink } from '../../services/projectChangeRequests';
 
-type TabId = 'overview' | 'tasks' | 'notes' | 'timeline' | 'financials' | 'change_requests';
+type TabId = 'overview' | 'tasks' | 'notes' | 'timeline' | 'financials' | 'change_requests' | 'support_tickets';
 
 const STATUS_STYLES: Record<string, string> = {
   active: 'bg-cyan-500/20 text-cyan-400',
@@ -149,6 +150,7 @@ export function ProjectDetail() {
     { id: 'timeline', label: 'Timeline' },
     ...(canAccessPayments ? [{ id: 'financials' as const, label: 'Financials' }] : []),
     ...(canViewChangeRequests ? [{ id: 'change_requests' as const, label: 'Change Requests' }] : []),
+    ...(canViewChangeRequests ? [{ id: 'support_tickets' as const, label: 'Support Tickets' }] : []),
   ];
 
   return (
@@ -283,6 +285,16 @@ export function ProjectDetail() {
               users={users}
               canManage={canManageChangeRequests}
               canApprove={canApproveChangeRequests}
+              currentUserId={user!.id}
+              currentUserName={user!.name || user!.email || ''}
+            />
+          )}
+          {activeTab === 'support_tickets' && (
+            <ProjectSupportTicketsTab
+              projectId={project.id}
+              orgId={project.org_id}
+              users={users}
+              canManage={canManageChangeRequests}
               currentUserId={user!.id}
               currentUserName={user!.name || user!.email || ''}
             />

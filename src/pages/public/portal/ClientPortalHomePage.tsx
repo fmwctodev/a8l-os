@@ -12,12 +12,16 @@ import {
   Phone,
   FileText,
   TrendingUp,
+  Headphones,
+  LifeBuoy,
 } from 'lucide-react';
 import { useClientPortal } from '../../../contexts/ClientPortalContext';
-import { getPortalChangeRequests, getPortalStats } from '../../../services/projectClientPortals';
+import { getPortalChangeRequests, getPortalStats, getPortalSupportTickets, getPortalTicketStats } from '../../../services/projectClientPortals';
 import { PortalStatusBadge } from '../../../components/portal/PortalStatusBadge';
+import { SupportTicketStatusBadge } from '../../../components/portal/SupportTicketStatusBadge';
 import { SubmitChangeRequestModal } from '../../../components/portal/SubmitChangeRequestModal';
-import type { ProjectChangeRequest } from '../../../types';
+import { SubmitSupportTicketModal } from '../../../components/portal/SubmitSupportTicketModal';
+import type { ProjectChangeRequest, ProjectSupportTicket } from '../../../types';
 
 const PRIORITY_DOT: Record<string, string> = {
   low: 'bg-slate-400',
@@ -60,14 +64,20 @@ export function ClientPortalHomePage() {
   const navigate = useNavigate();
 
   const [requests, setRequests] = useState<ProjectChangeRequest[]>([]);
+  const [tickets, setTickets] = useState<ProjectSupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showTicketModal, setShowTicketModal] = useState(false);
 
   useEffect(() => {
     if (!portal) return;
     logEvent('project_portal.viewed');
-    getPortalChangeRequests(portal.project_id).then((data) => {
-      setRequests(data);
+    Promise.all([
+      getPortalChangeRequests(portal.project_id),
+      getPortalSupportTickets(portal.project_id),
+    ]).then(([reqs, tix]) => {
+      setRequests(reqs);
+      setTickets(tix);
     }).catch(console.error).finally(() => setLoading(false));
   }, [portal]);
 
@@ -82,7 +92,9 @@ export function ClientPortalHomePage() {
     : 'Client';
 
   const stats = getPortalStats(requests);
+  const ticketStats = getPortalTicketStats(tickets);
   const recentRequests = requests.slice(0, 5);
+  const recentTickets = tickets.slice(0, 5);
 
   const base = `/portal/project/${portalToken}`;
 
@@ -171,13 +183,22 @@ export function ClientPortalHomePage() {
               )}
             </div>
           </div>
-          <button
-            onClick={() => setShowSubmitModal(true)}
-            className="mt-5 flex items-center justify-center gap-2 w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Submit Change Request
-          </button>
+          <div className="mt-5 space-y-2">
+            <button
+              onClick={() => setShowSubmitModal(true)}
+              className="flex items-center justify-center gap-2 w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Submit Change Request
+            </button>
+            <button
+              onClick={() => setShowTicketModal(true)}
+              className="flex items-center justify-center gap-2 w-full py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-xl transition-colors"
+            >
+              <Headphones className="w-4 h-4" />
+              Support Ticket
+            </button>
+          </div>
         </div>
       </div>
 
@@ -191,6 +212,12 @@ export function ClientPortalHomePage() {
           value={loading ? '—' : `$${stats.totalApprovedValue.toLocaleString()}`}
           color="amber"
         />
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <StatCard icon={LifeBuoy} label="Open Tickets" value={loading ? '—' : ticketStats.open} color="blue" />
+        <StatCard icon={Clock} label="Waiting on You" value={loading ? '—' : ticketStats.waitingOnClient} color="orange" />
+        <StatCard icon={CheckCircle2} label="Resolved Tickets" value={loading ? '—' : ticketStats.resolved} color="emerald" />
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
@@ -247,6 +274,60 @@ export function ClientPortalHomePage() {
         )}
       </div>
 
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h3 className="text-sm font-semibold text-gray-900">Recent Support Tickets</h3>
+          <button
+            onClick={() => navigate(`${base}/support-tickets`)}
+            className="text-xs text-teal-600 hover:text-teal-700 font-medium flex items-center gap-1"
+          >
+            View all
+            <ChevronRight className="w-3 h-3" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600" />
+          </div>
+        ) : recentTickets.length === 0 ? (
+          <div className="text-center py-12">
+            <LifeBuoy className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+            <p className="text-sm text-gray-500">No support tickets yet</p>
+            <button
+              onClick={() => setShowTicketModal(true)}
+              className="mt-3 text-sm text-teal-600 hover:text-teal-700 font-medium"
+            >
+              Submit your first ticket
+            </button>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {recentTickets.map((ticket) => (
+              <button
+                key={ticket.id}
+                onClick={() => navigate(`${base}/support-tickets/${ticket.id}`)}
+                className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors text-left group"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-2 h-2 rounded-full flex-none ${PRIORITY_DOT[ticket.priority] ?? 'bg-gray-400'}`} />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-gray-900 truncate">{ticket.title}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {ticket.ticket_number} &middot; {new Date(ticket.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 flex-none ml-4">
+                  <SupportTicketStatusBadge status={ticket.status} size="sm" />
+                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors" />
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
       {showSubmitModal && portal && (
         <SubmitChangeRequestModal
           projectId={portal.project_id}
@@ -258,6 +339,21 @@ export function ClientPortalHomePage() {
             getPortalChangeRequests(portal.project_id).then(setRequests);
           }}
           onClose={() => setShowSubmitModal(false)}
+        />
+      )}
+
+      {showTicketModal && portal && (
+        <SubmitSupportTicketModal
+          projectId={portal.project_id}
+          orgId={portal.org_id}
+          contactName={contactName}
+          contactEmail={contact?.email ?? undefined}
+          contactPhone={contact?.phone ?? undefined}
+          onSuccess={() => {
+            setShowTicketModal(false);
+            getPortalSupportTickets(portal.project_id).then(setTickets);
+          }}
+          onClose={() => setShowTicketModal(false)}
         />
       )}
     </div>

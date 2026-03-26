@@ -6278,6 +6278,194 @@ export interface UpdateChangeRequestInput {
   client_decision?: 'pending' | 'approved' | 'declined' | null;
 }
 
+// ============================================================
+// Project Support Tickets
+// ============================================================
+
+export type SupportTicketStatus =
+  | 'new'
+  | 'in_review'
+  | 'in_progress'
+  | 'waiting_on_client'
+  | 'resolved'
+  | 'closed';
+
+export type SupportTicketPriority = 'low' | 'medium' | 'high' | 'critical';
+
+export type SupportTicketServiceCategory =
+  | 'ai_automation'
+  | 'crm_pipeline'
+  | 'content_automation'
+  | 'integration_api'
+  | 'workflow_automation'
+  | 'custom_software'
+  | 'data_analytics'
+  | 'other';
+
+export type SupportTicketRequestType =
+  | 'bug_report'
+  | 'feature_request'
+  | 'performance_issue'
+  | 'configuration_change'
+  | 'access_permissions'
+  | 'training_docs'
+  | 'general_inquiry';
+
+export type SupportTicketBusinessImpact =
+  | 'revenue_affecting'
+  | 'operations_blocked'
+  | 'team_productivity'
+  | 'client_facing'
+  | 'internal_only'
+  | 'minimal';
+
+export type SupportTicketEnvironment =
+  | 'production'
+  | 'staging'
+  | 'development'
+  | 'unknown';
+
+export interface SupportTicketAttachment {
+  name: string;
+  url: string;
+  size: number;
+  type: string;
+}
+
+export interface ProjectSupportTicket {
+  id: string;
+  org_id: string;
+  project_id: string;
+  ticket_number: string;
+  client_name: string;
+  client_email: string | null;
+  client_phone: string | null;
+  client_company: string | null;
+  title: string;
+  service_category: SupportTicketServiceCategory;
+  request_type: SupportTicketRequestType;
+  priority: SupportTicketPriority;
+  description: string;
+  steps_to_reproduce: string | null;
+  expected_behavior: string | null;
+  actual_behavior: string | null;
+  affected_area: string | null;
+  affected_feature: string | null;
+  affected_workflow_id: string | null;
+  affected_integration: string | null;
+  environment: SupportTicketEnvironment;
+  browser_info: string | null;
+  error_messages: string | null;
+  attachments: SupportTicketAttachment[];
+  business_impact: SupportTicketBusinessImpact;
+  impact_description: string | null;
+  users_affected_count: number;
+  workaround_available: boolean;
+  preferred_contact_method: string;
+  availability_window: string | null;
+  expected_resolution_date: string | null;
+  status: SupportTicketStatus;
+  severity_score: number;
+  assigned_user_id: string | null;
+  internal_notes: string | null;
+  resolution_summary: string | null;
+  auto_tags: string[];
+  source: 'portal' | 'internal' | 'email';
+  access_token_hash: string | null;
+  created_by_user_id: string | null;
+  first_response_at: string | null;
+  resolved_at: string | null;
+  closed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  assigned_user?: User | null;
+  created_by_user?: User | null;
+  project?: { id: string; name: string; org_id: string } | null;
+}
+
+export interface CreateSupportTicketInput {
+  project_id: string;
+  org_id: string;
+  client_name: string;
+  client_email?: string;
+  client_phone?: string;
+  client_company?: string;
+  title: string;
+  service_category: SupportTicketServiceCategory;
+  request_type: SupportTicketRequestType;
+  priority: SupportTicketPriority;
+  description: string;
+  steps_to_reproduce?: string;
+  expected_behavior?: string;
+  actual_behavior?: string;
+  affected_area?: string;
+  affected_feature?: string;
+  affected_workflow_id?: string;
+  affected_integration?: string;
+  environment?: SupportTicketEnvironment;
+  browser_info?: string;
+  error_messages?: string;
+  attachments?: SupportTicketAttachment[];
+  business_impact?: SupportTicketBusinessImpact;
+  impact_description?: string;
+  users_affected_count?: number;
+  workaround_available?: boolean;
+  preferred_contact_method?: string;
+  availability_window?: string;
+  expected_resolution_date?: string;
+  source?: 'portal' | 'internal' | 'email';
+}
+
+export interface UpdateSupportTicketInput {
+  title?: string;
+  service_category?: SupportTicketServiceCategory;
+  request_type?: SupportTicketRequestType;
+  priority?: SupportTicketPriority;
+  description?: string;
+  status?: SupportTicketStatus;
+  severity_score?: number;
+  assigned_user_id?: string | null;
+  internal_notes?: string;
+  resolution_summary?: string;
+  auto_tags?: string[];
+}
+
+export interface ProjectSupportTicketComment {
+  id: string;
+  org_id: string;
+  support_ticket_id: string;
+  body: string;
+  is_internal: boolean;
+  author_type: 'user' | 'client' | 'system';
+  author_user_id: string | null;
+  author_name: string | null;
+  attachments: SupportTicketAttachment[];
+  created_at: string;
+  updated_at: string;
+  author_user?: User | null;
+}
+
+export interface ProjectSupportTicketAuditEvent {
+  id: string;
+  org_id: string;
+  support_ticket_id: string;
+  event_type: string;
+  actor_type: 'user' | 'client' | 'system';
+  actor_user_id: string | null;
+  actor_name: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ProjectSupportTicketStats {
+  total: number;
+  open: number;
+  in_progress: number;
+  waiting_on_client: number;
+  resolved: number;
+  closed: number;
+}
+
 export type ContractType = 'freelance_service' | 'retainer' | 'partnership' | 'nda';
 export type ContractStatus = 'draft' | 'sent' | 'viewed' | 'signed' | 'declined' | 'expired' | 'voided';
 export type ContractSignatureStatus = 'not_sent' | 'pending_signature' | 'viewed' | 'signed' | 'declined' | 'expired' | 'voided';

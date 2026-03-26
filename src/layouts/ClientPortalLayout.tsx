@@ -165,10 +165,11 @@ function PortalContent() {
             </div>
           </div>
 
-          <nav className="flex gap-1 -mb-px">
+          <nav className="flex gap-1 -mb-px overflow-x-auto">
             {[
               { to: base, label: 'Overview', end: true },
               { to: `${base}/change-requests`, label: 'Change Requests', end: false },
+              { to: `${base}/support-tickets`, label: 'Support Tickets', end: false },
               { to: `${base}/documents`, label: 'Documents', end: false },
             ].map(({ to, label, end }) => (
               <NavLink

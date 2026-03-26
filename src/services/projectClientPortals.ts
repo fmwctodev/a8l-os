@@ -365,6 +365,80 @@ export async function getPortalComments(changeRequestId: string): Promise<import
   return (data ?? []) as import('../types').ProjectChangeRequestComment[];
 }
 
+export async function getPortalSupportTickets(projectId: string): Promise<import('../types').ProjectSupportTicket[]> {
+  const { data, error } = await supabase
+    .from('project_support_tickets')
+    .select('*')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as import('../types').ProjectSupportTicket[];
+}
+
+export async function getPortalSupportTicketById(ticketId: string): Promise<import('../types').ProjectSupportTicket | null> {
+  const { data, error } = await supabase
+    .from('project_support_tickets')
+    .select('*')
+    .eq('id', ticketId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as import('../types').ProjectSupportTicket | null;
+}
+
+export async function getPortalTicketComments(ticketId: string): Promise<import('../types').ProjectSupportTicketComment[]> {
+  const { data, error } = await supabase
+    .from('project_support_ticket_comments')
+    .select('*')
+    .eq('support_ticket_id', ticketId)
+    .eq('is_internal', false)
+    .order('created_at', { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []) as import('../types').ProjectSupportTicketComment[];
+}
+
+export async function clientAddTicketComment(params: {
+  supportTicketId: string;
+  orgId: string;
+  body: string;
+  authorName: string;
+  portalId: string;
+  projectId: string;
+  contactId?: string | null;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('project_support_ticket_comments')
+    .insert({
+      support_ticket_id: params.supportTicketId,
+      org_id: params.orgId,
+      body: params.body,
+      is_internal: false,
+      author_type: 'client',
+      author_name: params.authorName,
+    });
+
+  if (error) throw error;
+
+  await logPortalEvent({
+    portalId: params.portalId,
+    projectId: params.projectId,
+    contactId: params.contactId,
+    eventType: 'project_support_ticket.client_replied',
+    metadata: { support_ticket_id: params.supportTicketId },
+    userAgent: navigator.userAgent,
+  });
+}
+
+export function getPortalTicketStats(tickets: import('../types').ProjectSupportTicket[]) {
+  return {
+    open: tickets.filter((t) => ['new', 'in_review', 'in_progress'].includes(t.status)).length,
+    waitingOnClient: tickets.filter((t) => t.status === 'waiting_on_client').length,
+    resolved: tickets.filter((t) => ['resolved', 'closed'].includes(t.status)).length,
+  };
+}
+
 export function getPortalStats(requests: import('../types').ProjectChangeRequest[]) {
   const openStatuses = ['submitted', 'under_review', 'needs_more_info', 'scheduled', 'in_progress'];
   return {
