@@ -34,6 +34,9 @@ async function getDecryptedApiKey(
   supabaseUrl: string,
   serviceRoleKey: string
 ): Promise<string | null> {
+  const envKey = Deno.env.get("SENDGRID_API_KEY");
+  if (envKey) return envKey;
+
   const { data: conn } = await supabase
     .from("integration_connections")
     .select("credentials_encrypted, credentials_iv, status, integrations!inner(key)")
