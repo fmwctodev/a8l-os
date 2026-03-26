@@ -171,7 +171,7 @@ export function ProjectSupportTicketsTab({
             </thead>
             <tbody>
               {tickets.map((ticket) => {
-                const assignedUser = users.find((u) => u.id === ticket.assigned_to);
+                const assignedUser = users.find((u) => u.id === ticket.assigned_user_id);
                 return (
                   <tr
                     key={ticket.id}

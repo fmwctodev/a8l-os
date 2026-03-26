@@ -391,7 +391,7 @@ export async function getPortalTicketComments(ticketId: string): Promise<import(
   const { data, error } = await supabase
     .from('project_support_ticket_comments')
     .select('*')
-    .eq('support_ticket_id', ticketId)
+    .eq('ticket_id', ticketId)
     .eq('is_internal', false)
     .order('created_at', { ascending: true });
 
@@ -411,7 +411,7 @@ export async function clientAddTicketComment(params: {
   const { error } = await supabase
     .from('project_support_ticket_comments')
     .insert({
-      support_ticket_id: params.supportTicketId,
+      ticket_id: params.supportTicketId,
       org_id: params.orgId,
       body: params.body,
       is_internal: false,

@@ -106,7 +106,7 @@ export function SupportTicketDrawer({
   const [resolution, setResolution] = useState(ticket.resolution_summary ?? '');
   const [showResolutionForm, setShowResolutionForm] = useState(false);
   const [savingResolution, setSavingResolution] = useState(false);
-  const [assignee, setAssignee] = useState(ticket.assigned_to ?? '');
+  const [assignee, setAssignee] = useState(ticket.assigned_user_id ?? '');
 
   const loadData = useCallback(async () => {
     const [c, a] = await Promise.all([
@@ -171,7 +171,7 @@ export function SupportTicketDrawer({
     try {
       const updated = await updateSupportTicket(
         ticket.id,
-        { assigned_to: userId || null },
+        { assigned_user_id: userId || null },
         currentUserId,
         currentUserName
       );

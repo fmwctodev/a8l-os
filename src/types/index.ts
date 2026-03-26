@@ -6464,6 +6464,7 @@ export interface ProjectSupportTicketStats {
   waiting_on_client: number;
   resolved: number;
   closed: number;
+  critical: number;
 }
 
 export type ContractType = 'freelance_service' | 'retainer' | 'partnership' | 'nda';

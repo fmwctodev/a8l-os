@@ -93,7 +93,7 @@ export async function createSupportTicket(
       client_name: input.client_name,
       client_email: input.client_email ?? null,
       client_phone: input.client_phone ?? null,
-      client_company: input.client_company ?? null,
+      company_name: input.client_company ?? null,
       title: input.title,
       service_category: input.service_category,
       request_type: input.request_type,
@@ -216,7 +216,7 @@ export async function updateSupportTicket(
 export async function getSupportTicketStats(projectId: string): Promise<ProjectSupportTicketStats> {
   const { data, error } = await supabase
     .from('project_support_tickets')
-    .select('status')
+    .select('status, priority')
     .eq('project_id', projectId);
 
   if (error) throw error;
@@ -229,6 +229,7 @@ export async function getSupportTicketStats(projectId: string): Promise<ProjectS
     waiting_on_client: rows.filter((r) => r.status === 'waiting_on_client').length,
     resolved: rows.filter((r) => r.status === 'resolved').length,
     closed: rows.filter((r) => r.status === 'closed').length,
+    critical: rows.filter((r) => r.priority === 'critical' && !['resolved', 'closed'].includes(r.status)).length,
   };
 }
 
@@ -239,7 +240,7 @@ export async function getTicketComments(ticketId: string, includeInternal = true
       *,
       author_user:users!project_support_ticket_comments_author_user_id_fkey(id, name, avatar_url, email)
     `)
-    .eq('support_ticket_id', ticketId)
+    .eq('ticket_id', ticketId)
     .order('created_at', { ascending: true });
 
   if (!includeInternal) {
@@ -265,7 +266,7 @@ export async function addTicketComment(params: {
     .from('project_support_ticket_comments')
     .insert({
       org_id: params.orgId,
-      support_ticket_id: params.supportTicketId,
+      ticket_id: params.supportTicketId,
       body: params.body,
       is_internal: params.isInternal,
       author_type: params.authorType,
@@ -296,7 +297,7 @@ export async function createAuditEvent(params: {
     .from('project_support_ticket_audit')
     .insert({
       org_id: params.orgId,
-      support_ticket_id: params.supportTicketId,
+      ticket_id: params.supportTicketId,
       event_type: params.eventType,
       actor_type: params.actorType,
       actor_user_id: params.actorId ?? null,
@@ -314,7 +315,7 @@ export async function getAuditEvents(ticketId: string): Promise<ProjectSupportTi
   const { data, error } = await supabase
     .from('project_support_ticket_audit')
     .select('*')
-    .eq('support_ticket_id', ticketId)
+    .eq('ticket_id', ticketId)
     .order('created_at', { ascending: true });
 
   if (error) throw error;
