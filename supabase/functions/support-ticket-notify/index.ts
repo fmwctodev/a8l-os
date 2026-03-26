@@ -16,7 +16,12 @@ async function getDecryptedSendGridKey(
   supabaseUrl: string,
   serviceRoleKey: string
 ): Promise<string | null> {
-  const { data: conn, error: connError } = await supabase
+  const envKey = Deno.env.get("SENDGRID_API_KEY");
+  if (envKey) {
+    return envKey;
+  }
+
+  const { data: conn } = await supabase
     .from("integration_connections")
     .select(
       "credentials_encrypted, credentials_iv, status, integrations!inner(key)"
@@ -24,8 +29,6 @@ async function getDecryptedSendGridKey(
     .eq("org_id", orgId)
     .eq("integrations.key", "sendgrid")
     .maybeSingle();
-
-  console.log("SendGrid connection lookup:", { found: !!conn, error: connError?.message, status: conn?.status });
 
   if (
     !conn ||
@@ -48,13 +51,8 @@ async function getDecryptedSendGridKey(
     }),
   });
 
-  if (!response.ok) {
-    const errText = await response.text().catch(() => "");
-    console.error("email-crypto decrypt failed:", response.status, errText);
-    return null;
-  }
+  if (!response.ok) return null;
   const data = await response.json();
-  console.log("SendGrid key decrypted:", !!data.plaintext);
   return data.plaintext;
 }
 
