@@ -16,7 +16,7 @@ async function getDecryptedSendGridKey(
   supabaseUrl: string,
   serviceRoleKey: string
 ): Promise<string | null> {
-  const { data: conn } = await supabase
+  const { data: conn, error: connError } = await supabase
     .from("integration_connections")
     .select(
       "credentials_encrypted, credentials_iv, status, integrations!inner(key)"
@@ -24,6 +24,8 @@ async function getDecryptedSendGridKey(
     .eq("org_id", orgId)
     .eq("integrations.key", "sendgrid")
     .maybeSingle();
+
+  console.log("SendGrid connection lookup:", { found: !!conn, error: connError?.message, status: conn?.status });
 
   if (
     !conn ||
@@ -46,8 +48,13 @@ async function getDecryptedSendGridKey(
     }),
   });
 
-  if (!response.ok) return null;
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "");
+    console.error("email-crypto decrypt failed:", response.status, errText);
+    return null;
+  }
   const data = await response.json();
+  console.log("SendGrid key decrypted:", !!data.plaintext);
   return data.plaintext;
 }
 
@@ -297,10 +304,12 @@ Deno.serve(async (req: Request) => {
       .eq("org_id", org_id)
       .maybeSingle();
 
+    console.log("Ticket lookup:", { found: !!ticket, error: ticketError?.message, ticket_id, org_id });
+
     if (ticketError || !ticket) {
       console.error("Ticket lookup failed:", ticketError?.message ?? "not found");
       return new Response(
-        JSON.stringify({ success: false, error: "Ticket not found" }),
+        JSON.stringify({ success: false, error: "Ticket not found", detail: ticketError?.message }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -407,28 +416,40 @@ Deno.serve(async (req: Request) => {
     const priorityPrefix = priority === "critical" ? "[CRITICAL] " : priority === "high" ? "[HIGH] " : "";
     const subject = `${priorityPrefix}New Support Ticket: ${title} (${ticket_number})`;
 
+    console.log("Sending team email to support@autom8ionlab.com from", fromEmail);
+
+    const teamPayload = {
+      personalizations: [
+        { to: [{ email: "support@autom8ionlab.com" }] },
+      ],
+      from: { email: fromEmail, name: fromName },
+      subject,
+      content: [{ type: "text/html", value: teamEmailContent }],
+    };
+
     const teamEmailRes = await fetch("https://api.sendgrid.com/v3/mail/send", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${sendgridKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        personalizations: [
-          { to: [{ email: "support@autom8ionlab.com" }] },
-        ],
-        from: { email: fromEmail, name: fromName },
-        subject,
-        content: [{ type: "text/html", value: teamEmailContent }],
-      }),
+      body: JSON.stringify(teamPayload),
     });
 
+    const teamStatus = teamEmailRes.status;
+    let teamError = "";
     if (!teamEmailRes.ok) {
-      const errBody = await teamEmailRes.text().catch(() => "");
-      console.error("SendGrid team email error:", teamEmailRes.status, errBody);
+      teamError = await teamEmailRes.text().catch(() => "");
+      console.error("SendGrid team email error:", teamStatus, teamError);
+    } else {
+      console.log("Team email sent successfully, status:", teamStatus);
     }
 
+    let clientStatus = 0;
+    let clientError = "";
     if (client_email) {
+      console.log("Sending client confirmation to", client_email);
+
       const clientEmailContent = buildClientConfirmationEmail({
         client_name,
         ticket_number,
@@ -457,14 +478,26 @@ Deno.serve(async (req: Request) => {
         }),
       });
 
+      clientStatus = clientEmailRes.status;
       if (!clientEmailRes.ok) {
-        const errBody = await clientEmailRes.text().catch(() => "");
-        console.error("SendGrid client email error:", clientEmailRes.status, errBody);
+        clientError = await clientEmailRes.text().catch(() => "");
+        console.error("SendGrid client email error:", clientStatus, clientError);
+      } else {
+        console.log("Client email sent successfully, status:", clientStatus);
       }
     }
 
     return new Response(
-      JSON.stringify({ success: true }),
+      JSON.stringify({
+        success: true,
+        team_email_status: teamStatus,
+        team_email_error: teamError || undefined,
+        client_email_status: clientStatus || undefined,
+        client_email_error: clientError || undefined,
+        from: fromEmail,
+        to_team: "support@autom8ionlab.com",
+        to_client: client_email,
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

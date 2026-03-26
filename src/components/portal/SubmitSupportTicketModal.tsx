@@ -210,9 +210,10 @@ export function SubmitSupportTicketModal({
           },
           body: JSON.stringify({ ticket_id: ticket.id, org_id: orgId }),
         });
+        const notifyBody = await notifyRes.json().catch(() => null);
+        console.log('support-ticket-notify response:', notifyRes.status, notifyBody);
         if (!notifyRes.ok) {
-          const body = await notifyRes.text().catch(() => '');
-          console.error('support-ticket-notify failed:', notifyRes.status, body);
+          console.error('support-ticket-notify failed:', notifyRes.status, notifyBody);
         }
       } catch (notifyErr) {
         console.error('support-ticket-notify error:', notifyErr);
