@@ -104,6 +104,24 @@ export function ProjectChangeRequestsTab({
         description: newForm.description,
         source: 'internal',
       }, currentUserId);
+
+      try {
+        const notifyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/change-request-notify`;
+        const notifyRes = await fetch(notifyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ request_id: request.id, org_id: orgId }),
+        });
+        const notifyBody = await notifyRes.json().catch(() => null);
+        console.log('change-request-notify response:', notifyRes.status, notifyBody);
+      } catch (notifyErr) {
+        console.error('change-request-notify error:', notifyErr);
+      }
+
       setShowNewForm(false);
       setNewForm({ title: '', client_name: '', client_email: '', request_type: 'scope', priority: 'medium', description: '' });
       await load();

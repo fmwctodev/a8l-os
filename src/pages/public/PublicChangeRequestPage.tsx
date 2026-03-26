@@ -91,6 +91,24 @@ export function PublicChangeRequestPage() {
         requested_due_date: form.requested_due_date || undefined,
         source: 'public_form',
       });
+
+      try {
+        const notifyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/change-request-notify`;
+        const notifyRes = await fetch(notifyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ request_id: request.id, org_id: orgId }),
+        });
+        const notifyBody = await notifyRes.json().catch(() => null);
+        console.log('change-request-notify response:', notifyRes.status, notifyBody);
+      } catch (notifyErr) {
+        console.error('change-request-notify error:', notifyErr);
+      }
+
       setReferenceId(request.id.slice(0, 8).toUpperCase());
       setClientPortalUrl(url);
       setPageState('submitted');
