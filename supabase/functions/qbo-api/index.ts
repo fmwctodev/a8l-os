@@ -743,7 +743,7 @@ Deno.serve(async (req: Request) => {
     if (error instanceof QBOTokenExpiredError) {
       return new Response(
         JSON.stringify({ error: "QBO_TOKEN_EXPIRED", message: error.message }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     return new Response(

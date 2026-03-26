@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getInvoices, getInvoiceStats, sendInvoice, voidInvoice } from '../../services/invoices';
 import { getProducts, toggleProductActive } from '../../services/products';
-import { getQBOConnectionStatus } from '../../services/qboAuth';
+import { getQBOConnectionStatus, refreshQBOToken, generateQBOAuthUrl, exchangeQBOCode } from '../../services/qboAuth';
 import { syncQBOInvoices, QBOTokenExpiredError } from '../../services/qboApi';
 import type { Invoice, Product, InvoiceStats, InvoiceStatus, BillingType } from '../../types';
 import {
@@ -63,6 +63,8 @@ export function Payments() {
   const [showCreateInvoice, setShowCreateInvoice] = useState(false);
   const [showCreateProduct, setShowCreateProduct] = useState(false);
   const [qboConnected, setQboConnected] = useState(false);
+  const [qboTokenExpired, setQboTokenExpired] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ synced: number; updated: number; total: number } | null>(null);
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
@@ -78,9 +80,26 @@ export function Payments() {
   useEffect(() => {
     if (canView) {
       loadData();
-      checkQBOConnection();
+      handleQBOOAuthCallback().then(() => checkQBOConnection());
     }
   }, [user, canView]);
+
+  const handleQBOOAuthCallback = async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const realmId = urlParams.get('realmId');
+    const state = urlParams.get('state');
+    if (!code || !realmId || !state) return;
+    try {
+      const redirectUri = `${window.location.origin}/payments`;
+      await exchangeQBOCode(code, realmId, redirectUri);
+      window.history.replaceState({}, '', window.location.pathname);
+      hasSyncedRef.current = false;
+      setQboTokenExpired(false);
+    } catch (err) {
+      console.error('Failed to exchange QBO code:', err);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -104,7 +123,21 @@ export function Payments() {
     try {
       const status = await getQBOConnectionStatus();
       setQboConnected(status.connected);
-      if (status.connected && !hasSyncedRef.current) {
+      setQboTokenExpired(false);
+
+      if (!status.connected) return;
+
+      if (status.tokenExpiring) {
+        try {
+          await refreshQBOToken();
+        } catch {
+          setQboTokenExpired(true);
+          setQboConnected(false);
+          return;
+        }
+      }
+
+      if (!hasSyncedRef.current) {
         hasSyncedRef.current = true;
         setIsSyncing(true);
         try {
@@ -116,6 +149,8 @@ export function Payments() {
         } catch (syncErr) {
           if (syncErr instanceof QBOTokenExpiredError) {
             setQboConnected(false);
+            setQboTokenExpired(true);
+            hasSyncedRef.current = false;
           } else {
             console.error('Failed to sync QBO invoices:', syncErr);
           }
@@ -126,6 +161,19 @@ export function Payments() {
       }
     } catch (err) {
       console.error('Failed to check QBO connection:', err);
+    }
+  };
+
+  const handleReconnectQBO = async () => {
+    if (!user?.organization_id) return;
+    try {
+      setIsReconnecting(true);
+      const redirectUri = `${window.location.origin}/payments`;
+      const authUrl = await generateQBOAuthUrl(user.organization_id, redirectUri);
+      window.location.href = authUrl;
+    } catch (err) {
+      console.error('Failed to initiate QBO reconnect:', err);
+      setIsReconnecting(false);
     }
   };
 
@@ -275,7 +323,21 @@ export function Payments() {
           <p className="text-slate-400 mt-1">Manage invoices, products, and billing</p>
         </div>
         <div className="flex items-center gap-3">
-          {!qboConnected && (
+          {qboTokenExpired && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+              <AlertCircle className="w-4 h-4" />
+              <span>QuickBooks session expired</span>
+              <button
+                onClick={handleReconnectQBO}
+                disabled={isReconnecting}
+                className="ml-1 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-300 font-medium transition-colors disabled:opacity-50"
+              >
+                {isReconnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Reconnect
+              </button>
+            </div>
+          )}
+          {!qboConnected && !qboTokenExpired && (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm">
               <AlertCircle className="w-4 h-4" />
               <span>QuickBooks not connected</span>
