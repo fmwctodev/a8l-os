@@ -11,7 +11,6 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { createSupportTicket, uploadTicketAttachment } from '../../services/projectSupportTickets';
-import { callEdgeFunction } from '../../lib/edgeFunction';
 import type {
   SupportTicketServiceCategory,
   SupportTicketRequestType,
@@ -201,9 +200,15 @@ export function SubmitSupportTicketModal({
       });
 
       try {
-        await callEdgeFunction('support-ticket-notify', {
-          ticket_id: ticket.id,
-          org_id: orgId,
+        const notifyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/support-ticket-notify`;
+        await fetch(notifyUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'Apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ ticket_id: ticket.id, org_id: orgId }),
         });
       } catch {
         // notification failure shouldn't block submission
