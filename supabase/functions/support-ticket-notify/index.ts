@@ -292,25 +292,25 @@ Deno.serve(async (req: Request) => {
 
     const { data: ticket, error: ticketError } = await supabase
       .from("project_support_tickets")
-      .select("*, project:projects!inner(name)")
+      .select("*")
       .eq("id", ticket_id)
       .eq("org_id", org_id)
       .maybeSingle();
 
     if (ticketError || !ticket) {
+      console.error("Ticket lookup failed:", ticketError?.message ?? "not found");
       return new Response(
         JSON.stringify({ success: false, error: "Ticket not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const { data: org } = await supabase
-      .from("organizations")
-      .select("name, email")
-      .eq("id", org_id)
-      .maybeSingle();
+    const [{ data: org }, { data: project }] = await Promise.all([
+      supabase.from("organizations").select("name, email").eq("id", org_id).maybeSingle(),
+      supabase.from("projects").select("name").eq("id", ticket.project_id).maybeSingle(),
+    ]);
 
-    const project_name = ticket.project?.name || "Unknown Project";
+    const project_name = project?.name || "Unknown Project";
     const org_name = org?.name || "Autom8ion Lab";
     const org_email = org?.email || "support@autom8ionlab.com";
 

@@ -201,7 +201,7 @@ export function SubmitSupportTicketModal({
 
       try {
         const notifyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/support-ticket-notify`;
-        await fetch(notifyUrl, {
+        const notifyRes = await fetch(notifyUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -210,8 +210,12 @@ export function SubmitSupportTicketModal({
           },
           body: JSON.stringify({ ticket_id: ticket.id, org_id: orgId }),
         });
-      } catch {
-        // notification failure shouldn't block submission
+        if (!notifyRes.ok) {
+          const body = await notifyRes.text().catch(() => '');
+          console.error('support-ticket-notify failed:', notifyRes.status, body);
+        }
+      } catch (notifyErr) {
+        console.error('support-ticket-notify error:', notifyErr);
       }
 
       setSubmitted(true);
