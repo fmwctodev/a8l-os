@@ -46,10 +46,10 @@ export function Header() {
           className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800 transition-colors"
         >
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center">
-            {user?.avatar_url ? (
+            {(user?.profile_photo || user?.avatar_url) ? (
               <img
-                src={user.avatar_url}
-                alt={user.name}
+                src={user?.profile_photo || user?.avatar_url}
+                alt={user?.name}
                 className="w-full h-full rounded-full object-cover"
               />
             ) : (
