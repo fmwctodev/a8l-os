@@ -334,6 +334,17 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    const extractedValue = extractValueFromSections(generatedSections, proposal.currency || "USD");
+    if (extractedValue && extractedValue.value > 0) {
+      await supabase
+        .from("proposals")
+        .update({
+          total_value: extractedValue.value,
+          currency: extractedValue.currency,
+        })
+        .eq("id", proposal_id);
+    }
+
     const aiContext = {
       meetings_used: meeting_ids || [],
       uploaded_documents: uploaded_documents?.map((d) => d.name) || [],
@@ -775,6 +786,84 @@ async function callLLM(
   const responseText = data.content.find((b) => b.type === "text")?.text || "";
 
   return parseAIResponse(responseText);
+}
+
+const TOTAL_ROW_PATTERNS = [
+  /total\s+platform\s+investment/i,
+  /total\s+project\s+investment/i,
+  /total\s+investment/i,
+  /total\s+engagement/i,
+  /total\s+annual/i,
+  /total\s+project\s+cost/i,
+  /grand\s+total/i,
+  /total\s+cost/i,
+  /total\s+value/i,
+  /total\s+fee/i,
+  /\btotal\b/i,
+];
+
+const CURRENCY_SYMBOL_MAP: Record<string, string> = {
+  'AU$': 'AUD', 'NZ$': 'NZD', 'CA$': 'CAD', 'HK$': 'HKD', 'S$': 'SGD',
+  '€': 'EUR', '£': 'GBP', '¥': 'JPY', '₹': 'INR', '$': 'USD',
+};
+
+function detectCurrencyEdge(text: string): string {
+  const isoMatch = text.match(/\b(USD|AUD|NZD|CAD|GBP|EUR|JPY|SGD|HKD|INR)\b/);
+  if (isoMatch) return isoMatch[1];
+  for (const [symbol, code] of Object.entries(CURRENCY_SYMBOL_MAP)) {
+    if (text.includes(symbol)) return code;
+  }
+  return 'USD';
+}
+
+function parseMonetaryValueEdge(text: string): number | null {
+  const cleaned = text
+    .replace(/AU\$|NZ\$|CA\$|HK\$|S\$|USD|AUD|NZD|CAD|GBP|EUR|JPY|SGD|HKD|INR/g, '')
+    .replace(/[$€£¥₹]/g, '')
+    .replace(/,/g, '')
+    .trim();
+  const match = cleaned.match(/[\d]+(?:\.\d+)?/);
+  if (!match) return null;
+  const value = parseFloat(match[0]);
+  return isNaN(value) || value <= 0 ? null : value;
+}
+
+function extractValueFromSections(
+  sections: GeneratedSection[],
+  defaultCurrency: string
+): { value: number; currency: string } | null {
+  const priority = ['pricing', 'terms', 'custom', 'intro'];
+  for (const type of priority) {
+    const section = sections.find((s) => s.section_type === type);
+    if (!section?.content) continue;
+
+    const html = section.content;
+    const detectedCurrency = detectCurrencyEdge(html) || defaultCurrency;
+    const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    let rowMatch: RegExpExecArray | null;
+
+    while ((rowMatch = rowPattern.exec(html)) !== null) {
+      const rowHtml = rowMatch[1];
+      const cellPattern = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+      const cells: string[] = [];
+      let cellMatch: RegExpExecArray | null;
+      while ((cellMatch = cellPattern.exec(rowHtml)) !== null) {
+        cells.push(cellMatch[1].replace(/<[^>]+>/g, '').trim());
+      }
+      if (cells.length < 2) continue;
+      const firstCell = cells[0];
+      const allCells = cells.join(' ');
+      if (TOTAL_ROW_PATTERNS.some((p) => p.test(firstCell) || p.test(allCells))) {
+        for (let i = cells.length - 1; i >= 1; i--) {
+          const value = parseMonetaryValueEdge(cells[i]);
+          if (value !== null) {
+            return { value, currency: detectCurrencyEdge(cells[i]) || detectedCurrency };
+          }
+        }
+      }
+    }
+  }
+  return null;
 }
 
 async function getMaxSectionSortOrder(

@@ -31,6 +31,7 @@ import {
 import { CreateProposalModal } from '../../components/proposals/CreateProposalModal';
 import { exportProposalToPDF } from '../../services/proposalPdfExport';
 import { getBrandKits } from '../../services/brandboard';
+import { extractValueFromSections } from '../../utils/extractProposalValue';
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; icon: typeof Clock; label: string }> = {
   draft: { bg: 'bg-slate-500/20', text: 'text-slate-300', icon: Clock, label: 'Draft' },
@@ -167,21 +168,31 @@ export function Proposals() {
 
   const getProposalDisplayValue = (proposal: Proposal): { value: number; isRange: boolean; minValue: number } => {
     const items = proposal.line_items || [];
-    if (items.length === 0) {
+    if (items.length > 0) {
+      let totalMin = 0;
+      let totalMax = 0;
+      let hasRange = false;
+      for (const item of items) {
+        const effectiveMin = item.unit_price;
+        const effectiveMax = item.unit_price_max != null && item.unit_price_max > item.unit_price ? item.unit_price_max : item.unit_price;
+        if (effectiveMax > effectiveMin) hasRange = true;
+        const discount = item.discount_percent / 100;
+        totalMin += item.quantity * effectiveMin * (1 - discount);
+        totalMax += item.quantity * effectiveMax * (1 - discount);
+      }
+      return { value: totalMax, isRange: hasRange, minValue: totalMin };
+    }
+
+    if (proposal.total_value > 0) {
       return { value: proposal.total_value, isRange: false, minValue: proposal.total_value };
     }
-    let totalMin = 0;
-    let totalMax = 0;
-    let hasRange = false;
-    for (const item of items) {
-      const effectiveMin = item.unit_price;
-      const effectiveMax = item.unit_price_max != null && item.unit_price_max > item.unit_price ? item.unit_price_max : item.unit_price;
-      if (effectiveMax > effectiveMin) hasRange = true;
-      const discount = item.discount_percent / 100;
-      totalMin += item.quantity * effectiveMin * (1 - discount);
-      totalMax += item.quantity * effectiveMax * (1 - discount);
+
+    const extracted = extractValueFromSections(proposal.sections, proposal.currency);
+    if (extracted && extracted.value > 0) {
+      return { value: extracted.value, isRange: false, minValue: extracted.value };
     }
-    return { value: totalMax, isRange: hasRange, minValue: totalMin };
+
+    return { value: 0, isRange: false, minValue: 0 };
   };
 
   const totalPages = Math.ceil(totalCount / pageSize);

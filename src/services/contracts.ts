@@ -7,6 +7,7 @@ import type {
   ContractStatus,
   ContractType,
 } from '../types';
+import { extractValueFromSections } from '../utils/extractProposalValue';
 
 const FROZEN_STATUSES = ['pending_signature', 'viewed', 'signed'] as const;
 
@@ -167,7 +168,7 @@ export async function createContractFromProposal(
   const [proposalRes, orgRes, userRes] = await Promise.all([
     supabase
       .from('proposals')
-      .select('*, contact:contacts(*), opportunity:opportunities(*)')
+      .select('*, contact:contacts(*), opportunity:opportunities(*), sections:proposal_sections(*)')
       .eq('id', proposalId)
       .single(),
     supabase.from('organizations').select('name').eq('id', orgId).maybeSingle(),
@@ -181,6 +182,17 @@ export async function createContractFromProposal(
 
   const title = `Contract — ${proposal.title}`;
 
+  let resolvedValue = proposal.total_value || 0;
+  let resolvedCurrency = proposal.currency || 'USD';
+
+  if (resolvedValue === 0 && proposal.sections?.length) {
+    const extracted = extractValueFromSections(proposal.sections, resolvedCurrency);
+    if (extracted && extracted.value > 0) {
+      resolvedValue = extracted.value;
+      resolvedCurrency = extracted.currency;
+    }
+  }
+
   const { data: contract, error } = await supabase
     .from('contracts')
     .insert({
@@ -191,8 +203,8 @@ export async function createContractFromProposal(
       title,
       contract_type: options.contract_type,
       status: 'draft',
-      total_value: proposal.total_value || 0,
-      currency: proposal.currency || 'USD',
+      total_value: resolvedValue,
+      currency: resolvedCurrency,
       effective_date: options.effective_date || null,
       governing_law_state: options.governing_law_state || null,
       public_token: generatePublicToken(),
