@@ -211,7 +211,7 @@ export function VapiAssistantsListPage() {
           )}
         </div>
       ) : (
-        <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+        <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-visible">
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-700">
@@ -285,7 +285,7 @@ export function VapiAssistantsListPage() {
                       {menuOpen === a.id && (
                         <>
                           <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(null)} />
-                          <div className="absolute right-0 mt-1 w-44 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-20 py-1">
+                          <div className="absolute right-0 mt-1 w-44 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-[999] py-1">
                             <button
                               onClick={() => { navigate(`/ai-agents/voice/assistants/${a.id}`); setMenuOpen(null); }}
                               className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700"
