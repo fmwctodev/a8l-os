@@ -30,7 +30,6 @@ function FolderNode({
   const [hasLoaded, setHasLoaded] = useState(false);
 
   const isSelected = selectedFolderId === folder.drive_folder_id;
-  const isRoot = folder.drive_folder_id === 'root';
 
   const loadChildren = async () => {
     if (hasLoaded) return;
@@ -63,30 +62,28 @@ function FolderNode({
       <div
         className={`flex items-center gap-1 px-2 py-1.5 cursor-pointer rounded-md transition-colors ${
           isSelected
-            ? 'bg-blue-50 text-blue-700'
-            : 'hover:bg-gray-100 text-gray-700'
+            ? 'bg-cyan-500/10 text-cyan-400'
+            : 'hover:bg-slate-700 text-slate-400 hover:text-slate-200'
         }`}
         style={{ paddingLeft: `${level * 12 + 8}px` }}
         onClick={handleSelect}
       >
         <button
           onClick={handleToggle}
-          className="p-0.5 hover:bg-gray-200 rounded"
+          className="p-0.5 hover:bg-slate-600 rounded"
         >
           {loading ? (
-            <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+            <div className="w-4 h-4 border-2 border-slate-500 border-t-slate-300 rounded-full animate-spin" />
           ) : expanded ? (
             <ChevronDown className="w-4 h-4" />
           ) : (
             <ChevronRight className="w-4 h-4" />
           )}
         </button>
-        {isRoot ? (
-          <HardDrive className="w-4 h-4 text-gray-500" />
-        ) : expanded ? (
-          <FolderOpen className="w-4 h-4 text-yellow-500" />
+        {expanded ? (
+          <FolderOpen className="w-4 h-4 text-yellow-400" />
         ) : (
-          <Folder className="w-4 h-4 text-yellow-500" />
+          <Folder className="w-4 h-4 text-yellow-400" />
         )}
         <span className="text-sm truncate">{folder.name}</span>
       </div>
@@ -153,9 +150,9 @@ export default function FolderTree({
     return (
       <div className="p-4">
         <div className="animate-pulse space-y-2">
-          <div className="h-6 bg-gray-200 rounded w-3/4" />
-          <div className="h-6 bg-gray-200 rounded w-1/2 ml-4" />
-          <div className="h-6 bg-gray-200 rounded w-2/3 ml-4" />
+          <div className="h-6 bg-slate-700 rounded w-3/4" />
+          <div className="h-6 bg-slate-700 rounded w-1/2 ml-4" />
+          <div className="h-6 bg-slate-700 rounded w-2/3 ml-4" />
         </div>
       </div>
     );
@@ -164,15 +161,15 @@ export default function FolderTree({
   return (
     <div className="py-2">
       <div className="px-3 mb-2">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
           Folders
         </h3>
       </div>
       <div
         className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer rounded-md mx-2 transition-colors ${
           selectedFolderId === null
-            ? 'bg-blue-50 text-blue-700'
-            : 'hover:bg-gray-100 text-gray-700'
+            ? 'bg-cyan-500/10 text-cyan-400'
+            : 'hover:bg-slate-700 text-slate-400 hover:text-slate-200'
         }`}
         onClick={() => onSelectFolder(null, 'All Files')}
       >
@@ -187,7 +184,7 @@ export default function FolderTree({
             level={0}
             selectedFolderId={selectedFolderId}
             onSelectFolder={onSelectFolder}
-            organizationId={organizationId}
+            userId={userId}
           />
         ))}
       </div>

@@ -61,16 +61,16 @@ function getFileIconColor(mimeType: string): string {
 function getIconBgColor(mimeType: string): string {
   const category = getFileTypeCategory(mimeType);
   switch (category) {
-    case 'image': return 'bg-emerald-50';
-    case 'video': return 'bg-rose-50';
-    case 'audio': return 'bg-pink-50';
-    case 'pdf': return 'bg-red-50';
-    case 'spreadsheet': return 'bg-green-50';
-    case 'document': return 'bg-blue-50';
-    case 'presentation': return 'bg-orange-50';
+    case 'image': return 'bg-emerald-900/20';
+    case 'video': return 'bg-rose-900/20';
+    case 'audio': return 'bg-pink-900/20';
+    case 'pdf': return 'bg-red-900/20';
+    case 'spreadsheet': return 'bg-green-900/20';
+    case 'document': return 'bg-blue-900/20';
+    case 'presentation': return 'bg-orange-900/20';
     default:
-      if (mimeType === 'application/vnd.google-apps.folder') return 'bg-gray-100';
-      return 'bg-gray-50';
+      if (mimeType === 'application/vnd.google-apps.folder') return 'bg-slate-700/50';
+      return 'bg-slate-700/30';
   }
 }
 
@@ -135,7 +135,7 @@ export default function FileCard({
 
   return (
     <div
-      className="group relative bg-white rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all cursor-pointer overflow-hidden"
+      className="group relative bg-slate-800 rounded-xl border border-slate-700 hover:border-slate-500 hover:bg-slate-750 transition-all cursor-pointer overflow-hidden"
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
     >
@@ -156,22 +156,22 @@ export default function FileCard({
               e.stopPropagation();
               setMenuOpen(!menuOpen);
             }}
-            className="p-1.5 bg-white/90 backdrop-blur-sm rounded-lg shadow-sm border border-gray-200 hover:bg-white transition-colors"
+            className="p-1.5 bg-slate-700/90 backdrop-blur-sm rounded-lg shadow-sm border border-slate-600 hover:bg-slate-600 transition-colors"
           >
-            <MoreVertical className="w-4 h-4 text-gray-600" />
+            <MoreVertical className="w-4 h-4 text-slate-300" />
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50">
+            <div className="absolute right-0 top-full mt-1 w-48 bg-slate-800 rounded-lg shadow-xl border border-slate-700 py-1 z-50">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setMenuOpen(false);
                   onOpen(file);
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700"
               >
-                <ExternalLink className="w-4 h-4 text-gray-400" />
+                <ExternalLink className="w-4 h-4 text-slate-500" />
                 Open in Google Drive
               </button>
               {!isFolderType && (
@@ -181,9 +181,9 @@ export default function FileCard({
                     setMenuOpen(false);
                     onDownload(file);
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700"
                 >
-                  <Download className="w-4 h-4 text-gray-400" />
+                  <Download className="w-4 h-4 text-slate-500" />
                   Download
                 </button>
               )}
@@ -193,21 +193,21 @@ export default function FileCard({
                   setMenuOpen(false);
                   onShare(file);
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700"
               >
-                <Share2 className="w-4 h-4 text-gray-400" />
+                <Share2 className="w-4 h-4 text-slate-500" />
                 Share
               </button>
-              <div className="border-t border-gray-100 my-1" />
+              <div className="border-t border-slate-700 my-1" />
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setMenuOpen(false);
                   onDelete(file);
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-rose-400 hover:bg-rose-500/10"
               >
-                <Trash2 className="w-4 h-4 text-red-400" />
+                <Trash2 className="w-4 h-4 text-rose-400" />
                 Delete
               </button>
             </div>
@@ -216,13 +216,13 @@ export default function FileCard({
       </div>
 
       <div className="px-3 py-3">
-        <p className="text-xs text-gray-400 mb-1">{getMimeLabel(file.mimeType)}</p>
+        <p className="text-xs text-slate-500 mb-1">{getMimeLabel(file.mimeType)}</p>
         <div className="flex items-center justify-between gap-2">
-          <h4 className="text-sm font-medium text-gray-900 truncate" title={file.name}>
+          <h4 className="text-sm font-medium text-white truncate" title={file.name}>
             {file.name}
           </h4>
         </div>
-        <p className="text-xs text-gray-400 mt-1">{formatDate(file.modifiedTime || file.createdTime)}</p>
+        <p className="text-xs text-slate-500 mt-1">{formatDate(file.modifiedTime || file.createdTime)}</p>
       </div>
     </div>
   );

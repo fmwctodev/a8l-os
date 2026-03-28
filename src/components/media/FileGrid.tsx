@@ -7,11 +7,6 @@ import {
   FileAudio,
   Presentation,
   Folder,
-  MoreVertical,
-  Download,
-  Link,
-  Trash2,
-  Eye,
   AlertCircle,
 } from 'lucide-react';
 import type { DriveFile } from '../../types';
@@ -56,24 +51,24 @@ function getFileIconColor(mimeType: string): string {
   const category = getFileTypeCategory(mimeType);
   switch (category) {
     case 'image':
-      return 'text-emerald-500';
+      return 'text-emerald-400';
     case 'video':
-      return 'text-purple-500';
+      return 'text-rose-400';
     case 'audio':
-      return 'text-pink-500';
+      return 'text-pink-400';
     case 'pdf':
-      return 'text-red-500';
+      return 'text-red-400';
     case 'spreadsheet':
-      return 'text-green-600';
+      return 'text-green-400';
     case 'document':
-      return 'text-blue-500';
+      return 'text-blue-400';
     case 'presentation':
-      return 'text-orange-500';
+      return 'text-orange-400';
     default:
       if (mimeType === 'application/vnd.google-apps.folder') {
-        return 'text-yellow-500';
+        return 'text-yellow-400';
       }
-      return 'text-gray-500';
+      return 'text-slate-400';
   }
 }
 
@@ -85,7 +80,7 @@ interface FileCardProps {
   onDelete?: () => void;
 }
 
-function FileCard({ file, selected, onSelect, onOpen, onDelete }: FileCardProps) {
+function FileCard({ file, selected, onSelect, onOpen }: FileCardProps) {
   const Icon = getFileIcon(file.mime_type);
   const iconColor = getFileIconColor(file.mime_type);
   const status = getFileStatus(file);
@@ -94,10 +89,10 @@ function FileCard({ file, selected, onSelect, onOpen, onDelete }: FileCardProps)
 
   return (
     <div
-      className={`group relative bg-white rounded-lg border transition-all cursor-pointer ${
+      className={`group relative bg-slate-800 rounded-lg border transition-all cursor-pointer ${
         selected
-          ? 'border-blue-500 ring-2 ring-blue-200'
-          : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+          ? 'border-cyan-500 ring-2 ring-cyan-500/20'
+          : 'border-slate-700 hover:border-slate-500 hover:bg-slate-750'
       } ${!available ? 'opacity-60' : ''}`}
       onClick={onSelect}
       onDoubleClick={onOpen}
@@ -106,7 +101,7 @@ function FileCard({ file, selected, onSelect, onOpen, onDelete }: FileCardProps)
         <div className="flex items-start justify-between mb-3">
           <div
             className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-              available ? 'bg-gray-50' : 'bg-gray-100'
+              available ? 'bg-slate-700/50' : 'bg-slate-700/30'
             }`}
           >
             {file.thumbnail_url && available ? (
@@ -116,11 +111,11 @@ function FileCard({ file, selected, onSelect, onOpen, onDelete }: FileCardProps)
                 className="w-10 h-10 object-cover rounded"
               />
             ) : (
-              <Icon className={`w-6 h-6 ${available ? iconColor : 'text-gray-400'}`} />
+              <Icon className={`w-6 h-6 ${available ? iconColor : 'text-slate-500'}`} />
             )}
           </div>
           {!available && (
-            <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs">
+            <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded text-xs border border-amber-500/20">
               <AlertCircle className="w-3 h-3" />
               <span>Unavailable</span>
             </div>
@@ -128,31 +123,19 @@ function FileCard({ file, selected, onSelect, onOpen, onDelete }: FileCardProps)
         </div>
         <h4
           className={`text-sm font-medium truncate ${
-            available ? 'text-gray-900' : 'text-gray-500'
+            available ? 'text-white' : 'text-slate-500'
           }`}
           title={file.name}
         >
           {file.name}
         </h4>
-        <p className="text-xs text-gray-500 mt-1">
+        <p className="text-xs text-slate-500 mt-1">
           {isFolder ? 'Folder' : formatFileSize(file.size_bytes)}
         </p>
       </div>
-      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <div className="relative">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-            }}
-            className="p-1.5 bg-white rounded-md shadow-sm border border-gray-200 hover:bg-gray-50"
-          >
-            <MoreVertical className="w-4 h-4 text-gray-500" />
-          </button>
-        </div>
-      </div>
       {status === 'access_revoked' && (
-        <div className="absolute inset-0 bg-gray-900/5 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-          <span className="text-xs text-gray-600 bg-white px-2 py-1 rounded shadow">
+        <div className="absolute inset-0 bg-slate-900/60 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <span className="text-xs text-slate-300 bg-slate-800 px-2 py-1 rounded shadow border border-slate-700">
             Access revoked in Google Drive
           </span>
         </div>
@@ -174,7 +157,7 @@ export default function FileGrid({
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 p-4">
         {[...Array(10)].map((_, i) => (
           <div key={i} className="animate-pulse">
-            <div className="bg-gray-200 rounded-lg h-32" />
+            <div className="bg-slate-700 rounded-lg h-32" />
           </div>
         ))}
       </div>
@@ -183,9 +166,9 @@ export default function FileGrid({
 
   if (files.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-gray-500">
-        <Folder className="w-16 h-16 text-gray-300 mb-4" />
-        <p className="text-lg font-medium">No files found</p>
+      <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+        <Folder className="w-16 h-16 text-slate-600 mb-4" />
+        <p className="text-lg font-medium text-slate-400">No files found</p>
         <p className="text-sm mt-1">This folder is empty or no files match your filters</p>
       </div>
     );

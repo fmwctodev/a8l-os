@@ -49,9 +49,9 @@ export default function FilePreviewPanel({ file, onClose }: FilePreviewPanelProp
   const renderPreview = () => {
     if (!available) {
       return (
-        <div className="flex flex-col items-center justify-center h-48 bg-gray-100 rounded-lg">
-          <AlertCircle className="w-12 h-12 text-amber-500 mb-2" />
-          <p className="text-sm text-gray-600 text-center px-4">
+        <div className="flex flex-col items-center justify-center h-48 bg-slate-900/50 rounded-lg border border-slate-700">
+          <AlertCircle className="w-12 h-12 text-amber-400 mb-2" />
+          <p className="text-sm text-slate-400 text-center px-4">
             {status === 'deleted'
               ? 'This file has been deleted from Google Drive'
               : 'Access to this file has been revoked'}
@@ -62,7 +62,7 @@ export default function FilePreviewPanel({ file, onClose }: FilePreviewPanelProp
 
     if (category === 'image' && file.thumbnail_url) {
       return (
-        <div className="relative bg-gray-100 rounded-lg overflow-hidden">
+        <div className="relative bg-slate-900/50 rounded-lg overflow-hidden border border-slate-700">
           <img
             src={file.thumbnail_url.replace('=s220', '=s400')}
             alt={file.name}
@@ -74,14 +74,14 @@ export default function FilePreviewPanel({ file, onClose }: FilePreviewPanelProp
 
     if (file.web_view_link && (category === 'document' || category === 'spreadsheet' || category === 'presentation' || category === 'pdf')) {
       return (
-        <div className="bg-gray-100 rounded-lg p-6 flex flex-col items-center justify-center h-48">
-          <FileText className="w-12 h-12 text-blue-500 mb-2" />
-          <p className="text-sm text-gray-600 mb-3">Preview in Google Drive</p>
+        <div className="bg-slate-900/50 rounded-lg p-6 flex flex-col items-center justify-center h-48 border border-slate-700">
+          <FileText className="w-12 h-12 text-blue-400 mb-2" />
+          <p className="text-sm text-slate-400 mb-3">Preview in Google Drive</p>
           <a
             href={file.web_view_link}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700"
+            className="inline-flex items-center gap-2 px-3 py-1.5 bg-cyan-600 text-white text-sm rounded-md hover:bg-cyan-500"
           >
             <ExternalLink className="w-4 h-4" />
             Open in Drive
@@ -91,15 +91,15 @@ export default function FilePreviewPanel({ file, onClose }: FilePreviewPanelProp
     }
 
     return (
-      <div className="bg-gray-100 rounded-lg p-6 flex flex-col items-center justify-center h-48">
+      <div className="bg-slate-900/50 rounded-lg p-6 flex flex-col items-center justify-center h-48 border border-slate-700">
         {category === 'video' ? (
-          <FileVideo className="w-12 h-12 text-purple-500 mb-2" />
+          <FileVideo className="w-12 h-12 text-rose-400 mb-2" />
         ) : category === 'image' ? (
-          <FileImage className="w-12 h-12 text-emerald-500 mb-2" />
+          <FileImage className="w-12 h-12 text-emerald-400 mb-2" />
         ) : (
-          <FileText className="w-12 h-12 text-gray-400 mb-2" />
+          <FileText className="w-12 h-12 text-slate-500 mb-2" />
         )}
-        <p className="text-sm text-gray-500">Preview not available</p>
+        <p className="text-sm text-slate-500">Preview not available</p>
       </div>
     );
   };
@@ -120,14 +120,14 @@ export default function FilePreviewPanel({ file, onClose }: FilePreviewPanelProp
   };
 
   return (
-    <div className="h-full flex flex-col bg-white border-l border-gray-200">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-        <h3 className="font-medium text-gray-900 truncate">{file.name}</h3>
+    <div className="h-full flex flex-col bg-slate-800 border-l border-slate-700">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
+        <h3 className="font-medium text-white truncate">{file.name}</h3>
         <button
           onClick={onClose}
-          className="p-1 hover:bg-gray-100 rounded"
+          className="p-1 hover:bg-slate-700 rounded"
         >
-          <X className="w-5 h-5 text-gray-500" />
+          <X className="w-5 h-5 text-slate-400" />
         </button>
       </div>
 
@@ -135,12 +135,12 @@ export default function FilePreviewPanel({ file, onClose }: FilePreviewPanelProp
         {renderPreview()}
 
         {!available && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
             <div className="flex items-start gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-amber-800">File Unavailable</p>
-                <p className="text-xs text-amber-700 mt-1">
+                <p className="text-sm font-medium text-amber-300">File Unavailable</p>
+                <p className="text-xs text-amber-400 mt-1">
                   {status === 'deleted'
                     ? 'This file was deleted from Google Drive but is still referenced in your records.'
                     : 'Access to this file was revoked in Google Drive. Contact the file owner to regain access.'}
@@ -151,29 +151,29 @@ export default function FilePreviewPanel({ file, onClose }: FilePreviewPanelProp
         )}
 
         <div className="space-y-3">
-          <h4 className="text-sm font-medium text-gray-700">Details</h4>
+          <h4 className="text-sm font-medium text-slate-300">Details</h4>
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm">
-              <HardDrive className="w-4 h-4 text-gray-400" />
-              <span className="text-gray-500">Size:</span>
-              <span className="text-gray-900">{formatFileSize(file.size_bytes)}</span>
+              <HardDrive className="w-4 h-4 text-slate-500" />
+              <span className="text-slate-500">Size:</span>
+              <span className="text-white">{formatFileSize(file.size_bytes)}</span>
             </div>
             <div className="flex items-center gap-2 text-sm">
-              <FileText className="w-4 h-4 text-gray-400" />
-              <span className="text-gray-500">Type:</span>
-              <span className="text-gray-900 truncate">{file.mime_type}</span>
+              <FileText className="w-4 h-4 text-slate-500" />
+              <span className="text-slate-500">Type:</span>
+              <span className="text-white truncate">{file.mime_type}</span>
             </div>
             {file.drive_owner_email && (
               <div className="flex items-center gap-2 text-sm">
-                <User className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-500">Owner:</span>
-                <span className="text-gray-900 truncate">{file.drive_owner_email}</span>
+                <User className="w-4 h-4 text-slate-500" />
+                <span className="text-slate-500">Owner:</span>
+                <span className="text-white truncate">{file.drive_owner_email}</span>
               </div>
             )}
             <div className="flex items-center gap-2 text-sm">
-              <Clock className="w-4 h-4 text-gray-400" />
-              <span className="text-gray-500">Synced:</span>
-              <span className="text-gray-900">
+              <Clock className="w-4 h-4 text-slate-500" />
+              <span className="text-slate-500">Synced:</span>
+              <span className="text-white">
                 {new Date(file.last_synced_at).toLocaleDateString()}
               </span>
             </div>
@@ -181,27 +181,27 @@ export default function FilePreviewPanel({ file, onClose }: FilePreviewPanelProp
         </div>
 
         <div className="space-y-3">
-          <h4 className="text-sm font-medium text-gray-700">Attached To</h4>
+          <h4 className="text-sm font-medium text-slate-300">Attached To</h4>
           {loadingAttachments ? (
             <div className="animate-pulse space-y-2">
-              <div className="h-8 bg-gray-200 rounded" />
-              <div className="h-8 bg-gray-200 rounded" />
+              <div className="h-8 bg-slate-700 rounded" />
+              <div className="h-8 bg-slate-700 rounded" />
             </div>
           ) : attachments.length === 0 ? (
-            <p className="text-sm text-gray-500">Not attached to any records</p>
+            <p className="text-sm text-slate-500">Not attached to any records</p>
           ) : (
             <div className="space-y-2">
               {attachments.map((attachment) => (
                 <div
                   key={attachment.id}
-                  className="flex items-center gap-2 p-2 bg-gray-50 rounded-md"
+                  className="flex items-center gap-2 p-2 bg-slate-900/50 rounded-md border border-slate-700"
                 >
-                  <Paperclip className="w-4 h-4 text-gray-400" />
-                  <span className="text-sm text-gray-600">
+                  <Paperclip className="w-4 h-4 text-slate-500" />
+                  <span className="text-sm text-slate-300">
                     {getEntityTypeLabel(attachment.entity_type)}
                   </span>
                   {attachment.note && (
-                    <span className="text-xs text-gray-500 truncate">
+                    <span className="text-xs text-slate-500 truncate">
                       - {attachment.note}
                     </span>
                   )}
@@ -212,13 +212,13 @@ export default function FilePreviewPanel({ file, onClose }: FilePreviewPanelProp
         </div>
       </div>
 
-      <div className="p-4 border-t border-gray-200 space-y-2">
+      <div className="p-4 border-t border-slate-700 space-y-2">
         {available && file.web_view_link && (
           <a
             href={file.web_view_link}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            className="flex items-center justify-center gap-2 w-full px-4 py-2 bg-cyan-600 text-white rounded-md hover:bg-cyan-500 transition-colors"
           >
             <ExternalLink className="w-4 h-4" />
             Open in Google Drive
