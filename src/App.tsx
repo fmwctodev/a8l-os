@@ -53,8 +53,6 @@ const VapiSettingsPage = lazy(() => import('./pages/modules/voice-ai/VapiSetting
 const AIAgentsConversation = lazy(() => import('./pages/modules/AIAgentsConversation').then(m => ({ default: m.AIAgentsConversation })));
 const AIAgentsKnowledge = lazy(() => import('./pages/modules/AIAgentsKnowledge').then(m => ({ default: m.AIAgentsKnowledge })));
 const AIAgentsTemplates = lazy(() => import('./pages/modules/AIAgentsTemplates').then(m => ({ default: m.AIAgentsTemplates })));
-const AIAgentsContent = lazy(() => import('./pages/modules/AIAgentsContent').then(m => ({ default: m.AIAgentsContent })));
-const ContentAIAnalytics = lazy(() => import('./pages/modules/ContentAIAnalytics').then(m => ({ default: m.ContentAIAnalytics })));
 const Marketing = lazy(() => import('./pages/modules/Marketing').then(m => ({ default: m.Marketing })));
 const MarketingForms = lazy(() => import('./pages/modules/MarketingForms').then(m => ({ default: m.MarketingForms })));
 const FormBuilder = lazy(() => import('./pages/modules/FormBuilder').then(m => ({ default: m.FormBuilder })));
@@ -336,8 +334,6 @@ function App() {
                 <Route path="conversation" element={<AIAgentsConversation />} />
                 <Route path="knowledge" element={<AIAgentsKnowledge />} />
                 <Route path="templates" element={<AIAgentsTemplates />} />
-                <Route path="content" element={<AIAgentsContent />} />
-                <Route path="content/analytics" element={<ContentAIAnalytics />} />
               </Route>
               <Route
                 path="/ai-agents/:agentId"
