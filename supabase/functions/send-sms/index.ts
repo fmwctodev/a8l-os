@@ -46,6 +46,14 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
+  return new Response(
+    JSON.stringify({ error: "SMS is not supported" }),
+    {
+      status: 503,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    }
+  );
+
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {

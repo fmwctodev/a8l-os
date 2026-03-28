@@ -83,7 +83,7 @@ export interface AIActionBaseConfig {
 }
 
 export interface AIConversationReplyConfig extends AIActionBaseConfig {
-  channel: 'sms' | 'email';
+  channel: 'email';
   responseStyle: AIResponseStyle;
   allowQuestions: boolean;
   includeBookingCTA: boolean;
@@ -99,7 +99,7 @@ export interface AIEmailDraftConfig extends AIActionBaseConfig {
 }
 
 export interface AIFollowUpMessageConfig extends AIActionBaseConfig {
-  channel: 'sms' | 'email';
+  channel: 'email';
   sequenceMode: 'single' | 'multi_step';
   maxSequenceSteps: number;
 }
@@ -293,7 +293,7 @@ export function createDefaultAIActionConfig(actionType: AIWorkflowActionType): A
     case 'ai_conversation_reply':
       return {
         ...base,
-        channel: 'sms',
+        channel: 'email',
         responseStyle: 'normal',
         allowQuestions: true,
         includeBookingCTA: false,
@@ -311,7 +311,7 @@ export function createDefaultAIActionConfig(actionType: AIWorkflowActionType): A
     case 'ai_follow_up_message':
       return {
         ...base,
-        channel: 'sms',
+        channel: 'email',
         sequenceMode: 'single',
         maxSequenceSteps: 3,
       } as AIFollowUpMessageConfig;

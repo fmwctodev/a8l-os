@@ -166,15 +166,6 @@ export const TOOL_DEFINITIONS: Record<AIAgentToolName, {
       notes: { type: 'string', description: 'Optional appointment notes' }
     }
   },
-  send_sms: {
-    name: 'send_sms',
-    description: 'Prepare an SMS message draft for user approval',
-    category: 'communication',
-    parameters: {
-      contact_id: { type: 'string', description: 'The contact ID', required: true },
-      message: { type: 'string', description: 'SMS message body', required: true }
-    }
-  },
   send_email: {
     name: 'send_email',
     description: 'Prepare an email draft for user approval',

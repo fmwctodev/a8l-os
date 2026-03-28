@@ -1,8 +1,6 @@
 export type WorkflowActionType =
   // Communication Actions
-  | 'send_sms'
   | 'send_email'
-  | 'send_internal_sms'
   | 'send_internal_email'
   | 'call_contact'
   | 'voicemail_drop'
@@ -153,15 +151,8 @@ export type SubscriptionSource = 'most_recent' | 'specific_id' | 'context';
 export type DiscountType = 'flat' | 'percentage';
 export type DNDChannel = 'sms' | 'email' | 'calls' | 'all';
 export type DNDDuration = 'permanent' | 'temporary';
-export type NotifyChannel = 'in_app' | 'email' | 'sms';
+export type NotifyChannel = 'in_app' | 'email';
 export type FallbackBehavior = 'skip' | 'stop' | 'notify';
-
-export interface SendSmsConfig {
-  message: string;
-  fromNumberId?: string;
-  mediaUrls?: string[];
-  trackLinks?: boolean;
-}
 
 export interface SendEmailConfig {
   subject: string;
@@ -172,15 +163,6 @@ export interface SendEmailConfig {
   attachments?: string[];
   trackOpens?: boolean;
   trackClicks?: boolean;
-}
-
-export interface SendInternalSmsConfig {
-  recipientType: RecipientType;
-  recipientIds?: string[];
-  roleNames?: string[];
-  message: string;
-  includeContactInfo: boolean;
-  includeOpportunityInfo?: boolean;
 }
 
 export interface SendInternalEmailConfig {
@@ -389,14 +371,14 @@ export interface RescheduleAppointmentConfig {
 export interface ConfirmAppointmentConfig {
   appointmentSource: AppointmentSource;
   appointmentId?: string;
-  confirmationChannel?: 'email' | 'sms' | 'both';
+  confirmationChannel?: 'email' | 'both';
   templateId?: string;
 }
 
 export interface SendReminderConfig {
   appointmentSource: AppointmentSource;
   appointmentId?: string;
-  reminderType: 'email' | 'sms' | 'both';
+  reminderType: 'email' | 'both';
   templateId?: string;
   customMessage?: string;
 }
@@ -475,7 +457,7 @@ export interface ManageSubscriptionConfig {
 export interface SendReviewRequestConfig {
   platform: 'google' | 'facebook' | 'trustpilot' | 'custom';
   templateId?: string;
-  channel: 'email' | 'sms' | 'both';
+  channel: 'email' | 'both';
   customMessage?: string;
   customUrl?: string;
   delayMinutes?: number;
@@ -770,7 +752,7 @@ export interface SendInternalNotificationConfig {
   title: string;
   body: string;
   urgency?: 'low' | 'normal' | 'high' | 'urgent';
-  channels: Array<'in_app' | 'email' | 'sms' | 'slack'>;
+  channels: Array<'in_app' | 'email' | 'slack'>;
   includeContactLink?: boolean;
 }
 
@@ -927,7 +909,7 @@ export interface SendDocumentsAndContractsConfig {
   templateId: string;
   recipientType: RecipientType;
   recipientIds?: string[];
-  deliveryChannel: 'email' | 'sms' | 'both';
+  deliveryChannel: 'email' | 'both';
   requireSignature?: boolean;
   linkedEntityType?: 'contact' | 'opportunity' | 'project';
   linkedEntityId?: string;
@@ -935,16 +917,14 @@ export interface SendDocumentsAndContractsConfig {
 }
 
 export interface GenerateMeetingFollowUpConfig {
-  channel: 'sms' | 'email' | 'both';
+  channel: 'email' | 'both';
   delayMinutes: number;
   autoSend: boolean;
   customInstructions?: string;
 }
 
 export type ActionConfig =
-  | SendSmsConfig
   | SendEmailConfig
-  | SendInternalSmsConfig
   | SendInternalEmailConfig
   | VoiceActionConfig
   | VoicemailDropConfig
@@ -1046,9 +1026,7 @@ export interface WorkflowActionDefinition {
 
 export const WORKFLOW_ACTION_DEFINITIONS: WorkflowActionDefinition[] = [
   // Communication Actions
-  { type: 'send_sms', label: 'Send SMS', description: 'Send an SMS message to the contact', category: 'communication', icon: 'MessageSquare' },
   { type: 'send_email', label: 'Send Email', description: 'Send an email to the contact', category: 'communication', icon: 'Mail' },
-  { type: 'send_internal_sms', label: 'Send Internal SMS', description: 'Send an SMS to team members', category: 'communication', icon: 'MessageCircle' },
   { type: 'send_internal_email', label: 'Send Internal Email', description: 'Send an email to team members', category: 'communication', icon: 'Send' },
   { type: 'call_contact', label: 'Call Contact', description: 'Initiate a phone call to the contact', category: 'communication', icon: 'Phone' },
   { type: 'voicemail_drop', label: 'Voicemail Drop', description: 'Drop a pre-recorded voicemail', category: 'communication', icon: 'Voicemail' },

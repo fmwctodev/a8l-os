@@ -4,9 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { AskAIModal } from './AskAIModal';
 import { SnippetPicker } from './SnippetPicker';
 import { createGmailDraft, updateGmailDraft, deleteGmailDraft } from '../../services/gmailApi';
-import { uploadMessageMedia } from '../../services/sendSms';
 import { ComposerTabBar } from './composer/ComposerTabBar';
-import { SMSComposerContent } from './composer/SMSComposerContent';
 import { EmailComposerContent } from './composer/EmailComposerContent';
 import { InternalCommentContent } from './composer/InternalCommentContent';
 import type { ComposerTab } from './composer/ComposerTabBar';
@@ -59,42 +57,23 @@ export function MessageComposer({
   const [ccRecipients, setCcRecipients] = useState<EmailRecipient[]>([]);
   const [bccRecipients, setBccRecipients] = useState<EmailRecipient[]>([]);
   const [internalMentions, setInternalMentions] = useState<string[]>([]);
-  const [selectedFromNumber, setSelectedFromNumber] = useState('');
-  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
-  const [mediaError, setMediaError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [uploading] = useState(false);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const canUseAI = hasPermission('ai_agents.run') && isFeatureEnabled('ai_agents');
   const canUseSnippets = hasPermission('snippets.view') && isFeatureEnabled('snippets');
 
-  const hasSms = availableChannels.some((c) => c.channel === 'sms');
   const hasEmail = availableChannels.some((c) => c.channel === 'email');
 
-  const channelToTab = (ch: MessageChannel): ComposerTab => {
-    if (ch === 'email') return 'email';
-    return 'sms';
-  };
-
   const [activeTab, setActiveTab] = useState<ComposerTab>(() => {
-    if (hasSms) return 'sms';
     if (hasEmail) return 'email';
     return 'internal_comment';
   });
 
   useEffect(() => {
-    const tab = channelToTab(selectedChannel);
-    if (tab === 'sms' && hasSms) setActiveTab('sms');
-    else if (tab === 'email' && hasEmail) setActiveTab('email');
-  }, [selectedChannel, hasSms, hasEmail]);
-
-  useEffect(() => {
-    if (fromNumbers.length > 0 && !selectedFromNumber) {
-      const defaultNum = fromNumbers.find((n) => n.is_default_sms) || fromNumbers[0];
-      setSelectedFromNumber(defaultNum.phone_number);
-    }
-  }, [fromNumbers, selectedFromNumber]);
+    if (selectedChannel === 'email' && hasEmail) setActiveTab('email');
+  }, [selectedChannel, hasEmail]);
 
   const isGmailEmail = gmailConnected && activeTab === 'email';
 
@@ -148,22 +127,17 @@ export function MessageComposer({
   useEffect(() => {
     setDraftId(null);
     setDraftSaved(false);
-    setMediaFiles([]);
-    setMediaError(null);
   }, [conversation?.id]);
 
   const handleTabChange = (tab: ComposerTab) => {
     setActiveTab(tab);
-    if (tab === 'sms' && hasSms) onChannelChange('sms');
-    else if (tab === 'email' && hasEmail) onChannelChange('email');
-    if (tab !== 'sms') {
-      setMediaFiles([]);
-      setMediaError(null);
-    }
+    if (tab === 'email' && hasEmail) onChannelChange('email');
+    setMediaFiles([]);
+    setMediaError(null);
   };
 
   const handleSubmit = async () => {
-    const hasContent = body.trim() || (activeTab === 'sms' && mediaFiles.length > 0);
+    const hasContent = body.trim();
     if (!hasContent || sending || disabled || uploading) return;
     if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
 
@@ -174,23 +148,6 @@ export function MessageComposer({
         }
       } else {
         const metadata: Record<string, unknown> = {};
-
-        if (activeTab === 'sms') {
-          if (selectedFromNumber) metadata.from_number = selectedFromNumber;
-
-          if (mediaFiles.length > 0) {
-            setUploading(true);
-            try {
-              const orgId = user?.organization_id || '';
-              const urls = await Promise.all(
-                mediaFiles.map(f => uploadMessageMedia(f, orgId))
-              );
-              metadata.media_urls = urls;
-            } finally {
-              setUploading(false);
-            }
-          }
-        }
 
         if (activeTab === 'email') {
           if (ccRecipients.length > 0) {
@@ -218,8 +175,6 @@ export function MessageComposer({
       setCcRecipients([]);
       setBccRecipients([]);
       setInternalMentions([]);
-      setMediaFiles([]);
-      setMediaError(null);
       setDraftSaved(false);
     } catch {
       // Keep input fields intact for retry
@@ -232,8 +187,6 @@ export function MessageComposer({
     setCcRecipients([]);
     setBccRecipients([]);
     setInternalMentions([]);
-    setMediaFiles([]);
-    setMediaError(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -267,11 +220,7 @@ export function MessageComposer({
     setShowSnippetPicker(false);
   };
 
-  const smsChannel = availableChannels.find((c) => c.channel === 'sms');
   const emailChannel = availableChannels.find((c) => c.channel === 'email');
-
-  const smsSendDisabled =
-    (!body.trim() && mediaFiles.length === 0) || sending || uploading;
 
   if (disabled) {
     return (
@@ -310,35 +259,10 @@ export function MessageComposer({
       <ComposerTabBar
         activeTab={activeTab}
         onTabChange={handleTabChange}
-        hasSms={hasSms}
         hasEmail={hasEmail}
         expanded={expanded}
         onToggleExpand={() => setExpanded(!expanded)}
       />
-
-      {activeTab === 'sms' && smsChannel && (
-        <SMSComposerContent
-          body={body}
-          onBodyChange={setBody}
-          onSend={handleSubmit}
-          onClear={handleClear}
-          sending={sending || uploading}
-          sendDisabled={smsSendDisabled}
-          expanded={expanded}
-          fromNumbers={fromNumbers.filter((n) => n.capabilities.sms && n.status === 'active')}
-          selectedFromNumber={selectedFromNumber}
-          onFromNumberChange={setSelectedFromNumber}
-          toNumber={smsChannel.identifier}
-          onKeyDown={handleKeyDown}
-          onSnippetClick={() => setShowSnippetPicker(!showSnippetPicker)}
-          canUseSnippets={canUseSnippets}
-          textareaRef={textareaRef}
-          mediaFiles={mediaFiles}
-          onMediaChange={setMediaFiles}
-          mediaError={mediaError}
-          onMediaError={setMediaError}
-        />
-      )}
 
       {activeTab === 'email' && emailChannel && (
         <EmailComposerContent
@@ -407,9 +331,7 @@ export function MessageComposer({
           onAcceptDraft={(draft, channel, draftSubject) => {
             setBody(draft);
             if (draftSubject) setSubject(draftSubject);
-            if (channel === 'sms' && hasSms) {
-              handleTabChange('sms');
-            } else if (channel === 'email' && hasEmail) {
+            if (channel === 'email' && hasEmail) {
               handleTabChange('email');
             }
             setShowAIModal(false);

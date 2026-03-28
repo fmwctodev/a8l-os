@@ -226,9 +226,7 @@ export interface ActionOption {
 }
 
 export const ACTION_OPTIONS: ActionOption[] = [
-  { type: 'send_sms', label: 'Send SMS', description: 'Send a text message to the contact', category: 'communication' },
   { type: 'send_email', label: 'Send Email', description: 'Send an email to the contact', category: 'communication' },
-  { type: 'send_internal_sms', label: 'Internal SMS', description: 'Send SMS to a team member', category: 'communication' },
   { type: 'send_internal_email', label: 'Internal Email', description: 'Send email to a team member', category: 'communication' },
   { type: 'call_contact', label: 'Call Contact', description: 'Initiate a phone call', category: 'communication' },
   { type: 'voicemail_drop', label: 'Voicemail Drop', description: 'Leave a voicemail', category: 'communication' },

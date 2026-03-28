@@ -323,8 +323,12 @@ export const ACTION_TYPE_LABELS: Record<string, string> = {
   assign_owner: 'Assign Owner',
   move_department: 'Move to Department',
   create_note: 'Create Note',
-  send_sms: 'Send SMS',
   send_email: 'Send Email',
   webhook_post: 'HTTP Webhook',
   internal_notification: 'Internal Notification'
 };
+
+export const SKIPPED_ACTION_TYPES = new Set([
+  'send_sms',
+  'send_internal_sms',
+]);

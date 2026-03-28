@@ -1,19 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Phone, Link2, Hash, MessageSquare, PhoneCall, Mic, Shield, TestTube2 } from 'lucide-react';
+import { Phone, Link2, Hash, PhoneCall, Mic, Shield, TestTube2 } from 'lucide-react';
 import { usePermission } from '../../hooks/usePermission';
 import {
   OverviewTab,
   ConnectionTab,
   NumbersTab,
-  MessagingTab,
   VoiceRoutingTab,
   RecordingTab,
   ComplianceTab,
   TestToolsTab,
 } from '../../components/settings/phone';
 
-type TabId = 'overview' | 'connection' | 'numbers' | 'messaging' | 'routing' | 'recording' | 'compliance' | 'test';
+type TabId = 'overview' | 'connection' | 'numbers' | 'routing' | 'recording' | 'compliance' | 'test';
 
 interface TabConfig {
   id: TabId;
@@ -26,7 +25,6 @@ const tabs: TabConfig[] = [
   { id: 'overview', label: 'Overview', icon: <Phone className="w-4 h-4" /> },
   { id: 'connection', label: 'Connection', icon: <Link2 className="w-4 h-4" />, permission: 'phone.settings.manage' },
   { id: 'numbers', label: 'Numbers', icon: <Hash className="w-4 h-4" /> },
-  { id: 'messaging', label: 'Messaging', icon: <MessageSquare className="w-4 h-4" /> },
   { id: 'routing', label: 'Voice Routing', icon: <PhoneCall className="w-4 h-4" /> },
   { id: 'recording', label: 'Recording', icon: <Mic className="w-4 h-4" /> },
   { id: 'compliance', label: 'Compliance', icon: <Shield className="w-4 h-4" /> },
@@ -68,8 +66,6 @@ export default function PhoneSystemSettingsPage() {
         return <ConnectionTab key={refreshKey} onRefresh={handleRefresh} />;
       case 'numbers':
         return <NumbersTab key={refreshKey} />;
-      case 'messaging':
-        return <MessagingTab key={refreshKey} />;
       case 'routing':
         return <VoiceRoutingTab key={refreshKey} />;
       case 'recording':
@@ -88,7 +84,7 @@ export default function PhoneSystemSettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Phone System</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Configure Twilio SMS and Voice telephony integration
+          Configure Twilio Voice telephony for AI voice agents
         </p>
       </div>
 

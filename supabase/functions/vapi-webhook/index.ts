@@ -2,6 +2,111 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, handleCors, errorResponse } from "../_shared/cors.ts";
 import { verifyWebhookSecret } from "../_shared/webhook-auth.ts";
 
+async function getDecryptedSendGridKey(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+): Promise<string | null> {
+  const envKey = Deno.env.get("SENDGRID_API_KEY");
+  if (envKey) return envKey;
+
+  const { data: conn } = await supabase
+    .from("integration_connections")
+    .select("credentials_encrypted, credentials_iv, status, integrations!inner(key)")
+    .eq("org_id", orgId)
+    .eq("integrations.key", "sendgrid")
+    .maybeSingle();
+
+  if (!conn || conn.status !== "connected" || !conn.credentials_encrypted || !conn.credentials_iv) {
+    return null;
+  }
+
+  const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/email-crypto`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      action: "decrypt",
+      encrypted: conn.credentials_encrypted,
+      iv: conn.credentials_iv,
+    }),
+  });
+
+  if (!response.ok) return null;
+  const data = await response.json();
+  return data.plaintext || null;
+}
+
+async function sendInboundCallEmail(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+  params: {
+    vapiCallId: string;
+    callerPhone: string | null;
+    assistantName: string | null;
+    startedAt: string | null;
+    durationSeconds: number | null;
+    summary: string | null;
+    recordingUrl: string | null;
+  },
+): Promise<void> {
+  const apiKey = await getDecryptedSendGridKey(supabase, orgId);
+  if (!apiKey) return;
+
+  const { vapiCallId, callerPhone, assistantName, startedAt, durationSeconds, summary, recordingUrl } = params;
+
+  const callDate = startedAt
+    ? new Date(startedAt).toLocaleString("en-US", { timeZone: "America/New_York" })
+    : "Unknown";
+  const durationText = durationSeconds != null
+    ? (durationSeconds >= 60 ? `${Math.floor(durationSeconds / 60)}m ${durationSeconds % 60}s` : `${durationSeconds}s`)
+    : "Unknown";
+
+  const recordingLine = recordingUrl
+    ? `<tr><td style="padding:8px 0;color:#6b7280;font-weight:500;">Recording</td><td style="padding:8px 0;"><a href="${recordingUrl}" style="color:#0ea5e9;">Listen to Recording</a></td></tr>`
+    : "";
+
+  const summarySection = summary
+    ? `<div style="margin-top:20px;padding:16px;background:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:4px;"><p style="margin:0 0 8px;font-weight:600;color:#0c4a6e;">Call Summary</p><p style="margin:0;color:#374151;line-height:1.6;">${summary}</p></div>`
+    : "";
+
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#0f172a;padding:20px 24px;border-radius:8px 8px 0 0;">
+        <p style="margin:0;color:#94a3b8;font-size:13px;text-transform:uppercase;letter-spacing:0.05em;">Autom8ion Voice AI</p>
+        <h1 style="margin:4px 0 0;color:#f1f5f9;font-size:20px;">Inbound Call Completed</h1>
+      </div>
+      <div style="background:#ffffff;border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr><td style="padding:8px 0;color:#6b7280;font-weight:500;">Caller</td><td style="padding:8px 0;color:#111827;font-weight:600;">${callerPhone || "Unknown"}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;font-weight:500;">Handled by</td><td style="padding:8px 0;color:#111827;">${assistantName || "AI Assistant"}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;font-weight:500;">Date &amp; Time</td><td style="padding:8px 0;color:#111827;">${callDate}</td></tr>
+          <tr><td style="padding:8px 0;color:#6b7280;font-weight:500;">Duration</td><td style="padding:8px 0;color:#111827;">${durationText}</td></tr>
+          ${recordingLine}
+        </table>
+        ${summarySection}
+        <div style="margin-top:24px;">
+          <a href="https://dashboard.vapi.ai/calls/${vapiCallId}" style="display:inline-block;padding:10px 20px;background:#0ea5e9;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:500;font-size:14px;">View Full Call in VAPI</a>
+        </div>
+      </div>
+    </div>`;
+
+  await fetch("https://api.sendgrid.com/v3/mail/send", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: { email: "info@mail.autom8ionlab.com", name: "Autom8ion Voice AI" },
+      personalizations: [{ to: [{ email: "admin@autom8ionlab.com" }] }],
+      subject: `Inbound Call: ${callerPhone || "Unknown"} \u2014 ${durationText}`,
+      content: [{ type: "text/html", value: html }],
+    }),
+  });
+}
+
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -443,6 +548,21 @@ Deno.serve(async (req: Request) => {
 
         if (orgId) {
           await normalizeCallEnd(supabase, orgId, message, internalAssistantId, assistantName);
+
+          const isInbound = message.call?.type !== "outboundPhoneCall";
+          if (isInbound) {
+            EdgeRuntime.waitUntil(
+              sendInboundCallEmail(supabase, orgId, {
+                vapiCallId,
+                callerPhone: message.call?.customer?.number || null,
+                assistantName,
+                startedAt: message.call?.startedAt || null,
+                durationSeconds,
+                summary: message.summary || null,
+                recordingUrl: message.artifact?.recordingUrl || message.recordingUrl || null,
+              }).catch((err) => console.error("[vapi-webhook] Email notification error:", err))
+            );
+          }
         }
 
         break;

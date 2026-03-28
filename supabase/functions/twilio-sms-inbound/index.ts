@@ -29,6 +29,14 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  return new Response(
+    '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+    {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/xml" },
+    }
+  );
+
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");

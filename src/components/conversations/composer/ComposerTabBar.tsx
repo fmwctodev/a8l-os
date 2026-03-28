@@ -1,11 +1,10 @@
 import { Maximize2, Minimize2 } from 'lucide-react';
 
-export type ComposerTab = 'sms' | 'email' | 'internal_comment';
+export type ComposerTab = 'email' | 'internal_comment';
 
 interface ComposerTabBarProps {
   activeTab: ComposerTab;
   onTabChange: (tab: ComposerTab) => void;
-  hasSms: boolean;
   hasEmail: boolean;
   expanded: boolean;
   onToggleExpand: () => void;
@@ -14,7 +13,6 @@ interface ComposerTabBarProps {
 export function ComposerTabBar({
   activeTab,
   onTabChange,
-  hasSms,
   hasEmail,
   expanded,
   onToggleExpand,
@@ -29,11 +27,6 @@ export function ComposerTabBar({
   return (
     <div className="flex items-center justify-between px-4 pt-3 border-b border-slate-700">
       <div className="flex items-center gap-5">
-        {hasSms && (
-          <button className={tabClass('sms')} onClick={() => onTabChange('sms')}>
-            SMS
-          </button>
-        )}
         {hasEmail && (
           <button className={tabClass('email')} onClick={() => onTabChange('email')}>
             Email
