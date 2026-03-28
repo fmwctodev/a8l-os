@@ -234,6 +234,21 @@ Deno.serve(async (req: Request) => {
       if (count && count > 0) deletedCount++;
     }
 
+    if (processedCount > 0) {
+      try {
+        await supabase.from("notifications").insert({
+          user_id: userId,
+          type: "email",
+          title: "New Email Received",
+          body: processedCount === 1
+            ? "You have 1 new email"
+            : `You have ${processedCount} new emails`,
+          link: "/conversations",
+          metadata: { count: processedCount },
+        });
+      } catch {}
+    }
+
     const now = new Date().toISOString();
     await supabase
       .from("gmail_sync_state")

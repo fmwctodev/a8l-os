@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { ContactTask, User } from '../types';
 import { addTimelineEvent } from './contactTimeline';
+import { notifyTaskAssigned } from './notifications';
 
 export interface CreateTaskData {
   title: string;
@@ -90,6 +91,17 @@ export async function createTask(
     task_title: taskData.title,
   });
 
+  if (taskData.assigned_to_user_id && taskData.assigned_to_user_id !== currentUser.id) {
+    try {
+      await notifyTaskAssigned(
+        taskData.assigned_to_user_id,
+        taskData.title,
+        contactId,
+        currentUser.name || 'Someone'
+      );
+    } catch {}
+  }
+
   return data;
 }
 
@@ -139,6 +151,21 @@ export async function updateTask(
         task_id: id,
         task_title: data.title,
       });
+    }
+
+    if (
+      updates.assigned_to_user_id &&
+      updates.assigned_to_user_id !== before.assigned_to_user_id &&
+      updates.assigned_to_user_id !== currentUser.id
+    ) {
+      try {
+        await notifyTaskAssigned(
+          updates.assigned_to_user_id,
+          data.title,
+          before.contact_id,
+          currentUser.name || 'Someone'
+        );
+      } catch {}
     }
   }
 

@@ -332,6 +332,26 @@ DEAL INFORMATION:
       actor_user_id: user_id,
     });
 
+    try {
+      const { data: orgUsers } = await supabase
+        .from("users")
+        .select("id")
+        .eq("organization_id", contract.org_id);
+
+      if (orgUsers?.length) {
+        await supabase.from("notifications").insert(
+          orgUsers.map((u: { id: string }) => ({
+            user_id: u.id,
+            type: "ai_draft_ready",
+            title: "AI Contract Draft Ready",
+            body: `An AI-generated contract draft is ready for "${contract.title || "Untitled"}"`,
+            link: `/contracts/${contract_id}`,
+            metadata: { contract_id },
+          }))
+        );
+      }
+    } catch {}
+
     return new Response(
       JSON.stringify({
         success: true,

@@ -10,6 +10,7 @@ import { logAudit } from './audit';
 import { addTimelineEvent } from './contactTimeline';
 import { publishEvent } from './eventOutbox';
 import { syncAppointmentToGoogle } from './googleCalendarOutboundSync';
+import { notifyAppointmentBooked } from './notifications';
 
 export interface CreateAppointmentData {
   calendar_id: string;
@@ -278,6 +279,25 @@ export async function createAppointment(
   try {
     await syncAppointmentToGoogle(data.id, 'create');
   } catch {
+  }
+
+  if (appointmentData.assigned_user_id) {
+    let contactName: string | undefined;
+    if (appointmentData.contact_id) {
+      const { data: contact } = await supabase
+        .from('contacts')
+        .select('first_name, last_name')
+        .eq('id', appointmentData.contact_id)
+        .maybeSingle();
+      if (contact) contactName = [contact.first_name, contact.last_name].filter(Boolean).join(' ');
+    }
+    try {
+      await notifyAppointmentBooked(
+        appointmentData.assigned_user_id,
+        appointmentData.start_at_utc,
+        contactName
+      );
+    } catch {}
   }
 
   return data;

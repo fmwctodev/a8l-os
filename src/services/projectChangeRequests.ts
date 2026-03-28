@@ -7,6 +7,7 @@ import type {
   ProjectChangeRequestAuditEvent,
 } from '../types';
 import { logProjectActivity } from './projectActivityLog';
+import { notifyChangeRequestCreated } from './notifications';
 
 async function computeHash(value: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -116,6 +117,10 @@ export async function createChangeRequest(
     payload: { change_request_id: data.id, client_name: input.client_name },
     actor_user_id: actorUserId ?? null,
   });
+
+  try {
+    await notifyChangeRequestCreated(input.org_id, input.title, input.project_id, input.client_name);
+  } catch {}
 
   const clientPortalUrl = `${window.location.origin}/project-change/status/${data.id}?token=${token.raw}`;
 

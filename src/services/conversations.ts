@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { callEdgeFunction } from '../lib/edgeFunction';
 import type { Conversation, ConversationFilters, ConversationStatus, MessageChannel } from '../types';
+import { notifyConversationAssigned } from './notifications';
 
 export async function getConversations(
   orgId: string,
@@ -235,6 +236,22 @@ export async function assignConversation(
       payload: { assigned_user_id: assignedUserId },
       actor_user_id: actorUserId
     });
+  }
+
+  if (assignedUserId && assignedUserId !== actorUserId) {
+    const { data: actor } = await supabase
+      .from('users')
+      .select('name')
+      .eq('id', actorUserId)
+      .maybeSingle();
+
+    try {
+      await notifyConversationAssigned(
+        assignedUserId,
+        id,
+        actor?.name || 'Someone'
+      );
+    } catch {}
   }
 }
 

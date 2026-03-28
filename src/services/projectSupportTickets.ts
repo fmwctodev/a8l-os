@@ -8,6 +8,7 @@ import type {
   UpdateSupportTicketInput,
 } from '../types';
 import { logProjectActivity } from './projectActivityLog';
+import { notifySupportTicketCreated } from './notifications';
 
 async function computeHash(value: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -146,6 +147,10 @@ export async function createSupportTicket(
     payload: { support_ticket_id: data.id, client_name: input.client_name, severity_score: severity },
     actor_user_id: actorUserId ?? null,
   });
+
+  try {
+    await notifySupportTicketCreated(input.org_id, input.title, input.project_id, input.client_name);
+  } catch {}
 
   return { ticket: data as ProjectSupportTicket, rawToken: token.raw };
 }

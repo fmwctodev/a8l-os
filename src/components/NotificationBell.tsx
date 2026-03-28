@@ -26,10 +26,17 @@ import {
 const typeConfig: Record<string, { icon: typeof Bell; color: string }> = {
   message: { icon: MessageSquare, color: 'text-sky-400' },
   conversation: { icon: MessageSquare, color: 'text-cyan-400' },
+  conversation_assigned: { icon: MessageSquare, color: 'text-cyan-400' },
   calendar: { icon: Calendar, color: 'text-emerald-400' },
   appointment: { icon: Calendar, color: 'text-emerald-400' },
+  appointment_booked: { icon: Calendar, color: 'text-emerald-400' },
   review: { icon: Star, color: 'text-amber-400' },
   ai: { icon: Bot, color: 'text-teal-400' },
+  ai_draft_ready: { icon: Bot, color: 'text-teal-400' },
+  support_ticket: { icon: AlertTriangle, color: 'text-orange-400' },
+  change_request: { icon: Info, color: 'text-sky-400' },
+  task_assigned: { icon: CheckCheck, color: 'text-emerald-400' },
+  email: { icon: MessageSquare, color: 'text-sky-400' },
   warning: { icon: AlertTriangle, color: 'text-orange-400' },
   system: { icon: Info, color: 'text-slate-400' },
 };

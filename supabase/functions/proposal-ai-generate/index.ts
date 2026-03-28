@@ -360,6 +360,26 @@ Deno.serve(async (req: Request) => {
       actor_user_id: user_id,
     });
 
+    try {
+      const { data: orgUsers } = await supabase
+        .from("users")
+        .select("id")
+        .eq("organization_id", proposal.org_id);
+
+      if (orgUsers?.length) {
+        await supabase.from("notifications").insert(
+          orgUsers.map((u: { id: string }) => ({
+            user_id: u.id,
+            type: "ai_draft_ready",
+            title: "AI Proposal Draft Ready",
+            body: `An AI-generated proposal draft is ready for "${proposal.title || "Untitled"}"`,
+            link: `/proposals/${proposal_id}`,
+            metadata: { proposal_id },
+          }))
+        );
+      }
+    } catch {}
+
     return new Response(
       JSON.stringify({
         success: true,
