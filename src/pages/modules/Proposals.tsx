@@ -369,10 +369,12 @@ export function Proposals() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle.bg} ${statusStyle.text}`}>
-                          <StatusIcon className="w-3 h-3" />
-                          {statusStyle.label}
-                        </span>
+                        {!(proposal.signature_status && SIGNATURE_STATUS_STYLES[proposal.signature_status]) && (
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle.bg} ${statusStyle.text}`}>
+                            <StatusIcon className="w-3 h-3" />
+                            {statusStyle.label}
+                          </span>
+                        )}
                         {proposal.signature_status && SIGNATURE_STATUS_STYLES[proposal.signature_status] && (
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${SIGNATURE_STATUS_STYLES[proposal.signature_status].bg} ${SIGNATURE_STATUS_STYLES[proposal.signature_status].text}`}>
                             {(() => { const SigIcon = SIGNATURE_STATUS_STYLES[proposal.signature_status!].icon; return <SigIcon className="w-3 h-3" />; })()}

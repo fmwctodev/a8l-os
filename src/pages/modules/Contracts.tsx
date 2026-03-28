@@ -290,10 +290,12 @@ export function Contracts() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle.bg} ${statusStyle.text}`}>
-                          <StatusIcon className="w-3 h-3" />
-                          {statusStyle.label}
-                        </span>
+                        {!sigStyle && (
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusStyle.bg} ${statusStyle.text}`}>
+                            <StatusIcon className="w-3 h-3" />
+                            {statusStyle.label}
+                          </span>
+                        )}
                         {sigStyle && (
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${sigStyle.bg} ${sigStyle.text}`}>
                             {(() => { const SigIcon = sigStyle.icon; return <SigIcon className="w-3 h-3" />; })()}
