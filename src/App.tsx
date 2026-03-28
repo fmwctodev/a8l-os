@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { SidebarProvider } from './contexts/SidebarContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -38,7 +38,6 @@ const Proposals = lazy(() => import('./pages/modules/Proposals').then(m => ({ de
 const ProposalDetail = lazy(() => import('./pages/modules/ProposalDetail').then(m => ({ default: m.ProposalDetail })));
 const ProposalBuilder = lazy(() => import('./pages/modules/ProposalBuilder').then(m => ({ default: m.ProposalBuilder })));
 const AIAgentsLayout = lazy(() => import('./layouts/AIAgentsLayout').then(m => ({ default: m.AIAgentsLayout })));
-const AIAgentsGettingStarted = lazy(() => import('./pages/modules/AIAgentsGettingStarted').then(m => ({ default: m.AIAgentsGettingStarted })));
 const AIAgentDetail = lazy(() => import('./pages/modules/AIAgentDetail').then(m => ({ default: m.AIAgentDetail })));
 const VoiceAIPage = lazy(() => import('./pages/modules/voice-ai/VoiceAIPage').then(m => ({ default: m.VoiceAIPage })));
 const VapiAssistantsListPage = lazy(() => import('./pages/modules/voice-ai/VapiAssistantsListPage').then(m => ({ default: m.VapiAssistantsListPage })));
@@ -317,8 +316,8 @@ function App() {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<AIAgentsGettingStarted />} />
-                <Route path="getting-started" element={<AIAgentsGettingStarted />} />
+                <Route index element={<Navigate to="/ai-agents/voice" replace />} />
+                <Route path="getting-started" element={<Navigate to="/ai-agents/voice" replace />} />
                 <Route path="voice" element={<VoiceAIPage />}>
                   <Route index element={<VapiAssistantsListPage />} />
                   <Route path="assistants" element={<VapiAssistantsListPage />} />
