@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getProposals, getProposalStats, deleteProposal, sendProposal } from '../../services/proposals';
+import { getProposals, getProposalStats, deleteProposal, sendProposal, updateProposal } from '../../services/proposals';
 import type { Proposal, ProposalStats, ProposalStatus } from '../../types';
 import {
   FileText,
@@ -97,6 +97,26 @@ export function Proposals() {
       setProposals(proposalData.data);
       setTotalCount(proposalData.total);
       setStats(statsData);
+
+      const needsBackfill = proposalData.data.filter(p => !p.total_value || p.total_value === 0);
+      if (needsBackfill.length > 0) {
+        (async () => {
+          let didUpdate = false;
+          for (const p of needsBackfill) {
+            const extracted = extractValueFromSections(p.sections, p.currency);
+            if (extracted && extracted.value > 0) {
+              try {
+                await updateProposal(p.id, { total_value: extracted.value, currency: extracted.currency });
+                didUpdate = true;
+              } catch {}
+            }
+          }
+          if (didUpdate) {
+            const refreshed = await getProposalStats();
+            setStats(refreshed);
+          }
+        })();
+      }
     } catch (err) {
       console.error('Failed to load proposals:', err);
     } finally {

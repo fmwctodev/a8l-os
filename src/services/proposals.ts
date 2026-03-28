@@ -350,7 +350,7 @@ export async function deleteProposal(id: string): Promise<void> {
 }
 
 export async function getProposalStats(filters: ProposalFilters = {}): Promise<ProposalStats> {
-  let query = supabase.from('proposals').select('status, total_value, signature_status');
+  let query = supabase.from('proposals').select('status, total_value, signature_status').is('archived_at', null);
 
   if (filters.contactId) {
     query = query.eq('contact_id', filters.contactId);

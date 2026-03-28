@@ -133,6 +133,7 @@ export async function createSignatureRequest(
   const { error: proposalError } = await supabase
     .from('proposals')
     .update({
+      status: 'sent',
       signature_status: 'pending_signature' as ProposalSignatureStatus,
       expires_at: expiresAt.toISOString(),
       signature_request_id: request.id,
@@ -379,7 +380,7 @@ export async function resendSignatureRequest(
 
   await supabase
     .from('proposals')
-    .update({ signature_status: 'pending_signature' as ProposalSignatureStatus })
+    .update({ status: 'sent', signature_status: 'pending_signature' as ProposalSignatureStatus })
     .eq('id', proposalId);
 
   await createAuditEvent({
