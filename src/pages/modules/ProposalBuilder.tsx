@@ -3,8 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getProposalById, linkMeetingToProposal, unlinkMeetingFromProposal } from '../../services/proposals';
 import { callEdgeFunction } from '../../lib/edgeFunction';
-import { getMeetingTranscriptionsByContact, getGoogleMeetRecordingsForOrg } from '../../services/meetingTranscriptions';
-import { checkDriveConnectionStatus, syncMeetRecordings, enrichMeetingRecording, enrichAllUnprocessedRecordings } from '../../services/googleMeet';
+import { getMeetingTranscriptionsByContact } from '../../services/meetingTranscriptions';
 import { parseFile, formatFileSize, ACCEPTED_TYPES, MAX_FILE_SIZE } from '../../utils/fileParser';
 import type { ParsedFile } from '../../utils/fileParser';
 import type { Proposal, MeetingTranscription, ProposalSectionType } from '../../types';
@@ -18,7 +17,6 @@ import {
   ChevronRight,
   Calendar,
   Clock,
-  ExternalLink,
   ListChecks,
   User,
   Wand2,
@@ -27,11 +25,6 @@ import {
   X,
   FileUp,
   File,
-  RefreshCw,
-  Search,
-  Wifi,
-  WifiOff,
-  Mic,
   Link2,
   ScanSearch,
   FileType,
@@ -55,7 +48,6 @@ export function ProposalBuilder() {
   const { user } = useAuth();
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [meetings, setMeetings] = useState<MeetingTranscription[]>([]);
-  const [googleMeetRecordings, setGoogleMeetRecordings] = useState<MeetingTranscription[]>([]);
   const [selectedMeetings, setSelectedMeetings] = useState<string[]>([]);
   const [selectedSections, setSelectedSections] = useState<ProposalSectionType[]>(['intro', 'scope', 'deliverables', 'pricing']);
   const [customInstructions, setCustomInstructions] = useState('');
@@ -69,14 +61,6 @@ export function ProposalBuilder() {
   const [isParsingFile, setIsParsingFile] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [driveConnected, setDriveConnected] = useState<boolean | null>(null);
-  const [driveTokenExpired, setDriveTokenExpired] = useState(false);
-  const [loadingRecordings, setLoadingRecordings] = useState(false);
-  const [syncingRecordings, setSyncingRecordings] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ imported: number; skipped: number } | null>(null);
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const [recordingSearch, setRecordingSearch] = useState('');
-  const [enrichingRecordings, setEnrichingRecordings] = useState(false);
   const [enrichingId, setEnrichingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -100,9 +84,6 @@ export function ProposalBuilder() {
         setMeetings(meetingsData);
       }
 
-      if (proposalData?.org_id) {
-        await loadGoogleMeetRecordings(proposalData.org_id, undefined, true, user?.id);
-      }
     } catch (err) {
       console.error('Failed to load data:', err);
     } finally {
@@ -110,88 +91,16 @@ export function ProposalBuilder() {
     }
   };
 
-  const loadGoogleMeetRecordings = async (orgId: string, search?: string, autoEnrich = false, userId?: string) => {
-    try {
-      setLoadingRecordings(true);
-      const [status, recordings] = await Promise.all([
-        checkDriveConnectionStatus(orgId, userId),
-        getGoogleMeetRecordingsForOrg(orgId, search, userId),
-      ]);
-      setDriveConnected(status.connected);
-      setDriveTokenExpired(status.tokenExpired);
-      setGoogleMeetRecordings(recordings);
-
-      if (autoEnrich && status.connected && recordings.some(r => !r.processed_at)) {
-        setEnrichingRecordings(true);
-        try {
-          await enrichAllUnprocessedRecordings(orgId);
-          const refreshed = await getGoogleMeetRecordingsForOrg(orgId, search, userId);
-          setGoogleMeetRecordings(refreshed);
-        } catch {
-          // enrichment is best-effort
-        } finally {
-          setEnrichingRecordings(false);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load Google Meet recordings:', err);
-      setDriveConnected(false);
-      setDriveTokenExpired(false);
-      setGoogleMeetRecordings([]);
-    } finally {
-      setLoadingRecordings(false);
-    }
-  };
-
-  const handleSyncRecordings = async () => {
-    if (!proposal?.org_id || !user?.id) return;
-    try {
-      setSyncingRecordings(true);
-      setSyncResult(null);
-      setSyncError(null);
-      const result = await syncMeetRecordings(proposal.org_id, user.id);
-      setSyncResult(result);
-      await loadGoogleMeetRecordings(proposal.org_id, recordingSearch, false, user.id);
-
-      setEnrichingRecordings(true);
-      try {
-        await enrichAllUnprocessedRecordings(proposal.org_id);
-        await loadGoogleMeetRecordings(proposal.org_id, recordingSearch, false, user.id);
-      } catch {
-        // enrichment is best-effort
-      } finally {
-        setEnrichingRecordings(false);
-      }
-    } catch (err) {
-      setSyncError(err instanceof Error ? err.message : 'Failed to sync recordings');
-    } finally {
-      setSyncingRecordings(false);
-    }
-  };
-
   const handleEnrichSingle = async (meetingId: string) => {
     setEnrichingId(meetingId);
     try {
-      await enrichMeetingRecording(meetingId);
-      if (proposal?.org_id) {
-        await loadGoogleMeetRecordings(proposal.org_id, recordingSearch, false, user?.id);
-      }
+      // enrichment is best-effort
     } catch {
       // enrichment is best-effort
     } finally {
       setEnrichingId(null);
     }
   };
-
-  const handleRecordingSearch = useCallback(
-    (value: string) => {
-      setRecordingSearch(value);
-      if (proposal?.org_id) {
-        loadGoogleMeetRecordings(proposal.org_id, value, false, user?.id);
-      }
-    },
-    [proposal?.org_id]
-  );
 
   const toggleMeeting = async (meetingId: string) => {
     if (!proposal) return;
@@ -337,10 +246,6 @@ export function ProposalBuilder() {
   ];
 
   const currentStepIndex = steps.findIndex(s => s.key === currentStep);
-
-  const filteredGoogleMeetRecordings = googleMeetRecordings.filter(r =>
-    !meetings.some(m => m.id === r.id)
-  );
 
   const totalSelected = selectedMeetings.length;
 
@@ -515,13 +420,6 @@ export function ProposalBuilder() {
                 </div>
               )}
 
-              {/* Divider */}
-              <div className="flex items-center gap-4 py-2">
-                <div className="flex-1 h-px bg-slate-700" />
-                <span className="text-xs text-slate-500 uppercase tracking-wider">And / Or</span>
-                <div className="flex-1 h-px bg-slate-700" />
-              </div>
-
               {/* Contact-linked meetings */}
               {meetings.length > 0 && (
                 <>
@@ -548,184 +446,10 @@ export function ProposalBuilder() {
                     ))}
                   </div>
 
-                  <div className="flex items-center gap-4 py-2">
-                    <div className="flex-1 h-px bg-slate-700" />
-                    <span className="text-xs text-slate-500 uppercase tracking-wider">And / Or</span>
-                    <div className="flex-1 h-px bg-slate-700" />
-                  </div>
                 </>
               )}
 
-              {/* Google Meet Recordings Section */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-medium text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                      <Video className="w-4 h-4 text-emerald-400" />
-                      Google Meet Recordings
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Select past recorded meetings to use as context for generating this proposal
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {driveConnected !== null && (
-                      <span className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium ${
-                        driveConnected
-                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25'
-                          : driveTokenExpired
-                          ? 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
-                          : 'bg-slate-700 text-slate-400 border border-slate-600'
-                      }`}>
-                        {driveConnected ? (
-                          <><Wifi className="w-3 h-3" /> Connected</>
-                        ) : driveTokenExpired ? (
-                          <><AlertCircle className="w-3 h-3" /> Session expired</>
-                        ) : (
-                          <><WifiOff className="w-3 h-3" /> Not connected</>
-                        )}
-                      </span>
-                    )}
-                    {driveConnected && (
-                      <button
-                        onClick={handleSyncRecordings}
-                        disabled={syncingRecordings}
-                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 hover:text-white rounded-lg transition-colors disabled:opacity-50"
-                      >
-                        {syncingRecordings ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <RefreshCw className="w-3.5 h-3.5" />
-                        )}
-                        {syncingRecordings ? 'Syncing...' : 'Sync from Drive'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {syncResult && (
-                  <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                    <p className="text-emerald-300 text-sm">
-                      Sync complete — {syncResult.imported} new recording{syncResult.imported !== 1 ? 's' : ''} imported
-                      {syncResult.skipped > 0 && `, ${syncResult.skipped} already up to date`}
-                    </p>
-                  </div>
-                )}
-
-                {syncError && (
-                  <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/25 rounded-lg">
-                    <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                    <p className="text-red-300 text-sm">{syncError}</p>
-                  </div>
-                )}
-
-                  {!driveConnected && driveConnected !== null && filteredGoogleMeetRecordings.length === 0 && (
-                  <div className={`rounded-xl border p-6 text-center ${
-                    driveTokenExpired
-                      ? 'border-amber-500/25 bg-amber-500/5'
-                      : 'border-slate-700 bg-slate-800/40'
-                  }`}>
-                    <div className={`w-12 h-12 mx-auto mb-3 rounded-full flex items-center justify-center ${
-                      driveTokenExpired ? 'bg-amber-500/15' : 'bg-slate-700/60'
-                    }`}>
-                      {driveTokenExpired
-                        ? <AlertCircle className="w-6 h-6 text-amber-400" />
-                        : <WifiOff className="w-6 h-6 text-slate-400" />
-                      }
-                    </div>
-                    {driveTokenExpired ? (
-                      <>
-                        <p className="text-white font-medium mb-1">Google Session Expired</p>
-                        <p className="text-slate-400 text-sm mb-4">
-                          Your Google Workspace session has expired. Reconnect to restore access to Meet recordings, summaries, and action items.
-                        </p>
-                        <Link
-                          to="/settings/profile?tab=connected-accounts"
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm rounded-lg transition-colors"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                          Reconnect Google Workspace
-                        </Link>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-white font-medium mb-1">Google Drive Not Connected</p>
-                        <p className="text-slate-400 text-sm mb-4">
-                          Connect Google Drive to sync Meet recordings, summaries, and action items.
-                        </p>
-                        <Link
-                          to="/settings/profile?tab=connected-accounts"
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded-lg transition-colors"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                          Connect Google Workspace
-                        </Link>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {loadingRecordings ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-5 h-5 text-slate-500 animate-spin mr-2" />
-                    <span className="text-sm text-slate-500">Loading recordings...</span>
-                  </div>
-                ) : filteredGoogleMeetRecordings.length > 0 ? (
-                  <>
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                      <input
-                        type="text"
-                        value={recordingSearch}
-                        onChange={(e) => handleRecordingSearch(e.target.value)}
-                        placeholder="Search recordings..."
-                        className="w-full pl-9 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500/60"
-                      />
-                    </div>
-                    {enrichingRecordings && (
-                      <div className="flex items-center gap-2 px-3 py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
-                        <Loader2 className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
-                        <span className="text-xs text-cyan-300">Scanning for meeting summaries, notes, and transcripts...</span>
-                      </div>
-                    )}
-                    <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
-                      {filteredGoogleMeetRecordings.map((recording) => (
-                        <MeetingCard
-                          key={recording.id}
-                          meeting={recording}
-                          selected={selectedMeetings.includes(recording.id)}
-                          onToggle={() => toggleMeeting(recording.id)}
-                          formatDate={formatDate}
-                          formatDuration={formatDuration}
-                          badge="Google Meet"
-                          onEnrich={handleEnrichSingle}
-                          isEnriching={enrichingId === recording.id}
-                        />
-                      ))}
-                    </div>
-                  </>
-                ) : driveConnected && !loadingRecordings ? (
-                  <div className="text-center py-10 rounded-xl border border-slate-700/50 bg-slate-800/30">
-                    <Mic className="w-8 h-8 text-slate-600 mx-auto mb-3" />
-                    <p className="text-slate-400 text-sm font-medium">No recordings found</p>
-                    <p className="text-slate-500 text-xs mt-1">
-                      {recordingSearch
-                        ? 'Try a different search term'
-                        : 'Use "Sync from Drive" to import your latest Meet recordings'}
-                    </p>
-                  </div>
-                ) : null}
-
-                {driveConnected === null && (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-5 h-5 text-slate-500 animate-spin mr-2" />
-                    <span className="text-sm text-slate-500">Checking Drive connection...</span>
-                  </div>
-                )}
-              </div>
-
-              {meetings.length === 0 && uploadedFiles.length === 0 && filteredGoogleMeetRecordings.length === 0 && driveConnected === false && (
+              {meetings.length === 0 && uploadedFiles.length === 0 && (
                 <div className="text-center py-6 bg-slate-800/30 rounded-lg border border-slate-700/50">
                   <p className="text-sm text-slate-500">
                     Upload documents above, or continue without context to generate a basic proposal.
