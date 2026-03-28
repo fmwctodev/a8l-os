@@ -425,6 +425,75 @@ export async function verifyAssistantExistsOnVapi(
   }
 }
 
+export interface ImportedVapiAssistant {
+  id: string;
+  name: string;
+  model?: { provider?: string; model?: string; messages?: { role: string; content: string }[] };
+  transcriber?: { provider?: string; model?: string };
+  voice?: { provider?: string; voiceId?: string };
+  firstMessage?: string;
+}
+
+export async function importAssistantFromVapi(
+  orgId: string,
+  vapiAssistantId: string,
+  userId: string
+): Promise<VapiAssistant> {
+  const response = await callEdgeFunction('vapi-client', {
+    action: 'get_assistant',
+    vapi_assistant_id: vapiAssistantId,
+  });
+  const json = await response.json();
+  if (!json.success) {
+    throw new Error(json.error?.message || 'Failed to fetch assistant from Vapi');
+  }
+
+  const remote = json.data as ImportedVapiAssistant;
+
+  const { data: existing } = await supabase
+    .from('vapi_assistants')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('vapi_assistant_id', vapiAssistantId)
+    .maybeSingle();
+
+  if (existing) {
+    throw new Error('This Vapi assistant is already imported into your dashboard.');
+  }
+
+  const systemPrompt =
+    remote.model?.messages?.find((m) => m.role === 'system')?.content || '';
+
+  const voiceProvider = remote.voice?.provider === '11labs' ? 'elevenlabs' : (remote.voice?.provider || 'elevenlabs');
+
+  const slug = generateSlug(remote.name || vapiAssistantId);
+
+  const { data, error } = await supabase
+    .from('vapi_assistants')
+    .insert({
+      org_id: orgId,
+      name: remote.name || `Imported Assistant`,
+      slug: `${slug}-${Date.now().toString(36)}`,
+      channel_modes: ['voice'],
+      first_message: remote.firstMessage || '',
+      system_prompt: systemPrompt,
+      llm_provider: remote.model?.provider || 'openai',
+      llm_model: remote.model?.model || 'gpt-4o',
+      transcriber_provider: remote.transcriber?.provider || 'deepgram',
+      transcriber_model: remote.transcriber?.model || 'nova-2',
+      voice_provider: voiceProvider,
+      voice_id: remote.voice?.voiceId || null,
+      vapi_assistant_id: vapiAssistantId,
+      status: 'published',
+      created_by_user_id: userId,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function deleteAssistant(id: string): Promise<void> {
   const assistant = await getAssistant(id);
   if (assistant?.vapi_assistant_id) {

@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Filter, MoreVertical, Eye, CreditCard as Edit, Copy, Upload, Archive, Phone, MessageSquare, Globe, Mic, Zap, RefreshCw } from 'lucide-react';
+import { Plus, Search, Filter, MoreVertical, Eye, CreditCard as Edit, Copy, Upload, Archive, Phone, MessageSquare, Globe, Mic, Zap, RefreshCw, Download, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
-import { listAssistants, archiveAssistant, duplicateAssistant, deleteAssistant, reconcileWithVapi } from '../../../services/vapiAssistants';
+import { listAssistants, archiveAssistant, duplicateAssistant, deleteAssistant, reconcileWithVapi, importAssistantFromVapi } from '../../../services/vapiAssistants';
 import type { VapiAssistant } from '../../../services/vapiAssistants';
 
 const statusColors: Record<string, string> = {
@@ -29,6 +29,11 @@ export function VapiAssistantsListPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const hasReconciledRef = useRef(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importId, setImportId] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccess, setImportSuccess] = useState<string | null>(null);
 
   const canCreate = hasPermission('ai_agents.voice.create');
   const canEdit = hasPermission('ai_agents.voice.edit');
@@ -119,6 +124,23 @@ export function VapiAssistantsListPage() {
     setMenuOpen(null);
   };
 
+  const handleImport = async () => {
+    if (!user?.organization_id || !user?.id || !importId.trim()) return;
+    setImporting(true);
+    setImportError(null);
+    setImportSuccess(null);
+    try {
+      const imported = await importAssistantFromVapi(user.organization_id, importId.trim(), user.id);
+      setImportSuccess(`"${imported.name}" imported successfully.`);
+      setImportId('');
+      loadAssistants();
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : 'Import failed. Check the Vapi ID and try again.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -133,13 +155,22 @@ export function VapiAssistantsListPage() {
         </div>
 
         {canCreate && (
-          <button
-            onClick={() => navigate('/ai-agents/voice/assistants/new')}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            New Assistant
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setShowImportModal(true); setImportError(null); setImportSuccess(null); }}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-lg transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Import from Vapi
+            </button>
+            <button
+              onClick={() => navigate('/ai-agents/voice/assistants/new')}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              New Assistant
+            </button>
+          </div>
         )}
       </div>
 
@@ -341,6 +372,91 @@ export function VapiAssistantsListPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-cyan-500/10 rounded-lg">
+                  <Download className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-white">Import from Vapi</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">Bring an existing Vapi assistant into your dashboard</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setShowImportModal(false); setImportId(''); setImportError(null); setImportSuccess(null); }}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                  Vapi Assistant ID
+                </label>
+                <input
+                  type="text"
+                  value={importId}
+                  onChange={(e) => { setImportId(e.target.value); setImportError(null); setImportSuccess(null); }}
+                  placeholder="e.g. 8828df1d-e434-45ae-a9be-7d5567a696b6"
+                  className="w-full px-3 py-2 text-sm bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 font-mono"
+                  onKeyDown={(e) => e.key === 'Enter' && !importing && importId.trim() && handleImport()}
+                />
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Find this ID in your Vapi dashboard under the assistant details.
+                </p>
+              </div>
+
+              {importError && (
+                <div className="flex items-start gap-2.5 px-3 py-2.5 bg-red-500/10 border border-red-500/20 rounded-lg">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <p className="text-sm text-red-300">{importError}</p>
+                </div>
+              )}
+
+              {importSuccess && (
+                <div className="flex items-start gap-2.5 px-3 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <p className="text-sm text-emerald-300">{importSuccess}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-700">
+              <button
+                onClick={() => { setShowImportModal(false); setImportId(''); setImportError(null); setImportSuccess(null); }}
+                className="px-4 py-2 text-sm font-medium text-slate-300 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors"
+              >
+                {importSuccess ? 'Close' : 'Cancel'}
+              </button>
+              {!importSuccess && (
+                <button
+                  onClick={handleImport}
+                  disabled={!importId.trim() || importing}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
+                >
+                  {importing ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      Import Assistant
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
