@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   X, Search, MessageSquarePlus, Loader2, ArrowLeft,
-  Mail, Send, AlertCircle, Plus
+  Mail, AlertCircle, Plus, ChevronDown, Type, FileText,
+  Link2, Image, Code2, MoreHorizontal
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getContacts } from '../../services/contacts';
 import { InlineCreateContactForm } from '../shared/InlineCreateContactForm';
 import { findOrCreateConversation } from '../../services/conversations';
 import { createMessage } from '../../services/messages';
+import { getEmailDefaults } from '../../services/emailDefaults';
 import type { Contact } from '../../types';
 
 type Step = 'contact' | 'compose';
@@ -28,7 +30,14 @@ export function NewConversationModal({ onClose, onSelectContact }: NewConversati
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showNewContactForm, setShowNewContactForm] = useState(false);
 
+  const [fromName, setFromName] = useState('');
+  const [fromEmail, setFromEmail] = useState('');
+  const [subject, setSubject] = useState('');
   const [messageBody, setMessageBody] = useState('');
+  const [ccVisible, setCcVisible] = useState(false);
+  const [bccVisible, setBccVisible] = useState(false);
+  const [ccValue, setCcValue] = useState('');
+  const [bccValue, setBccValue] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
@@ -54,6 +63,20 @@ export function NewConversationModal({ onClose, onSelectContact }: NewConversati
   }, [user?.organization_id]);
 
   useEffect(() => {
+    if (!user?.organization_id) return;
+    setFromName(user.name || '');
+    setFromEmail(user.email || '');
+    getEmailDefaults(user.organization_id).then(defaults => {
+      if (defaults?.default_from_address?.email) {
+        setFromEmail(defaults.default_from_address.email);
+      }
+      if (defaults?.default_from_address?.display_name) {
+        setFromName(defaults.default_from_address.display_name);
+      }
+    }).catch(() => {});
+  }, [user]);
+
+  useEffect(() => {
     if (!searchQuery.trim()) {
       setFilteredContacts(contacts);
       return;
@@ -71,7 +94,8 @@ export function NewConversationModal({ onClose, onSelectContact }: NewConversati
     setStep('compose');
   };
 
-  const canSend = !!selectedContact?.email && messageBody.trim().length > 0 && !sending;
+  const wordCount = messageBody.trim() ? messageBody.trim().split(/\s+/).length : 0;
+  const canSend = !!selectedContact?.email && subject.trim().length > 0 && messageBody.trim().length > 0 && !sending;
 
   const handleSend = async () => {
     if (!selectedContact || !user?.organization_id || !selectedContact.email) return;
@@ -91,8 +115,8 @@ export function NewConversationModal({ onClose, onSelectContact }: NewConversati
         'email',
         'outbound',
         messageBody.trim(),
-        {},
-        'New message'
+        { from_name: fromName, from_email: fromEmail, cc: ccValue || undefined, bcc: bccValue || undefined },
+        subject.trim() || 'New message'
       );
 
       onSelectContact(selectedContact.id);
@@ -104,16 +128,25 @@ export function NewConversationModal({ onClose, onSelectContact }: NewConversati
     }
   };
 
+  const handleClear = () => {
+    setSubject('');
+    setMessageBody('');
+    setCcValue('');
+    setBccValue('');
+    setCcVisible(false);
+    setBccVisible(false);
+  };
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col border border-slate-700"
-        style={{ maxHeight: '85vh' }}>
+        style={{ maxHeight: '90vh' }}>
 
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700 flex-shrink-0">
           <div className="flex items-center gap-2">
             {step === 'compose' && (
               <button
-                onClick={() => { setStep('contact'); setSelectedContact(null); setSendError(null); setMessageBody(''); }}
+                onClick={() => { setStep('contact'); setSelectedContact(null); setSendError(null); setSubject(''); setMessageBody(''); }}
                 className="p-1 hover:bg-slate-700 rounded transition-colors mr-1"
               >
                 <ArrowLeft size={18} className="text-slate-400" />
@@ -180,9 +213,7 @@ export function NewConversationModal({ onClose, onSelectContact }: NewConversati
                     <div className="text-center py-16">
                       <MessageSquarePlus className="w-10 h-10 text-slate-600 mx-auto mb-3" />
                       <p className="text-slate-400 text-sm mb-4">
-                        {contacts.length === 0
-                          ? 'No contacts found.'
-                          : 'No contacts match your search.'}
+                        {contacts.length === 0 ? 'No contacts found.' : 'No contacts match your search.'}
                       </p>
                       <button
                         onClick={() => setShowNewContactForm(true)}
@@ -209,117 +240,242 @@ export function NewConversationModal({ onClose, onSelectContact }: NewConversati
               </>
             )}
           </>
-        ) : (
-          <ComposeStep
-            contact={selectedContact!}
+        ) : selectedContact ? (
+          <EmailComposeStep
+            contact={selectedContact}
+            fromName={fromName}
+            fromEmail={fromEmail}
+            subject={subject}
+            onSubjectChange={setSubject}
             messageBody={messageBody}
             onMessageBodyChange={setMessageBody}
+            ccVisible={ccVisible}
+            bccVisible={bccVisible}
+            ccValue={ccValue}
+            bccValue={bccValue}
+            onCcToggle={() => setCcVisible(v => !v)}
+            onBccToggle={() => setBccVisible(v => !v)}
+            onCcChange={setCcValue}
+            onBccChange={setBccValue}
+            wordCount={wordCount}
             canSend={canSend}
             sending={sending}
             sendError={sendError}
             onSend={handleSend}
+            onClear={handleClear}
             onClose={onClose}
           />
-        )}
+        ) : null}
       </div>
     </div>
   );
 }
 
-interface ComposeStepProps {
+interface EmailComposeStepProps {
   contact: Contact;
+  fromName: string;
+  fromEmail: string;
+  subject: string;
+  onSubjectChange: (v: string) => void;
   messageBody: string;
   onMessageBodyChange: (v: string) => void;
+  ccVisible: boolean;
+  bccVisible: boolean;
+  ccValue: string;
+  bccValue: string;
+  onCcToggle: () => void;
+  onBccToggle: () => void;
+  onCcChange: (v: string) => void;
+  onBccChange: (v: string) => void;
+  wordCount: number;
   canSend: boolean;
   sending: boolean;
   sendError: string | null;
   onSend: () => void;
+  onClear: () => void;
   onClose: () => void;
 }
 
-function ComposeStep({
-  contact, messageBody, onMessageBodyChange, canSend, sending, sendError, onSend, onClose
-}: ComposeStepProps) {
+function EmailComposeStep({
+  contact, fromName, fromEmail, subject, onSubjectChange,
+  messageBody, onMessageBodyChange, ccVisible, bccVisible, ccValue, bccValue,
+  onCcToggle, onBccToggle, onCcChange, onBccChange,
+  wordCount, canSend, sending, sendError, onSend, onClear, onClose
+}: EmailComposeStepProps) {
   const fullName = `${contact.first_name} ${contact.last_name}`.trim();
   const initials = getInitials(fullName);
   const avatarColor = getAvatarColor(fullName);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  const autoResize = () => {
+    const el = bodyRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
+  if (!contact.email) {
+    return (
+      <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex-1 flex items-center justify-center p-8">
+          <div className="text-center">
+            <AlertCircle className="w-10 h-10 text-rose-400 mx-auto mb-3" />
+            <p className="text-slate-300 text-sm">This contact has no email address.</p>
+            <p className="text-slate-500 text-xs mt-1">Add an email to the contact to start a conversation.</p>
+          </div>
+        </div>
+        <div className="px-5 py-4 border-t border-slate-700 flex justify-end flex-shrink-0">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      <div className="px-5 py-4 border-b border-slate-700 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium ${avatarColor} flex-shrink-0`}>
+      <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
+
+        {/* From row */}
+        <div className="flex items-center gap-6 px-5 py-3 border-b border-slate-700/60">
+          <span className="text-xs text-slate-500 w-24 flex-shrink-0">From Name:</span>
+          <span className="text-sm text-white font-medium flex-1 truncate">{fromName || 'Unknown'}</span>
+          <span className="text-xs text-slate-500 flex-shrink-0">From email:</span>
+          <span className="text-sm text-white font-medium truncate max-w-[200px]">{fromEmail}</span>
+        </div>
+
+        {/* To row */}
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-700/60">
+          <span className="text-xs text-slate-500 flex-shrink-0 w-6">To:</span>
+          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-semibold ${avatarColor} flex-shrink-0`}>
             {initials}
           </div>
-          <div>
-            <p className="text-white font-medium text-sm">{fullName}</p>
-            {contact.email && (
-              <span className="flex items-center gap-1 text-xs text-slate-400 mt-0.5">
-                <Mail size={11} />
-                {contact.email}
-              </span>
-            )}
+          <div className="flex items-center gap-1.5 flex-1 min-w-0">
+            <span className="text-sm text-white truncate">{contact.email}</span>
+            <span className="text-xs text-slate-500 flex-shrink-0">(Primary)</span>
+            <ChevronDown size={13} className="text-slate-500 flex-shrink-0" />
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <button
+              onClick={onCcToggle}
+              className={`text-xs font-medium transition-colors ${ccVisible ? 'text-cyan-400' : 'text-slate-400 hover:text-white'}`}
+            >
+              CC
+            </button>
+            <button
+              onClick={onBccToggle}
+              className={`text-xs font-medium transition-colors ${bccVisible ? 'text-cyan-400' : 'text-slate-400 hover:text-white'}`}
+            >
+              BCC
+            </button>
           </div>
         </div>
-      </div>
 
-      <div className="px-5 py-4 space-y-4 flex-1 overflow-y-auto">
-        {contact.email ? (
-          <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg">
-            <Mail size={15} className="text-cyan-400 flex-shrink-0" />
-            <span className="text-sm text-slate-300">Sending via Email to <span className="text-white">{contact.email}</span></span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 px-3 py-2 bg-rose-500/10 border border-rose-500/20 rounded-lg">
-            <AlertCircle size={15} className="text-rose-400 flex-shrink-0" />
-            <span className="text-sm text-rose-400">This contact has no email address. Add an email to start a conversation.</span>
-          </div>
-        )}
-
-        {contact.email && (
-          <div>
-            <label className="text-xs font-medium text-slate-400 uppercase tracking-wider block mb-2">Message</label>
-            <textarea
-              value={messageBody}
-              onChange={e => onMessageBodyChange(e.target.value)}
-              placeholder="Type your message..."
-              rows={5}
-              className="w-full bg-slate-900 border border-slate-600 rounded-lg text-white text-sm px-3 py-2.5 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none"
+        {/* CC row */}
+        {ccVisible && (
+          <div className="flex items-center gap-3 px-5 py-2.5 border-b border-slate-700/60">
+            <span className="text-xs text-slate-500 flex-shrink-0 w-6">CC:</span>
+            <input
+              type="text"
+              value={ccValue}
+              onChange={e => onCcChange(e.target.value)}
+              placeholder="Add CC recipients..."
+              className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none"
               autoFocus
             />
           </div>
         )}
 
+        {/* BCC row */}
+        {bccVisible && (
+          <div className="flex items-center gap-3 px-5 py-2.5 border-b border-slate-700/60">
+            <span className="text-xs text-slate-500 flex-shrink-0 w-6">BCC:</span>
+            <input
+              type="text"
+              value={bccValue}
+              onChange={e => onBccChange(e.target.value)}
+              placeholder="Add BCC recipients..."
+              className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none"
+              autoFocus={!ccVisible}
+            />
+          </div>
+        )}
+
+        {/* Subject row */}
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-700/60">
+          <span className="text-xs text-slate-500 flex-shrink-0 w-12">Subject:</span>
+          <input
+            type="text"
+            value={subject}
+            onChange={e => onSubjectChange(e.target.value)}
+            placeholder="Enter subject..."
+            className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none"
+          />
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 px-5 pt-3 pb-2 min-h-[160px]">
+          <textarea
+            ref={bodyRef}
+            value={messageBody}
+            onChange={e => { onMessageBodyChange(e.target.value); autoResize(); }}
+            placeholder="Write your email..."
+            className="w-full bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none resize-none min-h-[140px]"
+            rows={6}
+          />
+        </div>
+
         {sendError && (
-          <div className="flex items-center gap-2 text-sm text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
+          <div className="mx-5 mb-3 flex items-center gap-2 text-sm text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2">
             <AlertCircle size={15} />
             {sendError}
           </div>
         )}
       </div>
 
-      <div className="px-5 py-4 border-t border-slate-700 flex items-center justify-between flex-shrink-0">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">
-          Cancel
+      {/* Bottom toolbar */}
+      <div className="border-t border-slate-700 px-4 py-3 flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1 flex-1">
+          <ToolbarBtn icon={<Type size={15} />} title="Text formatting" />
+          <ToolbarBtn icon={<FileText size={15} />} title="Insert template" />
+          <ToolbarBtn icon={<Link2 size={15} />} title="Insert link" />
+          <ToolbarBtn icon={<Image size={15} />} title="Insert image" />
+          <ToolbarBtn icon={<Code2 size={15} />} title="Insert variable" />
+          <ToolbarBtn icon={<MoreHorizontal size={15} />} title="More options" />
+        </div>
+        <span className="text-xs text-slate-500 flex-shrink-0">{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
+        <button
+          onClick={onClear}
+          className="px-3 py-1.5 rounded-lg text-sm text-slate-300 bg-slate-700 hover:bg-slate-600 border border-slate-600 transition-colors flex-shrink-0"
+        >
+          Clear
         </button>
         <button
           onClick={onSend}
           disabled={!canSend}
-          className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${
+          className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all flex-shrink-0 ${
             canSend
-              ? 'bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg shadow-cyan-500/20'
+              ? 'bg-cyan-600 hover:bg-cyan-500 text-white'
               : 'bg-slate-700 text-slate-500 cursor-not-allowed'
           }`}
         >
-          {sending ? (
-            <Loader2 size={15} className="animate-spin" />
-          ) : (
-            <Send size={15} />
-          )}
-          {sending ? 'Sending...' : 'Start Conversation'}
+          {sending ? <Loader2 size={14} className="animate-spin" /> : null}
+          {sending ? 'Sending...' : 'Send'}
         </button>
       </div>
     </div>
+  );
+}
+
+function ToolbarBtn({ icon, title }: { icon: React.ReactNode; title: string }) {
+  return (
+    <button
+      title={title}
+      className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+    >
+      {icon}
+    </button>
   );
 }
 
@@ -349,7 +505,10 @@ function ContactItem({ contact, onSelect }: ContactItemProps) {
           {contact.company && <span className="text-xs text-slate-400 truncate">{contact.company}</span>}
           {contact.company && contact.email && <span className="text-slate-600 text-xs">•</span>}
           {contact.email && (
-            <span className="text-xs text-slate-500 truncate">{contact.email}</span>
+            <span className="flex items-center gap-1 text-xs text-slate-500">
+              <Mail size={10} />
+              {contact.email}
+            </span>
           )}
         </div>
       </div>
