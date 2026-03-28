@@ -788,13 +788,13 @@ async function callLLM(
   return parseAIResponse(responseText);
 }
 
-const TOTAL_ROW_PATTERNS = [
+const TOTAL_LABEL_PATTERNS_EDGE = [
   /total\s+platform\s+investment/i,
   /total\s+project\s+investment/i,
-  /total\s+investment/i,
-  /total\s+engagement/i,
-  /total\s+annual/i,
   /total\s+project\s+cost/i,
+  /total\s+engagement/i,
+  /total\s+investment/i,
+  /total\s+annual/i,
   /grand\s+total/i,
   /total\s+cost/i,
   /total\s+value/i,
@@ -802,63 +802,153 @@ const TOTAL_ROW_PATTERNS = [
   /\btotal\b/i,
 ];
 
-const CURRENCY_SYMBOL_MAP: Record<string, string> = {
-  'AU$': 'AUD', 'NZ$': 'NZD', 'CA$': 'CAD', 'HK$': 'HKD', 'S$': 'SGD',
-  '€': 'EUR', '£': 'GBP', '¥': 'JPY', '₹': 'INR', '$': 'USD',
-};
+const ANNUAL_LABEL_PATTERNS_EDGE = [
+  /annual\s*\(recommended\)/i,
+  /annual\s*[-–]\s*recommended/i,
+  /\bannual\b/i,
+  /\byearly\b/i,
+  /per\s+year/i,
+  /\/\s*year/i,
+];
+
+const ANNUAL_COL_HEADER_PATTERNS_EDGE = [
+  /annual\s+total/i,
+  /total\s+annual/i,
+  /annual\s+cost/i,
+  /annual\s+value/i,
+  /annual\s+amount/i,
+  /\bannual\b/i,
+];
+
+const INLINE_TOTAL_PATTERNS_EDGE = [
+  /total\s*:\s*(?:AUD|USD|NZD|CAD|GBP|EUR|JPY|SGD|HKD|INR)?\s*(?:AU\$|NZ\$|CA\$|HK\$|S\$|[$€£¥₹])?\s*([\d,]+(?:\.\d+)?)/i,
+  /(?:AUD|USD|NZD|CAD|GBP|EUR|JPY|SGD|HKD|INR)\s*\$?\s*([\d,]+(?:\.\d+)?)\s*\(excl\. gst\)/i,
+  /(?:AU\$|NZ\$|CA\$|HK\$|S\$|[$€£¥₹])([\d,]+(?:\.\d+)?)\s*\(excl\. gst\)/i,
+];
 
 function detectCurrencyEdge(text: string): string {
   const isoMatch = text.match(/\b(USD|AUD|NZD|CAD|GBP|EUR|JPY|SGD|HKD|INR)\b/);
   if (isoMatch) return isoMatch[1];
-  for (const [symbol, code] of Object.entries(CURRENCY_SYMBOL_MAP)) {
-    if (text.includes(symbol)) return code;
+  const pairs: [string, string][] = [
+    ['AU$','AUD'],['NZ$','NZD'],['CA$','CAD'],['HK$','HKD'],['S$','SGD'],
+    ['€','EUR'],['£','GBP'],['¥','JPY'],['₹','INR'],['$','USD'],
+  ];
+  for (const [sym, code] of pairs) {
+    if (text.includes(sym)) return code;
   }
   return 'USD';
 }
 
 function parseMonetaryValueEdge(text: string): number | null {
   const cleaned = text
-    .replace(/AU\$|NZ\$|CA\$|HK\$|S\$|USD|AUD|NZD|CAD|GBP|EUR|JPY|SGD|HKD|INR/g, '')
+    .replace(/\b(AU|NZ|CA|HK|S)\$/g, '')
+    .replace(/\b(USD|AUD|NZD|CAD|GBP|EUR|JPY|SGD|HKD|INR)\b/g, '')
     .replace(/[$€£¥₹]/g, '')
     .replace(/,/g, '')
     .trim();
-  const match = cleaned.match(/[\d]+(?:\.\d+)?/);
+  const match = cleaned.match(/(\d+(?:\.\d+)?)/);
   if (!match) return null;
-  const value = parseFloat(match[0]);
+  const value = parseFloat(match[1]);
   return isNaN(value) || value <= 0 ? null : value;
+}
+
+function hasMonetaryValueEdge(text: string): boolean {
+  return /(?:AU\$|NZ\$|CA\$|\$|€|£|¥|₹|AUD|USD|GBP|EUR)[\s]?\d/.test(text) ||
+    /\d[\d,]*(?:\.\d+)?(?:\s*\/\s*(?:year|yr|month|mo))?/.test(text);
+}
+
+function extractTableEdge(html: string, defaultCurrency: string): { value: number; currency: string } | null {
+  const tablePattern = /<table[^>]*>([\s\S]*?)<\/table>/gi;
+  let tableMatch: RegExpExecArray | null;
+
+  while ((tableMatch = tablePattern.exec(html)) !== null) {
+    const tableHtml = tableMatch[1];
+    const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    let rowMatch: RegExpExecArray | null;
+    const tableRows: string[][] = [];
+
+    while ((rowMatch = rowPattern.exec(tableHtml)) !== null) {
+      const rowHtml = rowMatch[1];
+      const cellPattern = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+      const cells: string[] = [];
+      let cellMatch: RegExpExecArray | null;
+      while ((cellMatch = cellPattern.exec(rowHtml)) !== null) {
+        cells.push(cellMatch[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').trim());
+      }
+      if (cells.length > 0) tableRows.push(cells);
+    }
+
+    if (tableRows.length === 0) continue;
+
+    const headerRow = tableRows[0];
+    const annualColIndex = headerRow.findIndex((h) =>
+      ANNUAL_COL_HEADER_PATTERNS_EDGE.some((p) => p.test(h))
+    );
+
+    if (annualColIndex >= 0 && tableRows.length > 1) {
+      let bestValue: number | null = null;
+      let bestCurrency = defaultCurrency;
+      for (let r = 1; r < tableRows.length; r++) {
+        if (annualColIndex < tableRows[r].length) {
+          const v = parseMonetaryValueEdge(tableRows[r][annualColIndex]);
+          if (v !== null && (bestValue === null || v > bestValue)) {
+            bestValue = v;
+            bestCurrency = detectCurrencyEdge(tableRows[r][annualColIndex]) || defaultCurrency;
+          }
+        }
+      }
+      if (bestValue !== null && bestValue > 0) return { value: bestValue, currency: bestCurrency };
+    }
+
+    for (const cells of tableRows) {
+      if (cells.length < 2) continue;
+      const allCells = cells.join(' ');
+      if (TOTAL_LABEL_PATTERNS_EDGE.some((p) => p.test(cells[0])) ||
+          TOTAL_LABEL_PATTERNS_EDGE.some((p) => p.test(allCells))) {
+        for (let i = cells.length - 1; i >= 1; i--) {
+          const v = parseMonetaryValueEdge(cells[i]);
+          if (v !== null) return { value: v, currency: detectCurrencyEdge(cells[i]) || defaultCurrency };
+        }
+      }
+    }
+
+    for (const cells of tableRows) {
+      if (cells.length < 2) continue;
+      if (ANNUAL_LABEL_PATTERNS_EDGE.some((p) => p.test(cells[0]))) {
+        for (let i = cells.length - 1; i >= 1; i--) {
+          if (hasMonetaryValueEdge(cells[i])) {
+            const v = parseMonetaryValueEdge(cells[i]);
+            if (v !== null) return { value: v, currency: detectCurrencyEdge(cells[i]) || defaultCurrency };
+          }
+        }
+      }
+    }
+  }
+  return null;
 }
 
 function extractValueFromSections(
   sections: GeneratedSection[],
   defaultCurrency: string
 ): { value: number; currency: string } | null {
-  const priority = ['pricing', 'terms', 'custom', 'intro'];
+  const priority = ['pricing', 'terms', 'custom', 'scope', 'deliverables', 'timeline', 'intro'];
   for (const type of priority) {
     const section = sections.find((s) => s.section_type === type);
     if (!section?.content) continue;
 
     const html = section.content;
     const detectedCurrency = detectCurrencyEdge(html) || defaultCurrency;
-    const rowPattern = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-    let rowMatch: RegExpExecArray | null;
 
-    while ((rowMatch = rowPattern.exec(html)) !== null) {
-      const rowHtml = rowMatch[1];
-      const cellPattern = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
-      const cells: string[] = [];
-      let cellMatch: RegExpExecArray | null;
-      while ((cellMatch = cellPattern.exec(rowHtml)) !== null) {
-        cells.push(cellMatch[1].replace(/<[^>]+>/g, '').trim());
-      }
-      if (cells.length < 2) continue;
-      const firstCell = cells[0];
-      const allCells = cells.join(' ');
-      if (TOTAL_ROW_PATTERNS.some((p) => p.test(firstCell) || p.test(allCells))) {
-        for (let i = cells.length - 1; i >= 1; i--) {
-          const value = parseMonetaryValueEdge(cells[i]);
-          if (value !== null) {
-            return { value, currency: detectCurrencyEdge(cells[i]) || detectedCurrency };
-          }
+    const tableResult = extractTableEdge(html, detectedCurrency);
+    if (tableResult) return tableResult;
+
+    const stripped = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    for (const pattern of INLINE_TOTAL_PATTERNS_EDGE) {
+      const m = stripped.match(pattern);
+      if (m) {
+        const value = parseFloat(m[1].replace(/,/g, ''));
+        if (!isNaN(value) && value > 0) {
+          return { value, currency: detectCurrencyEdge(m[0]) || detectedCurrency };
         }
       }
     }
