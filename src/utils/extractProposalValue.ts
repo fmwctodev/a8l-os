@@ -142,14 +142,20 @@ function extractFromDom(doc: Document, detectedCurrency: string): { value: numbe
     const firstCellText = cells[0].textContent?.trim() || '';
 
     if (matchesAnyPattern(firstCellText, ANNUAL_LABEL_PATTERNS)) {
-      for (let i = cells.length - 1; i >= 1; i--) {
+      let bestValue: number | null = null;
+      let bestCurrency = detectedCurrency;
+      for (let i = 1; i < cells.length; i++) {
         const cellText = cells[i].textContent?.trim() || '';
         if (hasMonetaryValue(cellText)) {
           const value = parseMonetaryValue(cellText);
-          if (value !== null) {
-            return { value, currency: detectCurrency(cellText) || detectedCurrency };
+          if (value !== null && (bestValue === null || value > bestValue)) {
+            bestValue = value;
+            bestCurrency = detectCurrency(cellText) || detectedCurrency;
           }
         }
+      }
+      if (bestValue !== null) {
+        return { value: bestValue, currency: bestCurrency };
       }
     }
   }
@@ -264,12 +270,18 @@ function extractFromHtmlRegex(html: string, defaultCurrency: string): { value: n
     for (const cells of tableRows) {
       if (cells.length < 2) continue;
       if (matchesAnyPattern(cells[0], ANNUAL_LABEL_PATTERNS)) {
-        for (let i = cells.length - 1; i >= 1; i--) {
+        let bestValue: number | null = null;
+        let bestCurrency = defaultCurrency;
+        for (let i = 1; i < cells.length; i++) {
           if (hasMonetaryValue(cells[i])) {
             const v = parseMonetaryValue(cells[i]);
-            if (v !== null) return { value: v, currency: detectCurrency(cells[i]) || defaultCurrency };
+            if (v !== null && (bestValue === null || v > bestValue)) {
+              bestValue = v;
+              bestCurrency = detectCurrency(cells[i]) || defaultCurrency;
+            }
           }
         }
+        if (bestValue !== null) return { value: bestValue, currency: bestCurrency };
       }
     }
 

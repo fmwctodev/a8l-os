@@ -915,12 +915,18 @@ function extractTableEdge(html: string, defaultCurrency: string): { value: numbe
     for (const cells of tableRows) {
       if (cells.length < 2) continue;
       if (ANNUAL_LABEL_PATTERNS_EDGE.some((p) => p.test(cells[0]))) {
-        for (let i = cells.length - 1; i >= 1; i--) {
+        let bestValue: number | null = null;
+        let bestCurrency = defaultCurrency;
+        for (let i = 1; i < cells.length; i++) {
           if (hasMonetaryValueEdge(cells[i])) {
             const v = parseMonetaryValueEdge(cells[i]);
-            if (v !== null) return { value: v, currency: detectCurrencyEdge(cells[i]) || defaultCurrency };
+            if (v !== null && (bestValue === null || v > bestValue)) {
+              bestValue = v;
+              bestCurrency = detectCurrencyEdge(cells[i]) || defaultCurrency;
+            }
           }
         }
+        if (bestValue !== null) return { value: bestValue, currency: bestCurrency };
       }
     }
   }
