@@ -165,6 +165,25 @@ export function Proposals() {
     return proposal.contact.company || `${proposal.contact.first_name} ${proposal.contact.last_name}`;
   };
 
+  const getProposalDisplayValue = (proposal: Proposal): { value: number; isRange: boolean; minValue: number } => {
+    const items = proposal.line_items || [];
+    if (items.length === 0) {
+      return { value: proposal.total_value, isRange: false, minValue: proposal.total_value };
+    }
+    let totalMin = 0;
+    let totalMax = 0;
+    let hasRange = false;
+    for (const item of items) {
+      const effectiveMin = item.unit_price;
+      const effectiveMax = item.unit_price_max != null && item.unit_price_max > item.unit_price ? item.unit_price_max : item.unit_price;
+      if (effectiveMax > effectiveMin) hasRange = true;
+      const discount = item.discount_percent / 100;
+      totalMin += item.quantity * effectiveMin * (1 - discount);
+      totalMax += item.quantity * effectiveMax * (1 - discount);
+    }
+    return { value: totalMax, isRange: hasRange, minValue: totalMin };
+  };
+
   const totalPages = Math.ceil(totalCount / pageSize);
 
   if (!canView) {
@@ -384,9 +403,20 @@ export function Proposals() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-white font-medium">
-                        {formatCurrency(proposal.total_value, proposal.currency)}
-                      </span>
+                      {(() => {
+                        const { value, isRange, minValue } = getProposalDisplayValue(proposal);
+                        return isRange ? (
+                          <span className="text-white font-medium">
+                            {formatCurrency(minValue, proposal.currency)}
+                            <span className="text-slate-500 mx-1">–</span>
+                            {formatCurrency(value, proposal.currency)}
+                          </span>
+                        ) : (
+                          <span className="text-white font-medium">
+                            {formatCurrency(value, proposal.currency)}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-slate-300">{formatDate(proposal.valid_until)}</span>

@@ -5103,6 +5103,7 @@ export interface ProposalLineItem {
   description: string | null;
   quantity: number;
   unit_price: number;
+  unit_price_max: number | null;
   discount_percent: number;
   sort_order: number;
   created_at: string;

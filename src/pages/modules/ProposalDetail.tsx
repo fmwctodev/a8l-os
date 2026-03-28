@@ -5,6 +5,7 @@ import { usePaymentsAccess } from '../../hooks/usePaymentsAccess';
 import { SendForSignatureModal } from '../../components/proposals/SendForSignatureModal';
 import { ConvertToInvoiceModal } from '../../components/proposals/ConvertToInvoiceModal';
 import { ConvertToContractModal } from '../../components/proposals/ConvertToContractModal';
+import { PricingTab } from '../../components/proposals/PricingTab';
 import { sanitizeHtml } from '../../utils/sanitizeHtml';
 import {
   getProposalById,
@@ -700,67 +701,13 @@ export function ProposalDetail() {
         )}
 
         {activeTab === 'pricing' && (
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-slate-700">
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-400 uppercase">Item</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-400 uppercase">Qty</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-400 uppercase">Unit Price</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-400 uppercase">Discount</th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-400 uppercase">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-700">
-                  {proposal.line_items && proposal.line_items.length > 0 ? (
-                    proposal.line_items.map((item) => {
-                      const lineTotal = item.quantity * item.unit_price;
-                      const discount = lineTotal * (item.discount_percent / 100);
-                      const total = lineTotal - discount;
-
-                      return (
-                        <tr key={item.id}>
-                          <td className="px-4 py-3">
-                            <p className="text-white">{item.name}</p>
-                            {item.description && (
-                              <p className="text-sm text-slate-400">{item.description}</p>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-right text-slate-300">{item.quantity}</td>
-                          <td className="px-4 py-3 text-right text-slate-300">
-                            {formatCurrency(item.unit_price, proposal.currency)}
-                          </td>
-                          <td className="px-4 py-3 text-right text-slate-300">
-                            {item.discount_percent > 0 ? `${item.discount_percent}%` : '-'}
-                          </td>
-                          <td className="px-4 py-3 text-right text-white font-medium">
-                            {formatCurrency(total, proposal.currency)}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
-                        No line items added
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                <tfoot className="border-t border-slate-600">
-                  <tr>
-                    <td colSpan={4} className="px-4 py-3 text-right text-white font-medium">
-                      Total
-                    </td>
-                    <td className="px-4 py-3 text-right text-xl text-white font-semibold">
-                      {formatCurrency(proposal.total_value, proposal.currency)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
+          <PricingTab
+            proposal={proposal}
+            canEdit={canEdit && !isFrozenForSigning}
+            formatCurrency={formatCurrency}
+            onReload={loadProposal}
+            showToast={showToast}
+          />
         )}
 
         {activeTab === 'signature' && (

@@ -490,6 +490,7 @@ export async function addProposalLineItem(
     description?: string;
     quantity?: number;
     unit_price: number;
+    unit_price_max?: number | null;
     discount_percent?: number;
     sort_order?: number;
   }
@@ -505,6 +506,7 @@ export async function addProposalLineItem(
       description: item.description || null,
       quantity: item.quantity ?? 1,
       unit_price: item.unit_price,
+      unit_price_max: item.unit_price_max ?? null,
       discount_percent: item.discount_percent ?? 0,
       sort_order: item.sort_order ?? 0
     })
@@ -522,6 +524,7 @@ export async function updateProposalLineItem(
     description: string | null;
     quantity: number;
     unit_price: number;
+    unit_price_max: number | null;
     discount_percent: number;
     sort_order: number;
   }>
@@ -757,13 +760,14 @@ export async function unlinkMeetingFromProposal(proposalId: string, meetingTrans
 export async function calculateProposalTotal(proposalId: string): Promise<number> {
   const { data, error } = await supabase
     .from('proposal_line_items')
-    .select('quantity, unit_price, discount_percent')
+    .select('quantity, unit_price, unit_price_max, discount_percent')
     .eq('proposal_id', proposalId);
 
   if (error) throw error;
 
   const total = (data || []).reduce((sum, item) => {
-    const lineTotal = item.quantity * item.unit_price;
+    const effectivePrice = item.unit_price_max != null ? item.unit_price_max : item.unit_price;
+    const lineTotal = item.quantity * effectivePrice;
     const discount = lineTotal * (item.discount_percent / 100);
     return sum + (lineTotal - discount);
   }, 0);
@@ -835,6 +839,7 @@ export async function duplicateProposal(proposalId: string, actorUserId: string)
       description: item.description,
       quantity: item.quantity,
       unit_price: item.unit_price,
+      unit_price_max: item.unit_price_max ?? null,
       discount_percent: item.discount_percent,
       sort_order: item.sort_order,
     }));
