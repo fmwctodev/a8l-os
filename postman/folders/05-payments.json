@@ -1,0 +1,128 @@
+{
+  "name": "05 - Payments & Invoicing",
+  "description": "Products, invoices, payments, recurring profiles, payment reminders, and QBO integration.",
+  "item": [
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List Products",
+          "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/products?select=*,created_by_user:users!products_created_by_fkey(id,name,email)&organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["products"], "query": [{ "key": "select", "value": "*,created_by_user:users!products_created_by_fkey(id,name,email)" }, { "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } }
+        },
+        {
+          "name": "Get Product by ID",
+          "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/products?select=*,created_by_user:users!products_created_by_fkey(id,name,email)&id=eq.{{product_id}}", "host": ["{{base_rest_url}}"], "path": ["products"], "query": [{ "key": "select", "value": "*,created_by_user:users!products_created_by_fkey(id,name,email)" }, { "key": "id", "value": "eq.{{product_id}}" }] } }
+        },
+        {
+          "name": "Create Product",
+          "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"Premium Consulting\",\n  \"description\": \"1-hour consulting session\",\n  \"price_amount\": 250.00,\n  \"currency\": \"USD\",\n  \"billing_type\": \"one_time\",\n  \"active\": true,\n  \"created_by\": \"{{user_id}}\"\n}" }, "url": { "raw": "{{base_rest_url}}/products", "host": ["{{base_rest_url}}"], "path": ["products"] } }
+        },
+        {
+          "name": "Update Product",
+          "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"price_amount\": 300.00\n}" }, "url": { "raw": "{{base_rest_url}}/products?id=eq.{{product_id}}", "host": ["{{base_rest_url}}"], "path": ["products"], "query": [{ "key": "id", "value": "eq.{{product_id}}" }] } }
+        },
+        {
+          "name": "Delete Product",
+          "request": { "method": "DELETE", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/products?id=eq.{{product_id}}", "host": ["{{base_rest_url}}"], "path": ["products"], "query": [{ "key": "id", "value": "eq.{{product_id}}" }] } }
+        }
+      ]
+    },
+    {
+      "name": "Invoices",
+      "item": [
+        {
+          "name": "List Invoices",
+          "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/invoices?select=*,contact:contacts!invoices_contact_id_fkey(id,first_name,last_name,email,company),opportunity:opportunities!invoices_opportunity_id_fkey(id,value_amount,status),created_by_user:users!invoices_created_by_fkey(id,name,email)&organization_id=eq.{{org_id}}&order=created_at.desc", "host": ["{{base_rest_url}}"], "path": ["invoices"], "query": [{ "key": "select", "value": "*,contact:contacts!invoices_contact_id_fkey(id,first_name,last_name,email,company),opportunity:opportunities!invoices_opportunity_id_fkey(id,value_amount,status),created_by_user:users!invoices_created_by_fkey(id,name,email)" }, { "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }] } }
+        },
+        {
+          "name": "Get Invoice by ID",
+          "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/invoices?select=*,contact:contacts!invoices_contact_id_fkey(id,first_name,last_name,email,phone,company),opportunity:opportunities!invoices_opportunity_id_fkey(id,value_amount,status),created_by_user:users!invoices_created_by_fkey(id,name,email)&id=eq.{{invoice_id}}", "host": ["{{base_rest_url}}"], "path": ["invoices"], "query": [{ "key": "select", "value": "*,contact:contacts!invoices_contact_id_fkey(id,first_name,last_name,email,phone,company),opportunity:opportunities!invoices_opportunity_id_fkey(id,value_amount,status),created_by_user:users!invoices_created_by_fkey(id,name,email)" }, { "key": "id", "value": "eq.{{invoice_id}}" }] } }
+        },
+        {
+          "name": "Get Invoice Line Items",
+          "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/invoice_line_items?select=*,product:products!invoice_line_items_product_id_fkey(id,name,price_amount,billing_type)&invoice_id=eq.{{invoice_id}}&order=sort_order.asc", "host": ["{{base_rest_url}}"], "path": ["invoice_line_items"], "query": [{ "key": "select", "value": "*,product:products!invoice_line_items_product_id_fkey(id,name,price_amount,billing_type)" }, { "key": "invoice_id", "value": "eq.{{invoice_id}}" }, { "key": "order", "value": "sort_order.asc" }] } }
+        },
+        {
+          "name": "Create Invoice",
+          "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"doc_number\": \"INV-001\",\n  \"status\": \"draft\",\n  \"due_date\": \"2026-05-01\",\n  \"subtotal\": 1000.00,\n  \"tax_amount\": 80.00,\n  \"total\": 1080.00,\n  \"currency\": \"USD\",\n  \"notes\": \"Thank you for your business.\",\n  \"created_by\": \"{{user_id}}\"\n}" }, "url": { "raw": "{{base_rest_url}}/invoices", "host": ["{{base_rest_url}}"], "path": ["invoices"] } }
+        },
+        {
+          "name": "Update Invoice Status (Send)",
+          "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"status\": \"sent\",\n  \"sent_at\": \"{{$isoTimestamp}}\"\n}" }, "url": { "raw": "{{base_rest_url}}/invoices?id=eq.{{invoice_id}}", "host": ["{{base_rest_url}}"], "path": ["invoices"], "query": [{ "key": "id", "value": "eq.{{invoice_id}}" }] } }
+        },
+        {
+          "name": "Void Invoice",
+          "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"status\": \"voided\"\n}" }, "url": { "raw": "{{base_rest_url}}/invoices?id=eq.{{invoice_id}}", "host": ["{{base_rest_url}}"], "path": ["invoices"], "query": [{ "key": "id", "value": "eq.{{invoice_id}}" }] } }
+        },
+        {
+          "name": "Get Contact Invoices",
+          "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/invoices?contact_id=eq.{{contact_id}}&order=created_at.desc", "host": ["{{base_rest_url}}"], "path": ["invoices"], "query": [{ "key": "contact_id", "value": "eq.{{contact_id}}" }, { "key": "order", "value": "created_at.desc" }] } }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "List Payments",
+          "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/payments?select=*,contact:contacts!payments_contact_id_fkey(id,first_name,last_name,email,company),invoice:invoices!payments_invoice_id_fkey(id,doc_number,total,status)&organization_id=eq.{{org_id}}&order=created_at.desc", "host": ["{{base_rest_url}}"], "path": ["payments"], "query": [{ "key": "select", "value": "*,contact:contacts!payments_contact_id_fkey(id,first_name,last_name,email,company),invoice:invoices!payments_invoice_id_fkey(id,doc_number,total,status)" }, { "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }] } }
+        },
+        {
+          "name": "Get Contact Payments",
+          "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/payments?select=*,invoice:invoices!payments_invoice_id_fkey(id,doc_number,total,status)&contact_id=eq.{{contact_id}}&order=created_at.desc", "host": ["{{base_rest_url}}"], "path": ["payments"], "query": [{ "key": "select", "value": "*,invoice:invoices!payments_invoice_id_fkey(id,doc_number,total,status)" }, { "key": "contact_id", "value": "eq.{{contact_id}}" }, { "key": "order", "value": "created_at.desc" }] } }
+        }
+      ]
+    },
+    {
+      "name": "Recurring Profiles",
+      "item": [
+        {
+          "name": "List Recurring Profiles",
+          "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/recurring_profiles?select=*,contact:contacts!recurring_profiles_contact_id_fkey(id,first_name,last_name,email,company),created_by_user:users!recurring_profiles_created_by_fkey(id,name,email)&organization_id=eq.{{org_id}}&order=created_at.desc", "host": ["{{base_rest_url}}"], "path": ["recurring_profiles"], "query": [{ "key": "select", "value": "*,contact:contacts!recurring_profiles_contact_id_fkey(id,first_name,last_name,email,company),created_by_user:users!recurring_profiles_created_by_fkey(id,name,email)" }, { "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }] } }
+        },
+        {
+          "name": "Create Recurring Profile",
+          "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"frequency\": \"monthly\",\n  \"start_date\": \"2026-04-01\",\n  \"status\": \"active\",\n  \"created_by\": \"{{user_id}}\"\n}" }, "url": { "raw": "{{base_rest_url}}/recurring_profiles", "host": ["{{base_rest_url}}"], "path": ["recurring_profiles"] } }
+        }
+      ]
+    },
+    {
+      "name": "Payment Reminders",
+      "item": [
+        {
+          "name": "List Payment Reminders",
+          "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/payment_reminders?select=*,invoice:invoices!payment_reminders_invoice_id_fkey(id,doc_number,total,due_date,status,contact_id,contact:contacts!invoices_contact_id_fkey(id,first_name,last_name,email,phone))&organization_id=eq.{{org_id}}&order=scheduled_for.asc", "host": ["{{base_rest_url}}"], "path": ["payment_reminders"], "query": [{ "key": "select", "value": "*,invoice:invoices!payment_reminders_invoice_id_fkey(id,doc_number,total,due_date,status,contact_id,contact:contacts!invoices_contact_id_fkey(id,first_name,last_name,email,phone))" }, { "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "scheduled_for.asc" }] } }
+        },
+        {
+          "name": "Get Reminder Settings",
+          "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/payment_reminder_settings?organization_id=eq.{{org_id}}", "host": ["{{base_rest_url}}"], "path": ["payment_reminder_settings"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }] } }
+        }
+      ]
+    },
+    {
+      "name": "QBO Integration (Edge Functions)",
+      "item": [
+        {
+          "name": "QBO - Start OAuth",
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"org_id\": \"{{org_id}}\",\n  \"redirect_uri\": \"https://your-app.com/oauth/qbo/callback\"\n}" }, "url": { "raw": "{{base_edge_url}}/qbo-oauth-start", "host": ["{{base_edge_url}}"], "path": ["qbo-oauth-start"] } }
+        },
+        {
+          "name": "QBO - OAuth Callback",
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"code\": \"auth-code-here\",\n  \"realm_id\": \"realm-id-here\",\n  \"redirect_uri\": \"https://your-app.com/oauth/qbo/callback\"\n}" }, "url": { "raw": "{{base_edge_url}}/qbo-oauth-callback", "host": ["{{base_edge_url}}"], "path": ["qbo-oauth-callback"] } }
+        },
+        {
+          "name": "QBO - API Proxy",
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"getInvoice\",\n  \"invoice_id\": \"123\"\n}" }, "url": { "raw": "{{base_edge_url}}/qbo-api", "host": ["{{base_edge_url}}"], "path": ["qbo-api"] } }
+        },
+        {
+          "name": "Recurring Invoice Generator",
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{base_edge_url}}/recurring-invoice-generator", "host": ["{{base_edge_url}}"], "path": ["recurring-invoice-generator"] } }
+        },
+        {
+          "name": "Payment Reminder Scheduler",
+          "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{base_edge_url}}/payment-reminder-scheduler", "host": ["{{base_edge_url}}"], "path": ["payment-reminder-scheduler"] } }
+        }
+      ]
+    }
+  ]
+}

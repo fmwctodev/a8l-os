@@ -1,0 +1,54 @@
+{
+  "name": "14 - Reporting & Analytics",
+  "description": "AI-powered reports, report schedules, dashboard analytics, content AI analytics, and system health checks.",
+  "item": [
+    {
+      "name": "AI Reports",
+      "item": [
+        { "name": "List AI Reports", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/ai_reports?select=*,created_by_user:users!ai_reports_created_by_fkey(id,name,email)&organization_id=eq.{{org_id}}&order=created_at.desc&limit=50", "host": ["{{base_rest_url}}"], "path": ["ai_reports"], "query": [{ "key": "select", "value": "*,created_by_user:users!ai_reports_created_by_fkey(id,name,email)" }, { "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }, { "key": "limit", "value": "50" }] } } },
+        { "name": "Get AI Report by ID", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/ai_reports?id=eq.{{report_id}}", "host": ["{{base_rest_url}}"], "path": ["ai_reports"], "query": [{ "key": "id", "value": "eq.{{report_id}}" }] } } },
+        { "name": "Generate AI Report (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"query\": \"Show me a summary of all opportunities closed this month\",\n  \"org_id\": \"{{org_id}}\"\n}" }, "url": { "raw": "{{base_edge_url}}/ai-report-generate", "host": ["{{base_edge_url}}"], "path": ["ai-report-generate"] } } },
+        { "name": "Query AI Report (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"report_id\": \"{{report_id}}\",\n  \"question\": \"What is the average deal size?\"\n}" }, "url": { "raw": "{{base_edge_url}}/ai-report-query", "host": ["{{base_edge_url}}"], "path": ["ai-report-query"] } } },
+        { "name": "Cleanup AI Reports (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{base_edge_url}}/ai-report-cleanup", "host": ["{{base_edge_url}}"], "path": ["ai-report-cleanup"] } } },
+        { "name": "Delete AI Report", "request": { "method": "DELETE", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/ai_reports?id=eq.{{report_id}}", "host": ["{{base_rest_url}}"], "path": ["ai_reports"], "query": [{ "key": "id", "value": "eq.{{report_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "AI Report Schedules",
+      "item": [
+        { "name": "List Report Schedules", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/ai_report_schedules?organization_id=eq.{{org_id}}&order=created_at.desc", "host": ["{{base_rest_url}}"], "path": ["ai_report_schedules"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }] } } },
+        { "name": "Create Report Schedule", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"report_id\": \"{{report_id}}\",\n  \"schedule_type\": \"weekly\",\n  \"cron_expression\": \"0 9 * * 1\",\n  \"recipients\": [\"{{user_id}}\"],\n  \"enabled\": true,\n  \"created_by\": \"{{user_id}}\"\n}" }, "url": { "raw": "{{base_rest_url}}/ai_report_schedules", "host": ["{{base_rest_url}}"], "path": ["ai_report_schedules"] } } },
+        { "name": "Update Report Schedule", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"enabled\": false\n}" }, "url": { "raw": "{{base_rest_url}}/ai_report_schedules?id=eq.{{schedule_id}}", "host": ["{{base_rest_url}}"], "path": ["ai_report_schedules"], "query": [{ "key": "id", "value": "eq.{{schedule_id}}" }] } } },
+        { "name": "Run Report Schedule (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{base_edge_url}}/ai-report-schedule-runner", "host": ["{{base_edge_url}}"], "path": ["ai-report-schedule-runner"] } } }
+      ]
+    },
+    {
+      "name": "Dashboard Analytics (Edge Function)",
+      "item": [
+        { "name": "Get Dashboard Stats", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"stats\",\n  \"org_id\": \"{{org_id}}\"\n}" }, "url": { "raw": "{{base_edge_url}}/analytics-dashboard", "host": ["{{base_edge_url}}"], "path": ["analytics-dashboard"] } } },
+        { "name": "Get Dashboard Activity", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"activity\",\n  \"org_id\": \"{{org_id}}\",\n  \"limit\": 20\n}" }, "url": { "raw": "{{base_edge_url}}/analytics-dashboard", "host": ["{{base_edge_url}}"], "path": ["analytics-dashboard"] } } }
+      ]
+    },
+    {
+      "name": "Content AI Analytics (Edge Function)",
+      "item": [
+        { "name": "Get Content AI Analytics", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"org_id\": \"{{org_id}}\",\n  \"range\": \"30d\"\n}" }, "url": { "raw": "{{base_edge_url}}/analytics-content-ai", "host": ["{{base_edge_url}}"], "path": ["analytics-content-ai"] } } }
+      ]
+    },
+    {
+      "name": "Traditional Reports",
+      "item": [
+        { "name": "List Reports", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/reports?organization_id=eq.{{org_id}}&order=updated_at.desc", "host": ["{{base_rest_url}}"], "path": ["reports"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "updated_at.desc" }] } } },
+        { "name": "Get Report by ID", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/reports?id=eq.{{report_id}}", "host": ["{{base_rest_url}}"], "path": ["reports"], "query": [{ "key": "id", "value": "eq.{{report_id}}" }] } } },
+        { "name": "Execute Report Query (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"report_id\": \"{{report_id}}\"\n}" }, "url": { "raw": "{{base_edge_url}}/report-export-worker", "host": ["{{base_edge_url}}"], "path": ["report-export-worker"] } } },
+        { "name": "Send Report Email (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"report_id\": \"{{report_id}}\",\n  \"recipients\": [\"user@example.com\"]\n}" }, "url": { "raw": "{{base_edge_url}}/report-email-sender", "host": ["{{base_edge_url}}"], "path": ["report-email-sender"] } } }
+      ]
+    },
+    {
+      "name": "Workflow Analytics",
+      "item": [
+        { "name": "Get Workflow Analytics Cache", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/workflow_analytics_cache?workflow_id=eq.{{workflow_id}}", "host": ["{{base_rest_url}}"], "path": ["workflow_analytics_cache"], "query": [{ "key": "workflow_id", "value": "eq.{{workflow_id}}" }] } } }
+      ]
+    }
+  ]
+}

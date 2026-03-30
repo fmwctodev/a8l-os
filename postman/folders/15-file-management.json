@@ -1,0 +1,40 @@
+{
+  "name": "15 - File Management & Google Drive",
+  "description": "Google Drive integration, file management, drive connections, and file attachments.",
+  "item": [
+    {
+      "name": "Drive API (Edge Function)",
+      "item": [
+        { "name": "List Drive Files", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"list\",\n  \"folderId\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/drive-api", "host": ["{{base_edge_url}}"], "path": ["drive-api"] } } },
+        { "name": "Create Drive Folder", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"createFolder\",\n  \"name\": \"New Folder\",\n  \"parentId\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/drive-api", "host": ["{{base_edge_url}}"], "path": ["drive-api"] } } },
+        { "name": "Get Drive File Metadata", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"get\",\n  \"fileId\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/drive-api", "host": ["{{base_edge_url}}"], "path": ["drive-api"] } } },
+        { "name": "Delete Drive File", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"delete\",\n  \"fileId\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/drive-api", "host": ["{{base_edge_url}}"], "path": ["drive-api"] } } },
+        { "name": "Share Drive File", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"share\",\n  \"fileId\": \"\",\n  \"email\": \"user@example.com\",\n  \"role\": \"reader\"\n}" }, "url": { "raw": "{{base_edge_url}}/drive-api", "host": ["{{base_edge_url}}"], "path": ["drive-api"] } } }
+      ]
+    },
+    {
+      "name": "Drive OAuth",
+      "item": [
+        { "name": "Start Drive OAuth (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{base_edge_url}}/drive-oauth-start", "host": ["{{base_edge_url}}"], "path": ["drive-oauth-start"] } } },
+        { "name": "Drive OAuth Callback (Edge Function)", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }], "url": { "raw": "{{base_edge_url}}/drive-oauth-callback?code=AUTH_CODE&state=STATE", "host": ["{{base_edge_url}}"], "path": ["drive-oauth-callback"], "query": [{ "key": "code", "value": "AUTH_CODE" }, { "key": "state", "value": "STATE" }] } } },
+        { "name": "Auto-Connect Drive (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{base_edge_url}}/drive-auto-connect", "host": ["{{base_edge_url}}"], "path": ["drive-auto-connect"] } } }
+      ]
+    },
+    {
+      "name": "Drive Files (Database)",
+      "item": [
+        { "name": "List Drive Files (DB)", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/drive_files?organization_id=eq.{{org_id}}&order=name.asc&limit=100", "host": ["{{base_rest_url}}"], "path": ["drive_files"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }, { "key": "limit", "value": "100" }] } } },
+        { "name": "List Drive Folders (DB)", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/drive_folders?organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["drive_folders"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } } },
+        { "name": "List Drive Connections", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/drive_connections?user_id=eq.{{user_id}}", "host": ["{{base_rest_url}}"], "path": ["drive_connections"], "query": [{ "key": "user_id", "value": "eq.{{user_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "File Attachments",
+      "item": [
+        { "name": "List File Attachments", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/file_attachments?entity_type=eq.contact&entity_id=eq.{{contact_id}}&order=created_at.desc", "host": ["{{base_rest_url}}"], "path": ["file_attachments"], "query": [{ "key": "entity_type", "value": "eq.contact" }, { "key": "entity_id", "value": "eq.{{contact_id}}" }, { "key": "order", "value": "created_at.desc" }] } } },
+        { "name": "Create File Attachment", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"entity_type\": \"contact\",\n  \"entity_id\": \"{{contact_id}}\",\n  \"file_name\": \"document.pdf\",\n  \"file_url\": \"https://example.com/file.pdf\",\n  \"file_size\": 1024,\n  \"mime_type\": \"application/pdf\",\n  \"uploaded_by\": \"{{user_id}}\"\n}" }, "url": { "raw": "{{base_rest_url}}/file_attachments", "host": ["{{base_rest_url}}"], "path": ["file_attachments"] } } },
+        { "name": "Delete File Attachment", "request": { "method": "DELETE", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/file_attachments?id=eq.{{attachment_id}}", "host": ["{{base_rest_url}}"], "path": ["file_attachments"], "query": [{ "key": "id", "value": "eq.{{attachment_id}}" }] } } }
+      ]
+    }
+  ]
+}

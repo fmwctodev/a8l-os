@@ -1,0 +1,61 @@
+{
+  "name": "18 - Administration",
+  "description": "Users, organizations, departments, roles, permissions, feature flags, audit logs, and staff management.",
+  "item": [
+    {
+      "name": "Users",
+      "item": [
+        { "name": "List Users", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/users?select=*,role:roles(id,name,slug),department:departments(id,name)&organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["users"], "query": [{ "key": "select", "value": "*,role:roles(id,name,slug),department:departments(id,name)" }, { "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } } },
+        { "name": "Get User by ID", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/users?select=*,role:roles(id,name,slug),department:departments(id,name)&id=eq.{{user_id}}", "host": ["{{base_rest_url}}"], "path": ["users"], "query": [{ "key": "select", "value": "*,role:roles(id,name,slug),department:departments(id,name)" }, { "key": "id", "value": "eq.{{user_id}}" }] } } },
+        { "name": "Update User", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Name\",\n  \"role_id\": \"\",\n  \"department_id\": \"{{department_id}}\"\n}" }, "url": { "raw": "{{base_rest_url}}/users?id=eq.{{user_id}}", "host": ["{{base_rest_url}}"], "path": ["users"], "query": [{ "key": "id", "value": "eq.{{user_id}}" }] } } },
+        { "name": "Create User (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"password\": \"SecurePassword123!\",\n  \"name\": \"New User\",\n  \"role_id\": \"\",\n  \"department_id\": \"{{department_id}}\"\n}" }, "url": { "raw": "{{base_edge_url}}/create-user", "host": ["{{base_edge_url}}"], "path": ["create-user"] } } }
+      ]
+    },
+    {
+      "name": "Organizations",
+      "item": [
+        { "name": "Get Organization", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/organizations?id=eq.{{org_id}}", "host": ["{{base_rest_url}}"], "path": ["organizations"], "query": [{ "key": "id", "value": "eq.{{org_id}}" }] } } },
+        { "name": "Update Organization", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Organization\",\n  \"settings\": {}\n}" }, "url": { "raw": "{{base_rest_url}}/organizations?id=eq.{{org_id}}", "host": ["{{base_rest_url}}"], "path": ["organizations"], "query": [{ "key": "id", "value": "eq.{{org_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "Departments",
+      "item": [
+        { "name": "List Departments", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/departments?organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["departments"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } } },
+        { "name": "Create Department", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"Engineering\",\n  \"status\": \"active\"\n}" }, "url": { "raw": "{{base_rest_url}}/departments", "host": ["{{base_rest_url}}"], "path": ["departments"] } } },
+        { "name": "Update Department", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Department\"\n}" }, "url": { "raw": "{{base_rest_url}}/departments?id=eq.{{department_id}}", "host": ["{{base_rest_url}}"], "path": ["departments"], "query": [{ "key": "id", "value": "eq.{{department_id}}" }] } } },
+        { "name": "Delete Department", "request": { "method": "DELETE", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/departments?id=eq.{{department_id}}", "host": ["{{base_rest_url}}"], "path": ["departments"], "query": [{ "key": "id", "value": "eq.{{department_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "Roles & Permissions",
+      "item": [
+        { "name": "List Roles", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/roles?organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["roles"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } } },
+        { "name": "List Permissions", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/permissions?order=key.asc", "host": ["{{base_rest_url}}"], "path": ["permissions"], "query": [{ "key": "order", "value": "key.asc" }] } } },
+        { "name": "List Role Permissions", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/role_permissions?select=*,permission:permissions(id,key,name,category)&role_id=eq.{{role_id}}", "host": ["{{base_rest_url}}"], "path": ["role_permissions"], "query": [{ "key": "select", "value": "*,permission:permissions(id,key,name,category)" }, { "key": "role_id", "value": "eq.{{role_id}}" }] } } },
+        { "name": "List User Permission Overrides", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/user_permission_overrides?select=*,permission:permissions(id,key,name)&user_id=eq.{{user_id}}", "host": ["{{base_rest_url}}"], "path": ["user_permission_overrides"], "query": [{ "key": "select", "value": "*,permission:permissions(id,key,name)" }, { "key": "user_id", "value": "eq.{{user_id}}" }] } } },
+        { "name": "Create User Permission Override", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"permission_id\": \"\",\n  \"granted\": true\n}" }, "url": { "raw": "{{base_rest_url}}/user_permission_overrides", "host": ["{{base_rest_url}}"], "path": ["user_permission_overrides"] } } }
+      ]
+    },
+    {
+      "name": "Feature Flags",
+      "item": [
+        { "name": "List Feature Flags", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/feature_flags?organization_id=eq.{{org_id}}&order=flag_key.asc", "host": ["{{base_rest_url}}"], "path": ["feature_flags"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "flag_key.asc" }] } } },
+        { "name": "Update Feature Flag", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"enabled\": true\n}" }, "url": { "raw": "{{base_rest_url}}/feature_flags?id=eq.{{flag_id}}", "host": ["{{base_rest_url}}"], "path": ["feature_flags"], "query": [{ "key": "id", "value": "eq.{{flag_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "Audit Logs",
+      "item": [
+        { "name": "List Audit Logs", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/audit_logs?select=*,user:users(id,name,email)&organization_id=eq.{{org_id}}&order=created_at.desc&limit=50", "host": ["{{base_rest_url}}"], "path": ["audit_logs"], "query": [{ "key": "select", "value": "*,user:users(id,name,email)" }, { "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }, { "key": "limit", "value": "50" }] } } }
+      ]
+    },
+    {
+      "name": "Activity Log",
+      "item": [
+        { "name": "List Activity Log", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/activity_log?select=*,user:users(id,name,email,avatar_url)&organization_id=eq.{{org_id}}&order=created_at.desc&limit=50", "host": ["{{base_rest_url}}"], "path": ["activity_log"], "query": [{ "key": "select", "value": "*,user:users(id,name,email,avatar_url)" }, { "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }, { "key": "limit", "value": "50" }] } } },
+        { "name": "Create Activity Log Entry", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"action\": \"updated\",\n  \"entity_type\": \"contact\",\n  \"entity_id\": \"{{contact_id}}\",\n  \"description\": \"Updated contact details\"\n}" }, "url": { "raw": "{{base_rest_url}}/activity_log", "host": ["{{base_rest_url}}"], "path": ["activity_log"] } } }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,760 @@
+{
+  "name": "02 - Contacts & CRM",
+  "description": "Contact management, notes, tasks, timeline, tags, and custom fields.",
+  "item": [
+    {
+      "name": "Contacts",
+      "item": [
+        {
+          "name": "List Contacts",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/contacts?select=*,owner:users!contacts_owner_id_fkey(id,name,email),department:departments(*),tags:contact_tags(tag:tags(*))&organization_id=eq.{{org_id}}&status=eq.active&merged_into_contact_id=is.null&order=created_at.desc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contacts"],
+              "query": [
+                { "key": "select", "value": "*,owner:users!contacts_owner_id_fkey(id,name,email),department:departments(*),tags:contact_tags(tag:tags(*))" },
+                { "key": "organization_id", "value": "eq.{{org_id}}" },
+                { "key": "status", "value": "eq.active" },
+                { "key": "merged_into_contact_id", "value": "is.null" },
+                { "key": "order", "value": "created_at.desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Contacts (with search)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/contacts?select=*,owner:users!contacts_owner_id_fkey(id,name,email),department:departments(*),tags:contact_tags(tag:tags(*))&organization_id=eq.{{org_id}}&status=eq.active&merged_into_contact_id=is.null&or=(first_name.ilike.*search*,last_name.ilike.*search*,email.ilike.*search*,company.ilike.*search*)&order=created_at.desc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contacts"],
+              "query": [
+                { "key": "select", "value": "*,owner:users!contacts_owner_id_fkey(id,name,email),department:departments(*),tags:contact_tags(tag:tags(*))" },
+                { "key": "organization_id", "value": "eq.{{org_id}}" },
+                { "key": "status", "value": "eq.active" },
+                { "key": "merged_into_contact_id", "value": "is.null" },
+                { "key": "or", "value": "(first_name.ilike.*search*,last_name.ilike.*search*,email.ilike.*search*,company.ilike.*search*)" },
+                { "key": "order", "value": "created_at.desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Contact by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/contacts?select=*,owner:users!contacts_owner_id_fkey(id,name,email,avatar_url),department:departments(*),tags:contact_tags(tag:tags(*))&id=eq.{{contact_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contacts"],
+              "query": [
+                { "key": "select", "value": "*,owner:users!contacts_owner_id_fkey(id,name,email,avatar_url),department:departments(*),tags:contact_tags(tag:tags(*))" },
+                { "key": "id", "value": "eq.{{contact_id}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Contact",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"phone\": \"+15551234567\",\n  \"company\": \"Acme Inc\",\n  \"job_title\": \"CEO\",\n  \"source\": \"manual\",\n  \"status\": \"active\",\n  \"owner_id\": \"{{user_id}}\",\n  \"department_id\": \"{{department_id}}\",\n  \"address_line1\": \"123 Main St\",\n  \"city\": \"New York\",\n  \"state\": \"NY\",\n  \"postal_code\": \"10001\",\n  \"country\": \"US\",\n  \"created_by_user_id\": \"{{user_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/contacts",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contacts"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const json = pm.response.json();",
+                  "  if (Array.isArray(json) && json.length > 0) {",
+                  "    pm.environment.set('contact_id', json[0].id);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Contact",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company\": \"Updated Company Name\",\n  \"job_title\": \"CTO\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/contacts?id=eq.{{contact_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contacts"],
+              "query": [{ "key": "id", "value": "eq.{{contact_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Archive Contact",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"archived\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/contacts?id=eq.{{contact_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contacts"],
+              "query": [{ "key": "id", "value": "eq.{{contact_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Restore Contact",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/contacts?id=eq.{{contact_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contacts"],
+              "query": [{ "key": "id", "value": "eq.{{contact_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Delete Contact",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/contacts?id=eq.{{contact_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contacts"],
+              "query": [{ "key": "id", "value": "eq.{{contact_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Get Contact Sources",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/contacts?select=source&organization_id=eq.{{org_id}}&source=not.is.null",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contacts"],
+              "query": [
+                { "key": "select", "value": "source" },
+                { "key": "organization_id", "value": "eq.{{org_id}}" },
+                { "key": "source", "value": "not.is.null" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contact Notes",
+      "item": [
+        {
+          "name": "List Contact Notes",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/contact_notes?select=*,user:users(id,name,avatar_url)&contact_id=eq.{{contact_id}}&order=is_pinned.desc,created_at.desc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_notes"],
+              "query": [
+                { "key": "select", "value": "*,user:users(id,name,avatar_url)" },
+                { "key": "contact_id", "value": "eq.{{contact_id}}" },
+                { "key": "order", "value": "is_pinned.desc,created_at.desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Note by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/contact_notes?select=*,user:users(id,name,avatar_url)&id=eq.{{note_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_notes"],
+              "query": [
+                { "key": "select", "value": "*,user:users(id,name,avatar_url)" },
+                { "key": "id", "value": "eq.{{note_id}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Contact Note",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact_id\": \"{{contact_id}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"content\": \"Follow up on proposal discussion.\",\n  \"is_pinned\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/contact_notes",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_notes"]
+            }
+          }
+        },
+        {
+          "name": "Update Note",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Updated note content.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/contact_notes?id=eq.{{note_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_notes"],
+              "query": [{ "key": "id", "value": "eq.{{note_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Toggle Pin Note",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_pinned\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/contact_notes?id=eq.{{note_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_notes"],
+              "query": [{ "key": "id", "value": "eq.{{note_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Delete Note",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/contact_notes?id=eq.{{note_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_notes"],
+              "query": [{ "key": "id", "value": "eq.{{note_id}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contact Tasks",
+      "item": [
+        {
+          "name": "List Contact Tasks",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/contact_tasks?select=*,assigned_to:users!contact_tasks_assigned_to_user_id_fkey(id,name,avatar_url),created_by:users!contact_tasks_created_by_user_id_fkey(id,name,avatar_url)&contact_id=eq.{{contact_id}}&order=due_date.asc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_tasks"],
+              "query": [
+                { "key": "select", "value": "*,assigned_to:users!contact_tasks_assigned_to_user_id_fkey(id,name,avatar_url),created_by:users!contact_tasks_created_by_user_id_fkey(id,name,avatar_url)" },
+                { "key": "contact_id", "value": "eq.{{contact_id}}" },
+                { "key": "order", "value": "due_date.asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Contact Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact_id\": \"{{contact_id}}\",\n  \"title\": \"Follow up call\",\n  \"description\": \"Schedule follow up after proposal review\",\n  \"priority\": \"high\",\n  \"status\": \"pending\",\n  \"due_date\": \"2026-04-15T10:00:00Z\",\n  \"assigned_to_user_id\": \"{{user_id}}\",\n  \"created_by_user_id\": \"{{user_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/contact_tasks",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_tasks"]
+            }
+          }
+        },
+        {
+          "name": "Update Task",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_progress\",\n  \"priority\": \"medium\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/contact_tasks?id=eq.{{task_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_tasks"],
+              "query": [{ "key": "id", "value": "eq.{{task_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Complete Task",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\",\n  \"completed_at\": \"{{$isoTimestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/contact_tasks?id=eq.{{task_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_tasks"],
+              "query": [{ "key": "id", "value": "eq.{{task_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Delete Task",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/contact_tasks?id=eq.{{task_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_tasks"],
+              "query": [{ "key": "id", "value": "eq.{{task_id}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contact Timeline",
+      "item": [
+        {
+          "name": "Get Contact Timeline",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/contact_timeline?select=*,user:users(id,name,avatar_url)&contact_id=eq.{{contact_id}}&order=created_at.desc&limit=50",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_timeline"],
+              "query": [
+                { "key": "select", "value": "*,user:users(id,name,avatar_url)" },
+                { "key": "contact_id", "value": "eq.{{contact_id}}" },
+                { "key": "order", "value": "created_at.desc" },
+                { "key": "limit", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Add Timeline Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact_id\": \"{{contact_id}}\",\n  \"user_id\": \"{{user_id}}\",\n  \"event_type\": \"note_added\",\n  \"event_data\": {\"summary\": \"Manual timeline entry\"}\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/contact_timeline",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_timeline"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tags",
+      "item": [
+        {
+          "name": "List Tags",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/tags?organization_id=eq.{{org_id}}&order=name.asc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["tags"],
+              "query": [
+                { "key": "organization_id", "value": "eq.{{org_id}}" },
+                { "key": "order", "value": "name.asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Tag",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"VIP\",\n  \"color\": \"#EF4444\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/tags",
+              "host": ["{{base_rest_url}}"],
+              "path": ["tags"]
+            }
+          }
+        },
+        {
+          "name": "Update Tag",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"VIP Client\",\n  \"color\": \"#22C55E\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/tags?id=eq.{{tag_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["tags"],
+              "query": [{ "key": "id", "value": "eq.{{tag_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Delete Tag",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/tags?id=eq.{{tag_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["tags"],
+              "query": [{ "key": "id", "value": "eq.{{tag_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Add Tag to Contact",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact_id\": \"{{contact_id}}\",\n  \"tag_id\": \"{{tag_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/contact_tags",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_tags"]
+            }
+          }
+        },
+        {
+          "name": "Remove Tag from Contact",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/contact_tags?contact_id=eq.{{contact_id}}&tag_id=eq.{{tag_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_tags"],
+              "query": [
+                { "key": "contact_id", "value": "eq.{{contact_id}}" },
+                { "key": "tag_id", "value": "eq.{{tag_id}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Contact Tags",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/contact_tags?select=tag:tags(*)&contact_id=eq.{{contact_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_tags"],
+              "query": [
+                { "key": "select", "value": "tag:tags(*)" },
+                { "key": "contact_id", "value": "eq.{{contact_id}}" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Custom Fields",
+      "item": [
+        {
+          "name": "List Custom Fields",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/custom_fields?select=*,group:custom_field_groups(id,name,scope,sort_order,active)&organization_id=eq.{{org_id}}&is_deleted=eq.false&order=display_order.asc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["custom_fields"],
+              "query": [
+                { "key": "select", "value": "*,group:custom_field_groups(id,name,scope,sort_order,active)" },
+                { "key": "organization_id", "value": "eq.{{org_id}}" },
+                { "key": "is_deleted", "value": "eq.false" },
+                { "key": "order", "value": "display_order.asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Custom Field",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"Industry\",\n  \"field_key\": \"industry\",\n  \"field_type\": \"dropdown\",\n  \"scope\": \"contact\",\n  \"options\": [\"Technology\", \"Healthcare\", \"Finance\", \"Other\"],\n  \"required\": false,\n  \"active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/custom_fields",
+              "host": ["{{base_rest_url}}"],
+              "path": ["custom_fields"]
+            }
+          }
+        },
+        {
+          "name": "Get Contact Custom Field Values",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/contact_custom_field_values?select=*,custom_field:custom_fields(*)&contact_id=eq.{{contact_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_custom_field_values"],
+              "query": [
+                { "key": "select", "value": "*,custom_field:custom_fields(*)" },
+                { "key": "contact_id", "value": "eq.{{contact_id}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Set Contact Custom Field Value",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation,resolution=merge-duplicates" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact_id\": \"{{contact_id}}\",\n  \"custom_field_id\": \"{{custom_field_id}}\",\n  \"value\": \"Technology\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/contact_custom_field_values",
+              "host": ["{{base_rest_url}}"],
+              "path": ["contact_custom_field_values"]
+            }
+          }
+        },
+        {
+          "name": "List Custom Field Groups",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/custom_field_groups?organization_id=eq.{{org_id}}&order=sort_order.asc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["custom_field_groups"],
+              "query": [
+                { "key": "organization_id", "value": "eq.{{org_id}}" },
+                { "key": "order", "value": "sort_order.asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Custom Field Group",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"Business Details\",\n  \"scope\": \"contact\",\n  \"active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/custom_field_groups",
+              "host": ["{{base_rest_url}}"],
+              "path": ["custom_field_groups"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

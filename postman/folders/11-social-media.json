@@ -1,0 +1,100 @@
+{
+  "name": "11 - Social Media & Marketing",
+  "description": "Social accounts, posts, campaigns, guidelines, AI content, comments, metrics, account groups, and brandboard.",
+  "item": [
+    {
+      "name": "Social Accounts",
+      "item": [
+        { "name": "List Social Accounts", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/social_accounts?select=*,connected_by_user:users!social_accounts_connected_by_fkey(id,name,email,avatar_url)&organization_id=eq.{{org_id}}&order=created_at.desc", "host": ["{{base_rest_url}}"], "path": ["social_accounts"], "query": [{ "key": "select", "value": "*,connected_by_user:users!social_accounts_connected_by_fkey(id,name,email,avatar_url)" }, { "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }] } } },
+        { "name": "Get Social Account by ID", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/social_accounts?select=*,connected_by_user:users!social_accounts_connected_by_fkey(id,name,email,avatar_url)&id=eq.{{social_account_id}}", "host": ["{{base_rest_url}}"], "path": ["social_accounts"], "query": [{ "key": "select", "value": "*,connected_by_user:users!social_accounts_connected_by_fkey(id,name,email,avatar_url)" }, { "key": "id", "value": "eq.{{social_account_id}}" }] } } },
+        { "name": "Disconnect Social Account", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"status\": \"disconnected\",\n  \"access_token_encrypted\": null,\n  \"refresh_token_encrypted\": null\n}" }, "url": { "raw": "{{base_rest_url}}/social_accounts?id=eq.{{social_account_id}}", "host": ["{{base_rest_url}}"], "path": ["social_accounts"], "query": [{ "key": "id", "value": "eq.{{social_account_id}}" }] } } },
+        { "name": "Delete Social Account", "request": { "method": "DELETE", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/social_accounts?id=eq.{{social_account_id}}", "host": ["{{base_rest_url}}"], "path": ["social_accounts"], "query": [{ "key": "id", "value": "eq.{{social_account_id}}" }] } } },
+        { "name": "Connect via Late.dev", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"provider\": \"instagram\",\n  \"success_redirect_url\": \"\",\n  \"failure_redirect_url\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/late-connect", "host": ["{{base_edge_url}}"], "path": ["late-connect"] } } }
+      ]
+    },
+    {
+      "name": "Social Account Groups",
+      "item": [
+        { "name": "List Account Groups", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/social_account_groups?organization_id=eq.{{org_id}}&order=created_at.desc", "host": ["{{base_rest_url}}"], "path": ["social_account_groups"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }] } } },
+        { "name": "Create Account Group", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"Marketing Channels\",\n  \"description\": \"All marketing social accounts\",\n  \"account_ids\": [],\n  \"created_by\": \"{{user_id}}\"\n}" }, "url": { "raw": "{{base_rest_url}}/social_account_groups", "host": ["{{base_rest_url}}"], "path": ["social_account_groups"] } } },
+        { "name": "Delete Account Group", "request": { "method": "DELETE", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/social_account_groups?id=eq.{{group_id}}", "host": ["{{base_rest_url}}"], "path": ["social_account_groups"], "query": [{ "key": "id", "value": "eq.{{group_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "Social Posts",
+      "item": [
+        { "name": "List Social Posts", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/social_posts?select=*,created_by_user:users!social_posts_created_by_fkey(id,name,email,avatar_url),approved_by_user:users!social_posts_approved_by_fkey(id,name,email,avatar_url)&organization_id=eq.{{org_id}}&order=created_at.desc&limit=50", "host": ["{{base_rest_url}}"], "path": ["social_posts"], "query": [{ "key": "select", "value": "*,created_by_user:users!social_posts_created_by_fkey(id,name,email,avatar_url),approved_by_user:users!social_posts_approved_by_fkey(id,name,email,avatar_url)" }, { "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }, { "key": "limit", "value": "50" }] } } },
+        { "name": "Get Social Post by ID", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/social_posts?select=*,created_by_user:users!social_posts_created_by_fkey(id,name,email,avatar_url),approved_by_user:users!social_posts_approved_by_fkey(id,name,email,avatar_url)&id=eq.{{post_id}}", "host": ["{{base_rest_url}}"], "path": ["social_posts"], "query": [{ "key": "select", "value": "*,created_by_user:users!social_posts_created_by_fkey(id,name,email,avatar_url),approved_by_user:users!social_posts_approved_by_fkey(id,name,email,avatar_url)" }, { "key": "id", "value": "eq.{{post_id}}" }] } } },
+        { "name": "Create Social Post", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"created_by\": \"{{user_id}}\",\n  \"body\": \"Check out our latest update!\",\n  \"targets\": [],\n  \"status\": \"draft\",\n  \"media\": []\n}" }, "url": { "raw": "{{base_rest_url}}/social_posts", "host": ["{{base_rest_url}}"], "path": ["social_posts"] } } },
+        { "name": "Delete Social Post", "request": { "method": "DELETE", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/social_posts?id=eq.{{post_id}}", "host": ["{{base_rest_url}}"], "path": ["social_posts"], "query": [{ "key": "id", "value": "eq.{{post_id}}" }] } } },
+        { "name": "Publish Post (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"post_id\": \"{{post_id}}\"\n}" }, "url": { "raw": "{{base_edge_url}}/social-worker", "host": ["{{base_edge_url}}"], "path": ["social-worker"] } } },
+        { "name": "Fetch Post Metrics (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"post_id\": \"{{post_id}}\"\n}" }, "url": { "raw": "{{base_edge_url}}/late-metrics", "host": ["{{base_edge_url}}"], "path": ["late-metrics"] } } }
+      ]
+    },
+    {
+      "name": "Social Campaigns",
+      "item": [
+        { "name": "List Campaigns", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/social_campaigns?organization_id=eq.{{org_id}}&order=updated_at.desc", "host": ["{{base_rest_url}}"], "path": ["social_campaigns"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "updated_at.desc" }] } } },
+        { "name": "Create Campaign", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"created_by\": \"{{user_id}}\",\n  \"name\": \"Summer Campaign\",\n  \"description\": \"Summer promotion across all platforms\",\n  \"theme\": \"seasonal\",\n  \"frequency\": \"daily\",\n  \"platforms\": [\"instagram\", \"facebook\"]\n}" }, "url": { "raw": "{{base_rest_url}}/social_campaigns", "host": ["{{base_rest_url}}"], "path": ["social_campaigns"] } } },
+        { "name": "Delete Campaign", "request": { "method": "DELETE", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/social_campaigns?id=eq.{{campaign_id}}", "host": ["{{base_rest_url}}"], "path": ["social_campaigns"], "query": [{ "key": "id", "value": "eq.{{campaign_id}}" }] } } },
+        { "name": "Generate Campaign Posts (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"campaign_id\": \"{{campaign_id}}\"\n}" }, "url": { "raw": "{{base_edge_url}}/ai-social-campaign-generator", "host": ["{{base_edge_url}}"], "path": ["ai-social-campaign-generator"] } } }
+      ]
+    },
+    {
+      "name": "Social Guidelines",
+      "item": [
+        { "name": "Get Guidelines", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/social_guidelines?organization_id=eq.{{org_id}}", "host": ["{{base_rest_url}}"], "path": ["social_guidelines"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "Social AI Content (Edge Function)",
+      "item": [
+        { "name": "Quick Suggestion", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"quick_suggestion\",\n  \"content\": \"Check out our new product!\",\n  \"action_type\": \"improve\",\n  \"platform\": \"instagram\"\n}" }, "url": { "raw": "{{base_edge_url}}/ai-social-content", "host": ["{{base_edge_url}}"], "path": ["ai-social-content"] } } },
+        { "name": "Generate New Content", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"generate_new\",\n  \"objective\": \"Product launch announcement\",\n  \"tone\": \"professional\",\n  \"length\": \"medium\",\n  \"platforms\": [\"instagram\", \"linkedin\"]\n}" }, "url": { "raw": "{{base_edge_url}}/ai-social-content", "host": ["{{base_edge_url}}"], "path": ["ai-social-content"] } } },
+        { "name": "Generate Hashtags", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"generate_hashtags\",\n  \"content\": \"Our new product helps businesses automate their workflows\",\n  \"platform\": \"instagram\",\n  \"count\": 10\n}" }, "url": { "raw": "{{base_edge_url}}/ai-social-content", "host": ["{{base_edge_url}}"], "path": ["ai-social-content"] } } }
+      ]
+    },
+    {
+      "name": "Social AI Chat (Edge Function)",
+      "item": [
+        { "name": "Send Chat Message", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"thread_id\": \"\",\n  \"content\": \"Create a post about our new feature launch\",\n  \"message_type\": \"text\"\n}" }, "url": { "raw": "{{base_edge_url}}/ai-social-chat", "host": ["{{base_edge_url}}"], "path": ["ai-social-chat"] } } }
+      ]
+    },
+    {
+      "name": "Social Comments (Edge Function)",
+      "item": [
+        { "name": "Sync Comments", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"org_id\": \"{{org_id}}\"\n}" }, "url": { "raw": "{{base_edge_url}}/late-inbox-comments-sync", "host": ["{{base_edge_url}}"], "path": ["late-inbox-comments-sync"] } } },
+        { "name": "Reply to Comment", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"org_id\": \"{{org_id}}\",\n  \"action\": \"reply\",\n  \"late_comment_id\": \"\",\n  \"late_post_id\": \"\",\n  \"late_account_id\": \"\",\n  \"reply_text\": \"Thank you for your feedback!\"\n}" }, "url": { "raw": "{{base_edge_url}}/late-inbox-comments-sync", "host": ["{{base_edge_url}}"], "path": ["late-inbox-comments-sync"] } } }
+      ]
+    },
+    {
+      "name": "Social Metrics",
+      "item": [
+        { "name": "List Post Metrics", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/social_post_metrics?post_id=eq.{{post_id}}&order=recorded_at.desc", "host": ["{{base_rest_url}}"], "path": ["social_post_metrics"], "query": [{ "key": "post_id", "value": "eq.{{post_id}}" }, { "key": "order", "value": "recorded_at.desc" }] } } },
+        { "name": "Refresh All Metrics (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"bulk\": true\n}" }, "url": { "raw": "{{base_edge_url}}/late-metrics", "host": ["{{base_edge_url}}"], "path": ["late-metrics"] } } }
+      ]
+    },
+    {
+      "name": "Brand Kits",
+      "item": [
+        { "name": "List Brand Kits", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/brand_kits?select=*,created_by_user:users!brand_kits_created_by_fkey(id,name,email)&org_id=eq.{{org_id}}&order=created_at.desc", "host": ["{{base_rest_url}}"], "path": ["brand_kits"], "query": [{ "key": "select", "value": "*,created_by_user:users!brand_kits_created_by_fkey(id,name,email)" }, { "key": "org_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }] } } },
+        { "name": "Create Brand Kit", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"org_id\": \"{{org_id}}\",\n  \"name\": \"Company Brand Kit\",\n  \"description\": \"Primary brand identity\",\n  \"status\": \"active\",\n  \"created_by\": \"{{user_id}}\"\n}" }, "url": { "raw": "{{base_rest_url}}/brand_kits", "host": ["{{base_rest_url}}"], "path": ["brand_kits"] } } }
+      ]
+    },
+    {
+      "name": "Brand Voices",
+      "item": [
+        { "name": "List Brand Voices", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/brand_voices?select=*,created_by_user:users!brand_voices_created_by_fkey(id,name,email)&org_id=eq.{{org_id}}&order=created_at.desc", "host": ["{{base_rest_url}}"], "path": ["brand_voices"], "query": [{ "key": "select", "value": "*,created_by_user:users!brand_voices_created_by_fkey(id,name,email)" }, { "key": "org_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }] } } }
+      ]
+    },
+    {
+      "name": "Media Generation (Edge Functions)",
+      "item": [
+        { "name": "Create Generation Job", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"model_id\": \"\",\n  \"prompt\": \"A professional business team in a modern office\",\n  \"aspect_ratio\": \"16:9\",\n  \"job_type\": \"image\"\n}" }, "url": { "raw": "{{base_edge_url}}/media-kie-jobs", "host": ["{{base_edge_url}}"], "path": ["media-kie-jobs"] } } },
+        { "name": "Get Job Status", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"job_id\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/media-job-status", "host": ["{{base_edge_url}}"], "path": ["media-job-status"] } } },
+        { "name": "List KIE Models", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/kie_models?enabled=eq.true&order=display_name.asc", "host": ["{{base_rest_url}}"], "path": ["kie_models"], "query": [{ "key": "enabled", "value": "eq.true" }, { "key": "order", "value": "display_name.asc" }] } } },
+        { "name": "List Media Assets", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/media_assets?organization_id=eq.{{org_id}}&order=created_at.desc&limit=50", "host": ["{{base_rest_url}}"], "path": ["media_assets"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }, { "key": "limit", "value": "50" }] } } }
+      ]
+    }
+  ]
+}

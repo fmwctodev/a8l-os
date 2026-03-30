@@ -1,0 +1,429 @@
+{
+  "name": "04 - Opportunities & Pipelines",
+  "description": "Pipeline management, opportunity tracking, stage history, and lost reasons.",
+  "item": [
+    {
+      "name": "Pipelines",
+      "item": [
+        {
+          "name": "List Pipelines",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/pipelines?select=*,department:departments(*),stages:pipeline_stages(*)&organization_id=eq.{{org_id}}&order=sort_order.asc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["pipelines"],
+              "query": [
+                { "key": "select", "value": "*,department:departments(*),stages:pipeline_stages(*)" },
+                { "key": "organization_id", "value": "eq.{{org_id}}" },
+                { "key": "order", "value": "sort_order.asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Pipeline by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/pipelines?select=*,department:departments(*),stages:pipeline_stages(*),custom_fields:pipeline_custom_fields(*)&id=eq.{{pipeline_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["pipelines"],
+              "query": [
+                { "key": "select", "value": "*,department:departments(*),stages:pipeline_stages(*),custom_fields:pipeline_custom_fields(*)" },
+                { "key": "id", "value": "eq.{{pipeline_id}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Pipeline",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"Inbound Sales\",\n  \"department_id\": null\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/pipelines",
+              "host": ["{{base_rest_url}}"],
+              "path": ["pipelines"]
+            }
+          }
+        },
+        {
+          "name": "Create Pipeline Stage",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"pipeline_id\": \"{{pipeline_id}}\",\n  \"name\": \"Qualification\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/pipeline_stages",
+              "host": ["{{base_rest_url}}"],
+              "path": ["pipeline_stages"]
+            }
+          }
+        },
+        {
+          "name": "List Pipeline Stages",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/pipeline_stages?pipeline_id=eq.{{pipeline_id}}&order=sort_order.asc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["pipeline_stages"],
+              "query": [
+                { "key": "pipeline_id", "value": "eq.{{pipeline_id}}" },
+                { "key": "order", "value": "sort_order.asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Pipeline Custom Fields",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/pipeline_custom_fields?pipeline_id=eq.{{pipeline_id}}&order=sort_order.asc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["pipeline_custom_fields"],
+              "query": [
+                { "key": "pipeline_id", "value": "eq.{{pipeline_id}}" },
+                { "key": "order", "value": "sort_order.asc" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Opportunities",
+      "item": [
+        {
+          "name": "List Opportunities",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Prefer", "value": "count=exact" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/opportunities?select=*,contact:contacts(*,tags:contact_tags(tag:tags(*))),pipeline:pipelines(*),stage:pipeline_stages(*),assigned_user:users!opportunities_assigned_user_id_fkey(*),department:departments(*),lost_reason_ref:lost_reasons(*),custom_field_values:opportunity_custom_field_values(*,custom_field:pipeline_custom_fields(*))&organization_id=eq.{{org_id}}&order=created_at.desc&limit=25&offset=0",
+              "host": ["{{base_rest_url}}"],
+              "path": ["opportunities"],
+              "query": [
+                { "key": "select", "value": "*,contact:contacts(*,tags:contact_tags(tag:tags(*))),pipeline:pipelines(*),stage:pipeline_stages(*),assigned_user:users!opportunities_assigned_user_id_fkey(*),department:departments(*),lost_reason_ref:lost_reasons(*),custom_field_values:opportunity_custom_field_values(*,custom_field:pipeline_custom_fields(*))" },
+                { "key": "organization_id", "value": "eq.{{org_id}}" },
+                { "key": "order", "value": "created_at.desc" },
+                { "key": "limit", "value": "25" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Opportunity by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/opportunities?select=*,contact:contacts(*,tags:contact_tags(tag:tags(*))),pipeline:pipelines(*),stage:pipeline_stages(*),assigned_user:users!opportunities_assigned_user_id_fkey(*),department:departments(*)&id=eq.{{opportunity_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["opportunities"],
+              "query": [
+                { "key": "select", "value": "*,contact:contacts(*,tags:contact_tags(tag:tags(*))),pipeline:pipelines(*),stage:pipeline_stages(*),assigned_user:users!opportunities_assigned_user_id_fkey(*),department:departments(*)" },
+                { "key": "id", "value": "eq.{{opportunity_id}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Opportunity",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"pipeline_id\": \"{{pipeline_id}}\",\n  \"stage_id\": \"{{stage_id}}\",\n  \"assigned_user_id\": \"{{user_id}}\",\n  \"value_amount\": 25000,\n  \"currency\": \"USD\",\n  \"source\": \"inbound\",\n  \"close_date\": \"2026-06-30\",\n  \"created_by\": \"{{user_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/opportunities",
+              "host": ["{{base_rest_url}}"],
+              "path": ["opportunities"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const json = pm.response.json();",
+                  "  if (Array.isArray(json) && json.length > 0) {",
+                  "    pm.environment.set('opportunity_id', json[0].id);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Opportunity",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value_amount\": 30000,\n  \"close_date\": \"2026-07-15\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/opportunities?id=eq.{{opportunity_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["opportunities"],
+              "query": [{ "key": "id", "value": "eq.{{opportunity_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Move to Stage",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stage_id\": \"{{stage_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/opportunities?id=eq.{{opportunity_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["opportunities"],
+              "query": [{ "key": "id", "value": "eq.{{opportunity_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Close Opportunity (Won)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"won\",\n  \"closed_at\": \"{{$isoTimestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/opportunities?id=eq.{{opportunity_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["opportunities"],
+              "query": [{ "key": "id", "value": "eq.{{opportunity_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Close Opportunity (Lost)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"lost\",\n  \"closed_at\": \"{{$isoTimestamp}}\",\n  \"lost_reason_id\": \"\",\n  \"lost_reason_text\": \"Budget constraints\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/opportunities?id=eq.{{opportunity_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["opportunities"],
+              "query": [{ "key": "id", "value": "eq.{{opportunity_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Delete Opportunity",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/opportunities?id=eq.{{opportunity_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["opportunities"],
+              "query": [{ "key": "id", "value": "eq.{{opportunity_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Get Stage History",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/opportunity_stage_history?select=*,from_stage:pipeline_stages!opportunity_stage_history_from_stage_id_fkey(id,name),to_stage:pipeline_stages!opportunity_stage_history_to_stage_id_fkey(id,name),changed_by_user:users!opportunity_stage_history_changed_by_user_id_fkey(id,name)&opportunity_id=eq.{{opportunity_id}}&order=changed_at.desc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["opportunity_stage_history"],
+              "query": [
+                { "key": "select", "value": "*,from_stage:pipeline_stages!opportunity_stage_history_from_stage_id_fkey(id,name),to_stage:pipeline_stages!opportunity_stage_history_to_stage_id_fkey(id,name),changed_by_user:users!opportunity_stage_history_changed_by_user_id_fkey(id,name)" },
+                { "key": "opportunity_id", "value": "eq.{{opportunity_id}}" },
+                { "key": "order", "value": "changed_at.desc" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Opportunity Notes",
+      "item": [
+        {
+          "name": "List Opportunity Notes",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/opportunity_notes?select=*,created_by_user:users(*)&opportunity_id=eq.{{opportunity_id}}&order=created_at.desc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["opportunity_notes"],
+              "query": [
+                { "key": "select", "value": "*,created_by_user:users(*)" },
+                { "key": "opportunity_id", "value": "eq.{{opportunity_id}}" },
+                { "key": "order", "value": "created_at.desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Opportunity Note",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"opportunity_id\": \"{{opportunity_id}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"body\": \"Client is interested in the enterprise plan.\",\n  \"created_by\": \"{{user_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/opportunity_notes",
+              "host": ["{{base_rest_url}}"],
+              "path": ["opportunity_notes"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lost Reasons",
+      "item": [
+        {
+          "name": "List Lost Reasons",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/lost_reasons?organization_id=eq.{{org_id}}&is_active=eq.true&order=sort_order.asc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["lost_reasons"],
+              "query": [
+                { "key": "organization_id", "value": "eq.{{org_id}}" },
+                { "key": "is_active", "value": "eq.true" },
+                { "key": "order", "value": "sort_order.asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Lost Reason",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"Budget constraints\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/lost_reasons",
+              "host": ["{{base_rest_url}}"],
+              "path": ["lost_reasons"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

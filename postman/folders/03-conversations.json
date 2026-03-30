@@ -1,0 +1,457 @@
+{
+  "name": "03 - Conversations & Messaging",
+  "description": "Conversations, messages, AI drafts, conversation rules, and team messaging.",
+  "item": [
+    {
+      "name": "Conversations",
+      "item": [
+        {
+          "name": "List Conversations",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Prefer", "value": "count=exact" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/conversations?select=*,contact:contacts!contact_id(id,first_name,last_name,email,phone,company),assigned_user:users!assigned_user_id(id,name,email,avatar_url),department:departments!department_id(id,name)&organization_id=eq.{{org_id}}&order=last_message_at.desc&limit=50&offset=0",
+              "host": ["{{base_rest_url}}"],
+              "path": ["conversations"],
+              "query": [
+                { "key": "select", "value": "*,contact:contacts!contact_id(id,first_name,last_name,email,phone,company),assigned_user:users!assigned_user_id(id,name,email,avatar_url),department:departments!department_id(id,name)" },
+                { "key": "organization_id", "value": "eq.{{org_id}}" },
+                { "key": "order", "value": "last_message_at.desc" },
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Conversations (Filtered by Status)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Prefer", "value": "count=exact" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/conversations?select=*,contact:contacts!contact_id(id,first_name,last_name,email,phone,company),assigned_user:users!assigned_user_id(id,name,email,avatar_url)&organization_id=eq.{{org_id}}&status=in.(open,pending)&order=last_message_at.desc&limit=50",
+              "host": ["{{base_rest_url}}"],
+              "path": ["conversations"],
+              "query": [
+                { "key": "select", "value": "*,contact:contacts!contact_id(id,first_name,last_name,email,phone,company),assigned_user:users!assigned_user_id(id,name,email,avatar_url)" },
+                { "key": "organization_id", "value": "eq.{{org_id}}" },
+                { "key": "status", "value": "in.(open,pending)" },
+                { "key": "order", "value": "last_message_at.desc" },
+                { "key": "limit", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Conversation by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/conversations?select=*,contact:contacts!contact_id(id,first_name,last_name,email,phone,company),assigned_user:users!assigned_user_id(id,name,email,avatar_url),department:departments!department_id(id,name)&id=eq.{{conversation_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["conversations"],
+              "query": [
+                { "key": "select", "value": "*,contact:contacts!contact_id(id,first_name,last_name,email,phone,company),assigned_user:users!assigned_user_id(id,name,email,avatar_url),department:departments!department_id(id,name)" },
+                { "key": "id", "value": "eq.{{conversation_id}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Conversation Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"closed\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/conversations?id=eq.{{conversation_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["conversations"],
+              "query": [{ "key": "id", "value": "eq.{{conversation_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Assign Conversation to User",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigned_user_id\": \"{{user_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/conversations?id=eq.{{conversation_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["conversations"],
+              "query": [{ "key": "id", "value": "eq.{{conversation_id}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Messages",
+      "item": [
+        {
+          "name": "List Messages for Conversation",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/messages?conversation_id=eq.{{conversation_id}}&order=created_at.asc&limit=100",
+              "host": ["{{base_rest_url}}"],
+              "path": ["messages"],
+              "query": [
+                { "key": "conversation_id", "value": "eq.{{conversation_id}}" },
+                { "key": "order", "value": "created_at.asc" },
+                { "key": "limit", "value": "100" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversation_id\": \"{{conversation_id}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"direction\": \"outbound\",\n  \"channel\": \"email\",\n  \"body\": \"Hello, thanks for reaching out!\",\n  \"status\": \"sent\",\n  \"sender_user_id\": \"{{user_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/messages",
+              "host": ["{{base_rest_url}}"],
+              "path": ["messages"]
+            }
+          }
+        },
+        {
+          "name": "Get Internal Comments",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/messages?conversation_id=eq.{{conversation_id}}&channel=eq.internal&order=created_at.asc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["messages"],
+              "query": [
+                { "key": "conversation_id", "value": "eq.{{conversation_id}}" },
+                { "key": "channel", "value": "eq.internal" },
+                { "key": "order", "value": "created_at.asc" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI Drafts",
+      "item": [
+        {
+          "name": "List AI Drafts for Conversation",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/ai_drafts?select=*,generated_by_user:users!ai_drafts_generated_by_user_id_fkey(id,name,avatar_url),reviewed_by_user:users!ai_drafts_reviewed_by_user_id_fkey(id,name,avatar_url)&conversation_id=eq.{{conversation_id}}&order=created_at.desc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["ai_drafts"],
+              "query": [
+                { "key": "select", "value": "*,generated_by_user:users!ai_drafts_generated_by_user_id_fkey(id,name,avatar_url),reviewed_by_user:users!ai_drafts_reviewed_by_user_id_fkey(id,name,avatar_url)" },
+                { "key": "conversation_id", "value": "eq.{{conversation_id}}" },
+                { "key": "order", "value": "created_at.desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create AI Draft",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversation_id\": \"{{conversation_id}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"channel\": \"email\",\n  \"draft_body\": \"Thank you for your inquiry. We would be happy to schedule a call to discuss your needs.\",\n  \"status\": \"pending\",\n  \"source\": \"agent\",\n  \"generated_by_user_id\": \"{{user_id}}\",\n  \"agent_id\": \"{{agent_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/ai_drafts",
+              "host": ["{{base_rest_url}}"],
+              "path": ["ai_drafts"]
+            }
+          }
+        },
+        {
+          "name": "Approve AI Draft",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\",\n  \"reviewed_by_user_id\": \"{{user_id}}\",\n  \"reviewed_at\": \"{{$isoTimestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/ai_drafts?id=eq.{{draft_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["ai_drafts"],
+              "query": [{ "key": "id", "value": "eq.{{draft_id}}" }]
+            }
+          }
+        },
+        {
+          "name": "Reject AI Draft",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"rejected\",\n  \"reviewed_by_user_id\": \"{{user_id}}\",\n  \"reviewed_at\": \"{{$isoTimestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/ai_drafts?id=eq.{{draft_id}}",
+              "host": ["{{base_rest_url}}"],
+              "path": ["ai_drafts"],
+              "query": [{ "key": "id", "value": "eq.{{draft_id}}" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Conversation Rules",
+      "item": [
+        {
+          "name": "List Conversation Rules",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/conversation_rules?organization_id=eq.{{org_id}}&order=priority.asc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["conversation_rules"],
+              "query": [
+                { "key": "organization_id", "value": "eq.{{org_id}}" },
+                { "key": "order", "value": "priority.asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Conversation Rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"Auto-assign VIP contacts\",\n  \"trigger_type\": \"new_conversation\",\n  \"conditions\": {\"contact_tags\": [\"VIP\"]},\n  \"actions\": {\"assign_user_id\": \"{{user_id}}\"},\n  \"enabled\": true,\n  \"priority\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/conversation_rules",
+              "host": ["{{base_rest_url}}"],
+              "path": ["conversation_rules"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Conversation Rule Executor (Edge Function)",
+      "item": [
+        {
+          "name": "Execute Conversation Rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"conversation_id\": \"{{conversation_id}}\",\n  \"trigger_type\": \"new_conversation\"\n}"
+            },
+            "url": {
+              "raw": "{{base_edge_url}}/conversation-rule-executor",
+              "host": ["{{base_edge_url}}"],
+              "path": ["conversation-rule-executor"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Team Messaging",
+      "item": [
+        {
+          "name": "List Team Channels",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/team_channels?select=*,members:team_channel_members(user_id,role,joined_at)&order=updated_at.desc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["team_channels"],
+              "query": [
+                { "key": "select", "value": "*,members:team_channel_members(user_id,role,joined_at)" },
+                { "key": "order", "value": "updated_at.desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Channel Messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/team_messages?select=*,sender:users(id,name,avatar_url),reactions:team_message_reactions(id,emoji,user_id)&channel_id=eq.{{channel_id}}&order=created_at.asc&limit=100",
+              "host": ["{{base_rest_url}}"],
+              "path": ["team_messages"],
+              "query": [
+                { "key": "select", "value": "*,sender:users(id,name,avatar_url),reactions:team_message_reactions(id,emoji,user_id)" },
+                { "key": "channel_id", "value": "eq.{{channel_id}}" },
+                { "key": "order", "value": "created_at.asc" },
+                { "key": "limit", "value": "100" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Team Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel_id\": \"{{channel_id}}\",\n  \"sender_id\": \"{{user_id}}\",\n  \"content\": \"Hey team, let's sync up on the project status.\",\n  \"message_type\": \"text\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/team_messages",
+              "host": ["{{base_rest_url}}"],
+              "path": ["team_messages"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Snippets",
+      "item": [
+        {
+          "name": "List Snippets",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_rest_url}}/snippets?organization_id=eq.{{org_id}}&order=name.asc",
+              "host": ["{{base_rest_url}}"],
+              "path": ["snippets"],
+              "query": [
+                { "key": "organization_id", "value": "eq.{{org_id}}" },
+                { "key": "order", "value": "name.asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Snippet",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "apikey", "value": "{{supabase_anon_key}}" },
+              { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Prefer", "value": "return=representation" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"Greeting\",\n  \"shortcut\": \"/greet\",\n  \"content\": \"Hello {{contact.first_name}}, thank you for reaching out!\",\n  \"channels\": [\"email\", \"sms\"],\n  \"scope\": \"organization\",\n  \"is_enabled\": true,\n  \"created_by_user_id\": \"{{user_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_rest_url}}/snippets",
+              "host": ["{{base_rest_url}}"],
+              "path": ["snippets"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

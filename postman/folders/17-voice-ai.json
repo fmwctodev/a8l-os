@@ -1,0 +1,56 @@
+{
+  "name": "17 - Voice AI (VAPI)",
+  "description": "VAPI voice assistants, calls, sessions, phone numbers, tools, widgets, analytics, and conversations.",
+  "item": [
+    {
+      "name": "VAPI Client (Edge Function)",
+      "item": [
+        { "name": "List VAPI Assistants", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"listAssistants\"\n}" }, "url": { "raw": "{{base_edge_url}}/vapi-client", "host": ["{{base_edge_url}}"], "path": ["vapi-client"] } } },
+        { "name": "Get VAPI Assistant", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"getAssistant\",\n  \"assistantId\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/vapi-client", "host": ["{{base_edge_url}}"], "path": ["vapi-client"] } } },
+        { "name": "Create VAPI Assistant", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"createAssistant\",\n  \"name\": \"Sales Voice Agent\",\n  \"firstMessage\": \"Hello! How can I help you today?\",\n  \"systemPrompt\": \"You are a helpful sales assistant.\"\n}" }, "url": { "raw": "{{base_edge_url}}/vapi-client", "host": ["{{base_edge_url}}"], "path": ["vapi-client"] } } },
+        { "name": "Update VAPI Assistant", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"updateAssistant\",\n  \"assistantId\": \"\",\n  \"name\": \"Updated Voice Agent\"\n}" }, "url": { "raw": "{{base_edge_url}}/vapi-client", "host": ["{{base_edge_url}}"], "path": ["vapi-client"] } } },
+        { "name": "Delete VAPI Assistant", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"deleteAssistant\",\n  \"assistantId\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/vapi-client", "host": ["{{base_edge_url}}"], "path": ["vapi-client"] } } },
+        { "name": "List VAPI Phone Numbers", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"listPhoneNumbers\"\n}" }, "url": { "raw": "{{base_edge_url}}/vapi-client", "host": ["{{base_edge_url}}"], "path": ["vapi-client"] } } },
+        { "name": "List VAPI Calls", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"listCalls\"\n}" }, "url": { "raw": "{{base_edge_url}}/vapi-client", "host": ["{{base_edge_url}}"], "path": ["vapi-client"] } } },
+        { "name": "Get VAPI Call Details", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"getCall\",\n  \"callId\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/vapi-client", "host": ["{{base_edge_url}}"], "path": ["vapi-client"] } } },
+        { "name": "Create Outbound VAPI Call", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"createCall\",\n  \"assistantId\": \"\",\n  \"phoneNumberId\": \"\",\n  \"customerNumber\": \"+15551234567\"\n}" }, "url": { "raw": "{{base_edge_url}}/vapi-client", "host": ["{{base_edge_url}}"], "path": ["vapi-client"] } } }
+      ]
+    },
+    {
+      "name": "VAPI Assistants (Database)",
+      "item": [
+        { "name": "List VAPI Assistants (DB)", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/vapi_assistants?organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["vapi_assistants"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } } },
+        { "name": "List VAPI Bindings", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/vapi_bindings?organization_id=eq.{{org_id}}", "host": ["{{base_rest_url}}"], "path": ["vapi_bindings"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "VAPI Calls & Sessions (Database)",
+      "item": [
+        { "name": "List VAPI Call Records", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/vapi_calls?organization_id=eq.{{org_id}}&order=created_at.desc&limit=50", "host": ["{{base_rest_url}}"], "path": ["vapi_calls"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }, { "key": "limit", "value": "50" }] } } },
+        { "name": "List VAPI Sessions", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/vapi_sessions?organization_id=eq.{{org_id}}&order=created_at.desc&limit=50", "host": ["{{base_rest_url}}"], "path": ["vapi_sessions"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }, { "key": "limit", "value": "50" }] } } }
+      ]
+    },
+    {
+      "name": "VAPI Tools & Widgets",
+      "item": [
+        { "name": "List VAPI Tool Registry", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/vapi_tool_registry?organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["vapi_tool_registry"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } } },
+        { "name": "List VAPI Widgets", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/vapi_widgets?organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["vapi_widgets"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } } }
+      ]
+    },
+    {
+      "name": "VAPI Webhooks & Gateway",
+      "item": [
+        { "name": "VAPI Webhook (Edge Function)", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"message\": {\n    \"type\": \"function-call\",\n    \"call\": {},\n    \"functionCall\": {}\n  }\n}" }, "url": { "raw": "{{base_edge_url}}/vapi-webhook", "host": ["{{base_edge_url}}"], "path": ["vapi-webhook"] } } },
+        { "name": "VAPI Tool Gateway (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"tool_id\": \"\",\n  \"parameters\": {}\n}" }, "url": { "raw": "{{base_edge_url}}/vapi-tool-gateway", "host": ["{{base_edge_url}}"], "path": ["vapi-tool-gateway"] } } }
+      ]
+    },
+    {
+      "name": "ElevenLabs Voice (Edge Function)",
+      "item": [
+        { "name": "Get ElevenLabs Connection", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"getConnection\"\n}" }, "url": { "raw": "{{base_edge_url}}/ai-settings-elevenlabs", "host": ["{{base_edge_url}}"], "path": ["ai-settings-elevenlabs"] } } },
+        { "name": "List ElevenLabs Voices", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"listVoices\"\n}" }, "url": { "raw": "{{base_edge_url}}/ai-settings-elevenlabs", "host": ["{{base_edge_url}}"], "path": ["ai-settings-elevenlabs"] } } },
+        { "name": "Test ElevenLabs Connection", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"test\"\n}" }, "url": { "raw": "{{base_edge_url}}/ai-settings-elevenlabs", "host": ["{{base_edge_url}}"], "path": ["ai-settings-elevenlabs"] } } }
+      ]
+    }
+  ]
+}

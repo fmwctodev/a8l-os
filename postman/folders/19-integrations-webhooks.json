@@ -1,0 +1,56 @@
+{
+  "name": "19 - Integrations & Webhooks",
+  "description": "Integration catalog, connections, outgoing webhooks, webhook deliveries, Google OAuth, and portal authentication.",
+  "item": [
+    {
+      "name": "Integration Catalog",
+      "item": [
+        { "name": "List All Integrations", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/integrations?organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["integrations"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } } },
+        { "name": "Get Integration by ID", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/integrations?id=eq.{{integration_id}}", "host": ["{{base_rest_url}}"], "path": ["integrations"], "query": [{ "key": "id", "value": "eq.{{integration_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "Integration Connections",
+      "item": [
+        { "name": "List Integration Connections", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/integration_connections?select=*,integration:integrations(id,name,slug,icon_url)&organization_id=eq.{{org_id}}&order=connected_at.desc", "host": ["{{base_rest_url}}"], "path": ["integration_connections"], "query": [{ "key": "select", "value": "*,integration:integrations(id,name,slug,icon_url)" }, { "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "connected_at.desc" }] } } },
+        { "name": "Connect Integration (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"integration_slug\": \"sendgrid\",\n  \"credentials\": {\n    \"api_key\": \"\"\n  }\n}" }, "url": { "raw": "{{base_edge_url}}/integrations-connect", "host": ["{{base_edge_url}}"], "path": ["integrations-connect"] } } },
+        { "name": "Disconnect Integration", "request": { "method": "DELETE", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/integration_connections?id=eq.{{connection_id}}", "host": ["{{base_rest_url}}"], "path": ["integration_connections"], "query": [{ "key": "id", "value": "eq.{{connection_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "Outgoing Webhooks",
+      "item": [
+        { "name": "List Outgoing Webhooks", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/outgoing_webhooks?organization_id=eq.{{org_id}}&order=created_at.desc", "host": ["{{base_rest_url}}"], "path": ["outgoing_webhooks"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }] } } },
+        { "name": "Create Outgoing Webhook", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"New Contact Webhook\",\n  \"url\": \"https://example.com/webhook\",\n  \"events\": [\"contact.created\", \"contact.updated\"],\n  \"enabled\": true,\n  \"secret\": \"webhook-secret-123\",\n  \"created_by\": \"{{user_id}}\"\n}" }, "url": { "raw": "{{base_rest_url}}/outgoing_webhooks", "host": ["{{base_rest_url}}"], "path": ["outgoing_webhooks"] } } },
+        { "name": "Update Outgoing Webhook", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"enabled\": false\n}" }, "url": { "raw": "{{base_rest_url}}/outgoing_webhooks?id=eq.{{webhook_id}}", "host": ["{{base_rest_url}}"], "path": ["outgoing_webhooks"], "query": [{ "key": "id", "value": "eq.{{webhook_id}}" }] } } },
+        { "name": "Delete Outgoing Webhook", "request": { "method": "DELETE", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/outgoing_webhooks?id=eq.{{webhook_id}}", "host": ["{{base_rest_url}}"], "path": ["outgoing_webhooks"], "query": [{ "key": "id", "value": "eq.{{webhook_id}}" }] } } },
+        { "name": "List Webhook Deliveries", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/webhook_deliveries?webhook_id=eq.{{webhook_id}}&order=created_at.desc&limit=50", "host": ["{{base_rest_url}}"], "path": ["webhook_deliveries"], "query": [{ "key": "webhook_id", "value": "eq.{{webhook_id}}" }, { "key": "order", "value": "created_at.desc" }, { "key": "limit", "value": "50" }] } } },
+        { "name": "Test Webhook (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"webhook_id\": \"{{webhook_id}}\",\n  \"event\": \"contact.created\",\n  \"payload\": {}\n}" }, "url": { "raw": "{{base_edge_url}}/integrations-webhooks", "host": ["{{base_edge_url}}"], "path": ["integrations-webhooks"] } } }
+      ]
+    },
+    {
+      "name": "Google OAuth",
+      "item": [
+        { "name": "Start Google OAuth (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"scopes\": [\"gmail\", \"calendar\", \"drive\"],\n  \"redirect_uri\": \"{{supabase_url}}/functions/v1/integrations-oauth-callback\"\n}" }, "url": { "raw": "{{base_edge_url}}/google-oauth-unified", "host": ["{{base_edge_url}}"], "path": ["google-oauth-unified"] } } },
+        { "name": "List Google OAuth Connections", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/google_oauth_master?user_id=eq.{{user_id}}", "host": ["{{base_rest_url}}"], "path": ["google_oauth_master"], "query": [{ "key": "user_id", "value": "eq.{{user_id}}" }] } } },
+        { "name": "Refresh Google Tokens (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{base_edge_url}}/google-token-refresh-cron", "host": ["{{base_edge_url}}"], "path": ["google-token-refresh-cron"] } } }
+      ]
+    },
+    {
+      "name": "Client Portal Auth (Edge Function)",
+      "item": [
+        { "name": "Request Portal Access Code", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"requestCode\",\n  \"email\": \"client@example.com\",\n  \"project_id\": \"{{project_id}}\"\n}" }, "url": { "raw": "{{base_edge_url}}/portal-auth", "host": ["{{base_edge_url}}"], "path": ["portal-auth"] } } },
+        { "name": "Verify Portal Code", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"verifyCode\",\n  \"email\": \"client@example.com\",\n  \"code\": \"123456\",\n  \"project_id\": \"{{project_id}}\"\n}" }, "url": { "raw": "{{base_edge_url}}/portal-auth", "host": ["{{base_edge_url}}"], "path": ["portal-auth"] } } },
+        { "name": "Validate Portal Session", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"validateSession\",\n  \"token\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/portal-auth", "host": ["{{base_edge_url}}"], "path": ["portal-auth"] } } }
+      ]
+    },
+    {
+      "name": "Secrets Management (Edge Function)",
+      "item": [
+        { "name": "List Secrets", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"list\"\n}" }, "url": { "raw": "{{base_edge_url}}/secrets-api", "host": ["{{base_edge_url}}"], "path": ["secrets-api"] } } },
+        { "name": "Create Secret", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"create\",\n  \"name\": \"MY_API_KEY\",\n  \"value\": \"sk-...\"\n}" }, "url": { "raw": "{{base_edge_url}}/secrets-api", "host": ["{{base_edge_url}}"], "path": ["secrets-api"] } } },
+        { "name": "Scan Secrets (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{base_edge_url}}/secrets-scanner", "host": ["{{base_edge_url}}"], "path": ["secrets-scanner"] } } }
+      ]
+    }
+  ]
+}

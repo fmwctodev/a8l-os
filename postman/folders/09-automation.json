@@ -1,0 +1,54 @@
+{
+  "name": "09 - Automation & Workflows",
+  "description": "Workflow management, enrollment, execution, condition evaluation, scheduled/webhook triggers, templates, and approvals.",
+  "item": [
+    {
+      "name": "Workflows",
+      "item": [
+        { "name": "List Workflows", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/workflows?select=*,created_by_user:users!workflows_created_by_fkey(id,name)&organization_id=eq.{{org_id}}&order=updated_at.desc", "host": ["{{base_rest_url}}"], "path": ["workflows"], "query": [{ "key": "select", "value": "*,created_by_user:users!workflows_created_by_fkey(id,name)" }, { "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "updated_at.desc" }] } } },
+        { "name": "Get Workflow by ID", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/workflows?id=eq.{{workflow_id}}", "host": ["{{base_rest_url}}"], "path": ["workflows"], "query": [{ "key": "id", "value": "eq.{{workflow_id}}" }] } } },
+        { "name": "Create Workflow", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"Welcome New Contacts\",\n  \"description\": \"Send welcome email when new contact is created\",\n  \"status\": \"draft\",\n  \"trigger_type\": \"contact_created\",\n  \"trigger_config\": {},\n  \"definition\": {\"nodes\": [], \"edges\": []},\n  \"created_by\": \"{{user_id}}\"\n}" }, "url": { "raw": "{{base_rest_url}}/workflows", "host": ["{{base_rest_url}}"], "path": ["workflows"] } } },
+        { "name": "Update Workflow", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Workflow Name\",\n  \"definition\": {\"nodes\": [], \"edges\": []}\n}" }, "url": { "raw": "{{base_rest_url}}/workflows?id=eq.{{workflow_id}}", "host": ["{{base_rest_url}}"], "path": ["workflows"], "query": [{ "key": "id", "value": "eq.{{workflow_id}}" }] } } },
+        { "name": "Publish Workflow", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"status\": \"active\",\n  \"published_at\": \"{{$isoTimestamp}}\"\n}" }, "url": { "raw": "{{base_rest_url}}/workflows?id=eq.{{workflow_id}}", "host": ["{{base_rest_url}}"], "path": ["workflows"], "query": [{ "key": "id", "value": "eq.{{workflow_id}}" }] } } },
+        { "name": "Delete Workflow", "request": { "method": "DELETE", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/workflows?id=eq.{{workflow_id}}", "host": ["{{base_rest_url}}"], "path": ["workflows"], "query": [{ "key": "id", "value": "eq.{{workflow_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "Workflow Enrollments",
+      "item": [
+        { "name": "List Enrollments", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Prefer", "value": "count=exact" }], "url": { "raw": "{{base_rest_url}}/workflow_enrollments?select=*,contact:contacts(id,first_name,last_name,email),workflow:workflows(id,name)&workflow_id=eq.{{workflow_id}}&order=enrolled_at.desc&limit=50", "host": ["{{base_rest_url}}"], "path": ["workflow_enrollments"], "query": [{ "key": "select", "value": "*,contact:contacts(id,first_name,last_name,email),workflow:workflows(id,name)" }, { "key": "workflow_id", "value": "eq.{{workflow_id}}" }, { "key": "order", "value": "enrolled_at.desc" }, { "key": "limit", "value": "50" }] } } },
+        { "name": "Get Enrollment by ID", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/workflow_enrollments?select=*,contact:contacts(*),workflow:workflows(*)&id=eq.{{enrollment_id}}", "host": ["{{base_rest_url}}"], "path": ["workflow_enrollments"], "query": [{ "key": "select", "value": "*,contact:contacts(*),workflow:workflows(*)" }, { "key": "id", "value": "eq.{{enrollment_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "Workflow Versions",
+      "item": [
+        { "name": "List Workflow Versions", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/workflow_version_snapshots?workflow_id=eq.{{workflow_id}}&order=version_number.desc", "host": ["{{base_rest_url}}"], "path": ["workflow_version_snapshots"], "query": [{ "key": "workflow_id", "value": "eq.{{workflow_id}}" }, { "key": "order", "value": "version_number.desc" }] } } }
+      ]
+    },
+    {
+      "name": "Workflow Engine (Edge Functions)",
+      "item": [
+        { "name": "Process Workflow", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"enrollment_id\": \"{{enrollment_id}}\"\n}" }, "url": { "raw": "{{base_edge_url}}/workflow-processor", "host": ["{{base_edge_url}}"], "path": ["workflow-processor"] } } },
+        { "name": "Evaluate Condition", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"condition\": {\"field\": \"contact.email\", \"operator\": \"contains\", \"value\": \"@gmail.com\"},\n  \"context\": {\"contact_id\": \"{{contact_id}}\"}\n}" }, "url": { "raw": "{{base_edge_url}}/evaluate-condition", "host": ["{{base_edge_url}}"], "path": ["evaluate-condition"] } } },
+        { "name": "Custom Trigger", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"trigger_key\": \"custom_event\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"payload\": {}\n}" }, "url": { "raw": "{{base_edge_url}}/automation-custom-trigger", "host": ["{{base_edge_url}}"], "path": ["automation-custom-trigger"] } } },
+        { "name": "Webhook Receiver", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"webhook_trigger_id\": \"\",\n  \"payload\": {}\n}" }, "url": { "raw": "{{base_edge_url}}/workflow-webhook-receiver", "host": ["{{base_edge_url}}"], "path": ["workflow-webhook-receiver"] } } },
+        { "name": "AI Action Executor", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"ai_run_id\": \"\",\n  \"enrollment_id\": \"{{enrollment_id}}\"\n}" }, "url": { "raw": "{{base_edge_url}}/workflow-ai-action-executor", "host": ["{{base_edge_url}}"], "path": ["workflow-ai-action-executor"] } } },
+        { "name": "Scheduled Processor", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{base_edge_url}}/workflow-scheduled-processor", "host": ["{{base_edge_url}}"], "path": ["workflow-scheduled-processor"] } } }
+      ]
+    },
+    {
+      "name": "Automation Templates",
+      "item": [
+        { "name": "List Templates", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/automation_templates?organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["automation_templates"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } } },
+        { "name": "Get Template by ID", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/automation_templates?id=eq.{{template_id}}", "host": ["{{base_rest_url}}"], "path": ["automation_templates"], "query": [{ "key": "id", "value": "eq.{{template_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "Workflow Approvals",
+      "item": [
+        { "name": "List Pending Approvals", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/workflow_approval_queue?status=eq.pending&order=created_at.asc", "host": ["{{base_rest_url}}"], "path": ["workflow_approval_queue"], "query": [{ "key": "status", "value": "eq.pending" }, { "key": "order", "value": "created_at.asc" }] } } }
+      ]
+    }
+  ]
+}

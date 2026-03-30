@@ -1,0 +1,81 @@
+{
+  "name": "20 - System & Utilities",
+  "description": "Notifications, user profile/preferences, custom values, Clara assistant (chat, voice, memory), meetings, and Google Calendar sync.",
+  "item": [
+    {
+      "name": "Notifications",
+      "item": [
+        { "name": "List Notifications", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/notifications?user_id=eq.{{user_id}}&order=created_at.desc&limit=50", "host": ["{{base_rest_url}}"], "path": ["notifications"], "query": [{ "key": "user_id", "value": "eq.{{user_id}}" }, { "key": "order", "value": "created_at.desc" }, { "key": "limit", "value": "50" }] } } },
+        { "name": "List Unread Notifications", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Prefer", "value": "count=exact" }], "url": { "raw": "{{base_rest_url}}/notifications?user_id=eq.{{user_id}}&read=eq.false&order=created_at.desc", "host": ["{{base_rest_url}}"], "path": ["notifications"], "query": [{ "key": "user_id", "value": "eq.{{user_id}}" }, { "key": "read", "value": "eq.false" }, { "key": "order", "value": "created_at.desc" }] } } },
+        { "name": "Mark Notification as Read", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"read\": true\n}" }, "url": { "raw": "{{base_rest_url}}/notifications?id=eq.{{notification_id}}", "host": ["{{base_rest_url}}"], "path": ["notifications"], "query": [{ "key": "id", "value": "eq.{{notification_id}}" }] } } },
+        { "name": "Mark All Notifications as Read", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"read\": true\n}" }, "url": { "raw": "{{base_rest_url}}/notifications?user_id=eq.{{user_id}}&read=eq.false", "host": ["{{base_rest_url}}"], "path": ["notifications"], "query": [{ "key": "user_id", "value": "eq.{{user_id}}" }, { "key": "read", "value": "eq.false" }] } } }
+      ]
+    },
+    {
+      "name": "User Profile & Preferences",
+      "item": [
+        { "name": "Get User Preferences", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/user_preferences?user_id=eq.{{user_id}}", "host": ["{{base_rest_url}}"], "path": ["user_preferences"], "query": [{ "key": "user_id", "value": "eq.{{user_id}}" }] } } },
+        { "name": "Update User Preferences", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"theme\": \"dark\",\n  \"timezone\": \"America/New_York\",\n  \"language\": \"en\"\n}" }, "url": { "raw": "{{base_rest_url}}/user_preferences?user_id=eq.{{user_id}}", "host": ["{{base_rest_url}}"], "path": ["user_preferences"], "query": [{ "key": "user_id", "value": "eq.{{user_id}}" }] } } },
+        { "name": "Get Notification Preferences", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/user_notification_preferences?user_id=eq.{{user_id}}", "host": ["{{base_rest_url}}"], "path": ["user_notification_preferences"], "query": [{ "key": "user_id", "value": "eq.{{user_id}}" }] } } },
+        { "name": "Update Notification Preferences", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"email_enabled\": true,\n  \"push_enabled\": false\n}" }, "url": { "raw": "{{base_rest_url}}/user_notification_preferences?user_id=eq.{{user_id}}", "host": ["{{base_rest_url}}"], "path": ["user_notification_preferences"], "query": [{ "key": "user_id", "value": "eq.{{user_id}}" }] } } },
+        { "name": "List Connected Accounts", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/user_connected_accounts?user_id=eq.{{user_id}}", "host": ["{{base_rest_url}}"], "path": ["user_connected_accounts"], "query": [{ "key": "user_id", "value": "eq.{{user_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "Custom Values",
+      "item": [
+        { "name": "List Custom Value Categories", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/custom_value_categories?organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["custom_value_categories"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } } },
+        { "name": "List Custom Values", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/custom_values?select=*,category:custom_value_categories(id,name)&organization_id=eq.{{org_id}}&order=key.asc", "host": ["{{base_rest_url}}"], "path": ["custom_values"], "query": [{ "key": "select", "value": "*,category:custom_value_categories(id,name)" }, { "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "key.asc" }] } } },
+        { "name": "Create Custom Value", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"key\": \"company_name\",\n  \"value\": \"Autom8ion Labs\",\n  \"category_id\": \"\"\n}" }, "url": { "raw": "{{base_rest_url}}/custom_values", "host": ["{{base_rest_url}}"], "path": ["custom_values"] } } },
+        { "name": "Update Custom Value", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"value\": \"Updated Value\"\n}" }, "url": { "raw": "{{base_rest_url}}/custom_values?id=eq.{{custom_value_id}}", "host": ["{{base_rest_url}}"], "path": ["custom_values"], "query": [{ "key": "id", "value": "eq.{{custom_value_id}}" }] } } },
+        { "name": "Delete Custom Value", "request": { "method": "DELETE", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/custom_values?id=eq.{{custom_value_id}}", "host": ["{{base_rest_url}}"], "path": ["custom_values"], "query": [{ "key": "id", "value": "eq.{{custom_value_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "Clara Assistant - Chat (Edge Function)",
+      "item": [
+        { "name": "Send Chat Message", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"message\": \"What are my upcoming appointments?\",\n  \"thread_id\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/assistant-chat", "host": ["{{base_edge_url}}"], "path": ["assistant-chat"] } } }
+      ]
+    },
+    {
+      "name": "Clara Assistant - Voice (Edge Functions)",
+      "item": [
+        { "name": "Voice Command", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"transcript\": \"Schedule a meeting for tomorrow at 2pm\"\n}" }, "url": { "raw": "{{base_edge_url}}/assistant-voice", "host": ["{{base_edge_url}}"], "path": ["assistant-voice"] } } },
+        { "name": "Text-to-Speech", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"text\": \"Your meeting has been scheduled.\",\n  \"voice_id\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/assistant-tts", "host": ["{{base_edge_url}}"], "path": ["assistant-tts"] } } },
+        { "name": "TTS Stream", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"text\": \"Streaming audio response.\",\n  \"voice_id\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/assistant-tts-stream", "host": ["{{base_edge_url}}"], "path": ["assistant-tts-stream"] } } },
+        { "name": "STT Wake Word Detection", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"audio_base64\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/assistant-stt-wake", "host": ["{{base_edge_url}}"], "path": ["assistant-stt-wake"] } } },
+        { "name": "STT Final Transcription", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"audio_base64\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/assistant-stt-final", "host": ["{{base_edge_url}}"], "path": ["assistant-stt-final"] } } }
+      ]
+    },
+    {
+      "name": "Clara Memory",
+      "item": [
+        { "name": "List Clara Memories", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/clara_memories?user_id=eq.{{user_id}}&order=created_at.desc&limit=50", "host": ["{{base_rest_url}}"], "path": ["clara_memories"], "query": [{ "key": "user_id", "value": "eq.{{user_id}}" }, { "key": "order", "value": "created_at.desc" }, { "key": "limit", "value": "50" }] } } },
+        { "name": "Memory Decay (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{base_edge_url}}/clara-memory-decay", "host": ["{{base_edge_url}}"], "path": ["clara-memory-decay"] } } }
+      ]
+    },
+    {
+      "name": "Assistant Threads & Messages",
+      "item": [
+        { "name": "List Assistant Threads", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/assistant_threads?user_id=eq.{{user_id}}&order=updated_at.desc", "host": ["{{base_rest_url}}"], "path": ["assistant_threads"], "query": [{ "key": "user_id", "value": "eq.{{user_id}}" }, { "key": "order", "value": "updated_at.desc" }] } } },
+        { "name": "List Thread Messages", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/assistant_messages?thread_id=eq.{{thread_id}}&order=created_at.asc", "host": ["{{base_rest_url}}"], "path": ["assistant_messages"], "query": [{ "key": "thread_id", "value": "eq.{{thread_id}}" }, { "key": "order", "value": "created_at.asc" }] } } }
+      ]
+    },
+    {
+      "name": "Meeting Transcriptions",
+      "item": [
+        { "name": "List Meeting Transcriptions", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/meeting_transcriptions?organization_id=eq.{{org_id}}&order=created_at.desc&limit=50", "host": ["{{base_rest_url}}"], "path": ["meeting_transcriptions"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }, { "key": "limit", "value": "50" }] } } },
+        { "name": "Process Meeting (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"meeting_id\": \"\"\n}" }, "url": { "raw": "{{base_edge_url}}/assistant-meeting-processor", "host": ["{{base_edge_url}}"], "path": ["assistant-meeting-processor"] } } }
+      ]
+    },
+    {
+      "name": "Google Calendar Sync (Edge Functions)",
+      "item": [
+        { "name": "Start Google Calendar OAuth", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{base_edge_url}}/google-calendar-oauth", "host": ["{{base_edge_url}}"], "path": ["google-calendar-oauth"] } } },
+        { "name": "Sync Google Calendar", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{base_edge_url}}/google-calendar-sync", "host": ["{{base_edge_url}}"], "path": ["google-calendar-sync"] } } },
+        { "name": "Google Calendar Sync Runner", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{base_edge_url}}/google-calendar-sync-runner", "host": ["{{base_edge_url}}"], "path": ["google-calendar-sync-runner"] } } },
+        { "name": "List Google Calendar Connections", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/google_calendar_connections?user_id=eq.{{user_id}}", "host": ["{{base_rest_url}}"], "path": ["google_calendar_connections"], "query": [{ "key": "user_id", "value": "eq.{{user_id}}" }] } } }
+      ]
+    }
+  ]
+}

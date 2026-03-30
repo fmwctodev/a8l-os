@@ -1,0 +1,167 @@
+{
+  "name": "01 - Authentication",
+  "description": "Supabase Auth endpoints for sign-in, sign-up, session management, and token refresh.",
+  "item": [
+    {
+      "name": "Sign In with Email/Password",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "apikey", "value": "{{supabase_anon_key}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@autom8ion.com\",\n  \"password\": \"your-password-here\"\n}"
+        },
+        "url": {
+          "raw": "{{supabase_url}}/auth/v1/token?grant_type=password",
+          "host": ["{{supabase_url}}"],
+          "path": ["auth", "v1", "token"],
+          "query": [{ "key": "grant_type", "value": "password" }]
+        },
+        "description": "Authenticate with email and password. Returns access_token and refresh_token."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "  const json = pm.response.json();",
+              "  pm.environment.set('bearer_token', json.access_token);",
+              "  pm.environment.set('user_id', json.user.id);",
+              "  pm.environment.set('refresh_token', json.refresh_token);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sign Up",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "apikey", "value": "{{supabase_anon_key}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"newuser@example.com\",\n  \"password\": \"securepassword123\"\n}"
+        },
+        "url": {
+          "raw": "{{supabase_url}}/auth/v1/signup",
+          "host": ["{{supabase_url}}"],
+          "path": ["auth", "v1", "signup"]
+        }
+      }
+    },
+    {
+      "name": "Refresh Token",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "apikey", "value": "{{supabase_anon_key}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+        },
+        "url": {
+          "raw": "{{supabase_url}}/auth/v1/token?grant_type=refresh_token",
+          "host": ["{{supabase_url}}"],
+          "path": ["auth", "v1", "token"],
+          "query": [{ "key": "grant_type", "value": "refresh_token" }]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "  const json = pm.response.json();",
+              "  pm.environment.set('bearer_token', json.access_token);",
+              "  pm.environment.set('refresh_token', json.refresh_token);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Current User",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "apikey", "value": "{{supabase_anon_key}}" },
+          { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+        ],
+        "url": {
+          "raw": "{{supabase_url}}/auth/v1/user",
+          "host": ["{{supabase_url}}"],
+          "path": ["auth", "v1", "user"]
+        }
+      }
+    },
+    {
+      "name": "Sign Out",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "apikey", "value": "{{supabase_anon_key}}" },
+          { "key": "Authorization", "value": "Bearer {{bearer_token}}" }
+        ],
+        "url": {
+          "raw": "{{supabase_url}}/auth/v1/logout",
+          "host": ["{{supabase_url}}"],
+          "path": ["auth", "v1", "logout"]
+        }
+      }
+    },
+    {
+      "name": "Bootstrap Admin (Edge Function)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+          { "key": "apikey", "value": "{{supabase_anon_key}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": {
+          "raw": "{{base_edge_url}}/bootstrap-admin",
+          "host": ["{{base_edge_url}}"],
+          "path": ["bootstrap-admin"]
+        },
+        "description": "Bootstraps the first admin user for a new organization."
+      }
+    },
+    {
+      "name": "Create User (Edge Function)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{bearer_token}}" },
+          { "key": "apikey", "value": "{{supabase_anon_key}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"newstaff@company.com\",\n  \"password\": \"tempPass123!\",\n  \"name\": \"New Staff Member\",\n  \"role_id\": \"\",\n  \"department_id\": \"\",\n  \"phone\": \"\",\n  \"timezone\": \"America/New_York\"\n}"
+        },
+        "url": {
+          "raw": "{{base_edge_url}}/create-user",
+          "host": ["{{base_edge_url}}"],
+          "path": ["create-user"]
+        },
+        "description": "Creates a new user in the system with Supabase Auth account."
+      }
+    }
+  ]
+}

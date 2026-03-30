@@ -1,0 +1,73 @@
+{
+  "name": "10 - AI Agents",
+  "description": "AI agent management, knowledge collections, prompt templates, guardrails, AI reports, LLM models, and usage logs.",
+  "item": [
+    {
+      "name": "AI Agents",
+      "item": [
+        { "name": "List AI Agents", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/ai_agents?organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["ai_agents"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } } },
+        { "name": "Get AI Agent by ID", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/ai_agents?id=eq.{{agent_id}}", "host": ["{{base_rest_url}}"], "path": ["ai_agents"], "query": [{ "key": "id", "value": "eq.{{agent_id}}" }] } } },
+        { "name": "Create AI Agent", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"Sales Assistant\",\n  \"description\": \"AI agent for handling sales inquiries\",\n  \"system_prompt\": \"You are a helpful sales assistant.\",\n  \"model_id\": \"\",\n  \"enabled\": true,\n  \"agent_type\": \"conversational\",\n  \"created_by\": \"{{user_id}}\"\n}" }, "url": { "raw": "{{base_rest_url}}/ai_agents", "host": ["{{base_rest_url}}"], "path": ["ai_agents"] } } },
+        { "name": "Update AI Agent", "request": { "method": "PATCH", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Updated Agent Name\",\n  \"system_prompt\": \"Updated system prompt.\"\n}" }, "url": { "raw": "{{base_rest_url}}/ai_agents?id=eq.{{agent_id}}", "host": ["{{base_rest_url}}"], "path": ["ai_agents"], "query": [{ "key": "id", "value": "eq.{{agent_id}}" }] } } },
+        { "name": "Delete AI Agent", "request": { "method": "DELETE", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/ai_agents?id=eq.{{agent_id}}", "host": ["{{base_rest_url}}"], "path": ["ai_agents"], "query": [{ "key": "id", "value": "eq.{{agent_id}}" }] } } }
+      ]
+    },
+    {
+      "name": "AI Agent Executor (Edge Function)",
+      "item": [
+        { "name": "Execute AI Agent", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"agent_id\": \"{{agent_id}}\",\n  \"contact_id\": \"{{contact_id}}\",\n  \"conversation_id\": \"{{conversation_id}}\",\n  \"message\": \"Help me respond to this customer inquiry\"\n}" }, "url": { "raw": "{{base_edge_url}}/ai-agent-executor", "host": ["{{base_edge_url}}"], "path": ["ai-agent-executor"] } } }
+      ]
+    },
+    {
+      "name": "Knowledge Collections",
+      "item": [
+        { "name": "List Knowledge Collections", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/knowledge_collections?organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["knowledge_collections"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } } },
+        { "name": "Create Knowledge Collection", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"Product FAQ\",\n  \"description\": \"Common product questions and answers\",\n  \"source_type\": \"faq\",\n  \"status\": \"active\"\n}" }, "url": { "raw": "{{base_rest_url}}/knowledge_collections", "host": ["{{base_rest_url}}"], "path": ["knowledge_collections"] } } },
+        { "name": "Embed Knowledge (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"collection_id\": \"\",\n  \"content\": \"What are your pricing plans?\",\n  \"metadata\": {}\n}" }, "url": { "raw": "{{base_edge_url}}/ai-knowledge-embeddings", "host": ["{{base_edge_url}}"], "path": ["ai-knowledge-embeddings"] } } }
+      ]
+    },
+    {
+      "name": "Prompt Templates",
+      "item": [
+        { "name": "List Prompt Templates", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/prompt_templates?organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["prompt_templates"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } } },
+        { "name": "Create Prompt Template", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"Email Reply Template\",\n  \"content\": \"Compose a professional reply to: {{message}}\",\n  \"category\": \"communication\",\n  \"status\": \"active\"\n}" }, "url": { "raw": "{{base_rest_url}}/prompt_templates", "host": ["{{base_rest_url}}"], "path": ["prompt_templates"] } } }
+      ]
+    },
+    {
+      "name": "AI Guardrails",
+      "item": [
+        { "name": "List Active Guardrails", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/ai_guardrails?organization_id=eq.{{org_id}}&enabled=eq.true&order=priority.asc", "host": ["{{base_rest_url}}"], "path": ["ai_guardrails"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "enabled", "value": "eq.true" }, { "key": "order", "value": "priority.asc" }] } } },
+        { "name": "Create Guardrail", "request": { "method": "POST", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "Content-Type", "value": "application/json" }, { "key": "Prefer", "value": "return=representation" }], "body": { "mode": "raw", "raw": "{\n  \"organization_id\": \"{{org_id}}\",\n  \"name\": \"No competitor mentions\",\n  \"rule_type\": \"content_filter\",\n  \"config\": {\"blocked_terms\": [\"competitor_name\"]},\n  \"enabled\": true,\n  \"priority\": 1\n}" }, "url": { "raw": "{{base_rest_url}}/ai_guardrails", "host": ["{{base_rest_url}}"], "path": ["ai_guardrails"] } } }
+      ]
+    },
+    {
+      "name": "LLM Models",
+      "item": [
+        { "name": "List LLM Models", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/llm_models?organization_id=eq.{{org_id}}&order=name.asc", "host": ["{{base_rest_url}}"], "path": ["llm_models"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "name.asc" }] } } },
+        { "name": "List LLM Model Catalog", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/llm_model_catalog?enabled=eq.true&order=display_name.asc", "host": ["{{base_rest_url}}"], "path": ["llm_model_catalog"], "query": [{ "key": "enabled", "value": "eq.true" }, { "key": "order", "value": "display_name.asc" }] } } },
+        { "name": "Fetch Provider Models (Edge Function)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"provider\": \"openai\"\n}" }, "url": { "raw": "{{base_edge_url}}/fetch-provider-models", "host": ["{{base_edge_url}}"], "path": ["fetch-provider-models"] } } }
+      ]
+    },
+    {
+      "name": "AI Reports (Edge Functions)",
+      "item": [
+        { "name": "Generate AI Report", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"query\": \"Show me a summary of all opportunities closed this month\",\n  \"org_id\": \"{{org_id}}\"\n}" }, "url": { "raw": "{{base_edge_url}}/ai-report-generate", "host": ["{{base_edge_url}}"], "path": ["ai-report-generate"] } } },
+        { "name": "Query AI Report", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"report_id\": \"{{report_id}}\",\n  \"question\": \"What is the average deal size?\"\n}" }, "url": { "raw": "{{base_edge_url}}/ai-report-query", "host": ["{{base_edge_url}}"], "path": ["ai-report-query"] } } },
+        { "name": "Cleanup AI Reports", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{}" }, "url": { "raw": "{{base_edge_url}}/ai-report-cleanup", "host": ["{{base_edge_url}}"], "path": ["ai-report-cleanup"] } } }
+      ]
+    },
+    {
+      "name": "AI Usage Logs",
+      "item": [
+        { "name": "List AI Usage Logs", "request": { "method": "GET", "header": [{ "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Authorization", "value": "Bearer {{bearer_token}}" }], "url": { "raw": "{{base_rest_url}}/ai_usage_logs?organization_id=eq.{{org_id}}&order=created_at.desc&limit=50", "host": ["{{base_rest_url}}"], "path": ["ai_usage_logs"], "query": [{ "key": "organization_id", "value": "eq.{{org_id}}" }, { "key": "order", "value": "created_at.desc" }, { "key": "limit", "value": "50" }] } } }
+      ]
+    },
+    {
+      "name": "AI Settings (Edge Functions)",
+      "item": [
+        { "name": "Get AI Providers", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"list\"\n}" }, "url": { "raw": "{{base_edge_url}}/ai-settings-providers", "host": ["{{base_edge_url}}"], "path": ["ai-settings-providers"] } } },
+        { "name": "ElevenLabs Settings", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"getConnection\"\n}" }, "url": { "raw": "{{base_edge_url}}/ai-settings-elevenlabs", "host": ["{{base_edge_url}}"], "path": ["ai-settings-elevenlabs"] } } }
+      ]
+    }
+  ]
+}
