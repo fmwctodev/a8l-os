@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermission } from '../../hooks/usePermission';
+import { useSidebar } from '../../contexts/SidebarContext';
 import type { ProjectPipeline, ProjectBoardData, ProjectFilters, ProjectStats, ProjectStage } from '../../types';
 import { getProjectPipelines } from '../../services/projectPipelines';
 import { getBoardData, getProjectStats, moveProjectToStage } from '../../services/projects';
@@ -25,6 +26,7 @@ export function Projects() {
   const { user } = useAuth();
   const canCreate = usePermission('projects.create');
   const canMoveStage = usePermission('projects.move_stage');
+  const { isMobile } = useSidebar();
 
   const [pipelines, setPipelines] = useState<ProjectPipeline[]>([]);
   const [selectedPipelineId, setSelectedPipelineId] = useState<string>('');
@@ -157,13 +159,13 @@ export function Projects() {
 
   return (
     <div className="h-full min-w-0 flex flex-col">
-      <div className="flex-none px-6 py-4 space-y-3">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+      <div className="flex-none px-4 sm:px-6 py-4 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
             <select
               value={selectedPipelineId}
               onChange={(e) => setSelectedPipelineId(e.target.value)}
-              className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 w-full sm:w-auto"
             >
               {pipelines.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
@@ -175,13 +177,13 @@ export function Projects() {
               onChange={(e) => setSearchText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && loadBoard()}
               placeholder="Search projects..."
-              className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm w-56 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm w-full sm:w-56 focus:outline-none focus:ring-2 focus:ring-cyan-500"
             />
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors touch-manipulation ${
                 showFilters
                   ? 'bg-cyan-600 text-white'
                   : 'bg-slate-800 text-slate-300 border border-slate-600 hover:bg-slate-700'
@@ -193,17 +195,18 @@ export function Projects() {
             {canCreate && (
               <button
                 onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 text-sm"
+                className="flex items-center gap-2 px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 text-sm touch-manipulation"
               >
                 <Plus className="w-4 h-4" />
-                New Project
+                <span className="hidden sm:inline">New Project</span>
+                <span className="sm:hidden">New</span>
               </button>
             )}
           </div>
         </div>
 
         {stats && (
-          <div className="grid grid-cols-6 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-3">
             <StatPill icon={Activity} label="Total" value={stats.totalProjects} color="text-white" />
             <StatPill icon={CheckCircle2} label="Active" value={stats.activeProjects} color="text-cyan-400" />
             <StatPill icon={CheckCircle2} label="Completed" value={stats.completedProjects} color="text-emerald-400" />
@@ -218,61 +221,98 @@ export function Projects() {
         )}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-x-auto px-6 pb-6">
-        <div className="flex gap-4 h-full min-w-max">
+      {isMobile ? (
+        <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-4">
           {boardData?.stages.map((stage) => {
-            const stageTotal = stage.projects.reduce((s, p) => s + Number(p.budget_amount || 0), 0);
+            if (stage.projects.length === 0) return null;
             return (
-              <div
-                key={stage.id}
-                className={`w-80 flex-shrink-0 flex flex-col rounded-xl transition-all ${
-                  dragOverStageId === stage.id ? 'ring-2 ring-cyan-400 bg-cyan-500/5' : ''
-                }`}
-                onDragOver={(e) => handleDragOver(e, stage.id)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, stage.id)}
-              >
-                <div className="flex items-center justify-between px-3 py-2.5 mb-2">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: stage.color || '#64748b' }}
-                    />
-                    <h3 className="text-sm font-medium text-white">{stage.name}</h3>
-                    <span className="text-xs text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">
-                      {stage.projects.length}
-                    </span>
-                  </div>
-                  {stageTotal > 0 && (
-                    <span className="text-xs text-slate-500">${stageTotal.toLocaleString()}</span>
-                  )}
+              <div key={stage.id}>
+                <div className="flex items-center gap-2 mb-2">
+                  <div
+                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: stage.color || '#64748b' }}
+                  />
+                  <h3 className="text-sm font-semibold text-white">{stage.name}</h3>
+                  <span className="text-xs text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">
+                    {stage.projects.length}
+                  </span>
                 </div>
-
-                <div className="flex-1 overflow-y-auto space-y-2 px-1">
+                <div className="space-y-2">
                   {stage.projects.map((project) => (
-                    <div
+                    <ProjectCard
                       key={project.id}
-                      draggable={canMoveStage && project.status === 'active'}
-                      onDragStart={(e) => handleDragStart(e, project.id)}
-                    >
-                      <ProjectCard
-                        project={project}
-                        stage={stage}
-                        isDragging={draggingProjectId === project.id}
-                      />
-                    </div>
+                      project={project}
+                      stage={stage}
+                      isDragging={false}
+                    />
                   ))}
-                  {stage.projects.length === 0 && (
-                    <div className="py-8 text-center">
-                      <p className="text-xs text-slate-600">No projects</p>
-                    </div>
-                  )}
                 </div>
               </div>
             );
           })}
+          {boardData?.stages.every((s) => s.projects.length === 0) && (
+            <div className="py-16 text-center">
+              <p className="text-slate-500 text-sm">No projects found</p>
+            </div>
+          )}
         </div>
-      </div>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-x-auto px-6 pb-6">
+          <div className="flex gap-4 h-full min-w-max">
+            {boardData?.stages.map((stage) => {
+              const stageTotal = stage.projects.reduce((s, p) => s + Number(p.budget_amount || 0), 0);
+              return (
+                <div
+                  key={stage.id}
+                  className={`w-80 flex-shrink-0 flex flex-col rounded-xl transition-all ${
+                    dragOverStageId === stage.id ? 'ring-2 ring-cyan-400 bg-cyan-500/5' : ''
+                  }`}
+                  onDragOver={(e) => handleDragOver(e, stage.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, stage.id)}
+                >
+                  <div className="flex items-center justify-between px-3 py-2.5 mb-2">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: stage.color || '#64748b' }}
+                      />
+                      <h3 className="text-sm font-medium text-white">{stage.name}</h3>
+                      <span className="text-xs text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded">
+                        {stage.projects.length}
+                      </span>
+                    </div>
+                    {stageTotal > 0 && (
+                      <span className="text-xs text-slate-500">${stageTotal.toLocaleString()}</span>
+                    )}
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto space-y-2 px-1">
+                    {stage.projects.map((project) => (
+                      <div
+                        key={project.id}
+                        draggable={canMoveStage && project.status === 'active'}
+                        onDragStart={(e) => handleDragStart(e, project.id)}
+                      >
+                        <ProjectCard
+                          project={project}
+                          stage={stage}
+                          isDragging={draggingProjectId === project.id}
+                        />
+                      </div>
+                    ))}
+                    {stage.projects.length === 0 && (
+                      <div className="py-8 text-center">
+                        <p className="text-xs text-slate-600">No projects</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {showCreateModal && (
         <CreateProjectModal

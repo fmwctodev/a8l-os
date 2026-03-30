@@ -133,25 +133,25 @@ export function Dashboard() {
   const isLoading = loading.stats || analyticsLoading;
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-      <div className="flex items-start justify-between">
+    <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-white">
+          <h1 className="text-xl sm:text-2xl font-semibold text-white">
             {getGreeting()}, {user?.name?.split(' ')[0]}
           </h1>
-          <p className="text-slate-400 mt-1">Here's what's happening today.</p>
+          <p className="text-slate-400 mt-1 text-sm">Here's what's happening today.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {isSuperAdmin && (
             <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg p-1">
-              <button className="px-3 py-1.5 text-sm text-white bg-slate-700 rounded">
-                User Dashboard
+              <button className="px-3 py-1.5 text-sm text-white bg-slate-700 rounded touch-manipulation">
+                User
               </button>
               <button
                 onClick={() => setSearchParams({ mode: 'system' })}
-                className="px-3 py-1.5 text-sm text-slate-400 hover:text-white transition-colors rounded"
+                className="px-3 py-1.5 text-sm text-slate-400 hover:text-white transition-colors rounded touch-manipulation"
               >
-                System Dashboard
+                System
               </button>
             </div>
           )}
@@ -165,10 +165,10 @@ export function Dashboard() {
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="flex items-center gap-2 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white hover:bg-slate-700 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white hover:bg-slate-700 transition-colors disabled:opacity-50 touch-manipulation"
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
       </div>

@@ -478,7 +478,9 @@ export function Contacts() {
                 {visibleColumns.map((col) => (
                   <th
                     key={col.key}
-                    className="text-left px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider"
+                    className={`text-left px-4 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider ${
+                      ['tags', 'owner', 'lastActivity', 'createdAt'].includes(col.key) ? 'hidden md:table-cell' : ''
+                    }`}
                   >
                     {col.label}
                   </th>
@@ -506,7 +508,7 @@ export function Contacts() {
                   </td>
 
                   {visibleColumns.map((col) => (
-                    <td key={col.key} className="px-4 py-3">
+                    <td key={col.key} className={`px-4 py-3 ${['tags', 'owner', 'lastActivity', 'createdAt'].includes(col.key) ? 'hidden md:table-cell' : ''}`}>
                       {col.key === 'name' && (
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center flex-shrink-0">

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSidebar } from '../../contexts/SidebarContext';
 import { ConversationList } from '../../components/conversations/ConversationList';
 import { MessageThread } from '../../components/conversations/MessageThread';
 import { ContactPanel } from '../../components/conversations/ContactPanel';
@@ -11,7 +12,7 @@ import { PendingDraftsSection } from '../../components/conversations/PendingDraf
 import { ConversationErrorBoundary } from '../../components/ConversationErrorBoundary';
 import { getConversations, getConversationById, markConversationAsRead, findOrCreateConversation } from '../../services/conversations';
 import type { Conversation, ConversationFilters as FilterType } from '../../types';
-import { MessageSquare, Filter, Users, Inbox, Plus } from 'lucide-react';
+import { MessageSquare, Filter, Users, Inbox, Plus, ArrowLeft } from 'lucide-react';
 
 type ConversationTabType = 'inbox' | 'team-messaging';
 
@@ -20,6 +21,7 @@ export function Conversations() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
+  const { isMobile } = useSidebar();
 
   const tabParam = searchParams.get('tab') as ConversationTabType | null;
   const [activeTab, setActiveTab] = useState<ConversationTabType>(tabParam === 'team-messaging' ? 'team-messaging' : 'inbox');
@@ -35,6 +37,8 @@ export function Conversations() {
   const [showContactPanel, setShowContactPanel] = useState(true);
   const [showNewConversationModal, setShowNewConversationModal] = useState(false);
   const [creatingConversation, setCreatingConversation] = useState(false);
+
+  const mobileShowThread = isMobile && !!conversationId;
 
   const handleTabChange = (tab: ConversationTabType) => {
     setActiveTab(tab);
@@ -88,6 +92,10 @@ export function Conversations() {
     navigate(`/conversations/${conv.id}`);
   };
 
+  const handleMobileBack = () => {
+    navigate('/conversations');
+  };
+
   const handleFilterChange = (newFilters: FilterType) => {
     setFilters(newFilters);
     setPage(1);
@@ -132,31 +140,167 @@ export function Conversations() {
     }
   };
 
+  const listPanel = (
+    <div className={`${isMobile ? 'flex-1' : 'w-80'} border-r border-slate-700 flex flex-col bg-slate-800 min-h-0 ${isMobile && mobileShowThread ? 'hidden' : 'flex'}`}>
+      <div className="p-4 border-b border-slate-700">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-white">Conversations</h2>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowNewConversationModal(true)}
+              className="p-2 rounded-lg hover:bg-cyan-500/20 text-cyan-400 transition-colors touch-manipulation"
+              title="New conversation"
+            >
+              <Plus size={18} />
+            </button>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`p-2 rounded-lg transition-colors touch-manipulation ${
+                showFilters || activeFilterCount > 0
+                  ? 'bg-cyan-500/20 text-cyan-400'
+                  : 'hover:bg-slate-700 text-slate-400'
+              }`}
+            >
+              <Filter size={18} />
+              {activeFilterCount > 0 && (
+                <span className="ml-1 text-xs font-medium">{activeFilterCount}</span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex gap-1">
+          <button
+            onClick={() => handleQuickFilter('all')}
+            className={`flex-1 px-3 py-1.5 text-sm rounded-lg transition-colors touch-manipulation ${
+              Object.keys(filters).length === 0
+                ? 'bg-slate-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => handleQuickFilter('unread')}
+            className={`flex-1 px-3 py-1.5 text-sm rounded-lg transition-colors touch-manipulation ${
+              filters.unreadOnly
+                ? 'bg-slate-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            Unread
+          </button>
+          <button
+            onClick={() => handleQuickFilter('mine')}
+            className={`flex-1 px-3 py-1.5 text-sm rounded-lg transition-colors touch-manipulation ${
+              filters.assignedUserId === user?.id
+                ? 'bg-slate-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            Mine
+          </button>
+        </div>
+      </div>
+
+      <PendingDraftsSection
+        selectedConversationId={conversationId}
+        onSelectConversation={(id) => navigate(`/conversations/${id}`)}
+      />
+
+      {showFilters && (
+        <ConversationFilters
+          filters={filters}
+          onChange={handleFilterChange}
+          onClose={() => setShowFilters(false)}
+        />
+      )}
+
+      <ConversationList
+        conversations={conversations}
+        selectedId={conversationId}
+        loading={loading}
+        onSelect={handleSelectConversation}
+        totalCount={totalCount}
+        page={page}
+        onPageChange={setPage}
+      />
+    </div>
+  );
+
+  const threadPanel = (
+    <ConversationErrorBoundary
+      key={`thread-${selectedConversation?.id}`}
+      onRetry={loadConversations}
+    >
+      <div className={`flex-1 flex flex-col bg-slate-900 min-h-0 ${isMobile && !mobileShowThread ? 'hidden' : 'flex'}`}>
+        {isMobile && mobileShowThread && (
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700 bg-slate-800 flex-shrink-0">
+            <button
+              onClick={handleMobileBack}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition-colors touch-manipulation"
+              aria-label="Back to conversations"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <span className="text-sm font-medium text-white truncate">
+              {selectedConversation?.contact?.name || 'Conversation'}
+            </span>
+          </div>
+        )}
+        {selectedConversation ? (
+          <MessageThread
+            conversation={selectedConversation}
+            onConversationUpdate={loadConversations}
+            onToggleContactPanel={() => setShowContactPanel(!showContactPanel)}
+            showContactPanel={showContactPanel}
+          />
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
+                <MessageSquare className="w-8 h-8 text-slate-500" />
+              </div>
+              <h3 className="text-lg font-medium text-white mb-1">
+                Select a conversation
+              </h3>
+              <p className="text-slate-400">
+                Choose a conversation from the list to view messages
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </ConversationErrorBoundary>
+  );
+
   return (
-    <div className="-m-6 h-[calc(100vh-64px)] flex flex-col bg-slate-900 relative isolate">
-      <div className="border-b border-slate-700 bg-slate-800 px-4">
+    <div className="-m-3 sm:-m-4 md:-m-6 h-[calc(100vh-64px)] flex flex-col bg-slate-900 relative isolate">
+      <div className="border-b border-slate-700 bg-slate-800 px-4 flex-shrink-0">
         <div className="flex items-center gap-1">
           <button
             onClick={() => handleTabChange('inbox')}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors touch-manipulation ${
               activeTab === 'inbox'
                 ? 'border-cyan-500 text-cyan-400'
                 : 'border-transparent text-slate-400 hover:text-slate-300'
             }`}
           >
             <Inbox size={18} />
-            Customer Inbox
+            <span className="hidden sm:inline">Customer Inbox</span>
+            <span className="sm:hidden">Inbox</span>
           </button>
           <button
             onClick={() => handleTabChange('team-messaging')}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors touch-manipulation ${
               activeTab === 'team-messaging'
                 ? 'border-cyan-500 text-cyan-400'
                 : 'border-transparent text-slate-400 hover:text-slate-300'
             }`}
           >
             <Users size={18} />
-            Team Messaging
+            <span className="hidden sm:inline">Team Messaging</span>
+            <span className="sm:hidden">Team</span>
           </button>
         </div>
       </div>
@@ -165,123 +309,12 @@ export function Conversations() {
         <TeamMessagingTab />
       ) : (
         <div className="flex-1 flex min-h-0">
-          <div className="w-80 border-r border-slate-700 flex flex-col bg-slate-800 min-h-0">
-            <div className="p-4 border-b border-slate-700">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-semibold text-white">Conversations</h2>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowNewConversationModal(true)}
-                    className="p-2 rounded-lg hover:bg-cyan-500/20 text-cyan-400 transition-colors"
-                    title="New conversation"
-                  >
-                    <Plus size={18} />
-                  </button>
-                  <button
-                    onClick={() => setShowFilters(!showFilters)}
-                    className={`p-2 rounded-lg transition-colors ${
-                      showFilters || activeFilterCount > 0
-                        ? 'bg-cyan-500/20 text-cyan-400'
-                        : 'hover:bg-slate-700 text-slate-400'
-                    }`}
-                  >
-                    <Filter size={18} />
-                    {activeFilterCount > 0 && (
-                      <span className="ml-1 text-xs font-medium">{activeFilterCount}</span>
-                    )}
-                  </button>
-                </div>
-              </div>
+          {listPanel}
 
-              <div className="flex gap-1">
-                <button
-                  onClick={() => handleQuickFilter('all')}
-                  className={`flex-1 px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                    Object.keys(filters).length === 0
-                      ? 'bg-slate-600 text-white'
-                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-                >
-                  All
-                </button>
-                <button
-                  onClick={() => handleQuickFilter('unread')}
-                  className={`flex-1 px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                    filters.unreadOnly
-                      ? 'bg-slate-600 text-white'
-                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-                >
-                  Unread
-                </button>
-                <button
-                  onClick={() => handleQuickFilter('mine')}
-                  className={`flex-1 px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                    filters.assignedUserId === user?.id
-                      ? 'bg-slate-600 text-white'
-                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-                >
-                  Mine
-                </button>
-              </div>
-            </div>
+          {!isMobile && threadPanel}
+          {isMobile && threadPanel}
 
-            <PendingDraftsSection
-              selectedConversationId={conversationId}
-              onSelectConversation={(id) => navigate(`/conversations/${id}`)}
-            />
-
-            {showFilters && (
-              <ConversationFilters
-                filters={filters}
-                onChange={handleFilterChange}
-                onClose={() => setShowFilters(false)}
-              />
-            )}
-
-            <ConversationList
-              conversations={conversations}
-              selectedId={conversationId}
-              loading={loading}
-              onSelect={handleSelectConversation}
-              totalCount={totalCount}
-              page={page}
-              onPageChange={setPage}
-            />
-          </div>
-
-          <ConversationErrorBoundary
-            key={`thread-${selectedConversation?.id}`}
-            onRetry={loadConversations}
-          >
-            <div className="flex-1 flex flex-col bg-slate-900 min-h-0">
-              {selectedConversation ? (
-                <MessageThread
-                  conversation={selectedConversation}
-                  onConversationUpdate={loadConversations}
-                  onToggleContactPanel={() => setShowContactPanel(!showContactPanel)}
-                  showContactPanel={showContactPanel}
-                />
-              ) : (
-                <div className="flex-1 flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
-                      <MessageSquare className="w-8 h-8 text-slate-500" />
-                    </div>
-                    <h3 className="text-lg font-medium text-white mb-1">
-                      Select a conversation
-                    </h3>
-                    <p className="text-slate-400">
-                      Choose a conversation from the list to view messages
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </ConversationErrorBoundary>
-
-          {selectedConversation && showContactPanel && (
+          {selectedConversation && showContactPanel && !isMobile && (
             <ConversationErrorBoundary
               key={`contact-${selectedConversation?.id}`}
             >

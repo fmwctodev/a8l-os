@@ -12,10 +12,12 @@ function NavItemComponent({
   item,
   badge,
   isCompact,
+  onNavigate,
 }: {
   item: NavItem;
   badge?: number;
   isCompact: boolean;
+  onNavigate?: () => void;
 }) {
   const location = useLocation();
   const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
@@ -24,7 +26,8 @@ function NavItemComponent({
   const linkContent = (
     <NavLink
       to={item.path}
-      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+      onClick={onNavigate}
+      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 touch-manipulation ${
         isActive
           ? 'bg-slate-800 text-white border-l-2 border-cyan-500 -ml-[2px] pl-[14px]'
           : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
@@ -64,10 +67,12 @@ function NavSectionComponent({
   section,
   isCompact,
   unreadCount,
+  onNavigate,
 }: {
   section: NavSection;
   isCompact: boolean;
   unreadCount: number;
+  onNavigate?: () => void;
 }) {
   const { hasPermission, isFeatureEnabled } = useAuth();
   const { isGroupCollapsed, toggleGroup } = useSidebar();
@@ -113,6 +118,7 @@ function NavSectionComponent({
               item={item}
               badge={item.path === '/conversations' ? unreadCount : undefined}
               isCompact={isCompact}
+              onNavigate={onNavigate}
             />
           ))}
         </div>
@@ -125,6 +131,7 @@ function NavSectionComponent({
               item={item}
               badge={item.path === '/conversations' ? unreadCount : undefined}
               isCompact={isCompact}
+              onNavigate={onNavigate}
             />
           ))}
         </div>
@@ -135,38 +142,45 @@ function NavSectionComponent({
 
 export function Sidebar() {
   const location = useLocation();
-  const { isExpanded, toggleSidebar } = useSidebar();
+  const { isExpanded, toggleSidebar, isMobile, isMobileOpen, closeMobileSidebar } = useSidebar();
   const { unreadCount } = useUnreadCount();
   const isHomeActive = location.pathname === '/';
 
-  const sidebarWidth = isExpanded ? 'w-64' : 'w-16';
+  const isCompact = !isMobile && !isExpanded;
+  const sidebarWidth = isCompact ? 'w-16' : 'w-64';
 
   const dashboardLink = (
     <NavLink
       to="/"
-      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 ${
+      onClick={isMobile ? closeMobileSidebar : undefined}
+      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 touch-manipulation ${
         isHomeActive
           ? 'bg-slate-800 text-white border-l-2 border-cyan-500 -ml-[2px] pl-[14px]'
           : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-      } ${!isExpanded ? 'justify-center px-2' : ''}`}
+      } ${isCompact ? 'justify-center px-2' : ''}`}
     >
       <Home className="w-5 h-5 flex-shrink-0" />
-      {isExpanded && <span>Dashboard</span>}
+      {!isCompact && <span>Dashboard</span>}
     </NavLink>
   );
 
-  return (
+  const sidebarContent = (
     <aside
-      className={`fixed left-0 top-0 h-screen ${sidebarWidth} bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-200 z-40`}
+      className={`${
+        isMobile
+          ? 'fixed left-0 top-0 h-screen w-72 bg-slate-900 border-r border-slate-800 flex flex-col z-50 transition-transform duration-300 ' +
+            (isMobileOpen ? 'translate-x-0' : '-translate-x-full')
+          : `fixed left-0 top-0 h-screen ${sidebarWidth} bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-200 z-40`
+      }`}
     >
-      <div className={`p-4 border-b border-slate-800 ${!isExpanded ? 'px-2' : ''}`}>
-        <div className={`flex items-center ${isExpanded ? 'gap-3' : 'justify-center'}`}>
+      <div className={`p-4 border-b border-slate-800 ${isCompact ? 'px-2' : ''}`}>
+        <div className={`flex items-center ${!isCompact ? 'gap-3' : 'justify-center'}`}>
           <img
             src="/assets/logo/logo.png"
             alt="Autom8ion Lab"
             className="w-10 h-10 rounded-xl flex-shrink-0 object-contain"
           />
-          {isExpanded && (
+          {!isCompact && (
             <div className="min-w-0">
               <h1 className="text-white font-semibold text-sm truncate">Autom8ion Lab</h1>
               <p className="text-slate-500 text-xs">OS Platform</p>
@@ -177,12 +191,12 @@ export function Sidebar() {
 
       <nav className="flex-1 overflow-y-auto p-3 space-y-4">
         <div>
-          {isExpanded ? (
-            dashboardLink
-          ) : (
+          {isCompact ? (
             <Tooltip content="Dashboard" side="right">
               {dashboardLink}
             </Tooltip>
+          ) : (
+            dashboardLink
           )}
         </div>
 
@@ -190,34 +204,59 @@ export function Sidebar() {
           <NavSectionComponent
             key={section.id}
             section={section}
-            isCompact={!isExpanded}
+            isCompact={isCompact}
             unreadCount={unreadCount}
+            onNavigate={isMobile ? closeMobileSidebar : undefined}
           />
         ))}
       </nav>
 
-      <div className="p-3 border-t border-slate-800">
-        <button
-          onClick={toggleSidebar}
-          className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors ${
-            !isExpanded ? 'justify-center px-2' : ''
-          }`}
-        >
-          {isExpanded ? (
-            <>
-              <ChevronLeft className="w-4 h-4" />
-              <span>Collapse</span>
-            </>
-          ) : (
-            <ChevronRight className="w-4 h-4" />
+      {!isMobile && (
+        <div className="p-3 border-t border-slate-800">
+          <button
+            onClick={toggleSidebar}
+            className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors ${
+              isCompact ? 'justify-center px-2' : ''
+            }`}
+          >
+            {isExpanded ? (
+              <>
+                <ChevronLeft className="w-4 h-4" />
+                <span>Collapse</span>
+              </>
+            ) : (
+              <ChevronRight className="w-4 h-4" />
+            )}
+          </button>
+          {isExpanded && (
+            <div className="px-3 py-2 mt-1">
+              <p className="text-xs text-slate-600">Version 0.1.0</p>
+            </div>
           )}
-        </button>
-        {isExpanded && (
-          <div className="px-3 py-2 mt-1">
-            <p className="text-xs text-slate-600">Version 0.1.0</p>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {isMobile && (
+        <div className="p-3 border-t border-slate-800">
+          <p className="text-xs text-slate-600 px-3 py-2">Version 0.1.0</p>
+        </div>
+      )}
     </aside>
   );
+
+  if (isMobile) {
+    return (
+      <>
+        {isMobileOpen && (
+          <div
+            className="fixed inset-0 bg-black/50 z-40 transition-opacity duration-300"
+            onClick={closeMobileSidebar}
+          />
+        )}
+        {sidebarContent}
+      </>
+    );
+  }
+
+  return sidebarContent;
 }

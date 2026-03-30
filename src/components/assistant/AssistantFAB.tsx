@@ -9,7 +9,7 @@ export function AssistantFAB() {
   return (
     <button
       onClick={togglePanel}
-      className="fixed bottom-6 right-6 z-40 group"
+      className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 group touch-manipulation"
       title="Clara AI Assistant (Ctrl+Shift+K)"
     >
       <span className="absolute inset-0 rounded-full bg-cyan-500/20 animate-ping" style={{ animationDuration: '3s' }} />

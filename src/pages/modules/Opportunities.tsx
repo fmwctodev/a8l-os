@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermission } from '../../hooks/usePermission';
+import { useSidebar } from '../../contexts/SidebarContext';
 import type {
   Pipeline,
   Opportunity,
@@ -43,6 +44,7 @@ export function Opportunities() {
   const canManagePipelines = usePermission('pipelines.manage');
   const canCreate = usePermission('opportunities.create');
   const canMoveStage = usePermission('opportunities.move_stage');
+  const { isMobile } = useSidebar();
 
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null);
@@ -68,7 +70,7 @@ export function Opportunities() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const sortDropdownRef = useRef<HTMLDivElement>(null);
 
-  const viewMode = searchParams.get('view') || 'board';
+  const viewMode = searchParams.get('view') || (isMobile ? 'list' : 'board');
 
   const sortOptions: { value: SortOption; label: string }[] = [
     { value: 'newest', label: 'Newest First' },

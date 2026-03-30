@@ -45,7 +45,7 @@ export function StatCard({
 
   if (isLoading) {
     return (
-      <div className={`bg-slate-800 rounded-xl border border-slate-700 p-5`}>
+      <div className={`bg-slate-800 rounded-xl border border-slate-700 p-3 md:p-5`}>
         <div className="animate-pulse">
           <div className="flex items-center justify-between mb-3">
             <div className="h-4 w-24 bg-slate-700 rounded" />
@@ -61,14 +61,14 @@ export function StatCard({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left bg-slate-800 rounded-xl border ${colors.border} border-slate-700 p-5 transition-colors hover:bg-slate-700/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/40`}
+      className={`w-full text-left bg-slate-800 rounded-xl border ${colors.border} border-slate-700 p-3 md:p-5 transition-colors hover:bg-slate-700/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 touch-manipulation`}
     >
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-2 md:mb-3">
         <span className="text-sm font-medium text-slate-400">{title}</span>
         <Icon className={`h-5 w-5 ${colors.icon}`} />
       </div>
       <div className="flex items-baseline gap-2">
-        <span className="text-3xl font-semibold text-white">{value}</span>
+        <span className="text-2xl md:text-3xl font-semibold text-white">{value}</span>
         {delta !== undefined && (
           <span className={`text-sm font-medium ${deltaColors[deltaType]}`}>
             {deltaType === 'positive' ? '+' : deltaType === 'negative' ? '' : ''}
@@ -76,7 +76,7 @@ export function StatCard({
           </span>
         )}
       </div>
-      {sublabel && <p className="mt-1 text-sm text-slate-500">{sublabel}</p>}
+      {sublabel && <p className="mt-1 text-xs md:text-sm text-slate-500">{sublabel}</p>}
     </button>
   );
 }

@@ -11,10 +11,10 @@ import { useSidebar } from '../contexts/SidebarContext';
 import { useCommandPalette } from '../hooks/useCommandPalette';
 
 export function DashboardLayout() {
-  const { isExpanded } = useSidebar();
+  const { isExpanded, isMobile } = useSidebar();
   const { isOpen: isCommandPaletteOpen, close: closeCommandPalette } = useCommandPalette();
 
-  const sidebarWidth = isExpanded ? 'ml-64' : 'ml-16';
+  const sidebarWidth = isMobile ? 'ml-0' : isExpanded ? 'ml-64' : 'ml-16';
 
   return (
     <AssistantProvider>
@@ -22,7 +22,7 @@ export function DashboardLayout() {
         <Sidebar />
         <div className={`flex-1 min-w-0 flex flex-col ${sidebarWidth} transition-all duration-200`}>
           <Header />
-          <main className="flex-1 p-6 overflow-y-auto overflow-x-hidden">
+          <main className="flex-1 p-3 sm:p-4 md:p-6 overflow-y-auto overflow-x-hidden">
             <ErrorBoundary>
               <Outlet />
             </ErrorBoundary>

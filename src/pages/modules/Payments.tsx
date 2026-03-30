@@ -546,8 +546,8 @@ export function Payments() {
                     <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Contact</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Amount</th>
                     <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Status</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Due Date</th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-slate-400">Payment Link</th>
+                    <th className="hidden md:table-cell text-left py-3 px-4 text-sm font-medium text-slate-400">Due Date</th>
+                    <th className="hidden lg:table-cell text-left py-3 px-4 text-sm font-medium text-slate-400">Payment Link</th>
                     <th className="text-right py-3 px-4 text-sm font-medium text-slate-400">Actions</th>
                   </tr>
                 </thead>
@@ -592,10 +592,10 @@ export function Payments() {
                               {statusStyle.label}
                             </span>
                           </td>
-                          <td className="py-3 px-4">
+                          <td className="hidden md:table-cell py-3 px-4">
                             <span className="text-slate-300">{formatDate(invoice.due_date)}</span>
                           </td>
-                          <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
+                          <td className="hidden lg:table-cell py-3 px-4" onClick={(e) => e.stopPropagation()}>
                             {invoice.payment_link_url ? (
                               <div className="flex items-center gap-2">
                                 <button
