@@ -1,0 +1,44 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerAuthTools } from './auth.js';
+import { registerContactsTools } from './contacts.js';
+import { registerConversationsTools } from './conversations.js';
+import { registerOpportunitiesTools } from './opportunities.js';
+import { registerPaymentsTools } from './payments.js';
+import { registerProposalsTools } from './proposals.js';
+import { registerCalendarsTools } from './calendars.js';
+import { registerProjectsTools } from './projects.js';
+import { registerWorkflowsTools } from './workflows.js';
+import { registerAIAgentsTools } from './ai-agents.js';
+import { registerSocialMediaTools } from './social-media.js';
+import { registerReputationTools } from './reputation.js';
+import { registerFormsTools } from './forms.js';
+import { registerReportingTools } from './reporting.js';
+import { registerFilesTools } from './files.js';
+import { registerCommunicationsTools } from './communications.js';
+import { registerVoiceAITools } from './voice-ai.js';
+import { registerAdministrationTools } from './administration.js';
+import { registerIntegrationsTools } from './integrations.js';
+import { registerSystemTools } from './system.js';
+
+export function registerAllTools(server: McpServer): void {
+  registerAuthTools(server);
+  registerContactsTools(server);
+  registerConversationsTools(server);
+  registerOpportunitiesTools(server);
+  registerPaymentsTools(server);
+  registerProposalsTools(server);
+  registerCalendarsTools(server);
+  registerProjectsTools(server);
+  registerWorkflowsTools(server);
+  registerAIAgentsTools(server);
+  registerSocialMediaTools(server);
+  registerReputationTools(server);
+  registerFormsTools(server);
+  registerReportingTools(server);
+  registerFilesTools(server);
+  registerCommunicationsTools(server);
+  registerVoiceAITools(server);
+  registerAdministrationTools(server);
+  registerIntegrationsTools(server);
+  registerSystemTools(server);
+}
