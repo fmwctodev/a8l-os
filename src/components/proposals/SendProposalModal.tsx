@@ -5,6 +5,7 @@ import { getEmailDefaults } from '../../services/emailDefaults';
 import { sendProposal } from '../../services/proposals';
 import { createProposalActivity } from '../../services/proposals';
 import type { Proposal } from '../../types';
+import { APP_BASE_URL } from '../../constants';
 import { X, Send, Loader2, Mail, AlertCircle } from 'lucide-react';
 
 interface SendProposalModalProps {
@@ -43,7 +44,7 @@ export function SendProposalModal({ proposal, onClose, onSent }: SendProposalMod
       const companyName = user.organization?.name || 'our company';
       setSubject(`Proposal: ${proposal.title}`);
 
-      const publicUrl = `${window.location.origin}/p/${proposal.public_token}`;
+      const publicUrl = `${APP_BASE_URL}/p/${proposal.public_token}`;
 
       const emailBody = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -120,7 +121,7 @@ export function SendProposalModal({ proposal, onClose, onSent }: SendProposalMod
         subject,
         htmlBody: body,
         trackOpens: true,
-        trackClicks: true,
+        trackClicks: false,
       });
 
       if (!result.success) {

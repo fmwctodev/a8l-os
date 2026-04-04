@@ -9,6 +9,7 @@ import type {
 import { generateContractHTML } from './contractPdfExport';
 import { getBrandKits } from './brandboard';
 import { advanceOpportunityToStageByName } from './opportunities';
+import { APP_BASE_URL } from '../constants';
 
 export async function computeDocumentHash(content: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -147,7 +148,7 @@ export async function createContractSignatureRequest(
     metadata: { signer_name: signerName, signer_email: signerEmail, expires_at: expiresAt.toISOString() },
   });
 
-  const signingUrl = `${window.location.origin}/sign/contract/${request.id}?token=${token.raw}`;
+  const signingUrl = `${APP_BASE_URL}/sign/contract/${request.id}?token=${encodeURIComponent(token.raw)}`;
   return { request, rawToken: token.raw, signingUrl };
 }
 
@@ -366,7 +367,7 @@ export async function resendContractSignatureRequest(
     metadata: { request_id: requestId },
   });
 
-  const signingUrl = `${window.location.origin}/sign/contract/${requestId}?token=${token.raw}`;
+  const signingUrl = `${APP_BASE_URL}/sign/contract/${requestId}?token=${encodeURIComponent(token.raw)}`;
   return { rawToken: token.raw, signingUrl };
 }
 

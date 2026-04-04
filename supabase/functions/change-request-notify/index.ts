@@ -364,6 +364,10 @@ Deno.serve(async (req: Request) => {
         from: { email: fromEmail, name: fromName },
         subject,
         content: [{ type: "text/html", value: teamEmailContent }],
+        tracking_settings: {
+          open_tracking: { enable: true },
+          click_tracking: { enable: false },
+        },
       }),
     });
 
@@ -409,6 +413,10 @@ Deno.serve(async (req: Request) => {
             reply_to: { email: org_email, name: org_name },
             subject: `Your change request has been received (${reference_id})`,
             content: [{ type: "text/html", value: clientEmailContent }],
+            tracking_settings: {
+              open_tracking: { enable: true },
+              click_tracking: { enable: false },
+            },
           }),
         }
       );

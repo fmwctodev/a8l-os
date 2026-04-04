@@ -1,6 +1,25 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 
+const APP_BASE_URL = "https://os.autom8ionlab.com";
+
+async function computeHash(value: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(value);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function generateSecureToken(): { raw: string; hashPromise: Promise<string> } {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const raw = Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return { raw, hashPromise: computeHash(raw) };
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -101,7 +120,16 @@ Deno.serve(async (req: Request) => {
         .single();
 
       const companyName = org?.name || "Our Company";
-      const signingUrl = `${supabaseUrl.replace(".supabase.co", ".supabase.co")}/sign/proposal/${req.id}`;
+
+      const token = generateSecureToken();
+      const tokenHash = await token.hashPromise;
+
+      await supabase
+        .from("proposal_signature_requests")
+        .update({ access_token_hash: tokenHash })
+        .eq("id", req.id);
+
+      const signingUrl = `${APP_BASE_URL}/sign/proposal/${req.id}?token=${encodeURIComponent(token.raw)}`;
 
       const expiresFormatted = expiresAt.toLocaleDateString("en-US", {
         year: "numeric",
@@ -167,7 +195,7 @@ Deno.serve(async (req: Request) => {
               subject: `Reminder: Please sign "${proposal.title}"`,
               htmlBody: htmlBody,
               trackOpens: true,
-              trackClicks: true,
+              trackClicks: false,
               transactional: true,
             }),
           });

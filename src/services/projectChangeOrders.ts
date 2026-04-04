@@ -3,6 +3,7 @@ import type { ProjectChangeOrder, ProjectChangeRequest } from '../types';
 import { createAuditEvent } from './projectChangeRequests';
 import { logProjectActivity } from './projectActivityLog';
 import { updateChangeRequest } from './projectChangeRequests';
+import { APP_BASE_URL } from '../constants';
 
 async function computeHash(value: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -206,7 +207,7 @@ export async function sendChangeOrderForSignature(
     metadata: { change_order_id: changeOrderId, signer_name: signerName, signer_email: signerEmail },
   });
 
-  const signingUrl = `${window.location.origin}/project-change/sign/${changeOrderId}?token=${token.raw}`;
+  const signingUrl = `${APP_BASE_URL}/project-change/sign/${changeOrderId}?token=${encodeURIComponent(token.raw)}`;
   return { rawToken: token.raw, signingUrl };
 }
 

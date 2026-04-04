@@ -93,7 +93,7 @@ export async function sendSignatureRequestEmail(
     subject: `Please review and sign: ${params.proposalTitle}`,
     htmlBody,
     trackOpens: true,
-    trackClicks: true,
+    trackClicks: false,
     transactional: true,
   });
 

@@ -9,6 +9,7 @@ import type {
 import { generateProposalHTML } from './proposalPdfExport';
 import { getBrandKits } from './brandboard';
 import { advanceOpportunityToStageByName } from './opportunities';
+import { APP_BASE_URL } from '../constants';
 
 export async function computeDocumentHash(content: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -157,7 +158,7 @@ export async function createSignatureRequest(
     },
   });
 
-  const signingUrl = `${window.location.origin}/sign/proposal/${request.id}?token=${token.raw}`;
+  const signingUrl = `${APP_BASE_URL}/sign/proposal/${request.id}?token=${encodeURIComponent(token.raw)}`;
 
   return { request, rawToken: token.raw, signingUrl };
 }
@@ -392,7 +393,7 @@ export async function resendSignatureRequest(
     metadata: { request_id: requestId },
   });
 
-  const signingUrl = `${window.location.origin}/sign/proposal/${requestId}?token=${token.raw}`;
+  const signingUrl = `${APP_BASE_URL}/sign/proposal/${requestId}?token=${encodeURIComponent(token.raw)}`;
 
   return { rawToken: token.raw, signingUrl };
 }

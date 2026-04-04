@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import { logProjectActivity } from './projectActivityLog';
 import { notifyChangeRequestCreated } from './notifications';
+import { APP_BASE_URL } from '../constants';
 
 async function computeHash(value: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -122,7 +123,7 @@ export async function createChangeRequest(
     await notifyChangeRequestCreated(input.org_id, input.title, input.project_id, input.client_name);
   } catch {}
 
-  const clientPortalUrl = `${window.location.origin}/project-change/status/${data.id}?token=${token.raw}`;
+  const clientPortalUrl = `${APP_BASE_URL}/project-change/status/${data.id}?token=${encodeURIComponent(token.raw)}`;
 
   return { request: data as ProjectChangeRequest, rawToken: token.raw, clientPortalUrl };
 }
@@ -248,7 +249,7 @@ export async function generateClientPortalToken(
 
   if (error) throw error;
 
-  const clientPortalUrl = `${window.location.origin}/project-change/status/${changeRequestId}?token=${token.raw}`;
+  const clientPortalUrl = `${APP_BASE_URL}/project-change/status/${changeRequestId}?token=${encodeURIComponent(token.raw)}`;
   return { rawToken: token.raw, clientPortalUrl };
 }
 
@@ -259,7 +260,7 @@ export async function generateProjectClientLink(
   const token = generateSecureToken();
   const tokenHash = await token.hashPromise;
 
-  const url = `${window.location.origin}/project-change/submit?projectId=${projectId}&org=${orgId}&token=${token.raw}&h=${tokenHash}`;
+  const url = `${APP_BASE_URL}/project-change/submit?projectId=${projectId}&org=${orgId}&token=${encodeURIComponent(token.raw)}&h=${encodeURIComponent(tokenHash)}`;
   return url;
 }
 

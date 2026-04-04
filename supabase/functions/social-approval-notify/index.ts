@@ -335,7 +335,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const baseUrl = org?.custom_domain || supabaseUrl.replace(".supabase.co", ".app");
+    const baseUrl = org?.custom_domain || "https://os.autom8ionlab.com";
     const approvalUrl = `${baseUrl}/marketing/social/approve/${post.approval_token}`;
     const creatorName = creator?.full_name || creator?.email || "A team member";
     const orgName = org?.name || "Your Organization";
@@ -360,7 +360,7 @@ Deno.serve(async (req: Request) => {
         content: [{ type: "text/html", value: htmlBody }],
         tracking_settings: {
           open_tracking: { enable: true },
-          click_tracking: { enable: true },
+          click_tracking: { enable: false },
         },
       };
 
