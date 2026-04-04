@@ -1,21 +1,5 @@
 import { useState } from 'react';
-import {
-  Plus,
-  Pencil,
-  Trash2,
-  GripVertical,
-  ToggleLeft,
-  ToggleRight,
-  ChevronDown,
-  ChevronUp,
-  Film,
-  Camera,
-  Sun,
-  Timer,
-  Subtitles,
-  Sparkles,
-  AlertTriangle,
-} from 'lucide-react';
+import { Plus, Pencil, Trash2, GripVertical, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Film, Camera, Sun, Timer, Files as Subtitles, Sparkles, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../../contexts/ToastContext';
 import type { MediaStylePreset } from '../../../services/mediaStylePresets';
 import {
@@ -41,11 +25,11 @@ export function StylePresetsManager({ presets, onRefresh }: StylePresetsManagerP
     setToggling(preset.id);
     try {
       await updateStylePreset(preset.id, { enabled: !preset.enabled });
-      showToast(`${preset.display_name} ${preset.enabled ? 'disabled' : 'enabled'}`, 'success');
+      showToast('success', `${preset.display_name} ${preset.enabled ? 'disabled' : 'enabled'}`);
       onRefresh();
     } catch (err) {
       console.error('Toggle error:', err);
-      showToast('Failed to toggle preset', 'error');
+      showToast('error', 'Failed to toggle preset');
     } finally {
       setToggling(null);
     }
@@ -56,11 +40,11 @@ export function StylePresetsManager({ presets, onRefresh }: StylePresetsManagerP
     setDeleting(id);
     try {
       await deleteStylePreset(id);
-      showToast('Preset deleted', 'success');
+      showToast('success', 'Preset deleted');
       onRefresh();
     } catch (err) {
       console.error('Delete error:', err);
-      showToast('Failed to delete preset', 'error');
+      showToast('error', 'Failed to delete preset');
     } finally {
       setDeleting(null);
     }

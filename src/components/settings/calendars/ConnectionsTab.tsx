@@ -68,16 +68,16 @@ export function ConnectionsTab() {
       setConnection(conn);
 
       if (result.success || conn.connected) {
-        showToast('Google Calendar connected successfully', 'success');
+        showToast('success', 'Google Calendar connected successfully');
         if (user?.id) {
           getSyncStatus(user.id).then(setSyncStatus).catch(() => {});
         }
       } else if (result.error && result.error !== 'Popup closed') {
-        showToast(result.error, 'error');
+        showToast('error', result.error);
       }
     } catch (error) {
       console.error('Failed to connect:', error);
-      showToast('Failed to connect Google Calendar', 'error');
+      showToast('error', 'Failed to connect Google Calendar');
     } finally {
       setConnecting(false);
     }

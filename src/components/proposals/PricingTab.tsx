@@ -99,7 +99,7 @@ export function PricingTab({ proposal, canEdit, formatCurrency, onReload, showTo
   const handleSaveEdit = async () => {
     if (!editingId) return;
     const updates = formToItem(editForm);
-    if (!updates.name) { showToast('Item name is required', 'warning'); return; }
+    if (!updates.name) { showToast('warning', 'Item name is required'); return; }
     try {
       setSaving(true);
       await updateProposalLineItem(editingId, updates);
@@ -107,7 +107,7 @@ export function PricingTab({ proposal, canEdit, formatCurrency, onReload, showTo
       setEditingId(null);
       onReload();
     } catch {
-      showToast('Failed to update line item', 'error');
+      showToast('error', 'Failed to update line item');
     } finally {
       setSaving(false);
     }
@@ -115,7 +115,7 @@ export function PricingTab({ proposal, canEdit, formatCurrency, onReload, showTo
 
   const handleAdd = async () => {
     const values = formToItem(addForm);
-    if (!values.name) { showToast('Item name is required', 'warning'); return; }
+    if (!values.name) { showToast('warning', 'Item name is required'); return; }
     try {
       setSaving(true);
       await addProposalLineItem({
@@ -129,7 +129,7 @@ export function PricingTab({ proposal, canEdit, formatCurrency, onReload, showTo
       setShowAddForm(false);
       onReload();
     } catch {
-      showToast('Failed to add line item', 'error');
+      showToast('error', 'Failed to add line item');
     } finally {
       setSaving(false);
     }
@@ -143,7 +143,7 @@ export function PricingTab({ proposal, canEdit, formatCurrency, onReload, showTo
       await recalculateAndUpdateProposalTotal(proposal.id);
       onReload();
     } catch {
-      showToast('Failed to delete line item', 'error');
+      showToast('error', 'Failed to delete line item');
     } finally {
       setDeleting(null);
     }

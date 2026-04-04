@@ -207,10 +207,10 @@ export function ContractDetail() {
       await updateContractSection(sectionId, contract.id, { content });
       loadContract();
       setEditingSection(null);
-      showToast('Section updated', 'success');
+      showToast('success', 'Section updated');
     } catch (err) {
       console.error('Failed to update section:', err);
-      showToast('Failed to update section', 'error');
+      showToast('error', 'Failed to update section');
     }
   };
 
@@ -219,10 +219,10 @@ export function ContractDetail() {
     try {
       await deleteContractSection(sectionId, contract.id);
       loadContract();
-      showToast('Section deleted', 'success');
+      showToast('success', 'Section deleted');
     } catch (err) {
       console.error('Failed to delete section:', err);
-      showToast('Failed to delete section', 'error');
+      showToast('error', 'Failed to delete section');
     }
   };
 
@@ -252,7 +252,7 @@ export function ContractDetail() {
       await exportContractToPDF(contract, brandKit);
     } catch (err) {
       console.error('Export failed:', err);
-      showToast('Export failed. Allow pop-ups and try again.', 'error');
+      showToast('error', 'Export failed. Allow pop-ups and try again.');
     } finally {
       setIsExportingPDF(false);
     }
@@ -261,29 +261,29 @@ export function ContractDetail() {
   const copyPublicLink = () => {
     if (!contract.public_token) return;
     navigator.clipboard.writeText(`${window.location.origin}/c/${contract.public_token}`);
-    showToast('Public link copied', 'success');
+    showToast('success', 'Public link copied');
   };
 
   const handleArchive = async () => {
     try {
       if (contract.archived_at) {
         await unarchiveContract(contract.id);
-        showToast('Contract unarchived', 'success');
+        showToast('success', 'Contract unarchived');
       } else {
         await archiveContract(contract.id);
-        showToast('Contract archived', 'success');
+        showToast('success', 'Contract archived');
       }
       loadContract();
-    } catch { showToast('Action failed', 'error'); }
+    } catch { showToast('error', 'Action failed'); }
   };
 
   const handleDelete = async () => {
     if (!confirm('Permanently delete this contract?')) return;
     try {
       await deleteContract(contract.id);
-      showToast('Contract deleted', 'success');
+      showToast('success', 'Contract deleted');
       navigate(-1);
-    } catch { showToast('Delete failed', 'error'); }
+    } catch { showToast('error', 'Delete failed'); }
   };
 
   const handleVoid = async () => {
@@ -291,9 +291,9 @@ export function ContractDetail() {
     try {
       setIsVoiding(true);
       await voidContractSignatureRequest(signatureRequest.id, contract.id, user.organization_id, user.id);
-      showToast('Signature request voided', 'success');
+      showToast('success', 'Signature request voided');
       loadContract();
-    } catch { showToast('Void failed', 'error'); }
+    } catch { showToast('error', 'Void failed'); }
     finally { setIsVoiding(false); }
   };
 
@@ -303,9 +303,9 @@ export function ContractDetail() {
       setIsResending(true);
       const { signingUrl } = await resendContractSignatureRequest(signatureRequest.id, contract.id, user.organization_id, user.id);
       navigator.clipboard.writeText(signingUrl);
-      showToast('Resent. Signing link copied.', 'success');
+      showToast('success', 'Resent. Signing link copied.');
       loadContract();
-    } catch { showToast('Resend failed', 'error'); }
+    } catch { showToast('error', 'Resend failed'); }
     finally { setIsResending(false); }
   };
 

@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import { X, MessageSquare, CheckCircle, AlertTriangle, Info } from 'lucide-react';
+import { X, MessageSquare, CheckCircle, AlertTriangle, Info, XCircle } from 'lucide-react';
 
-type ToastType = 'message' | 'success' | 'warning' | 'info';
+type ToastType = 'message' | 'success' | 'warning' | 'info' | 'error';
 
 interface Toast {
   id: string;
@@ -23,6 +23,7 @@ const iconMap: Record<ToastType, typeof MessageSquare> = {
   success: CheckCircle,
   warning: AlertTriangle,
   info: Info,
+  error: XCircle,
 };
 
 const colorMap: Record<ToastType, { bg: string; icon: string; border: string }> = {
@@ -30,11 +31,12 @@ const colorMap: Record<ToastType, { bg: string; icon: string; border: string }> 
   success: { bg: 'bg-slate-800', icon: 'text-emerald-400', border: 'border-emerald-500/30' },
   warning: { bg: 'bg-slate-800', icon: 'text-amber-400', border: 'border-amber-500/30' },
   info: { bg: 'bg-slate-800', icon: 'text-blue-400', border: 'border-blue-500/30' },
+  error: { bg: 'bg-slate-800', icon: 'text-red-400', border: 'border-red-500/30' },
 };
 
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) => void }) {
-  const Icon = iconMap[toast.type];
-  const colors = colorMap[toast.type];
+  const Icon = iconMap[toast.type] || MessageSquare;
+  const colors = colorMap[toast.type] || colorMap.message;
 
   return (
     <div

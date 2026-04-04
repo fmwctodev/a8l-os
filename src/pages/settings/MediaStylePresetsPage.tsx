@@ -29,7 +29,7 @@ export function MediaStylePresetsPage() {
       setPresets(data);
     } catch (err) {
       console.error('Failed to load style presets:', err);
-      showToast('Failed to load style presets', 'error');
+      showToast('error', 'Failed to load style presets');
     } finally {
       setLoading(false);
     }

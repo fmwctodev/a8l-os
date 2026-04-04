@@ -63,11 +63,11 @@ export function PresetEditorModal({ preset, onClose, onSave }: PresetEditorModal
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name || !form.display_name || !form.prompt_template) {
-      showToast('Name, display name, and prompt template are required', 'error');
+      showToast('error', 'Name, display name, and prompt template are required');
       return;
     }
     if (!form.prompt_template.includes('{prompt}')) {
-      showToast('Prompt template must include {prompt} placeholder', 'error');
+      showToast('error', 'Prompt template must include {prompt} placeholder');
       return;
     }
 
@@ -75,15 +75,15 @@ export function PresetEditorModal({ preset, onClose, onSave }: PresetEditorModal
     try {
       if (isEditing && preset) {
         await updateStylePreset(preset.id, form);
-        showToast('Preset updated', 'success');
+        showToast('success', 'Preset updated');
       } else {
         await createStylePreset(form);
-        showToast('Preset created', 'success');
+        showToast('success', 'Preset created');
       }
       onSave();
     } catch (err) {
       console.error('Save error:', err);
-      showToast('Failed to save preset', 'error');
+      showToast('error', 'Failed to save preset');
     } finally {
       setSaving(false);
     }

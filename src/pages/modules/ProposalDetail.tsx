@@ -218,16 +218,16 @@ export function ProposalDetail() {
 
       if (emailResult.success) {
         await updateSignatureRequestSendStatus(signatureRequest.id, 'sent', emailResult.messageId);
-        showToast('Signature request resent successfully', 'success');
+        showToast('success', 'Signature request resent successfully');
       } else {
         await updateSignatureRequestSendStatus(signatureRequest.id, 'failed', undefined, emailResult.error);
-        showToast(emailResult.error || 'Failed to send signature request', 'warning');
+        showToast('warning', emailResult.error || 'Failed to send signature request');
       }
 
       loadProposal();
     } catch (err) {
       console.error('Failed to resend:', err);
-      showToast('Failed to resend signature request', 'warning');
+      showToast('warning', 'Failed to resend signature request');
     } finally {
       setIsResending(false);
     }
