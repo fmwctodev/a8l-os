@@ -3,18 +3,22 @@ import { useParams } from 'react-router-dom';
 import { getContractByPublicToken } from '../../services/contracts';
 import { getBrandKits } from '../../services/brandboard';
 import { sanitizeHtml } from '../../utils/sanitizeHtml';
+import { SectionIcon } from '../../components/public-document/SectionIcon';
+import { DocumentContentStyles } from '../../components/public-document/DocumentContentStyles';
+import {
+  COMPANY,
+  FALLBACK_LOGO,
+  DEFAULT_ACCENT,
+  generateContractNumber,
+  formatDocDate,
+  formatDocCurrency,
+} from '../../components/public-document/documentTheme';
 import type { Contract, BrandKitWithVersion } from '../../types';
 import {
-  Scale,
-  Calendar,
   AlertCircle,
   Loader2,
-  DollarSign,
-  MapPin,
   Shield,
 } from 'lucide-react';
-
-const FALLBACK_LOGO = '/assets/logo/Autom8ion-White.png';
 
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
   freelance_service: 'Freelance Service Agreement',
@@ -57,24 +61,29 @@ export default function PublicContractPage() {
     }
   };
 
-  const primaryColor = brandKit?.latest_version?.colors?.primary?.hex || '#06b6d4';
-  const logoUrl = brandKit?.latest_version?.logos?.[0]?.url || null;
+  const accentColor = brandKit?.latest_version?.colors?.primary?.hex || DEFAULT_ACCENT;
+  const logoUrl = brandKit?.latest_version?.logos?.find((l: { url?: string }) => l.url)?.url || FALLBACK_LOGO;
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-cyan-600 animate-spin" />
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin" style={{ color: accentColor }} />
+          <p className="text-sm text-slate-500">Loading contract...</p>
+        </div>
       </div>
     );
   }
 
   if (error || !contract) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4">
         <div className="max-w-md w-full text-center">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Contract Not Found</h1>
-          <p className="text-slate-600">
+          <div className="w-20 h-20 rounded-2xl bg-red-500/10 flex items-center justify-center mx-auto mb-6">
+            <AlertCircle className="w-10 h-10 text-red-400" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-100 mb-3">Contract Not Found</h1>
+          <p className="text-slate-400 leading-relaxed">
             {error || 'The contract you are looking for does not exist or has been removed.'}
           </p>
         </div>
@@ -84,110 +93,150 @@ export default function PublicContractPage() {
 
   const sections = [...(contract.sections || [])].sort((a, b) => a.sort_order - b.sort_order);
   const typeLabel = CONTRACT_TYPE_LABELS[contract.contract_type] || contract.contract_type;
-  const formatCurrency = (val: number, curr: string) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: curr || 'USD', minimumFractionDigits: 0 }).format(val);
+  const contractNumber = generateContractNumber(contract.id, contract.created_at);
+
+  const partyBName = contract.party_b_name
+    || (contract.contact ? `${contract.contact.first_name} ${contract.contact.last_name}` : 'Not specified');
+  const partyBEmail = contract.party_b_email || contract.contact?.email || '';
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="max-w-4xl mx-auto p-6 py-12">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-6 border-b border-slate-200 bg-slate-900">
-            <img src={logoUrl || FALLBACK_LOGO} alt="Logo" className="h-10 object-contain" />
-          </div>
+    <div className="min-h-screen bg-[#0f172a]">
+      <DocumentContentStyles accentColor={accentColor} />
 
-          <div className="p-8">
-            <div className="mb-2">
-              <div className="flex items-center gap-2 mb-2">
-                <Scale className="w-5 h-5" style={{ color: primaryColor }} />
-                <span className="text-sm font-medium text-slate-500 uppercase tracking-wider">Contract</span>
-              </div>
-              <h1 className="text-3xl font-bold text-slate-900 mb-1">{contract.title}</h1>
-              <p className="text-sm text-slate-500">{typeLabel}</p>
-            </div>
+      <div className="max-w-[900px] mx-auto px-6 py-12 md:py-16">
 
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 mb-6 mt-4">
-              <Shield className="w-4 h-4 inline mr-1 -mt-0.5" />
-              This contract is a template for informational purposes only. It must be reviewed by a qualified attorney before signing.
-            </div>
-
-            <div className="flex items-center gap-6 mb-8 text-sm text-slate-600">
-              {contract.effective_date && (
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
-                  <span>Effective {new Date(contract.effective_date).toLocaleDateString()}</span>
-                </div>
-              )}
-              {contract.governing_law_state && (
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4" />
-                  <span>{contract.governing_law_state}</span>
-                </div>
-              )}
-              {contract.total_value > 0 && (
-                <div className="flex items-center gap-2">
-                  <DollarSign className="w-4 h-4" />
-                  <span className="font-semibold text-slate-900">
-                    {formatCurrency(contract.total_value, contract.currency)}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {(contract.party_a_name || contract.party_b_name) && (
-              <div className="grid grid-cols-2 gap-6 mb-8 p-5 bg-slate-50 rounded-lg border border-slate-200">
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: primaryColor }}>Party A (Service Provider)</h3>
-                  <p className="text-sm font-medium text-slate-900">{contract.party_a_name || 'Not specified'}</p>
-                  {contract.party_a_email && <p className="text-xs text-slate-500 mt-1">{contract.party_a_email}</p>}
-                </div>
-                <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: primaryColor }}>Party B (Client)</h3>
-                  <p className="text-sm font-medium text-slate-900">
-                    {contract.party_b_name || (contract.contact ? `${contract.contact.first_name} ${contract.contact.last_name}` : 'Not specified')}
-                  </p>
-                  {(contract.party_b_email || contract.contact?.email) && (
-                    <p className="text-xs text-slate-500 mt-1">{contract.party_b_email || contract.contact?.email}</p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {sections.length > 0 && (
-              <div className="space-y-8 mb-8">
-                {sections.map((section, idx) => (
-                  <div key={section.id || idx}>
-                    <h2 className="text-xl font-bold text-slate-900 mb-1 flex items-center gap-2">
-                      <span
-                        className="inline-flex items-center justify-center w-7 h-7 rounded-md text-white text-xs font-bold"
-                        style={{ backgroundColor: primaryColor }}
-                      >
-                        {idx + 1}
-                      </span>
-                      {section.title}
-                    </h2>
-                    {section.annotation && (
-                      <div className="ml-9 mb-3 px-3 py-2 bg-slate-50 border-l-3 rounded-r-md text-sm text-slate-500 italic" style={{ borderLeftWidth: 3, borderLeftColor: primaryColor }}>
-                        {section.annotation}
-                      </div>
-                    )}
-                    <div className="ml-9">
-                      <div
-                        className="prose prose-slate max-w-none text-sm"
-                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(section.content) }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="px-8 py-4 bg-slate-50 border-t border-slate-200 text-center">
-            <p className="text-xs text-slate-400">
-              Generated by Autom8ion Lab. This document requires professional legal review before execution.
-            </p>
-          </div>
+        {/* Disclaimer Banner */}
+        <div className="bg-[#451a03] border border-[#92400e] rounded-lg px-5 py-4 mb-10 flex items-start gap-3">
+          <Shield className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+          <p className="text-[11px] text-amber-400 uppercase tracking-wide leading-relaxed font-medium">
+            This contract is a template for informational purposes only. It must be reviewed by a qualified attorney before signing.
+          </p>
         </div>
+
+        {/* Header */}
+        <header className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-6 mb-12 pb-8" style={{ borderBottom: `2px solid ${accentColor}` }}>
+          <div>
+            {logoUrl && (
+              <img src={logoUrl} alt={COMPANY.name} className="h-10 object-contain mb-3" />
+            )}
+            <h1 className="text-2xl font-bold text-slate-50 mb-1">{contract.title}</h1>
+            <p className="text-sm text-slate-500">{typeLabel}</p>
+          </div>
+          <div className="sm:text-right space-y-3 flex-shrink-0">
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-slate-600 font-semibold mb-0.5">Contract No.</div>
+              <div className="text-sm font-medium text-slate-200">{contractNumber}</div>
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-slate-600 font-semibold mb-0.5">Effective Date</div>
+              <div className="text-sm font-medium text-slate-200">{formatDocDate(contract.effective_date)}</div>
+            </div>
+            {contract.total_value > 0 && (
+              <div>
+                <div className="text-[11px] uppercase tracking-wider text-slate-600 font-semibold mb-0.5">Contract Value</div>
+                <div className="text-sm font-medium text-slate-200">{formatDocCurrency(contract.total_value, contract.currency)}</div>
+              </div>
+            )}
+          </div>
+        </header>
+
+        {/* Parties */}
+        {(contract.party_a_name || contract.party_b_name || contract.contact) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-10 p-6 bg-[#1e293b] rounded-xl border border-[#334155]">
+            <div>
+              <h3
+                className="text-xs font-bold uppercase tracking-[0.08em] mb-2"
+                style={{ color: accentColor }}
+              >
+                Party A (Service Provider)
+              </h3>
+              <p className="text-[15px] font-semibold text-slate-100">{contract.party_a_name || 'Not specified'}</p>
+              {contract.party_a_email && (
+                <p className="text-sm text-slate-400 mt-1">{contract.party_a_email}</p>
+              )}
+            </div>
+            <div>
+              <h3
+                className="text-xs font-bold uppercase tracking-[0.08em] mb-2"
+                style={{ color: accentColor }}
+              >
+                Party B (Client)
+              </h3>
+              <p className="text-[15px] font-semibold text-slate-100">{partyBName}</p>
+              {partyBEmail && (
+                <p className="text-sm text-slate-400 mt-1">{partyBEmail}</p>
+              )}
+              {contract.contact?.company && (
+                <p className="text-sm text-slate-400 mt-0.5">{contract.contact.company}</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Meta Bar */}
+        <div className="flex flex-wrap gap-8 mb-10 px-6 py-5 bg-[#1e293b] rounded-xl border border-[#334155]">
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-slate-600 font-semibold mb-0.5">Contract Type</div>
+            <div className="text-base font-semibold" style={{ color: accentColor }}>{typeLabel}</div>
+          </div>
+          {contract.governing_law_state && (
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-slate-600 font-semibold mb-0.5">Governing Law</div>
+              <div className="text-base font-semibold" style={{ color: accentColor }}>{contract.governing_law_state}</div>
+            </div>
+          )}
+          {contract.total_value > 0 && (
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-slate-600 font-semibold mb-0.5">Total Value</div>
+              <div className="text-base font-semibold" style={{ color: accentColor }}>
+                {formatDocCurrency(contract.total_value, contract.currency)}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sections */}
+        {sections.length > 0 && (
+          <div className="space-y-9 mb-12">
+            {sections.map((section, idx) => (
+              <div key={section.id || idx}>
+                <div className="flex items-center gap-2.5 mb-4 pb-2 border-b border-[#334155]">
+                  <div
+                    className="w-7 h-7 rounded-md flex items-center justify-center text-[13px] font-bold text-white flex-shrink-0"
+                    style={{ backgroundColor: accentColor }}
+                  >
+                    {idx + 1}
+                  </div>
+                  <div className="flex-shrink-0" style={{ color: accentColor }}>
+                    <SectionIcon sectionType={section.section_type} className="w-4 h-4" />
+                  </div>
+                  <h2 className="text-[17px] font-semibold text-slate-100">{section.title}</h2>
+                </div>
+
+                {section.annotation && (
+                  <div
+                    className="mb-3.5 px-3.5 py-2.5 bg-[#1e293b] rounded-r-md text-[13px] text-slate-500 italic"
+                    style={{ borderLeft: `3px solid ${accentColor}` }}
+                  >
+                    {section.annotation}
+                  </div>
+                )}
+
+                <div
+                  className="doc-section-body"
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(section.content) }}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Footer */}
+        <footer className="mt-12 pt-6 border-t border-[#334155] text-center">
+          <p className="text-xs text-slate-600">
+            Generated by {COMPANY.name}. This document requires professional legal review before execution.
+          </p>
+        </footer>
       </div>
     </div>
   );

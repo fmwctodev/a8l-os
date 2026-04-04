@@ -5,9 +5,10 @@ interface SignatureCanvasProps {
   onSave: (signatureData: string) => void;
   onClear: () => void;
   value?: string;
+  darkMode?: boolean;
 }
 
-export function SignatureCanvas({ onSave, onClear, value }: SignatureCanvasProps) {
+export function SignatureCanvas({ onSave, onClear, value, darkMode = false }: SignatureCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [isEmpty, setIsEmpty] = useState(true);
@@ -24,7 +25,7 @@ export function SignatureCanvas({ onSave, onClear, value }: SignatureCanvasProps
     canvas.height = rect.height * window.devicePixelRatio;
     ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-    ctx.strokeStyle = '#000000';
+    ctx.strokeStyle = darkMode ? '#e2e8f0' : '#000000';
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -37,7 +38,7 @@ export function SignatureCanvas({ onSave, onClear, value }: SignatureCanvasProps
       };
       img.src = value;
     }
-  }, [value]);
+  }, [value, darkMode]);
 
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -115,21 +116,29 @@ export function SignatureCanvas({ onSave, onClear, value }: SignatureCanvasProps
           onTouchStart={startDrawing}
           onTouchMove={draw}
           onTouchEnd={stopDrawing}
-          className="w-full h-40 border-2 border-slate-300 rounded-lg bg-white cursor-crosshair touch-none"
+          className={`w-full h-40 border-2 rounded-lg cursor-crosshair touch-none ${
+            darkMode
+              ? 'border-[#334155] bg-[#162032]'
+              : 'border-slate-300 bg-white'
+          }`}
           style={{ width: '100%', height: '160px' }}
         />
         {!isEmpty && (
           <button
             type="button"
             onClick={clearCanvas}
-            className="absolute top-2 right-2 p-1.5 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+            className={`absolute top-2 right-2 p-1.5 border rounded-lg transition-colors ${
+              darkMode
+                ? 'bg-[#1e293b] border-[#334155] hover:bg-[#334155]'
+                : 'bg-white border-slate-300 hover:bg-slate-50'
+            }`}
             title="Clear signature"
           >
-            <X className="w-4 h-4 text-slate-600" />
+            <X className={`w-4 h-4 ${darkMode ? 'text-slate-400' : 'text-slate-600'}`} />
           </button>
         )}
       </div>
-      <p className="text-sm text-slate-500 text-center">
+      <p className={`text-sm text-center ${darkMode ? 'text-slate-600' : 'text-slate-500'}`}>
         Sign above using your mouse or touch screen
       </p>
     </div>
