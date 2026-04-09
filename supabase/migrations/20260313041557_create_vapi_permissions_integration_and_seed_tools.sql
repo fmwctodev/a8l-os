@@ -74,7 +74,7 @@ BEGIN
       gen_random_uuid(), v_org.id, 'vapi', 'Vapi',
       'Voice AI platform for building voice, SMS, and web chat assistants.',
       'AI_LLM', 'https://vapi.ai/favicon.ico', 'global', 'api_key',
-      '{"fields":[{"name":"api_key","label":"Vapi API Key","type":"password","required":true,"placeholder":"Enter your Vapi API key"},{"name":"webhook_secret","label":"Webhook Secret","type":"password","required":false,"placeholder":"Optional webhook signing secret"},{"name":"environment","label":"Environment","type":"select","required":false,"options":["production","development","staging"],"default":"production"},{"name":"public_key","label":"Public Key (Widget)","type":"text","required":false,"placeholder":"Vapi public key for web widgets"},{"name":"callback_base_url","label":"Callback Base URL","type":"text","required":false,"placeholder":"https://your-project.supabase.co/functions/v1"}]}'::jsonb,
+      '{"fields":[{"name":"api_key","label":"Vapi API Key","type":"password","required":true,"placeholder":"Enter your Vapi API key"},{"name":"webhook_secret","label":"Webhook Secret","type":"password","required":false,"placeholder":"Optional webhook signing secret"},{"name":"environment","label":"Environment","type":"select","required":false,"options":["production","development","staging"],"default":"production"},{"name":"public_key","label":"Public Key (Widget)","type":"text","required":false,"placeholder":"Vapi public key for web widgets"},{"name":"callback_base_url","label":"Callback Base URL","type":"text","required":false,"placeholder":"https://YOUR-PROJECT.supabase.co/functions/v1"}]}'::jsonb,
       true, '/settings/integrations', 'https://docs.vapi.ai', now(), now()
     ) ON CONFLICT (org_id, key) DO NOTHING;
   END LOOP;
