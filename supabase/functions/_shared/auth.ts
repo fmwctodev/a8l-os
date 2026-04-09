@@ -30,11 +30,24 @@ export async function extractUserContext(
   const token = authHeader.replace("Bearer ", "");
 
   // Use anon client for JWT validation (this is the key fix!)
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+
+  if (!supabaseUrl || !anonKey) {
+    console.error("[Auth] Missing SUPABASE_URL or SUPABASE_ANON_KEY in environment");
+  } else {
+    console.log("[Auth] Supabase environment verified. Project URL:", supabaseUrl);
+  }
+
   const anonClient = getAnonClient();
   const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
 
   if (authError) {
-    console.error("[Auth] JWT validation failed:", authError.message, authError);
+    console.error("[Auth] JWT validation failed:", authError.message, {
+      code: authError.code,
+      status: authError.status,
+      tokenSnippet: token.substring(0, 10) + "..."
+    });
     return null;
   }
 

@@ -74,6 +74,11 @@ export function extractToolCallsFromResponse(
 }
 
 export function buildAnthropicHeaders(apiKey: string): Record<string, string> {
+  if (!apiKey) {
+    console.error("[AI] Attempting to build Anthropic headers with an empty API key");
+  } else {
+    console.log("[AI] Anthropic API key verified (length: " + apiKey.length + ")");
+  }
   return {
     "Content-Type": "application/json",
     "x-api-key": apiKey,
