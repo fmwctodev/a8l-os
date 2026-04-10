@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { extractUserContext, getSupabaseClient } from "../_shared/auth.ts";
+import { CLARA_MODEL } from "../_shared/claraConfig.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -196,7 +197,7 @@ async function generateWithLLM(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: CLARA_MODEL,
         system: systemPrompt,
         messages: [
           { role: "user", content: userPrompt },

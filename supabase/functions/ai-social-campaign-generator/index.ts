@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { extractUserContext, getSupabaseClient } from "../_shared/auth.ts";
+import { CLARA_MODEL } from "../_shared/claraConfig.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -250,7 +251,7 @@ Respond ONLY with the JSON array, no other text.`;
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-20241022",
+        model: CLARA_MODEL,
         system: systemPrompt,
         messages: [
           {

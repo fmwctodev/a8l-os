@@ -3,7 +3,9 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   buildAnthropicHeaders,
   type AnthropicResponse,
+  CLARA_MODEL,
 } from "../_shared/claraConfig.ts";
+import { extractUserContext, getSupabaseClient } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,7 +14,7 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const CONTRACT_MODEL = "claude-opus-4-6";
+const CONTRACT_MODEL = CLARA_MODEL;
 const CONTRACT_MAX_TOKENS = 16384;
 const CONTRACT_TEMPERATURE = 0.4;
 
@@ -62,38 +64,14 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const authHeader = req.headers.get("Authorization");
-    const token = authHeader?.replace("Bearer ", "") || "";
-    const isServiceRole = token === supabaseKey;
+    const supabase = getSupabaseClient();
+    const userContext = await extractUserContext(req, supabase);
 
-    if (!isServiceRole) {
-      if (!authHeader) {
-        return new Response(
-          JSON.stringify({ error: "Missing authorization header" }),
-          {
-            status: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
-      const anonClient = createClient(
-        supabaseUrl,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { auth: { autoRefreshToken: false, persistSession: false } }
+    if (!userContext) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized", message: "Check Supabase Dashboard logs for [Auth] diagnostic info." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-      const { error: authError } = await anonClient.auth.getUser(token);
-      if (authError) {
-        return new Response(
-          JSON.stringify({ error: "Invalid or expired token" }),
-          {
-            status: 401,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
     }
 
     const payload: RequestPayload = await req.json();

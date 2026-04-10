@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import {
   buildAnthropicHeaders,
   type AnthropicResponse,
+  CLARA_MODEL,
 } from "../_shared/claraConfig.ts";
 import { extractUserContext, getSupabaseClient } from "../_shared/auth.ts";
 
@@ -12,7 +13,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const PROPOSAL_MODEL = "claude-3-5-sonnet-20241022";
+const PROPOSAL_MODEL = CLARA_MODEL;
 const PROPOSAL_MAX_TOKENS = 16384;
 const PROPOSAL_TEMPERATURE = 0.5;
 

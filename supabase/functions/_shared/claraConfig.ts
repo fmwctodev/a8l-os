@@ -1,5 +1,5 @@
-export const CLARA_MODEL = "claude-sonnet-4-20250514";
-export const CLARA_MODEL_HEAVY = "claude-opus-4-20250514";
+export const CLARA_MODEL = "claude-3-5-sonnet-20241022";
+export const CLARA_MODEL_HEAVY = "claude-3-5-sonnet-20241022";
 export const CLARA_TEMPERATURE = 0.2;
 export const CLARA_MAX_TOKENS = 4096;
 export const ANTHROPIC_API_VERSION = "2023-06-01";
