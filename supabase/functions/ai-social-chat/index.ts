@@ -275,10 +275,9 @@ Only use multi_prompt when the user explicitly asks for multi-scene or multi-sho
     const apiUrl =
       provider.base_url || "https://api.anthropic.com/v1/messages";
 
-    const anthropicKey = (Deno.env.get("ANTHROPIC_API_KEY") || "").trim();
     const textResult = await generateText(
       "https://api.anthropic.com/v1/messages",
-      anthropicKey,
+      (anthropicKey || "").trim(),
       messages
     );
     const assistantContent = textResult.content;
