@@ -79,9 +79,10 @@ export function buildAnthropicHeaders(apiKey: string): Record<string, string> {
   } else {
     console.log("[AI] Anthropic API key verified (length: " + apiKey.length + ")");
   }
+  const trimmedKey = apiKey?.trim();
   return {
     "Content-Type": "application/json",
-    "x-api-key": apiKey,
+    "x-api-key": trimmedKey,
     "anthropic-version": ANTHROPIC_API_VERSION,
   };
 }
