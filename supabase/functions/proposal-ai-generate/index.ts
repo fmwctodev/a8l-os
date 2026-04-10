@@ -4,6 +4,7 @@ import {
   buildAnthropicHeaders,
   type AnthropicResponse,
 } from "../_shared/claraConfig.ts";
+import { extractUserContext, getSupabaseClient } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -76,30 +77,17 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const authHeader = req.headers.get("Authorization");
-    const token = authHeader?.replace("Bearer ", "") || "";
-    const isServiceRole = token === supabaseKey;
+    const supabase = getSupabaseClient();
+    const userContext = await extractUserContext(req, supabase);
 
-    if (!isServiceRole) {
-      if (!authHeader) {
-        return new Response(
-          JSON.stringify({ error: "Missing authorization header" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-        auth: { autoRefreshToken: false, persistSession: false },
-      });
-      const { error: authError } = await anonClient.auth.getUser(token);
-      if (authError) {
-        return new Response(
-          JSON.stringify({ error: "Invalid or expired token" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+    if (!userContext) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized", message: "Check Supabase Dashboard logs for [Auth] diagnostic info." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+
+    const user_id = userContext.id;
 
     const payload: RequestPayload = await req.json();
     const {
@@ -112,18 +100,16 @@ Deno.serve(async (req: Request) => {
       sections_to_generate,
       include_contact_history,
       include_opportunity_data,
-      user_id,
       uploaded_documents,
     } = payload;
 
-    if (!proposal_id || !contact_id || !user_id) {
+    if (!proposal_id || !contact_id) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { data: proposal, error: proposalError } = await supabase
       .from("proposals")

@@ -1,5 +1,5 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { extractUserContext, getSupabaseClient } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -169,47 +169,19 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    const supabase = getSupabaseClient();
+    const userContext = await extractUserContext(req, supabase);
+
+    if (!userContext) {
       return new Response(
-        JSON.stringify({ error: "Missing authorization" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
+        JSON.stringify({ error: "Unauthorized", message: "Check Supabase Dashboard logs for [Auth] diagnostic info." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const token = authHeader.replace("Bearer ", "");
-    const anonClient = createClient(
-      supabaseUrl,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
-    const { data: authData, error: authError } =
-      await anonClient.auth.getUser(token);
-    if (authError || !authData.user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid or expired token" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
-    const userId = authData.user.id;
-    const { data: userData } = await supabase
-      .from("users")
-      .select("organization_id")
-      .eq("id", userId)
-      .maybeSingle();
-
-    if (!userData?.organization_id) {
+    const userId = userContext.id;
+    const orgId = userContext.orgId || "";
+    if (!orgId) {
       return new Response(
         JSON.stringify({ error: "User organization not found" }),
         {
@@ -218,8 +190,6 @@ Deno.serve(async (req: Request) => {
         }
       );
     }
-
-    const orgId = userData.organization_id;
     const body = await req.json();
     const { review_id, instructions } = body;
 

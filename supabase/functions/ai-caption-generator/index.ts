@@ -1,5 +1,5 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { extractUserContext, getSupabaseClient } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,40 +40,20 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
+    const supabase = getSupabaseClient();
+    const userContext = await extractUserContext(req, supabase);
 
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!userContext) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized", message: "Check Supabase Dashboard logs for [Auth] diagnostic info." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    const token = authHeader.replace("Bearer ", "");
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-    const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
+    const user = userContext;
+    const orgId = user.orgId || "";
 
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { data: userData } = await supabase
-      .from("users")
-      .select("organization_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!userData?.organization_id) {
+    if (!orgId) {
       return new Response(JSON.stringify({ error: "User not associated with an organization" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -105,7 +85,7 @@ Deno.serve(async (req: Request) => {
     const { data: dbProvider } = await supabase
       .from("llm_providers")
       .select("*")
-      .eq("org_id", userData.organization_id)
+      .eq("org_id", orgId)
       .eq("enabled", true)
       .order("created_at", { ascending: true })
       .limit(1)
@@ -147,7 +127,7 @@ Deno.serve(async (req: Request) => {
     const { data: generation } = await supabase
       .from("content_ai_generations")
       .insert({
-        organization_id: userData.organization_id,
+        organization_id: orgId,
         user_id: user.id,
         content_type: "social_caption",
         prompt,
