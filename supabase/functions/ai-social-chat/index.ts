@@ -4,7 +4,7 @@ import {
   generateTextToVideo,
   generateTextToImage,
 } from "../_shared/kieAdapter.ts";
-import { generateTextViaKie } from "../_shared/kieTextClient.ts";
+import { generateText } from "../_shared/openaiTextClient.ts";
 import { getRequiredAspectRatio } from "../_shared/platformAspectMatrix.ts";
 import {
   buildStructuredPrompt,
@@ -275,9 +275,10 @@ Only use multi_prompt when the user explicitly asks for multi-scene or multi-sho
     const apiUrl =
       provider.base_url || "https://api.anthropic.com/v1/messages";
 
-    const kieApiKey = Deno.env.get("KIE_API_KEY") || "";
-    const textResult = await generateTextViaKie(
-      kieApiKey,
+    const anthropicKey = (Deno.env.get("ANTHROPIC_API_KEY") || "").trim();
+    const textResult = await generateText(
+      "https://api.anthropic.com/v1/messages",
+      anthropicKey,
       messages
     );
     const assistantContent = textResult.content;

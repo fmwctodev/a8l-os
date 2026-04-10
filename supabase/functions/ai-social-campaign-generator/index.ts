@@ -1,7 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { extractUserContext, getSupabaseClient } from "../_shared/auth.ts";
-import { CLARA_MODEL } from "../_shared/claraConfig.ts";
-import { generateTextViaKie } from "../_shared/kieTextClient.ts";
+import { CLARA_MODEL, buildAnthropicHeaders, extractTextFromResponse, type AnthropicResponse } from "../_shared/claraConfig.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -240,15 +239,29 @@ For each post, respond with a JSON array where each element has:
 
 Respond ONLY with the JSON array, no other text.`;
 
-  const kieApiKey = Deno.env.get("KIE_API_KEY") || "";
-  const messages = [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: `Generate ${count} posts for the "${campaign.name}" campaign.` }
-  ];
+  const anthropicKey = (Deno.env.get("ANTHROPIC_API_KEY") || "").trim();
 
   try {
-    const textResult = await generateTextViaKie(kieApiKey, messages);
-    responseText = textResult.content;
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: buildAnthropicHeaders(anthropicKey),
+      body: JSON.stringify({
+        model: CLARA_MODEL,
+        system: systemPrompt,
+        messages: [
+          { role: "user", content: `Generate ${count} posts for the "${campaign.name}" campaign.` },
+        ],
+        temperature: 0.8,
+        max_tokens: 3000,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Anthropic API error ${response.status}: ${errText}`);
+    }
+    const data = await response.json() as AnthropicResponse;
+    responseText = extractTextFromResponse(data);
   } catch (err) {
     console.error("[ai-social-campaign-generator] LLM Error:", err);
     return generateFallbackPosts(campaign, count);

@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { generateTextViaKie } from "../_shared/kieTextClient.ts";
+import { buildAnthropicHeaders, extractTextFromResponse, CLARA_MODEL, type AnthropicResponse } from "../_shared/claraConfig.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -510,19 +510,28 @@ async function callLLM(
   systemPrompt: string,
   userPrompt: string
 ): Promise<string> {
-  const kieApiKey = Deno.env.get("KIE_API_KEY") || "";
-  const messages = [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: userPrompt }
-  ];
+  const apiKey = (Deno.env.get("ANTHROPIC_API_KEY") || providerConfig.api_key_encrypted || "").trim();
 
-  try {
-    const textResult = await generateTextViaKie(kieApiKey, messages);
-    return textResult.content;
-  } catch (err) {
-    console.error("[ai-social-content] Kie.ai LLM Error:", err);
-    throw err;
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: buildAnthropicHeaders(apiKey),
+    body: JSON.stringify({
+      model: CLARA_MODEL,
+      system: systemPrompt,
+      messages: [
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 2000,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Anthropic API error ${response.status}: ${errText}`);
   }
+  const data = await response.json() as AnthropicResponse;
+  return extractTextFromResponse(data);
 }
 
 function buildQuickSuggestionPrompt(
