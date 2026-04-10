@@ -64,6 +64,7 @@ Deno.serve(async (req: Request) => {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
+  try {
     const supabase = getSupabaseClient();
     const userContext = await extractUserContext(req, supabase);
 
