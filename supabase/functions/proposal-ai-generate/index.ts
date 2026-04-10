@@ -77,8 +77,16 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    console.log("[AI] Request received. Method:", req.method);
+    const authHeader = req.headers.get("Authorization");
+    console.log("[AI] Auth header present:", !!authHeader);
+    
     const supabase = getSupabaseClient();
+    console.log("[AI] Supabase client initialized. URL:", Deno.env.get("SUPABASE_URL"));
+    
     const userContext = await extractUserContext(req, supabase);
+    console.log("[AI] extractUserContext result:", userContext ? "SUCCESS" : "NULL");
+
 
     if (!userContext) {
       return new Response(
@@ -87,7 +95,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const user_id = userContext.id;
+    const authenticatedUserId = userContext.id;
 
     const payload: RequestPayload = await req.json();
     const {
@@ -354,7 +362,7 @@ Deno.serve(async (req: Request) => {
         sections_generated: generatedSections.map((s) => s.section_type),
         meetings_used: meeting_ids?.length || 0,
       },
-      actor_user_id: user_id,
+      actor_user_id: authenticatedUserId,
     });
 
     try {
