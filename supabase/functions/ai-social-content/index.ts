@@ -1,5 +1,5 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { generateTextViaKie } from "../_shared/kieTextClient.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -510,31 +510,19 @@ async function callLLM(
   systemPrompt: string,
   userPrompt: string
 ): Promise<string> {
-  const apiKey = providerConfig.api_key_encrypted;
+  const kieApiKey = Deno.env.get("KIE_API_KEY") || "";
+  const messages = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt }
+  ];
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      system: systemPrompt,
-      messages: [
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 2000,
-    }),
-  });
-
-  if (response.ok) {
-    const data = await response.json();
-    return data.content?.[0]?.text || "";
+  try {
+    const textResult = await generateTextViaKie(kieApiKey, messages);
+    return textResult.content;
+  } catch (err) {
+    console.error("[ai-social-content] Kie.ai LLM Error:", err);
+    throw err;
   }
-  throw new Error("Anthropic API request failed");
 }
 
 function buildQuickSuggestionPrompt(

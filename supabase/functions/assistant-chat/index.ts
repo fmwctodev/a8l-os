@@ -466,6 +466,13 @@ async function handleStreamingChat(
   });
 
   if (!anthropicRes.ok) {
+    const anthropicKey = (llmConfig.apiKey || "").trim();
+    if (anthropicKey) {
+      console.log(`[Clara] Anthropic Key Diagnostic: Length=${anthropicKey.length}, Prefix=${anthropicKey.substring(0, 7)}..., ValidPrefix=${anthropicKey.startsWith("sk-ant")}`);
+    } else {
+      console.warn("[Clara] No Anthropic API key found in configuration.");
+    }
+
     const errText = await anthropicRes.text();
     const errMsg = `Anthropic API error ${anthropicRes.status}: ${errText.slice(0, 200)}`;
     return new Response(sseEvent({ type: "error", message: errMsg }) + "data: [DONE]\n\n", {

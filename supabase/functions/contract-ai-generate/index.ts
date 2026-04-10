@@ -11,7 +11,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers":
-    "Content-Type, Authorization, X-Client-Info, Apikey",
+    "Content-Type, Authorization, X-Client-Info, Apikey, X-Supabase-Auth",
 };
 
 const CONTRACT_MODEL = CLARA_MODEL;
@@ -94,8 +94,6 @@ Deno.serve(async (req: Request) => {
         }
       );
     }
-
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { data: contract, error: contractError } = await supabase
       .from("contracts")
