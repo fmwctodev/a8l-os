@@ -439,6 +439,7 @@ Only use multi_prompt when the user explicitly asks for multi-scene or multi-sho
                 : 5);
 
             const effectiveMode = video_mode || (modelDefaults.mode as string) || undefined;
+            const hasMultiShot = isVideo && draft.multi_prompt && draft.multi_prompt.length > 0;
 
             const { data: job, error: jobErr } = await supabase
               .from("media_generation_jobs")
@@ -469,7 +470,6 @@ Only use multi_prompt when the user explicitly asks for multi-scene or multi-sho
               veoModelParam = modelKey === "google/veo-3.1" ? "veo3" : "veo3_fast";
             }
 
-            const hasMultiShot = isVideo && draft.multi_prompt && draft.multi_prompt.length > 0;
 
             if (isVideo) {
               kieResult = await generateTextToVideo(
