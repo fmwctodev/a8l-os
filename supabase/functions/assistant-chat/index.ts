@@ -1023,12 +1023,73 @@ async function executeITSAction(
     }
 
     case "draft_email": {
-      return {
-        action_id: action.action_id,
-        status: "success",
-        resource_id: `draft-${action.action_id}`,
-        error: null,
+      const draftToken = await resolveGmailAccessToken(supabase, user.id, user.orgId);
+      if (!draftToken) return fail(action, "Gmail not connected. Please connect Gmail in Settings > Integrations.");
+
+      const draftTo = (p.to as string[]) || [];
+      const draftCc = (p.cc as string[]) || [];
+      const draftSubject = (p.subject as string) || "";
+      const draftBody = (p.body as string) || "";
+
+      const draftRaw = createRawEmail(userData.email, draftTo, draftCc, draftSubject, draftBody);
+
+      const draftPayload: Record<string, unknown> = {
+        message: { raw: draftRaw },
       };
+      if (p.reply_to_message_id) {
+        (draftPayload.message as Record<string, unknown>).threadId = p.reply_to_message_id;
+      }
+
+      const gmailDraftRes = await fetch(
+        "https://gmail.googleapis.com/gmail/v1/users/me/drafts",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${draftToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(draftPayload),
+        }
+      );
+
+      if (!gmailDraftRes.ok) {
+        const errText = await gmailDraftRes.text();
+        return fail(action, `Gmail draft creation failed: ${errText}`);
+      }
+
+      const draftResult = await gmailDraftRes.json();
+      const gmailDraftId = draftResult.id;
+
+      // Also save to conversations so it appears in the Conversations UI
+      try {
+        const contactEmail = draftTo[0];
+        if (contactEmail) {
+          const { data: contactRow } = await supabase
+            .from("contacts")
+            .select("id")
+            .eq("organization_id", user.orgId)
+            .eq("email", contactEmail)
+            .maybeSingle();
+
+          if (contactRow) {
+            await supabase.from("conversations").insert({
+              organization_id: user.orgId,
+              contact_id: contactRow.id,
+              channel: "email",
+              direction: "outbound",
+              status: "draft",
+              subject: draftSubject,
+              body_text: draftBody,
+              metadata: { gmail_draft_id: gmailDraftId, created_via: "clara" },
+              created_by: user.id,
+            });
+          }
+        }
+      } catch (convErr) {
+        console.warn("[Clara] Failed to save draft to conversations:", convErr);
+      }
+
+      return ok(action, gmailDraftId);
     }
 
     case "send_email": {
