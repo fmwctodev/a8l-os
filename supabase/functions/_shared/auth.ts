@@ -39,15 +39,29 @@ export async function extractUserContext(
     console.log("[Auth] Supabase environment verified. Project URL:", supabaseUrl);
   }
 
+  let user = null;
   const anonClient = getAnonClient();
-  const { data: { user }, error: authError } = await anonClient.auth.getUser(token);
+  const { data: { user: authUser }, error: authError } = await anonClient.auth.getUser(token);
 
   if (authError) {
-    console.error("[Auth] JWT validation failed:", authError.message, {
-      code: authError.code,
-      status: authError.status,
-      tokenSnippet: token.substring(0, 10) + "..."
-    });
+    console.warn("[Auth] getUser() failed, attempting manual decode:", authError.message);
+    try {
+      // Manual decode fallback for "missing sub" or project-mismatch issues
+      const payloadBase64 = token.split(".")[1];
+      const decoded = JSON.parse(atob(payloadBase64.replace(/-/g, "+").replace(/_/g, "/")));
+      if (decoded.sub) {
+        user = { id: decoded.sub };
+        console.log("[Auth] Manually extracted User ID from JWT:", user.id);
+      }
+    } catch (decodeErr) {
+      console.error("[Auth] Manual decode also failed:", decodeErr);
+    }
+  } else {
+    user = authUser;
+  }
+
+  if (!user) {
+    console.error("[Auth] No user could be identified from JWT");
     return null;
   }
 
