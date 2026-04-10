@@ -12,7 +12,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const PROPOSAL_MODEL = "claude-opus-4-6";
+const PROPOSAL_MODEL = "claude-3-5-sonnet-20241022";
 const PROPOSAL_MAX_TOKENS = 16384;
 const PROPOSAL_TEMPERATURE = 0.5;
 

@@ -117,7 +117,7 @@ async function generateDraft(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-3-5-sonnet-20241022",
       system: systemPrompt,
       messages: [
         { role: "user", content: userPrompt },
@@ -279,7 +279,7 @@ Deno.serve(async (req: Request) => {
           org_id: orgId,
           review_id,
           draft_text: result.text,
-          model: "claude-sonnet-4-20250514",
+          model: "claude-3-5-sonnet-20241022",
           tone_preset: tone.key,
           created_by_user_id: userId,
           applied: false,
@@ -302,7 +302,7 @@ Deno.serve(async (req: Request) => {
       organization_id: orgId,
       feature: "reputation_ai_draft",
       provider: "anthropic",
-      model: "claude-sonnet-4-20250514",
+      model: "claude-3-5-sonnet-20241022",
       tokens_used: totalTokens,
       metadata: {
         review_id,
@@ -332,7 +332,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         drafts,
-        model: "claude-sonnet-4-20250514",
+        model: "claude-3-5-sonnet-20241022",
         total_tokens: totalTokens,
       }),
       {
