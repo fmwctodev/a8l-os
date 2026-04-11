@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSidebar } from '../../contexts/SidebarContext';
@@ -12,7 +12,7 @@ import { PendingDraftsSection } from '../../components/conversations/PendingDraf
 import { ConversationErrorBoundary } from '../../components/ConversationErrorBoundary';
 import { getConversations, getConversationById, markConversationAsRead, findOrCreateConversation } from '../../services/conversations';
 import type { Conversation, ConversationFilters as FilterType } from '../../types';
-import { MessageSquare, Filter, Users, Inbox, Plus, ArrowLeft } from 'lucide-react';
+import { MessageSquare, Filter, Users, Inbox, Plus, ArrowLeft, Search, X } from 'lucide-react';
 
 type ConversationTabType = 'inbox' | 'team-messaging';
 
@@ -37,6 +37,8 @@ export function Conversations() {
   const [showContactPanel, setShowContactPanel] = useState(true);
   const [showNewConversationModal, setShowNewConversationModal] = useState(false);
   const [creatingConversation, setCreatingConversation] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const mobileShowThread = isMobile && !!conversationId;
 
@@ -141,7 +143,7 @@ export function Conversations() {
   };
 
   const listPanel = (
-    <div className={`${isMobile ? 'flex-1' : 'w-80'} border-r border-slate-700 flex flex-col bg-slate-800 min-h-0 ${isMobile && mobileShowThread ? 'hidden' : 'flex'}`}>
+    <div className={`${isMobile ? 'flex-1' : 'w-96'} border-r border-slate-700 flex flex-col bg-slate-800 min-h-0 ${isMobile && mobileShowThread ? 'hidden' : 'flex'}`}>
       <div className="p-4 border-b border-slate-700">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold text-white">Conversations</h2>
@@ -200,6 +202,35 @@ export function Conversations() {
           >
             Mine
           </button>
+        </div>
+
+        <div className="relative mt-3">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSearchQuery(val);
+              if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+              searchTimeoutRef.current = setTimeout(() => {
+                handleFilterChange({ ...filters, search: val || undefined });
+              }, 300);
+            }}
+            placeholder="Search contacts..."
+            className="w-full pl-9 pr-8 py-2 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 transition-colors"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                handleFilterChange({ ...filters, search: undefined });
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
       </div>
 

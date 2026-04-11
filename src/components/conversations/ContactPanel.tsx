@@ -205,7 +205,8 @@ interface OverviewTabProps {
 }
 
 function OverviewTab({ contact, conversation, tags, canViewAI, loadingInsights, aiInsights }: OverviewTabProps) {
-  const [showAIInsights, setShowAIInsights] = useState(true);
+  const hasInsights = aiInsights && aiInsights.memories.length > 0;
+  const [showAIInsights, setShowAIInsights] = useState(hasInsights);
 
   const addressParts = [
     contact.address_line1,

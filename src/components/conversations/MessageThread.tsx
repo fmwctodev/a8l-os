@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { RefreshCw, AlertTriangle, Bot, Mic, Clock, PhoneCall, FileAudio, ExternalLink } from 'lucide-react';
+import { RefreshCw, AlertTriangle, Bot, Mic, Clock, PhoneCall, FileAudio, ExternalLink, MessageSquare } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { MessageBubble } from './MessageBubble';
@@ -348,8 +348,20 @@ export function MessageThread({
             </button>
           </div>
         ) : threadItems.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-slate-400">
-            {isVapiConversation ? 'No messages in this conversation.' : 'No messages yet. Start the conversation!'}
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center max-w-xs">
+              <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
+                <MessageSquare className="w-7 h-7 text-slate-500" />
+              </div>
+              <p className="text-slate-300 font-medium mb-1">
+                {isVapiConversation ? 'No messages in this conversation.' : 'Start the conversation'}
+              </p>
+              {!isVapiConversation && (
+                <p className="text-sm text-slate-500">
+                  Send an email or SMS to begin communicating with this contact.
+                </p>
+              )}
+            </div>
           </div>
         ) : (
           threadItems.map((item, index) => {

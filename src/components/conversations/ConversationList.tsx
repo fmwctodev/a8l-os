@@ -248,7 +248,10 @@ function ConversationListItem({ conversation, isSelected, onClick, bulkMode, isC
     ? `${contact.first_name} ${contact.last_name}`.trim()
     : 'Unknown';
 
-  const lastMessagePreview = conversation.last_message?.body || 'No messages yet';
+  const hasMessages = !!conversation.last_message;
+  const lastMessagePreview = hasMessages
+    ? (conversation.last_message?.body || conversation.last_message?.subject || 'No preview available')
+    : (conversation.unread_count > 0 ? `${conversation.unread_count} unread message${conversation.unread_count > 1 ? 's' : ''}` : 'No messages yet');
   const truncatedPreview = lastMessagePreview.length > 50
     ? lastMessagePreview.substring(0, 50) + '...'
     : lastMessagePreview;
@@ -357,12 +360,16 @@ function ConversationListItem({ conversation, isSelected, onClick, bulkMode, isC
             )}
 
             <div className="flex items-center gap-2">
-              <ChannelIcon
-                channel={conversation.last_message?.channel as MessageChannel}
-                size="sm"
-                platform={conversation.late_dm_platform}
-              />
-              <p className={`text-sm truncate flex-1 ${hasUnread ? 'text-slate-200 font-medium' : 'text-slate-400'}`}>
+              {hasMessages ? (
+                <ChannelIcon
+                  channel={conversation.last_message?.channel as MessageChannel}
+                  size="sm"
+                  platform={conversation.late_dm_platform}
+                />
+              ) : (
+                <MessageCircle className="w-3.5 h-3.5 text-slate-500" />
+              )}
+              <p className={`text-sm truncate flex-1 ${hasUnread ? 'text-slate-200 font-medium' : hasMessages ? 'text-slate-400' : 'text-slate-500 italic'}`}>
                 {truncatedPreview}
               </p>
             </div>
