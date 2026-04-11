@@ -18,6 +18,13 @@ const CONTRACT_MODEL = CLARA_MODEL;
 const CONTRACT_MAX_TOKENS = 16384;
 const CONTRACT_TEMPERATURE = 0.4;
 
+// Hardcoded service provider signatory info used to pre-fill the Signatures
+// section on every generated contract. Kept in code per product decision.
+const SERVICE_PROVIDER_LEGAL_NAME = "Sitehues Media Inc. DBA: Autom8ion Lab";
+const SERVICE_PROVIDER_SIGNATORY_NAME = "Sean Scott Richard";
+const SIGNATURES_SECTION_ANNOTATION =
+  "The Service Provider has pre-signed. The contract becomes binding once the Client signs and dates it.";
+
 const CONTRACT_SECTION_TYPES = [
   "scope",
   "deliverables",
@@ -268,6 +275,28 @@ DEAL INFORMATION:
       );
     }
 
+    // Replace any AI-generated signatures section with a deterministic,
+    // pre-signed-by-service-provider template. The AI prompt already asks the
+    // model to skip this section, but the filter + push here is defensive so
+    // we always have exactly one signatures row with our canonical HTML.
+    generatedSections = generatedSections.filter(
+      (s) => s.section_type !== "signatures"
+    );
+    const contractPartyBName =
+      (contract as { party_b_name?: string | null }).party_b_name ?? null;
+    const contractCreatedAt = String(
+      (contract as { created_at?: string }).created_at ?? new Date().toISOString()
+    );
+    generatedSections.push({
+      section_type: "signatures",
+      title: "Signatures",
+      content: buildServiceProviderSignaturesHtml(
+        contractPartyBName,
+        contractCreatedAt
+      ),
+      annotation: SIGNATURES_SECTION_ANNOTATION,
+    });
+
     for (let i = 0; i < generatedSections.length; i++) {
       const section = generatedSections[i];
       await supabase.from("contract_sections").insert({
@@ -390,7 +419,7 @@ COMPANY INFORMATION:
 - Website: ${company.website}
 - Location: ${company.city ? `${company.city}, ` : ""}${company.state || "[STATE]"}
 
-REQUIRED SECTIONS (generate all 12 in order):
+REQUIRED SECTIONS (generate all 11 in order — do NOT include a signatures section):
 
 1. Scope of Work (section_type: "scope")
    - Define exactly what work is included
@@ -445,9 +474,10 @@ REQUIRED SECTIONS (generate all 12 in order):
     - Entire agreement, amendments in writing, severability, force majeure, notices
     - Annotation: "Standard housekeeping clauses for edge cases."
 
-12. Signatures (section_type: "signatures")
-    - Signature lines, printed names, dates for both parties
-    - Annotation: "The contract is not binding until both parties sign and date it."
+NOTE: The Signatures section is generated deterministically AFTER your output
+(it pre-fills the service provider side with a cursive signature, printed name,
+and date, and leaves the client side blank). Do NOT include a "signatures"
+section in your JSON response — it will be filtered out and replaced.
 
 DRAFTING RULES:
 - Plain language always. Write "The client pays $5,000 within 10 days of signing" not legalese
@@ -514,7 +544,7 @@ function buildUserPrompt(
 ): string {
   const typeLabel = CONTRACT_TYPE_LABELS[contractType] || contractType;
 
-  let prompt = `Generate a complete ${typeLabel} with all 12 required sections.
+  let prompt = `Generate a complete ${typeLabel} with all 11 required sections (the Signatures section is generated separately and must NOT be included in your response).
 
 PARTIES:
 Party A (Service Provider): ${contract.party_a_name || company.name}
@@ -537,7 +567,7 @@ ${opportunityContext}`;
     prompt += `\n\nADDITIONAL INSTRUCTIONS FROM THE USER:\n${customInstructions}`;
   }
 
-  prompt += `\n\nGenerate all 12 sections with professional HTML content and plain-language annotations. Derive all terms from the proposal data above. Return ONLY the raw JSON array.`;
+  prompt += `\n\nGenerate all 11 sections with professional HTML content and plain-language annotations. Do NOT include a signatures section — it is generated deterministically after your output. Derive all terms from the proposal data above. Return ONLY the raw JSON array.`;
 
   return prompt;
 }
@@ -674,6 +704,85 @@ function ensureAnnotation(s: GeneratedSection): GeneratedSection {
       "The contract is not binding until both parties sign and date it.",
   };
   return { ...s, annotation: defaults[s.section_type] || "" };
+}
+
+/**
+ * Build a deterministic Signatures section HTML with the service provider
+ * side pre-filled (legal name, signer name, cursive signature, date) and the
+ * client side left blank for the client to complete when signing.
+ *
+ * The HTML uses inline styles only so it renders identically through the
+ * sanitizer (src/utils/sanitizeHtml.ts) and across PublicContractPage,
+ * PublicContractSignPage, and ContractDetail.
+ */
+function buildServiceProviderSignaturesHtml(
+  partyBName: string | null,
+  createdAt: string
+): string {
+  const formattedDate = new Date(createdAt).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+  const clientName = partyBName ?? "";
+  const headerCellStyle =
+    "text-align:left;padding:12px;border-bottom:1px solid #334155;text-transform:uppercase;font-size:11px;letter-spacing:0.5px;color:#94a3b8;";
+  const bodyCellStyle = "vertical-align:top;padding:16px 12px;width:50%;";
+  const labelStyle =
+    "border-top:1px solid #475569;margin:0;padding-top:4px;font-size:11px;color:#64748b;";
+  const cursiveStyle =
+    "font-family:'Brush Script MT','Lucida Handwriting','Segoe Script',cursive;font-size:32px;margin:0 0 4px 0;color:#22d3ee;";
+
+  return [
+    `<p><strong>IN WITNESS WHEREOF,</strong> the parties have executed this Agreement as of the Effective Date written below.</p>`,
+    `<table style="width:100%;border-collapse:collapse;margin-top:24px;">`,
+    `<thead><tr>`,
+    `<th style="${headerCellStyle}">Service Provider</th>`,
+    `<th style="${headerCellStyle}">Client</th>`,
+    `</tr></thead>`,
+    `<tbody>`,
+    // Row 1: party name
+    `<tr>`,
+    `<td style="${bodyCellStyle}"><strong>${SERVICE_PROVIDER_LEGAL_NAME}</strong></td>`,
+    `<td style="${bodyCellStyle}"><strong>${clientName}</strong></td>`,
+    `</tr>`,
+    // Row 2: signature
+    `<tr>`,
+    `<td style="${bodyCellStyle}">`,
+    `<p style="${cursiveStyle}">${SERVICE_PROVIDER_SIGNATORY_NAME}</p>`,
+    `<p style="${labelStyle}">Signature</p>`,
+    `</td>`,
+    `<td style="${bodyCellStyle}">`,
+    `<p style="margin:0 0 4px 0;height:40px;">&nbsp;</p>`,
+    `<p style="${labelStyle}">Signature</p>`,
+    `</td>`,
+    `</tr>`,
+    // Row 3: print name
+    `<tr>`,
+    `<td style="${bodyCellStyle}">`,
+    `<p style="margin:0 0 4px 0;">${SERVICE_PROVIDER_SIGNATORY_NAME}</p>`,
+    `<p style="${labelStyle}">Print Name</p>`,
+    `</td>`,
+    `<td style="${bodyCellStyle}">`,
+    `<p style="margin:0 0 4px 0;height:20px;">&nbsp;</p>`,
+    `<p style="${labelStyle}">Print Name</p>`,
+    `</td>`,
+    `</tr>`,
+    // Row 4: date
+    `<tr>`,
+    `<td style="${bodyCellStyle}">`,
+    `<p style="margin:0 0 4px 0;">${formattedDate}</p>`,
+    `<p style="${labelStyle}">Date</p>`,
+    `</td>`,
+    `<td style="${bodyCellStyle}">`,
+    `<p style="margin:0 0 4px 0;height:20px;">&nbsp;</p>`,
+    `<p style="${labelStyle}">Date</p>`,
+    `</td>`,
+    `</tr>`,
+    `</tbody>`,
+    `</table>`,
+    `<p style="margin-top:24px;font-style:italic;color:#64748b;font-size:13px;">This agreement becomes effective on the date last signed by both parties.</p>`,
+  ].join("");
 }
 
 function guessSectionType(title: string): string {
