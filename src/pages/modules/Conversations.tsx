@@ -144,7 +144,7 @@ export function Conversations() {
 
   const listPanel = (
     <div className={`${isMobile ? 'flex-1' : 'w-96'} border-r border-slate-700 flex flex-col bg-slate-800 min-h-0 ${isMobile && mobileShowThread ? 'hidden' : 'flex'}`}>
-      <div className="p-4 border-b border-slate-700">
+      <div className="p-4 border-b border-slate-700 flex-shrink-0">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold text-white">Conversations</h2>
           <div className="flex items-center gap-2">
@@ -306,7 +306,7 @@ export function Conversations() {
   );
 
   return (
-    <div className="-m-3 sm:-m-4 md:-m-6 h-[calc(100vh-64px)] flex flex-col bg-slate-900 relative isolate">
+    <div className="-m-3 sm:-m-4 md:-m-6 h-[calc(100vh-64px)] flex flex-col bg-slate-900 relative isolate overflow-hidden">
       <div className="border-b border-slate-700 bg-slate-800 px-4 flex-shrink-0">
         <div className="flex items-center gap-1">
           <button
