@@ -327,7 +327,7 @@ export function MessageThread({
         <VapiCallInfoBar metadata={vapiMeta} />
       )}
 
-      <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4 custom-scrollbar">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full" />

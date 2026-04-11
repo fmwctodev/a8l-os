@@ -78,7 +78,7 @@ export function ConversationList({
 
   if (loading && conversations.length === 0) {
     return (
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
         {[...Array(8)].map((_, i) => (
           <div key={i} className="p-4 border-b border-slate-700 animate-pulse">
             <div className="flex items-start gap-3">
@@ -187,7 +187,7 @@ export function ConversationList({
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
         {conversations.map((conversation) => (
           <ConversationListItem
             key={conversation.id}
