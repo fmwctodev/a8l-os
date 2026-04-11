@@ -310,6 +310,7 @@ export function MessageThread({
   };
 
   const threadItems = buildThreadItems(messages, events);
+  const hasNoMessages = messages.length === 0;
   const isVapiConversation = conversation.provider === 'vapi';
   const vapiMeta = conversation.conversation_metadata as Record<string, unknown> | undefined;
 
@@ -347,7 +348,7 @@ export function MessageThread({
               Retry
             </button>
           </div>
-        ) : threadItems.length === 0 ? (
+        ) : hasNoMessages ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center max-w-xs">
               <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
