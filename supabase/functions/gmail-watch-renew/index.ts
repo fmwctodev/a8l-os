@@ -1,5 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  getAccessToken,
+  type GmailTokenRecord,
+} from "../_shared/gmail-helpers.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -8,7 +12,6 @@ const corsHeaders = {
     "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_API_URL = "https://gmail.googleapis.com/gmail/v1";
 
 Deno.serve(async (req: Request) => {
@@ -19,11 +22,9 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const clientId = Deno.env.get("GOOGLE_CLIENT_ID")!;
-    const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
     const pubsubTopic = Deno.env.get("GMAIL_PUBSUB_TOPIC");
 
-    if (!supabaseUrl || !serviceRoleKey || !clientId || !clientSecret) {
+    if (!supabaseUrl || !serviceRoleKey) {
       return new Response(
         JSON.stringify({ error: "Missing configuration" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -43,15 +44,16 @@ Deno.serve(async (req: Request) => {
 
     const twoDaysFromNow = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
 
+    // Fetch sync states that need watch renewal (expired or never set)
     const { data: expiringSyncs, error: queryError } = await supabase
       .from("gmail_sync_state")
-      .select("*, gmail_token:gmail_oauth_tokens!inner(id, access_token, refresh_token, token_expiry, email)")
+      .select("*")
       .or(`watch_expiration.is.null,watch_expiration.lt.${twoDaysFromNow}`);
 
     if (queryError) {
       console.error("Failed to query sync states:", queryError);
       return new Response(
-        JSON.stringify({ error: "Failed to query sync states" }),
+        JSON.stringify({ error: "Failed to query sync states", detail: queryError.message }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -69,49 +71,22 @@ Deno.serve(async (req: Request) => {
 
     for (const sync of expiringSyncs) {
       try {
-        const tokenRecord = (sync as Record<string, unknown>).gmail_token as {
-          id: string;
-          access_token: string;
-          refresh_token: string;
-          token_expiry: string;
-          email: string;
-        };
+        // Fetch token record separately (no FK join needed)
+        const { data: tokenRecord } = await supabase
+          .from("gmail_oauth_tokens")
+          .select("*")
+          .eq("organization_id", sync.organization_id)
+          .eq("user_id", sync.user_id)
+          .maybeSingle();
 
-        if (!tokenRecord) continue;
-
-        let accessToken = tokenRecord.access_token;
-        const tokenExpiry = new Date(tokenRecord.token_expiry);
-
-        if (tokenExpiry < new Date(Date.now() + 5 * 60 * 1000)) {
-          const refreshRes = await fetch(GOOGLE_TOKEN_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-              refresh_token: tokenRecord.refresh_token,
-              client_id: clientId,
-              client_secret: clientSecret,
-              grant_type: "refresh_token",
-            }),
-          });
-
-          if (!refreshRes.ok) {
-            errors.push(`Token refresh failed for ${tokenRecord.email}`);
-            failed++;
-            continue;
-          }
-
-          const refreshData = await refreshRes.json();
-          accessToken = refreshData.access_token;
-
-          await supabase
-            .from("gmail_oauth_tokens")
-            .update({
-              access_token: accessToken,
-              token_expiry: new Date(Date.now() + refreshData.expires_in * 1000).toISOString(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", tokenRecord.id);
+        if (!tokenRecord) {
+          errors.push(`No token found for user ${sync.user_id}`);
+          failed++;
+          continue;
         }
+
+        // Use the shared getAccessToken which handles decryption and refresh
+        const accessToken = await getAccessToken(supabase, tokenRecord as GmailTokenRecord);
 
         const watchRes = await fetch(`${GMAIL_API_URL}/users/me/watch`, {
           method: "POST",
@@ -145,6 +120,7 @@ Deno.serve(async (req: Request) => {
           })
           .eq("id", sync.id);
 
+        console.log(`Watch renewed for ${tokenRecord.email}, expires ${new Date(Number(watchData.expiration)).toISOString()}`);
         renewed++;
       } catch (err) {
         errors.push(`Error for sync ${sync.id}: ${(err as Error).message}`);
