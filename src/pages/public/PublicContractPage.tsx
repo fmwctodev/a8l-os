@@ -17,7 +17,6 @@ import type { Contract, BrandKitWithVersion } from '../../types';
 import {
   AlertCircle,
   Loader2,
-  Shield,
 } from 'lucide-react';
 
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
@@ -104,14 +103,6 @@ export default function PublicContractPage() {
       <DocumentContentStyles accentColor={accentColor} />
 
       <div className="max-w-[900px] mx-auto px-6 py-12 md:py-16">
-
-        {/* Disclaimer Banner */}
-        <div className="bg-[#451a03] border border-[#92400e] rounded-lg px-5 py-4 mb-10 flex items-start gap-3">
-          <Shield className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-          <p className="text-[11px] text-amber-400 uppercase tracking-wide leading-relaxed font-medium">
-            This contract is a template for informational purposes only. It must be reviewed by a qualified attorney before signing.
-          </p>
-        </div>
 
         {/* Header */}
         <header className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-6 mb-12 pb-8" style={{ borderBottom: `2px solid ${accentColor}` }}>
