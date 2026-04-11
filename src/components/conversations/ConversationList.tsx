@@ -106,7 +106,7 @@ export function ConversationList({
   }
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col min-h-0">
       {canManage && (
         <div className="p-2 border-b border-slate-700 flex items-center justify-between">
           {bulkMode ? (
