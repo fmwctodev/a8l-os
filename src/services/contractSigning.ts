@@ -8,7 +8,8 @@ import type {
 } from '../types';
 import { generateContractHTML } from './contractPdfExport';
 import { getBrandKits } from './brandboard';
-import { advanceOpportunityToStageByName } from './opportunities';
+import { advanceOpportunityToStageByName, closeOpportunity } from './opportunities';
+import { createProject } from './projects';
 import { APP_BASE_URL } from '../constants';
 
 export async function computeDocumentHash(content: string): Promise<string> {
@@ -267,21 +268,136 @@ export async function submitContractSignature(params: {
     },
   });
 
+  // Post-signature automation: advance the opportunity to "Closed Won"
+  // (+ flip status to 'won') and create a new Kickoff-stage project linked
+  // to the same contact/opportunity/proposal. All wrapped in try/catch so
+  // an automation failure never blocks the signing itself.
   try {
     const { data: contract } = await supabase
       .from('contracts')
-      .select('opportunity_id')
+      .select('opportunity_id, created_by')
       .eq('id', params.contractId)
       .maybeSingle();
 
+    const actorUserId = contract?.created_by ?? null;
+
     if (contract?.opportunity_id) {
-      await advanceOpportunityToStageByName(contract.opportunity_id, 'Agreement Signed', null);
+      // 1. Advance opportunity stage to Closed Won. advanceOpportunityToStageByName
+      //    is a no-op if the opp is already past that stage or not open.
+      await advanceOpportunityToStageByName(
+        contract.opportunity_id,
+        'Closed Won',
+        actorUserId
+      );
+
+      // 2. Flip opportunity.status to 'won'. closeOpportunity throws if the
+      //    opportunity is not found; ignore errors so a stale link or an
+      //    already-closed opp does not fail the signature.
+      try {
+        await closeOpportunity(
+          contract.opportunity_id,
+          'won',
+          actorUserId ?? params.orgId
+        );
+      } catch (err) {
+        console.warn('[contract-signing] closeOpportunity skipped:', String(err));
+      }
     }
+
+    // 3. Create a Kickoff-stage project from this contract (dedupes by opp/proposal).
+    await createKickoffProjectFromContract(
+      params.contractId,
+      actorUserId ?? params.orgId
+    );
   } catch (err) {
-    console.error('Failed to advance opportunity stage on contract signature:', err);
+    console.error('[contract-signing] Post-sign automation failed:', err);
   }
 
   return signature;
+}
+
+/**
+ * When a contract is signed by the client, spin up a matching project in the
+ * Kickoff stage of the default project pipeline. Idempotent: if a project
+ * already exists for this contract's opportunity (or proposal, or
+ * contact+title as a last resort), this is a no-op.
+ */
+async function createKickoffProjectFromContract(
+  contractId: string,
+  actorUserId: string
+): Promise<void> {
+  // 1. Fetch contract fields needed to seed the project.
+  const { data: contract } = await supabase
+    .from('contracts')
+    .select(
+      'id, org_id, contact_id, opportunity_id, proposal_id, title, total_value, currency, effective_date, created_by'
+    )
+    .eq('id', contractId)
+    .maybeSingle();
+
+  if (!contract || !contract.contact_id) return;
+
+  // 2. Dedupe — skip if a project already exists for this contract's
+  //    opportunity (preferred), proposal (fallback), or contact+title.
+  let dedupeQuery = supabase
+    .from('projects')
+    .select('id', { count: 'exact', head: true })
+    .eq('org_id', contract.org_id);
+
+  if (contract.opportunity_id) {
+    dedupeQuery = dedupeQuery.eq('opportunity_id', contract.opportunity_id);
+  } else if (contract.proposal_id) {
+    dedupeQuery = dedupeQuery.eq('proposal_id', contract.proposal_id);
+  } else {
+    dedupeQuery = dedupeQuery
+      .eq('contact_id', contract.contact_id)
+      .eq('name', contract.title ?? '');
+  }
+
+  const { count: existingCount } = await dedupeQuery;
+  if ((existingCount ?? 0) > 0) return;
+
+  // 3. Resolve the default project pipeline for this org.
+  const { data: pipeline } = await supabase
+    .from('project_pipelines')
+    .select('id')
+    .eq('org_id', contract.org_id)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (!pipeline) return;
+
+  // 4. Resolve the Kickoff stage in that pipeline.
+  const { data: kickoffStage } = await supabase
+    .from('project_stages')
+    .select('id')
+    .eq('org_id', contract.org_id)
+    .eq('pipeline_id', pipeline.id)
+    .ilike('name', 'kickoff')
+    .maybeSingle();
+
+  if (!kickoffStage) return;
+
+  // 5. Create the project, delegating to the existing service so timeline
+  //    events and the project.created event get emitted for free.
+  await createProject(
+    {
+      org_id: contract.org_id,
+      contact_id: contract.contact_id,
+      opportunity_id: contract.opportunity_id ?? null,
+      proposal_id: contract.proposal_id ?? null,
+      pipeline_id: pipeline.id,
+      stage_id: kickoffStage.id,
+      name: contract.title || 'New Project',
+      description: `Auto-created when contract "${contract.title ?? 'Untitled'}" was signed.`,
+      start_date: contract.effective_date ?? null,
+      budget_amount: contract.total_value ?? 0,
+      currency: contract.currency ?? 'USD',
+      created_by: contract.created_by ?? actorUserId,
+    },
+    actorUserId
+  );
 }
 
 export async function declineContractSignature(
