@@ -349,7 +349,7 @@ export function Conversations() {
             <ConversationErrorBoundary
               key={`contact-${selectedConversation?.id}`}
             >
-              <div className="w-80 border-l border-slate-700 bg-slate-800 overflow-y-auto custom-scrollbar">
+              <div className="w-80 border-l border-slate-700 bg-slate-800 overflow-hidden">
                 <ContactPanel
                   conversation={selectedConversation}
                   onClose={() => setShowContactPanel(false)}

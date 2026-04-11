@@ -165,7 +165,7 @@ export function ContactPanel({ conversation, onClose }: ContactPanelProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-4">
         {activeTab === 'overview' && (
           <OverviewTab
             contact={contact}
