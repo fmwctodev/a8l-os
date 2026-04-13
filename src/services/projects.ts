@@ -131,17 +131,11 @@ export async function createProject(
     actor_user_id: actorUserId,
   });
 
-  emitEvent('project.created', {
-    entityType: 'project',
-    entityId: data.id,
-    orgId: input.org_id,
-    data: {
-      contact_id: input.contact_id,
-      pipeline_id: input.pipeline_id,
-      stage_id: input.stage_id,
-      name: input.name,
-    },
-  }, { userId: actorUserId }).catch(() => {});
+  // NOTE: emitEvent('project.created') was removed here intentionally.
+  // The project_created event is now dispatched by a DB trigger
+  // (trg_project_created_enqueue_event) that fires AFTER INSERT on the
+  // projects table. This ensures both TS-created and SQL-trigger-created
+  // projects get the event emitted exactly once.
 
   return data as Project;
 }

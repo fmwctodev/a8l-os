@@ -212,6 +212,35 @@ Deno.serve(async (req: Request) => {
           results.enrollmentsCreated++;
         }
 
+        // ----------------------------------------------------------
+        // Side-effect: on project_created, auto-send a client portal
+        // invite to the contact so they can access the portal without
+        // admin intervention. Dispatches to the client-portal-auth
+        // edge function with action: send-invite (throttled to 1 per
+        // 24h per contact, so batch imports don't spam).
+        // ----------------------------------------------------------
+        if (event.event_type === "project_created" && event.payload?.project_id) {
+          try {
+            const portalInviteUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/client-portal-auth`;
+            await fetch(portalInviteUrl, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                action: "send-invite",
+                projectId: event.payload.project_id,
+              }),
+            });
+          } catch (portalErr) {
+            console.error(
+              `[workflow-processor] portal invite failed for project ${event.payload.project_id}:`,
+              portalErr
+            );
+          }
+        }
+
         await supabase
           .from("event_outbox")
           .update({ processed_at: new Date().toISOString() })
