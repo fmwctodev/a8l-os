@@ -80,7 +80,8 @@ export async function getSupportTicketById(id: string): Promise<ProjectSupportTi
 
 export async function createSupportTicket(
   input: CreateSupportTicketInput,
-  actorUserId?: string
+  actorUserId?: string,
+  portalMode = false
 ): Promise<{ ticket: ProjectSupportTicket; rawToken: string }> {
   const token = generateSecureToken();
   const tokenHash = await token.hashPromise;
@@ -124,7 +125,7 @@ export async function createSupportTicket(
       access_token_hash: tokenHash,
       created_by_user_id: actorUserId ?? null,
     })
-    .select(TICKET_SELECT)
+    .select(portalMode ? '*' : TICKET_SELECT)
     .single();
 
   if (error) throw error;

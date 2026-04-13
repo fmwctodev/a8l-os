@@ -71,7 +71,8 @@ export async function getChangeRequestById(id: string): Promise<ProjectChangeReq
 
 export async function createChangeRequest(
   input: CreateChangeRequestInput,
-  actorUserId?: string
+  actorUserId?: string,
+  portalMode = false
 ): Promise<{ request: ProjectChangeRequest; rawToken: string; clientPortalUrl: string }> {
   const token = generateSecureToken();
   const tokenHash = await token.hashPromise;
@@ -95,7 +96,7 @@ export async function createChangeRequest(
       access_token_hash: tokenHash,
       created_by_user_id: actorUserId ?? null,
     })
-    .select(CHANGE_REQUEST_SELECT)
+    .select(portalMode ? '*, change_orders:project_change_orders(*)' : CHANGE_REQUEST_SELECT)
     .single();
 
   if (error) throw error;

@@ -197,7 +197,7 @@ export function SubmitSupportTicketModal({
         availability_window: form.availability_window || undefined,
         expected_resolution_date: form.expected_resolution_date || undefined,
         source: 'portal',
-      });
+      }, undefined, true);
 
       try {
         const notifyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/support-ticket-notify`;

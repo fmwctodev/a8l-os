@@ -57,7 +57,7 @@ export function SubmitChangeRequestModal({ projectId, orgId, contactName, contac
         description: form.description,
         requested_due_date: form.requested_due_date || undefined,
         source: 'public_form',
-      });
+      }, undefined, true);
 
       try {
         const notifyUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/change-request-notify`;
