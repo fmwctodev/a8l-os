@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Save, Upload, Copy, Archive, Play, AlertTriangle,
-  FileText, Cpu, Volume2, Wrench, Radio, History, Loader2,
+  FileText, Cpu, Volume2, Wrench, Radio, History, Loader2, ScrollText,
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
@@ -16,6 +16,7 @@ import type { VapiAssistant, VapiAssistantVersion } from '../../../services/vapi
 import type { VapiTool } from '../../../services/vapiTools';
 import { VoiceTabPanel } from '../../../components/voice-ai/VoiceTabPanel';
 import { ModelTabPanel } from '../../../components/voice-ai/ModelTabPanel';
+import { AssistantLogsTab } from '../../../components/voice-ai/AssistantLogsTab';
 
 const editorTabs = [
   { key: 'basics', label: 'Basics', icon: FileText },
@@ -24,6 +25,7 @@ const editorTabs = [
   { key: 'tools', label: 'Tools', icon: Wrench },
   { key: 'channels', label: 'Channels', icon: Radio },
   { key: 'publish', label: 'Publish', icon: Upload },
+  { key: 'logs', label: 'Logs', icon: ScrollText },
 ];
 
 function generateSlug(name: string): string {
@@ -560,6 +562,16 @@ export function VapiAssistantDetailPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {tab === 'logs' && !isNew && id && user?.organization_id && (
+          <AssistantLogsTab assistantId={id} orgId={user.organization_id} />
+        )}
+
+        {tab === 'logs' && isNew && (
+          <div className="text-center py-16 bg-slate-800/50 border border-slate-700 rounded-xl">
+            <p className="text-sm text-slate-400">Save this assistant first to view call logs.</p>
           </div>
         )}
       </div>
