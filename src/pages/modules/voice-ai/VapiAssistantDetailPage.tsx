@@ -565,8 +565,8 @@ export function VapiAssistantDetailPage() {
           </div>
         )}
 
-        {tab === 'logs' && !isNew && id && user?.organization_id && (
-          <AssistantLogsTab assistantId={id} orgId={user.organization_id} />
+        {tab === 'logs' && !isNew && vapiAssistantId && user?.organization_id && (
+          <AssistantLogsTab vapiAssistantId={vapiAssistantId} orgId={user.organization_id} />
         )}
 
         {tab === 'logs' && isNew && (

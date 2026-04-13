@@ -221,7 +221,14 @@ Deno.serve(async (req: Request) => {
       }
 
       case "list_calls": {
-        const result = await vapiRequest(apiKey, "/call", "GET");
+        // Build query params for Vapi's GET /call endpoint
+        const callParams = new URLSearchParams();
+        if (payload.assistantId) callParams.set("assistantId", payload.assistantId as string);
+        if (payload.limit) callParams.set("limit", String(payload.limit));
+        if (payload.createdAtGe) callParams.set("createdAtGe", payload.createdAtGe as string);
+        if (payload.createdAtLe) callParams.set("createdAtLe", payload.createdAtLe as string);
+        const callPath = callParams.toString() ? `/call?${callParams.toString()}` : "/call";
+        const result = await vapiRequest(apiKey, callPath, "GET");
         if (result.status >= 200 && result.status < 300) {
           return successResponse(result.data);
         }
