@@ -398,14 +398,14 @@ async function resolveContactByEmail(
   supabase: SupabaseClient,
   email: string,
   orgId: string | null
-): Promise<{ id: string; org_id: string; first_name: string | null; last_name: string | null; email: string } | null> {
+): Promise<{ id: string; organization_id: string; first_name: string | null; last_name: string | null; email: string } | null> {
   let query = supabase
     .from("contacts")
-    .select("id, org_id, first_name, last_name, email")
+    .select("id, organization_id, first_name, last_name, email")
     .ilike("email", email)
     .order("updated_at", { ascending: false })
     .limit(1);
-  if (orgId) query = query.eq("org_id", orgId);
+  if (orgId) query = query.eq("organization_id", orgId);
   const { data } = await query.maybeSingle();
   return data as any;
 }
@@ -602,13 +602,13 @@ async function handleSendCode(
     if (decoded) {
       const { data: contact } = await supabase
         .from("contacts")
-        .select("id, org_id, email")
+        .select("id, organization_id, email")
         .eq("id", decoded.contact_id)
-        .eq("org_id", decoded.org_id)
+        .eq("organization_id", decoded.org_id)
         .maybeSingle();
       if (contact?.email) {
         contactId = contact.id;
-        orgId = contact.org_id;
+        orgId = contact.organization_id;
         email = contact.email;
       }
     }
@@ -619,7 +619,7 @@ async function handleSendCode(
     const contact = await resolveContactByEmail(supabase, payload.email, null);
     if (contact) {
       contactId = contact.id;
-      orgId = contact.org_id;
+      orgId = contact.organization_id;
       email = contact.email;
     }
   }
@@ -761,7 +761,7 @@ async function handleVerifyCode(
     const contact = await resolveContactByEmail(supabase, payload.email, null);
     if (contact) {
       contactId = contact.id;
-      orgId = contact.org_id;
+      orgId = contact.organization_id;
     }
   }
 
