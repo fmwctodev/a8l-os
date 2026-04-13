@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Shield, AlertCircle, Loader2, CheckCircle, RefreshCw } from 'lucide-react';
-import { useClientPortal } from '../../contexts/ClientPortalContext';
+import { useClientPortalV2 } from '../../contexts/ClientPortalContextV2';
+import { sendLoginCode, verifyLoginCode } from '../../services/clientPortal';
 
 interface PortalStepUpModalProps {
   onSuccess: () => void;
@@ -9,14 +10,15 @@ interface PortalStepUpModalProps {
 }
 
 export function PortalStepUpModal({ onSuccess, onCancel, actionLabel = 'this action' }: PortalStepUpModalProps) {
-  const { authInfo, sendCode, submitCode, completeStepUp, state } = useClientPortal();
+  const { contact, completeStepUp } = useClientPortalV2();
+  const authInfo = contact ? { maskedEmail: contact.contactEmail } : null;
   const [phase, setPhase] = useState<'send' | 'enter'>('send');
   const [digits, setDigits] = useState(['', '', '', '', '', '']);
   const [error, setError] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-  const isVerifying = state === 'verifying';
-  const isSending = state === 'sending_code';
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -25,14 +27,22 @@ export function PortalStepUpModal({ onSuccess, onCancel, actionLabel = 'this act
   }, [resendCooldown]);
 
   async function handleSendCode() {
+    if (!contact?.contactEmail) return;
     setError(null);
-    const result = await sendCode();
-    if (result.success) {
-      setPhase('enter');
-      setResendCooldown(60);
-      setTimeout(() => inputRefs.current[0]?.focus(), 50);
-    } else {
-      setError(result.error || 'Failed to send code. Please try again.');
+    setIsSending(true);
+    try {
+      const result = await sendLoginCode(contact.contactEmail);
+      if (result.success) {
+        setPhase('enter');
+        setResendCooldown(60);
+        setTimeout(() => inputRefs.current[0]?.focus(), 50);
+      } else {
+        setError(result.rateLimited ? 'Please wait before requesting another code.' : 'Failed to send code.');
+      }
+    } catch {
+      setError('Failed to send code. Please try again.');
+    } finally {
+      setIsSending(false);
     }
   }
 
@@ -60,36 +70,48 @@ export function PortalStepUpModal({ onSuccess, onCancel, actionLabel = 'this act
 
   async function handleVerify() {
     const code = digits.join('');
-    if (code.length !== 6) return;
+    if (code.length !== 6 || !contact?.contactEmail) return;
     setError(null);
-    const result = await submitCode(code, false);
-    if (result.success) {
-      await completeStepUp();
-      onSuccess();
-    } else {
-      setError(
-        result.maxAttemptsExceeded
-          ? 'Too many attempts. Please request a new code.'
-          : result.expired
-          ? 'Code expired. Please request a new one.'
-          : `Incorrect code.${result.attemptsRemaining != null ? ` ${result.attemptsRemaining} attempt${result.attemptsRemaining === 1 ? '' : 's'} remaining.` : ''}`
-      );
-      setDigits(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
-      if (result.maxAttemptsExceeded || result.expired) setPhase('send');
+    setIsVerifying(true);
+    try {
+      const result = await verifyLoginCode(contact.contactEmail, code, false);
+      if (result.success) {
+        await completeStepUp();
+        onSuccess();
+      } else {
+        setError(
+          result.maxAttemptsExceeded
+            ? 'Too many attempts. Please request a new code.'
+            : `Incorrect code.${result.attemptsRemaining != null ? ` ${result.attemptsRemaining} attempt${result.attemptsRemaining === 1 ? '' : 's'} remaining.` : ''}`
+        );
+        setDigits(['', '', '', '', '', '']);
+        inputRefs.current[0]?.focus();
+        if (result.maxAttemptsExceeded) setPhase('send');
+      }
+    } catch {
+      setError('Verification failed. Please try again.');
+    } finally {
+      setIsVerifying(false);
     }
   }
 
   async function handleResend() {
-    if (resendCooldown > 0) return;
+    if (resendCooldown > 0 || !contact?.contactEmail) return;
     setError(null);
     setDigits(['', '', '', '', '', '']);
-    const result = await sendCode();
-    if (result.success) {
-      setResendCooldown(60);
-      inputRefs.current[0]?.focus();
-    } else {
-      setError(result.error || 'Failed to resend.');
+    setIsSending(true);
+    try {
+      const result = await sendLoginCode(contact.contactEmail);
+      if (result.success) {
+        setResendCooldown(60);
+        inputRefs.current[0]?.focus();
+      } else {
+        setError('Failed to resend.');
+      }
+    } catch {
+      setError('Failed to resend.');
+    } finally {
+      setIsSending(false);
     }
   }
 

@@ -119,20 +119,17 @@ const PostApprovalPage = lazy(() => import('./pages/public/PostApprovalPage'));
 const OAuthCallbackPage = lazy(() => import('./pages/public/OAuthCallbackPage').then(m => ({ default: m.OAuthCallbackPage })));
 const PublicChangeRequestPage = lazy(() => import('./pages/public/PublicChangeRequestPage').then(m => ({ default: m.PublicChangeRequestPage })));
 const PublicChangeRequestStatusPage = lazy(() => import('./pages/public/PublicChangeRequestStatusPage').then(m => ({ default: m.PublicChangeRequestStatusPage })));
-// Old per-project portal (kept temporarily for typecheck — removed in cleanup commit)
-const ClientPortalLayout = lazy(() => import('./layouts/ClientPortalLayout').then(m => ({ default: m.ClientPortalLayout })));
+// Client portal (contact-scoped)
+const ClientPortalLayoutV2 = lazy(() => import('./layouts/ClientPortalLayoutV2').then(m => ({ default: m.ClientPortalLayoutV2 })));
+const ClientPortalLoginPage = lazy(() => import('./pages/public/client-portal/LoginPage').then(m => ({ default: m.ClientPortalLoginPage })));
+const ClientPortalVerifyCodePage = lazy(() => import('./pages/public/client-portal/VerifyCodePage').then(m => ({ default: m.ClientPortalVerifyCodePage })));
+const ClientPortalDashboardPage = lazy(() => import('./pages/public/client-portal/DashboardPage').then(m => ({ default: m.ClientPortalDashboardPage })));
 const ClientPortalHomePage = lazy(() => import('./pages/public/portal/ClientPortalHomePage').then(m => ({ default: m.ClientPortalHomePage })));
 const ClientPortalChangeRequestsPage = lazy(() => import('./pages/public/portal/ClientPortalChangeRequestsPage').then(m => ({ default: m.ClientPortalChangeRequestsPage })));
 const ClientPortalChangeRequestDetailPage = lazy(() => import('./pages/public/portal/ClientPortalChangeRequestDetailPage').then(m => ({ default: m.ClientPortalChangeRequestDetailPage })));
 const ClientPortalDocumentsPage = lazy(() => import('./pages/public/portal/ClientPortalDocumentsPage').then(m => ({ default: m.ClientPortalDocumentsPage })));
 const ClientPortalSupportTicketsPage = lazy(() => import('./pages/public/portal/ClientPortalSupportTicketsPage').then(m => ({ default: m.ClientPortalSupportTicketsPage })));
 const ClientPortalSupportTicketDetailPage = lazy(() => import('./pages/public/portal/ClientPortalSupportTicketDetailPage').then(m => ({ default: m.ClientPortalSupportTicketDetailPage })));
-
-// New contact-scoped client portal
-const ClientPortalLayoutV2 = lazy(() => import('./layouts/ClientPortalLayoutV2').then(m => ({ default: m.ClientPortalLayoutV2 })));
-const ClientPortalLoginPage = lazy(() => import('./pages/public/client-portal/LoginPage').then(m => ({ default: m.ClientPortalLoginPage })));
-const ClientPortalVerifyCodePage = lazy(() => import('./pages/public/client-portal/VerifyCodePage').then(m => ({ default: m.ClientPortalVerifyCodePage })));
-const ClientPortalDashboardPage = lazy(() => import('./pages/public/client-portal/DashboardPage').then(m => ({ default: m.ClientPortalDashboardPage })));
 
 function PageLoader() {
   return (
@@ -770,15 +767,7 @@ function App() {
             <Route path="/oauth/google-calendar/callback" element={<OAuthCallbackPage />} />
             <Route path="/project-change/submit" element={<PublicChangeRequestPage />} />
             <Route path="/project-change/status/:requestId" element={<PublicChangeRequestStatusPage />} />
-            <Route path="/portal/project/:portalToken" element={<ClientPortalLayout />}>
-              <Route index element={<ClientPortalHomePage />} />
-              <Route path="change-requests" element={<ClientPortalChangeRequestsPage />} />
-              <Route path="change-requests/:requestId" element={<ClientPortalChangeRequestDetailPage />} />
-              <Route path="support-tickets" element={<ClientPortalSupportTicketsPage />} />
-              <Route path="support-tickets/:ticketId" element={<ClientPortalSupportTicketDetailPage />} />
-              <Route path="documents" element={<ClientPortalDocumentsPage />} />
-            </Route>
-            {/* New contact-scoped client portal */}
+            {/* Client portal — contact-scoped, permanent URL */}
             <Route path="/client-portal" element={<ClientPortalLayoutV2 />}>
               <Route index element={<ClientPortalLoginPage />} />
               <Route path="verify" element={<ClientPortalVerifyCodePage />} />
