@@ -824,26 +824,40 @@ async function callLLM(
   systemPrompt: string,
   userPrompt: string
 ): Promise<GeneratedSection[]> {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: buildAnthropicHeaders(apiKey),
-    body: JSON.stringify({
-      model,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
-      temperature: CONTRACT_TEMPERATURE,
-      max_tokens: CONTRACT_MAX_TOKENS,
-    }),
-  });
+  const maxRetries = 3;
+  const retryableStatuses = [429, 529, 500, 502, 503];
 
-  if (!response.ok) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: buildAnthropicHeaders(apiKey),
+      body: JSON.stringify({
+        model,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+        temperature: CONTRACT_TEMPERATURE,
+        max_tokens: CONTRACT_MAX_TOKENS,
+      }),
+    });
+
+    if (response.ok) {
+      const data = (await response.json()) as AnthropicResponse;
+      const responseText =
+        data.content.find((b) => b.type === "text")?.text || "";
+      return parseAIResponse(responseText);
+    }
+
     const errBody = await response.text();
+
+    if (retryableStatuses.includes(response.status) && attempt < maxRetries) {
+      const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 10000);
+      console.warn(`[contract-ai-generate] Anthropic ${response.status}, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`);
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
+    }
+
     throw new Error(`Anthropic API error ${response.status}: ${errBody}`);
   }
 
-  const data = (await response.json()) as AnthropicResponse;
-  const responseText =
-    data.content.find((b) => b.type === "text")?.text || "";
-
-  return parseAIResponse(responseText);
+  throw new Error("Exhausted retries calling Anthropic API");
 }
