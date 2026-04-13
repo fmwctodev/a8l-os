@@ -25,6 +25,53 @@ function errorResponse(message: string, status = 400) {
   return jsonResponse({ error: message }, status);
 }
 
+/**
+ * Fetch the user's Gmail signature for their primary send-as address.
+ * Returns the signature HTML or empty string if none is set.
+ * Uses Gmail's settings.sendAs API endpoint.
+ */
+async function getGmailSignature(
+  accessToken: string,
+  fromEmail: string
+): Promise<string> {
+  try {
+    const res = await fetch(
+      `${GMAIL_API_URL}/users/me/settings/sendAs/${encodeURIComponent(fromEmail)}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    if (!res.ok) {
+      // Try the primary address if the specific one fails
+      const fallbackRes = await fetch(
+        `${GMAIL_API_URL}/users/me/settings/sendAs`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      );
+      if (!fallbackRes.ok) return "";
+      const fallbackData = await fallbackRes.json();
+      const primary = (fallbackData.sendAs ?? []).find(
+        (sa: { isPrimary?: boolean }) => sa.isPrimary
+      );
+      return primary?.signature ?? "";
+    }
+    const data = await res.json();
+    return data.signature ?? "";
+  } catch (err) {
+    console.error("[gmail-api] Failed to fetch signature:", err);
+    return "";
+  }
+}
+
+/**
+ * Append the Gmail signature to the email body with a separator.
+ */
+function appendSignature(htmlBody: string, signature: string): string {
+  if (!signature) return htmlBody;
+  return `${htmlBody}<br><br><div class="gmail_signature_separator">--</div><div class="gmail_signature">${signature}</div>`;
+}
+
 function getAnonClient() {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -174,12 +221,16 @@ Deno.serve(async (req: Request) => {
         if (!to || !subject || !htmlBody)
           return errorResponse("to, subject, htmlBody required");
 
+        // Fetch the user's Gmail signature and append it to the body
+        const sendSignature = await getGmailSignature(accessToken, tokenData.email);
+        const bodyWithSignature = appendSignature(htmlBody, sendSignature);
+
         const raw = buildRawEmail({
           to,
           cc,
           bcc,
           subject,
-          body: htmlBody,
+          body: bodyWithSignature,
           inReplyTo,
           references,
           fromEmail: tokenData.email,
@@ -263,13 +314,17 @@ Deno.serve(async (req: Request) => {
         if (!to || !htmlBody || !threadId)
           return errorResponse("to, htmlBody, threadId required");
 
+        // Fetch the user's Gmail signature and append it to the reply body
+        const replySignature = await getGmailSignature(accessToken, tokenData.email);
+        const replyBodyWithSignature = appendSignature(htmlBody, replySignature);
+
         const replySubject = subject || "";
         const raw = buildRawEmail({
           to,
           cc,
           bcc,
           subject: replySubject,
-          body: htmlBody,
+          body: replyBodyWithSignature,
           inReplyTo,
           references,
           fromEmail: tokenData.email,
