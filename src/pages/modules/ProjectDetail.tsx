@@ -12,7 +12,8 @@ import {
   Users,
   DollarSign,
   Lock,
-  Link2,
+  Mail,
+  Loader2,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePermission } from '../../hooks/usePermission';
@@ -27,7 +28,7 @@ import { ProjectTimelineTab } from '../../components/projects/ProjectTimelineTab
 import { ProjectFinancialsTab } from '../../components/projects/ProjectFinancialsTab';
 import { ProjectChangeRequestsTab } from '../../components/projects/ProjectChangeRequestsTab';
 import { ProjectSupportTicketsTab } from '../../components/projects/ProjectSupportTicketsTab';
-import { generateProjectClientLink } from '../../services/projectChangeRequests';
+import { sendPortalInvite } from '../../services/clientPortal';
 
 type TabId = 'overview' | 'tasks' | 'notes' | 'timeline' | 'financials' | 'change_requests' | 'support_tickets';
 
@@ -55,7 +56,8 @@ export function ProjectDetail() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
-  const [linkCopied, setLinkCopied] = useState(false);
+  const [inviteSent, setInviteSent] = useState(false);
+  const [sendingInvite, setSendingInvite] = useState(false);
 
   useEffect(() => {
     loadProject();
@@ -113,13 +115,23 @@ export function ProjectDetail() {
     }
   }
 
-  function handleCopyClientLink() {
-    if (!project) return;
-    const url = generateProjectClientLink(project.id, project.org_id);
-    navigator.clipboard.writeText(url).then(() => {
-      setLinkCopied(true);
-      setTimeout(() => setLinkCopied(false), 2000);
-    });
+  async function handleSendPortalInvite() {
+    if (!project || sendingInvite) return;
+    setSendingInvite(true);
+    try {
+      const result = await sendPortalInvite(project.id);
+      if (result.skippedReason) {
+        alert(`Portal invite skipped: ${result.skippedReason}`);
+      } else {
+        setInviteSent(true);
+        setTimeout(() => setInviteSent(false), 3000);
+      }
+    } catch (err) {
+      alert('Failed to send portal invite. Please try again.');
+      console.error(err);
+    } finally {
+      setSendingInvite(false);
+    }
   }
 
   async function handleDelete() {
@@ -201,11 +213,16 @@ export function ProjectDetail() {
               )}
               {canManageChangeRequests && (
                 <button
-                  onClick={handleCopyClientLink}
-                  className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white text-sm rounded-lg transition-colors"
+                  onClick={handleSendPortalInvite}
+                  disabled={sendingInvite}
+                  className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-slate-300 hover:text-white text-sm rounded-lg transition-colors"
                 >
-                  <Link2 className="w-4 h-4" />
-                  {linkCopied ? 'Copied!' : 'Client Link'}
+                  {sendingInvite ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Mail className="w-4 h-4" />
+                  )}
+                  {inviteSent ? 'Invite Sent!' : 'Send Portal Invite'}
                 </button>
               )}
               {canDelete && (

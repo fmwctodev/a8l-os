@@ -15,7 +15,8 @@ import type { ProjectChangeRequest, ProjectChangeRequestStats, User } from '../.
 import { getChangeRequests, getChangeRequestStats, createChangeRequest } from '../../services/projectChangeRequests';
 import { ChangeRequestStatusBadge } from './ChangeRequestStatusBadge';
 import { ChangeRequestDrawer } from './ChangeRequestDrawer';
-import { ClientPortalManagementPanel } from './ClientPortalManagementPanel';
+// ClientPortalManagementPanel removed — portal invites are now auto-sent
+// and can be re-triggered via the "Send portal invite" button on ProjectDetail.
 
 const PRIORITY_COLORS: Record<string, string> = {
   low: 'text-slate-400',
@@ -322,16 +323,6 @@ export function ProjectChangeRequestsTab({
             </tbody>
           </table>
         </div>
-      )}
-
-      {canManage && (
-        <ClientPortalManagementPanel
-          projectId={projectId}
-          orgId={orgId}
-          contactId={contactId ?? null}
-          currentUserId={currentUserId}
-          canManage={canManage}
-        />
       )}
 
       {selectedRequest && (
