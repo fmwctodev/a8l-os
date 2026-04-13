@@ -264,40 +264,113 @@ function buildOtpEmailHtml(params: {
 }
 
 // -----------------------------------------------------------------
-// Internal: send email via the official `email-send` function
+// Internal: send email via SendGrid directly (same pattern as the
+// original portal-auth edge function). This is more reliable than
+// routing through the email-send function because it avoids auth
+// context issues with internal edge-function-to-edge-function calls.
 // -----------------------------------------------------------------
 
-async function sendTransactionalEmail(params: {
-  toEmail: string;
-  toName?: string;
-  subject: string;
-  htmlBody: string;
-}): Promise<{ success: boolean; error?: string }> {
-  const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/email-send`;
+async function sendTransactionalEmail(
+  supabase: SupabaseClient,
+  orgId: string,
+  params: {
+    toEmail: string;
+    toName?: string;
+    subject: string;
+    htmlBody: string;
+  }
+): Promise<{ success: boolean; error?: string }> {
   try {
-    const res = await fetch(url, {
+    // Get SendGrid API key (env var or org-level encrypted credential)
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+    // Try env var first, then org-level credential
+    let apiKey = Deno.env.get("SENDGRID_API_KEY") ?? null;
+    if (!apiKey) {
+      const { data: conn } = await supabase
+        .from("integration_connections")
+        .select("credentials_encrypted, credentials_iv, status, integrations!inner(key)")
+        .eq("org_id", orgId)
+        .eq("integrations.key", "sendgrid")
+        .maybeSingle();
+      if (conn?.status === "connected" && conn.credentials_encrypted && conn.credentials_iv) {
+        const res = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${serviceRoleKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ action: "decrypt", encrypted: conn.credentials_encrypted, iv: conn.credentials_iv }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          apiKey = data.plaintext;
+        }
+      }
+    }
+
+    if (!apiKey) {
+      return { success: false, error: "SendGrid API key not configured" };
+    }
+
+    // Resolve org from-address
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("name, contact_email")
+      .eq("id", orgId)
+      .maybeSingle();
+
+    let fromEmail = org?.contact_email || "noreply@example.com";
+    let fromName = org?.name || "Client Portal";
+
+    const { data: defaults } = await supabase
+      .from("email_defaults")
+      .select("default_from_address_id")
+      .eq("org_id", orgId)
+      .maybeSingle();
+
+    if (defaults?.default_from_address_id) {
+      const { data: fromAddr } = await supabase
+        .from("email_from_addresses")
+        .select("email, display_name")
+        .eq("id", defaults.default_from_address_id)
+        .eq("active", true)
+        .maybeSingle();
+      if (fromAddr) {
+        fromEmail = fromAddr.email;
+        fromName = fromAddr.display_name || fromName;
+      }
+    }
+
+    // Send via SendGrid
+    const sgRes = await fetch("https://api.sendgrid.com/v3/mail/send", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        action: "send",
-        toEmail: params.toEmail,
-        toName: params.toName,
+        personalizations: [{ to: [{ email: params.toEmail, name: params.toName }] }],
+        from: { email: fromEmail, name: fromName },
         subject: params.subject,
-        htmlBody: params.htmlBody,
-        trackOpens: false,
-        trackClicks: false,
-        transactional: true,
+        content: [{ type: "text/html", value: params.htmlBody }],
+        tracking_settings: {
+          open_tracking: { enable: false },
+          click_tracking: { enable: false },
+        },
       }),
     });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      return { success: false, error: body?.error ?? `email-send ${res.status}` };
+
+    if (!sgRes.ok) {
+      const errBody = await sgRes.text().catch(() => "");
+      console.error(`[client-portal-auth] SendGrid ${sgRes.status}: ${errBody}`);
+      return { success: false, error: `SendGrid error ${sgRes.status}` };
     }
+
     return { success: true };
   } catch (err) {
+    console.error("[client-portal-auth] sendTransactionalEmail error:", err);
     return { success: false, error: String(err) };
   }
 }
@@ -478,7 +551,7 @@ async function handleSendInvite(
     supportEmail: orgInfo.supportEmail,
   });
 
-  const emailResult = await sendTransactionalEmail({
+  const emailResult = await sendTransactionalEmail(supabase, project.org_id, {
     toEmail: contact.email,
     toName: clientName,
     subject: `Your client portal for ${project.name}`,
@@ -642,7 +715,7 @@ async function handleSendCode(
     supportEmail: orgInfo.supportEmail,
   });
 
-  await sendTransactionalEmail({
+  await sendTransactionalEmail(supabase, orgId, {
     toEmail: email,
     toName: clientName,
     subject: `Your ${orgInfo.name} portal verification code`,
