@@ -317,11 +317,11 @@ async function sendTransactionalEmail(
     // Resolve org from-address
     const { data: org } = await supabase
       .from("organizations")
-      .select("name, contact_email")
+      .select("name, email")
       .eq("id", orgId)
       .maybeSingle();
 
-    let fromEmail = org?.contact_email || "noreply@example.com";
+    let fromEmail = org?.email || "noreply@autom8ionlab.com";
     let fromName = org?.name || "Client Portal";
 
     const { data: defaults } = await supabase
@@ -385,12 +385,12 @@ async function getOrgInfo(
 ): Promise<{ name: string; supportEmail: string }> {
   const { data: org } = await supabase
     .from("organizations")
-    .select("name, contact_email")
+    .select("name, email")
     .eq("id", orgId)
     .maybeSingle();
   return {
-    name: org?.name ?? "Our Company",
-    supportEmail: org?.contact_email ?? "support@example.com",
+    name: org?.name ?? "Autom8ion Lab",
+    supportEmail: org?.email ?? "support@autom8ionlab.com",
   };
 }
 
