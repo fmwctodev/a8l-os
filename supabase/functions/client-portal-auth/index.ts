@@ -118,8 +118,15 @@ async function getAuthedUserOrgId(req: Request): Promise<string | null> {
 // HMAC-signed invite token
 // -----------------------------------------------------------------
 
-async function signInvitePayload(payload: object): Promise<string> {
-  const secret = Deno.env.get("CLIENT_PORTAL_INVITE_HMAC_SECRET") || "";
+async function signInvitePayload(payload: object): Promise<string | null> {
+  const secret = Deno.env.get("CLIENT_PORTAL_INVITE_HMAC_SECRET");
+  if (!secret) {
+    // HMAC secret not configured — return null so the invite link
+    // goes to /client-portal without a signed token. The client will
+    // just need to type their email manually on the login page.
+    console.warn("[client-portal-auth] CLIENT_PORTAL_INVITE_HMAC_SECRET not set — invite links will not include a signed token");
+    return null;
+  }
   const body = btoa(JSON.stringify(payload))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
@@ -449,14 +456,16 @@ async function handleSendInvite(
     accountId = created.id;
   }
 
-  // Build signed invite link
+  // Build invite link (with signed token if HMAC secret is configured)
   const inviteToken = await signInvitePayload({
     org_id: project.org_id,
     contact_id: contact.id,
     iat: Math.floor(Date.now() / 1000),
   });
   const appBase = Deno.env.get("APP_BASE_URL") ?? "https://os.autom8ionlab.com";
-  const portalUrl = `${appBase}/client-portal?invite=${encodeURIComponent(inviteToken)}`;
+  const portalUrl = inviteToken
+    ? `${appBase}/client-portal?invite=${encodeURIComponent(inviteToken)}`
+    : `${appBase}/client-portal`;
 
   const orgInfo = await getOrgInfo(supabase, project.org_id);
   const clientName = `${contact.first_name ?? ""} ${contact.last_name ?? ""}`.trim() || "there";
