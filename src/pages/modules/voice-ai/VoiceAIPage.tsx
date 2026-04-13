@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useLocation, Navigate } from 'react-router-dom';
 import {
-  Users, Phone, Globe, Wrench, PhoneCall, MessageCircle,
+  Users, Phone, Globe, Wrench,
   BarChart3, Settings,
 } from 'lucide-react';
 
@@ -9,8 +9,6 @@ const voiceTabs = [
   { path: '/ai-agents/voice/numbers', label: 'Numbers', icon: Phone },
   { path: '/ai-agents/voice/widgets', label: 'Widgets', icon: Globe },
   { path: '/ai-agents/voice/tools', label: 'Tools', icon: Wrench },
-  { path: '/ai-agents/voice/calls', label: 'Calls', icon: PhoneCall },
-  { path: '/ai-agents/voice/sessions', label: 'Sessions', icon: MessageCircle },
   { path: '/ai-agents/voice/analytics', label: 'Analytics', icon: BarChart3 },
   { path: '/ai-agents/voice/settings', label: 'Settings', icon: Settings },
 ];
