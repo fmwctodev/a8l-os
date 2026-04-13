@@ -535,7 +535,7 @@ async function handleSendInvite(
     contact_id: contact.id,
     iat: Math.floor(Date.now() / 1000),
   });
-  const appBase = Deno.env.get("APP_BASE_URL") ?? "https://os.autom8ionlab.com";
+  const appBase = (Deno.env.get("APP_BASE_URL") ?? "https://os.autom8ionlab.com").replace(/\/+$/, "");
   const portalUrl = inviteToken
     ? `${appBase}/client-portal?invite=${encodeURIComponent(inviteToken)}`
     : `${appBase}/client-portal`;
