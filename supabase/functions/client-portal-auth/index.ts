@@ -547,7 +547,11 @@ async function handleSendCode(
     return maskedResponse(payload.email ?? "unknown@example.com");
   }
 
-  // Ensure a portal account exists (so /client-portal is usable even if no invite was sent before)
+  // Ensure a portal account exists. If the contact exists in the DB but
+  // was never formally invited (no client_portal_accounts row), auto-create
+  // one so the OTP flow works. This lets any contact who knows their email
+  // sign in without waiting for an admin-triggered invite.
+  let portalAccountId: string;
   const { data: existingAccount } = await supabase
     .from("client_portal_accounts")
     .select("id")
@@ -555,9 +559,19 @@ async function handleSendCode(
     .eq("contact_id", contactId)
     .maybeSingle();
 
-  if (!existingAccount) {
-    // Not invited yet — do not leak. Return masked success.
-    return maskedResponse(email);
+  if (existingAccount) {
+    portalAccountId = existingAccount.id;
+  } else {
+    const { data: newAccount, error: createErr } = await supabase
+      .from("client_portal_accounts")
+      .insert({ org_id: orgId, contact_id: contactId, status: "active" })
+      .select("id")
+      .single();
+    if (createErr || !newAccount) {
+      console.error("[client-portal-auth] Failed to auto-create portal account:", createErr?.message);
+      return maskedResponse(email);
+    }
+    portalAccountId = newAccount.id;
   }
 
   // 60-second rate limit per (org, contact)
@@ -628,7 +642,7 @@ async function handleSendCode(
 
   await supabase.from("client_portal_events").insert({
     org_id: orgId,
-    account_id: existingAccount.id,
+    account_id: portalAccountId,
     contact_id: contactId,
     event_type: "otp_sent",
     metadata: {},
