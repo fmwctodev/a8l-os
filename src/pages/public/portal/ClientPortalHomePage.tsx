@@ -3,18 +3,19 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Calendar,
   Clock,
+  DollarSign,
   CheckCircle2,
   AlertCircle,
   ChevronRight,
   Plus,
   Mail,
+  Phone,
   FileText,
   TrendingUp,
   Headphones,
   LifeBuoy,
-  Loader2,
 } from 'lucide-react';
-import { useClientPortalProject } from '../../../contexts/ClientPortalContextV2';
+import { useClientPortal } from '../../../contexts/ClientPortalContext';
 import { getPortalChangeRequests, getPortalStats, getPortalSupportTickets, getPortalTicketStats } from '../../../services/projectClientPortals';
 import { PortalStatusBadge } from '../../../components/portal/PortalStatusBadge';
 import { SupportTicketStatusBadge } from '../../../components/portal/SupportTicketStatusBadge';
@@ -59,7 +60,7 @@ function StatCard({
 
 export function ClientPortalHomePage() {
   const { projectId } = useParams<{ projectId: string }>();
-  const { project } = useClientPortalProject(projectId!);
+  const { portal, logEvent } = useClientPortal();
   const navigate = useNavigate();
 
   const [requests, setRequests] = useState<ProjectChangeRequest[]>([]);
@@ -69,19 +70,22 @@ export function ClientPortalHomePage() {
   const [showTicketModal, setShowTicketModal] = useState(false);
 
   useEffect(() => {
-    if (!project) return;
+    if (!portal) return;
+    logEvent('project_portal.viewed');
     Promise.all([
-      getPortalChangeRequests(projectId!),
-      getPortalSupportTickets(projectId!),
+      getPortalChangeRequests(portal.project_id),
+      getPortalSupportTickets(portal.project_id),
     ]).then(([reqs, tix]) => {
       setRequests(reqs);
       setTickets(tix);
     }).catch(console.error).finally(() => setLoading(false));
-  }, [project]);
+  }, [portal]);
 
-  if (!project) return <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>;
+  if (!portal) return null;
 
-  const contact = project.contact;
+  const project = portal.project;
+  const org = portal.organization;
+  const contact = portal.contact;
 
   const contactName = contact
     ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Client'
@@ -165,10 +169,16 @@ export function ClientPortalHomePage() {
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Project Support</h3>
             <p className="text-sm text-gray-500 mb-4">Have a question or need assistance with your project?</p>
             <div className="space-y-2">
-              {project.supportEmail && (
-                <a href={`mailto:${project.supportEmail}`} className="flex items-center gap-2.5 text-sm text-gray-600 hover:text-blue-600 transition-colors">
+              {org?.email && (
+                <a href={`mailto:${org.email}`} className="flex items-center gap-2.5 text-sm text-gray-600 hover:text-blue-600 transition-colors">
                   <Mail className="w-4 h-4 text-gray-400" />
-                  {project.supportEmail}
+                  {org.email}
+                </a>
+              )}
+              {org?.phone && (
+                <a href={`tel:${org.phone}`} className="flex items-center gap-2.5 text-sm text-gray-600 hover:text-blue-600 transition-colors">
+                  <Phone className="w-4 h-4 text-gray-400" />
+                  {org.phone}
                 </a>
               )}
             </div>
@@ -318,29 +328,30 @@ export function ClientPortalHomePage() {
         )}
       </div>
 
-      {showSubmitModal && (
+      {showSubmitModal && portal && (
         <SubmitChangeRequestModal
-          projectId={projectId!}
-          orgId={project.org_id}
+          projectId={portal.project_id}
+          orgId={portal.org_id}
           contactName={contactName}
           contactEmail={contact?.email ?? undefined}
           onSuccess={() => {
             setShowSubmitModal(false);
-            getPortalChangeRequests(projectId!).then(setRequests);
+            getPortalChangeRequests(portal.project_id).then(setRequests);
           }}
           onClose={() => setShowSubmitModal(false)}
         />
       )}
 
-      {showTicketModal && (
+      {showTicketModal && portal && (
         <SubmitSupportTicketModal
-          projectId={projectId!}
-          orgId={project.org_id}
+          projectId={portal.project_id}
+          orgId={portal.org_id}
           contactName={contactName}
           contactEmail={contact?.email ?? undefined}
+          contactPhone={contact?.phone ?? undefined}
           onSuccess={() => {
             setShowTicketModal(false);
-            getPortalSupportTickets(projectId!).then(setTickets);
+            getPortalSupportTickets(portal.project_id).then(setTickets);
           }}
           onClose={() => setShowTicketModal(false)}
         />

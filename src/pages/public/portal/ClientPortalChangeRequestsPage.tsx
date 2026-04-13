@@ -7,9 +7,8 @@ import {
   FileText,
   DollarSign,
   Clock,
-  Loader2,
 } from 'lucide-react';
-import { useClientPortalProject } from '../../../contexts/ClientPortalContextV2';
+import { useClientPortal } from '../../../contexts/ClientPortalContext';
 import { getPortalChangeRequests } from '../../../services/projectClientPortals';
 import { PortalStatusBadge } from '../../../components/portal/PortalStatusBadge';
 import { SubmitChangeRequestModal } from '../../../components/portal/SubmitChangeRequestModal';
@@ -44,7 +43,7 @@ const OPEN_STATUSES = ['submitted', 'under_review', 'needs_more_info', 'schedule
 
 export function ClientPortalChangeRequestsPage() {
   const { projectId } = useParams<{ projectId: string }>();
-  const { project } = useClientPortalProject(projectId!);
+  const { portal } = useClientPortal();
   const navigate = useNavigate();
 
   const [requests, setRequests] = useState<ProjectChangeRequest[]>([]);
@@ -54,14 +53,14 @@ export function ClientPortalChangeRequestsPage() {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
   useEffect(() => {
-    if (!project) return;
+    if (!portal) return;
     setLoading(true);
-    getPortalChangeRequests(projectId!).then(setRequests).catch(console.error).finally(() => setLoading(false));
-  }, [project]);
+    getPortalChangeRequests(portal.project_id).then(setRequests).catch(console.error).finally(() => setLoading(false));
+  }, [portal]);
 
-  if (!project) return <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>;
+  if (!portal) return null;
 
-  const contact = project.contact;
+  const contact = portal.contact;
   const contactName = contact
     ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Client'
     : 'Client';
@@ -206,13 +205,13 @@ export function ClientPortalChangeRequestsPage() {
 
       {showSubmitModal && (
         <SubmitChangeRequestModal
-          projectId={projectId!}
-          orgId={project.org_id}
+          projectId={portal.project_id}
+          orgId={portal.org_id}
           contactName={contactName}
           contactEmail={contact?.email ?? undefined}
           onSuccess={() => {
             setShowSubmitModal(false);
-            getPortalChangeRequests(projectId!).then(setRequests);
+            getPortalChangeRequests(portal.project_id).then(setRequests);
           }}
           onClose={() => setShowSubmitModal(false)}
         />

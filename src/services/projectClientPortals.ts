@@ -201,22 +201,31 @@ export async function logPortalEvent(params: {
   ipAddress?: string;
   userAgent?: string;
 }): Promise<void> {
-  await supabase.from('project_client_portal_events').insert({
-    portal_id: params.portalId,
-    project_id: params.projectId,
-    contact_id: params.contactId ?? null,
-    event_type: params.eventType,
-    metadata: params.metadata ?? {},
-    ip_address: params.ipAddress ?? null,
-    user_agent: params.userAgent ?? null,
-  });
+  // Write to the new client_portal_events table (the old
+  // project_client_portal_events table was dropped). portalId is now
+  // the client_portal_accounts.id (set by the bridge component).
+  try {
+    await supabase.from('client_portal_events').insert({
+      org_id: (await supabase.from('client_portal_accounts').select('org_id').eq('id', params.portalId).maybeSingle()).data?.org_id ?? null,
+      account_id: params.portalId,
+      project_id: params.projectId,
+      contact_id: params.contactId ?? null,
+      event_type: params.eventType,
+      metadata: params.metadata ?? {},
+      ip_address: params.ipAddress ?? null,
+      user_agent: params.userAgent ?? null,
+    });
+  } catch (err) {
+    // Never let event logging failure break the portal UI
+    console.error('[logPortalEvent] failed:', err);
+  }
 }
 
 export async function getPortalEvents(portalId: string): Promise<PortalEvent[]> {
   const { data, error } = await supabase
-    .from('project_client_portal_events')
+    .from('client_portal_events')
     .select('*')
-    .eq('portal_id', portalId)
+    .eq('account_id', portalId)
     .order('created_at', { ascending: false });
 
   if (error) throw error;

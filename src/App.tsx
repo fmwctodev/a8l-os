@@ -130,6 +130,7 @@ const ClientPortalChangeRequestDetailPage = lazy(() => import('./pages/public/po
 const ClientPortalDocumentsPage = lazy(() => import('./pages/public/portal/ClientPortalDocumentsPage').then(m => ({ default: m.ClientPortalDocumentsPage })));
 const ClientPortalSupportTicketsPage = lazy(() => import('./pages/public/portal/ClientPortalSupportTicketsPage').then(m => ({ default: m.ClientPortalSupportTicketsPage })));
 const ClientPortalSupportTicketDetailPage = lazy(() => import('./pages/public/portal/ClientPortalSupportTicketDetailPage').then(m => ({ default: m.ClientPortalSupportTicketDetailPage })));
+const ClientPortalProjectBridge = lazy(() => import('./components/portal/ClientPortalProjectBridge').then(m => ({ default: m.ClientPortalProjectBridge })));
 
 function PageLoader() {
   return (
@@ -772,12 +773,14 @@ function App() {
               <Route index element={<ClientPortalLoginPage />} />
               <Route path="verify" element={<ClientPortalVerifyCodePage />} />
               <Route path="dashboard" element={<ClientPortalDashboardPage />} />
-              <Route path="projects/:projectId" element={<ClientPortalHomePage />} />
-              <Route path="projects/:projectId/change-requests" element={<ClientPortalChangeRequestsPage />} />
-              <Route path="projects/:projectId/change-requests/:requestId" element={<ClientPortalChangeRequestDetailPage />} />
-              <Route path="projects/:projectId/support-tickets" element={<ClientPortalSupportTicketsPage />} />
-              <Route path="projects/:projectId/support-tickets/:ticketId" element={<ClientPortalSupportTicketDetailPage />} />
-              <Route path="projects/:projectId/documents" element={<ClientPortalDocumentsPage />} />
+              <Route path="projects/:projectId" element={<ClientPortalProjectBridge />}>
+                <Route index element={<ClientPortalHomePage />} />
+                <Route path="change-requests" element={<ClientPortalChangeRequestsPage />} />
+                <Route path="change-requests/:requestId" element={<ClientPortalChangeRequestDetailPage />} />
+                <Route path="support-tickets" element={<ClientPortalSupportTicketsPage />} />
+                <Route path="support-tickets/:ticketId" element={<ClientPortalSupportTicketDetailPage />} />
+                <Route path="documents" element={<ClientPortalDocumentsPage />} />
+              </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
             </Routes>

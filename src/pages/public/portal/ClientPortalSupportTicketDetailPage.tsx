@@ -10,9 +10,8 @@ import {
   AlertTriangle,
   Clock,
   Paperclip,
-  Loader2,
 } from 'lucide-react';
-import { useClientPortalProject } from '../../../contexts/ClientPortalContextV2';
+import { useClientPortal } from '../../../contexts/ClientPortalContext';
 import {
   getPortalSupportTicketById,
   getPortalTicketComments,
@@ -51,7 +50,7 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
 
 export function ClientPortalSupportTicketDetailPage() {
   const { projectId, ticketId } = useParams<{ projectId: string; ticketId: string }>();
-  const { project } = useClientPortalProject(projectId!);
+  const { portal } = useClientPortal();
   const navigate = useNavigate();
 
   const [ticket, setTicket] = useState<ProjectSupportTicket | null>(null);
@@ -61,7 +60,7 @@ export function ClientPortalSupportTicketDetailPage() {
   const [sendingMessage, setSendingMessage] = useState(false);
 
   useEffect(() => {
-    if (!ticketId || !project) return;
+    if (!ticketId || !portal) return;
     Promise.all([
       getPortalSupportTicketById(ticketId),
       getPortalTicketComments(ticketId),
@@ -69,11 +68,11 @@ export function ClientPortalSupportTicketDetailPage() {
       setTicket(t);
       setComments(msgs);
     }).catch(console.error).finally(() => setLoading(false));
-  }, [ticketId, project]);
+  }, [ticketId, portal]);
 
-  if (!project) return <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>;
+  if (!portal) return null;
 
-  const contact = project.contact;
+  const contact = portal.contact;
   const contactName = contact
     ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Client'
     : 'Client';
@@ -81,17 +80,17 @@ export function ClientPortalSupportTicketDetailPage() {
   const base = `/client-portal/projects/${projectId}`;
 
   async function handleSendMessage() {
-    if (!newMessage.trim() || !ticket || !project) return;
+    if (!newMessage.trim() || !ticket || !portal) return;
     setSendingMessage(true);
     try {
       await clientAddTicketComment({
         supportTicketId: ticket.id,
-        orgId: project.org_id,
+        orgId: portal.org_id,
         body: newMessage,
         authorName: contactName,
-        portalId: '',
-        projectId: projectId!,
-        contactId: project.contact_id,
+        portalId: portal.id,
+        projectId: portal.project_id,
+        contactId: portal.contact_id,
       });
       const updated = await getPortalTicketComments(ticket.id);
       setComments(updated);
