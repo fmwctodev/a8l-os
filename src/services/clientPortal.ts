@@ -58,6 +58,7 @@ export interface ClientPortalProject {
   pipeline_id: string;
   contact_id: string;
   created_at: string;
+  updated_at: string;
   stage?: { id: string; name: string; sort_order: number; color: string | null };
 }
 

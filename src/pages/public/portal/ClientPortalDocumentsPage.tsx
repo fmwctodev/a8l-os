@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { FileText, Download, ExternalLink, PenTool } from 'lucide-react';
+import { FileText, Download, ExternalLink, PenTool, Loader2 } from 'lucide-react';
 import { useParams } from 'react-router-dom';
-import { useClientPortal } from '../../../contexts/ClientPortalContext';
+import { useClientPortalProject } from '../../../contexts/ClientPortalContextV2';
 import { getPortalChangeRequests } from '../../../services/projectClientPortals';
 import type { ProjectChangeRequest, ProjectChangeOrder } from '../../../types';
 
@@ -31,22 +31,22 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export function ClientPortalDocumentsPage() {
-  const { portalToken } = useParams<{ portalToken: string }>();
-  const { portal } = useClientPortal();
+  const { projectId } = useParams<{ projectId: string }>();
+  const { project } = useClientPortalProject(projectId!);
 
   const [requests, setRequests] = useState<ProjectChangeRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);
 
   useEffect(() => {
-    if (!portal) return;
-    getPortalChangeRequests(portal.project_id)
+    if (!project) return;
+    getPortalChangeRequests(projectId!)
       .then(setRequests)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [portal]);
+  }, [project]);
 
-  if (!portal) return null;
+  if (!project) return <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>;
 
   const documents: DocumentItem[] = [];
 

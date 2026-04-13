@@ -7,8 +7,9 @@ import {
   FileText,
   DollarSign,
   Clock,
+  Loader2,
 } from 'lucide-react';
-import { useClientPortal } from '../../../contexts/ClientPortalContext';
+import { useClientPortalProject } from '../../../contexts/ClientPortalContextV2';
 import { getPortalChangeRequests } from '../../../services/projectClientPortals';
 import { PortalStatusBadge } from '../../../components/portal/PortalStatusBadge';
 import { SubmitChangeRequestModal } from '../../../components/portal/SubmitChangeRequestModal';
@@ -42,8 +43,8 @@ const FILTER_TABS = [
 const OPEN_STATUSES = ['submitted', 'under_review', 'needs_more_info', 'scheduled', 'in_progress'];
 
 export function ClientPortalChangeRequestsPage() {
-  const { portalToken } = useParams<{ portalToken: string }>();
-  const { portal } = useClientPortal();
+  const { projectId } = useParams<{ projectId: string }>();
+  const { project } = useClientPortalProject(projectId!);
   const navigate = useNavigate();
 
   const [requests, setRequests] = useState<ProjectChangeRequest[]>([]);
@@ -53,14 +54,14 @@ export function ClientPortalChangeRequestsPage() {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
   useEffect(() => {
-    if (!portal) return;
+    if (!project) return;
     setLoading(true);
-    getPortalChangeRequests(portal.project_id).then(setRequests).catch(console.error).finally(() => setLoading(false));
-  }, [portal]);
+    getPortalChangeRequests(projectId!).then(setRequests).catch(console.error).finally(() => setLoading(false));
+  }, [project]);
 
-  if (!portal) return null;
+  if (!project) return <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>;
 
-  const contact = portal.contact;
+  const contact = project.contact;
   const contactName = contact
     ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Client'
     : 'Client';
@@ -166,7 +167,7 @@ export function ClientPortalChangeRequestsPage() {
             {filtered.map((req) => (
               <button
                 key={req.id}
-                onClick={() => navigate(`/portal/project/${portalToken}/change-requests/${req.id}`)}
+                onClick={() => navigate(`/client-portal/projects/${projectId}/change-requests/${req.id}`)}
                 className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left group"
               >
                 <div className={`w-2.5 h-2.5 rounded-full flex-none mt-0.5 ${PRIORITY_DOT[req.priority] ?? 'bg-gray-400'}`} />
@@ -205,13 +206,13 @@ export function ClientPortalChangeRequestsPage() {
 
       {showSubmitModal && (
         <SubmitChangeRequestModal
-          projectId={portal.project_id}
-          orgId={portal.org_id}
+          projectId={projectId!}
+          orgId={project.org_id}
           contactName={contactName}
           contactEmail={contact?.email ?? undefined}
           onSuccess={() => {
             setShowSubmitModal(false);
-            getPortalChangeRequests(portal.project_id).then(setRequests);
+            getPortalChangeRequests(projectId!).then(setRequests);
           }}
           onClose={() => setShowSubmitModal(false)}
         />

@@ -5,10 +5,9 @@ import {
   Plus,
   Search,
   LifeBuoy,
-  Clock,
-  Headphones,
+  Loader2,
 } from 'lucide-react';
-import { useClientPortal } from '../../../contexts/ClientPortalContext';
+import { useClientPortalProject } from '../../../contexts/ClientPortalContextV2';
 import { getPortalSupportTickets } from '../../../services/projectClientPortals';
 import { SupportTicketStatusBadge } from '../../../components/portal/SupportTicketStatusBadge';
 import { SubmitSupportTicketModal } from '../../../components/portal/SubmitSupportTicketModal';
@@ -43,8 +42,8 @@ const FILTER_TABS = [
 const OPEN_STATUSES = ['new', 'in_review', 'in_progress'];
 
 export function ClientPortalSupportTicketsPage() {
-  const { portalToken } = useParams<{ portalToken: string }>();
-  const { portal } = useClientPortal();
+  const { projectId } = useParams<{ projectId: string }>();
+  const { project } = useClientPortalProject(projectId!);
   const navigate = useNavigate();
 
   const [tickets, setTickets] = useState<ProjectSupportTicket[]>([]);
@@ -54,14 +53,14 @@ export function ClientPortalSupportTicketsPage() {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
   useEffect(() => {
-    if (!portal) return;
+    if (!project) return;
     setLoading(true);
-    getPortalSupportTickets(portal.project_id).then(setTickets).catch(console.error).finally(() => setLoading(false));
-  }, [portal]);
+    getPortalSupportTickets(projectId!).then(setTickets).catch(console.error).finally(() => setLoading(false));
+  }, [project]);
 
-  if (!portal) return null;
+  if (!project) return <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>;
 
-  const contact = portal.contact;
+  const contact = project.contact;
   const contactName = contact
     ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Client'
     : 'Client';
@@ -167,7 +166,7 @@ export function ClientPortalSupportTicketsPage() {
             {filtered.map((ticket) => (
               <button
                 key={ticket.id}
-                onClick={() => navigate(`/portal/project/${portalToken}/support-tickets/${ticket.id}`)}
+                onClick={() => navigate(`/client-portal/projects/${projectId}/support-tickets/${ticket.id}`)}
                 className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left group"
               >
                 <div className={`w-2.5 h-2.5 rounded-full flex-none mt-0.5 ${PRIORITY_DOT[ticket.priority] ?? 'bg-gray-400'}`} />
@@ -198,14 +197,13 @@ export function ClientPortalSupportTicketsPage() {
 
       {showSubmitModal && (
         <SubmitSupportTicketModal
-          projectId={portal.project_id}
-          orgId={portal.org_id}
+          projectId={projectId!}
+          orgId={project.org_id}
           contactName={contactName}
           contactEmail={contact?.email ?? undefined}
-          contactPhone={contact?.phone ?? undefined}
           onSuccess={() => {
             setShowSubmitModal(false);
-            getPortalSupportTickets(portal.project_id).then(setTickets);
+            getPortalSupportTickets(projectId!).then(setTickets);
           }}
           onClose={() => setShowSubmitModal(false)}
         />

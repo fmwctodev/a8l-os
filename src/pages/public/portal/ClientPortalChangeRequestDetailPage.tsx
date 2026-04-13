@@ -15,8 +15,9 @@ import {
   PenTool,
   Download,
   ExternalLink,
+  Loader2,
 } from 'lucide-react';
-import { useClientPortal } from '../../../contexts/ClientPortalContext';
+import { useClientPortalV2, useClientPortalProject } from '../../../contexts/ClientPortalContextV2';
 import {
   getPortalChangeRequestById,
   getPortalComments,
@@ -61,8 +62,9 @@ type SigningState = 'idle' | 'signing' | 'signed' | 'declined';
 type StepUpPending = 'approve' | 'reject' | 'sign' | 'decline' | null;
 
 export function ClientPortalChangeRequestDetailPage() {
-  const { portalToken, requestId } = useParams<{ portalToken: string; requestId: string }>();
-  const { portal, needsStepUp, completeStepUp } = useClientPortal();
+  const { projectId, requestId } = useParams<{ projectId: string; requestId: string }>();
+  const { project } = useClientPortalProject(projectId!);
+  const { needsStepUp, completeStepUp } = useClientPortalV2();
   const navigate = useNavigate();
 
   const [request, setRequest] = useState<ProjectChangeRequest | null>(null);
@@ -78,9 +80,8 @@ export function ClientPortalChangeRequestDetailPage() {
   const [processingSign, setProcessingSign] = useState(false);
   const [stepUpPending, setStepUpPending] = useState<StepUpPending>(null);
   const [pendingRejectReason, setPendingRejectReason] = useState<string | null>(null);
-
   useEffect(() => {
-    if (!requestId || !portal) return;
+    if (!requestId || !project) return;
     Promise.all([
       getPortalChangeRequestById(requestId),
       getPortalComments(requestId),
@@ -88,16 +89,16 @@ export function ClientPortalChangeRequestDetailPage() {
       setRequest(req);
       setComments(msgs);
     }).catch(console.error).finally(() => setLoading(false));
-  }, [requestId, portal]);
+  }, [requestId, project]);
 
-  if (!portal) return null;
+  if (!project) return <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>;
 
-  const contact = portal.contact;
+  const contact = project.contact;
   const contactName = contact
     ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Client'
     : 'Client';
 
-  const base = `/portal/project/${portalToken}`;
+  const base = `/client-portal/projects/${projectId}`;
 
   function requestWithStepUp(action: StepUpPending, onProceed: () => void) {
     if (needsStepUp()) {
@@ -130,24 +131,24 @@ export function ClientPortalChangeRequestDetailPage() {
   };
 
   async function handleApprove() {
-    if (!request || !portal) return;
+    if (!request || !project) return;
     await clientApproveChangeRequest({
       requestId: request.id,
-      portalId: portal.id,
-      projectId: portal.project_id,
-      contactId: portal.contact_id,
+      portalId: '',
+      projectId: projectId!,
+      contactId: project.contact_id,
     });
     setRequest((r) => r ? { ...r, status: 'approved', client_decision: 'approved' } : r);
     setActionState('idle');
   }
 
   async function handleReject(reason: string) {
-    if (!request || !portal) return;
+    if (!request || !project) return;
     await clientRejectChangeRequest({
       requestId: request.id,
-      portalId: portal.id,
-      projectId: portal.project_id,
-      contactId: portal.contact_id,
+      portalId: '',
+      projectId: projectId!,
+      contactId: project.contact_id,
       reason,
     });
     setRequest((r) => r ? { ...r, status: 'rejected', client_decision: 'declined' } : r);
@@ -156,15 +157,15 @@ export function ClientPortalChangeRequestDetailPage() {
   }
 
   async function handleClarification(message: string) {
-    if (!request || !portal) return;
+    if (!request || !project) return;
     await clientAddComment({
       changeRequestId: request.id,
-      orgId: portal.org_id,
+      orgId: project.org_id,
       body: message,
       authorName: contactName,
-      portalId: portal.id,
-      projectId: portal.project_id,
-      contactId: portal.contact_id,
+      portalId: '',
+      projectId: projectId!,
+      contactId: project.contact_id,
     });
     const updated = await getPortalComments(request.id);
     setComments(updated);
@@ -172,17 +173,17 @@ export function ClientPortalChangeRequestDetailPage() {
   }
 
   async function handleSendMessage() {
-    if (!newMessage.trim() || !request || !portal) return;
+    if (!newMessage.trim() || !request || !project) return;
     setSendingMessage(true);
     try {
       await clientAddComment({
         changeRequestId: request.id,
-        orgId: portal.org_id,
+        orgId: project.org_id,
         body: newMessage,
         authorName: contactName,
-        portalId: portal.id,
-        projectId: portal.project_id,
-        contactId: portal.contact_id,
+        portalId: '',
+        projectId: projectId!,
+        contactId: project.contact_id,
       });
       const updated = await getPortalComments(request.id);
       setComments(updated);
@@ -241,7 +242,6 @@ export function ClientPortalChangeRequestDetailPage() {
         changeOrderId: activeChangeOrder.id,
         changeRequest: request,
         rawToken: activeChangeOrder.access_token_hash ?? '',
-        userAgent: navigator.userAgent,
       });
       setRequest((r) => r ? { ...r, client_decision: 'declined' } : r);
       setSigningState('declined');

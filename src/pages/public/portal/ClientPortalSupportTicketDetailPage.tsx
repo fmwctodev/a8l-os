@@ -10,8 +10,9 @@ import {
   AlertTriangle,
   Clock,
   Paperclip,
+  Loader2,
 } from 'lucide-react';
-import { useClientPortal } from '../../../contexts/ClientPortalContext';
+import { useClientPortalProject } from '../../../contexts/ClientPortalContextV2';
 import {
   getPortalSupportTicketById,
   getPortalTicketComments,
@@ -49,8 +50,8 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 export function ClientPortalSupportTicketDetailPage() {
-  const { portalToken, ticketId } = useParams<{ portalToken: string; ticketId: string }>();
-  const { portal } = useClientPortal();
+  const { projectId, ticketId } = useParams<{ projectId: string; ticketId: string }>();
+  const { project } = useClientPortalProject(projectId!);
   const navigate = useNavigate();
 
   const [ticket, setTicket] = useState<ProjectSupportTicket | null>(null);
@@ -60,7 +61,7 @@ export function ClientPortalSupportTicketDetailPage() {
   const [sendingMessage, setSendingMessage] = useState(false);
 
   useEffect(() => {
-    if (!ticketId || !portal) return;
+    if (!ticketId || !project) return;
     Promise.all([
       getPortalSupportTicketById(ticketId),
       getPortalTicketComments(ticketId),
@@ -68,29 +69,29 @@ export function ClientPortalSupportTicketDetailPage() {
       setTicket(t);
       setComments(msgs);
     }).catch(console.error).finally(() => setLoading(false));
-  }, [ticketId, portal]);
+  }, [ticketId, project]);
 
-  if (!portal) return null;
+  if (!project) return <div className="flex justify-center py-8"><Loader2 className="animate-spin" /></div>;
 
-  const contact = portal.contact;
+  const contact = project.contact;
   const contactName = contact
     ? [contact.first_name, contact.last_name].filter(Boolean).join(' ') || 'Client'
     : 'Client';
 
-  const base = `/portal/project/${portalToken}`;
+  const base = `/client-portal/projects/${projectId}`;
 
   async function handleSendMessage() {
-    if (!newMessage.trim() || !ticket || !portal) return;
+    if (!newMessage.trim() || !ticket || !project) return;
     setSendingMessage(true);
     try {
       await clientAddTicketComment({
         supportTicketId: ticket.id,
-        orgId: portal.org_id,
+        orgId: project.org_id,
         body: newMessage,
         authorName: contactName,
-        portalId: portal.id,
-        projectId: portal.project_id,
-        contactId: portal.contact_id,
+        portalId: '',
+        projectId: projectId!,
+        contactId: project.contact_id,
       });
       const updated = await getPortalTicketComments(ticket.id);
       setComments(updated);
