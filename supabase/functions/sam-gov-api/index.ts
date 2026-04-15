@@ -211,8 +211,9 @@ interface ImportOpportunityParams {
 async function importOpportunity(
   supabase: ReturnType<typeof createClient>,
   orgId: string,
+  userId: string,
   params: ImportOpportunityParams
-): Promise<{ opportunityId: string }> {
+): Promise<{ opportunityId: string; contactId?: string }> {
   const { samData, contactId } = params;
 
   if (!samData || !samData.title) {
@@ -257,28 +258,127 @@ async function importOpportunity(
     );
   }
 
-  // 3. Parse close date from SAM.gov responseDeadLine
-  let closeDate: string | null = null;
-  if (samData.responseDeadLine) {
-    try {
-      closeDate = new Date(samData.responseDeadLine).toISOString();
-    } catch {
-      console.warn(
-        "[sam-gov-api] Could not parse responseDeadLine:",
-        samData.responseDeadLine
-      );
+  // 3. Create or find contact from SAM.gov Point of Contact
+  const pocArray = samData.pointOfContact as Array<{
+    fullName?: string; email?: string; phone?: string; title?: string; type?: string;
+  }> | undefined;
+  const poc = pocArray?.find((p) => p.type === "primary") || pocArray?.[0];
+  let resolvedContactId = contactId || null;
+
+  if (!resolvedContactId && poc?.email) {
+    // Check if a contact with this email already exists
+    const { data: existingContact } = await supabase
+      .from("contacts")
+      .select("id")
+      .eq("organization_id", orgId)
+      .ilike("email", poc.email.trim())
+      .maybeSingle();
+
+    if (existingContact) {
+      resolvedContactId = existingContact.id;
+      console.log(`[sam-gov-api] Found existing contact ${resolvedContactId} for POC ${poc.email}`);
+    } else {
+      // Create a new contact from the POC
+      const nameParts = (poc.fullName || "Government POC").trim().split(/\s+/);
+      const firstName = nameParts[0] || "Government";
+      const lastName = nameParts.slice(1).join(" ") || "POC";
+
+      const { data: newContact, error: contactErr } = await supabase
+        .from("contacts")
+        .insert({
+          organization_id: orgId,
+          first_name: firstName,
+          last_name: lastName,
+          email: poc.email.trim(),
+          phone: poc.phone || null,
+          job_title: poc.title || null,
+          company: (samData.fullParentPathName as string) || (samData.department as string) || null,
+          source: "sam_gov",
+        })
+        .select("id")
+        .single();
+
+      if (contactErr) {
+        console.error("[sam-gov-api] Contact creation failed:", contactErr.message);
+        // Don't fail the import — create opportunity without contact
+      } else {
+        resolvedContactId = newContact.id;
+        console.log(`[sam-gov-api] Created new contact ${resolvedContactId} from POC ${poc.email}`);
+      }
     }
   }
 
-  // 4. Create the opportunity record
+  // If still no contact, create a placeholder
+  if (!resolvedContactId) {
+    const placeholderName = (samData.fullParentPathName as string) || (samData.department as string) || "SAM.gov Opportunity";
+    const { data: placeholderContact } = await supabase
+      .from("contacts")
+      .insert({
+        organization_id: orgId,
+        first_name: placeholderName.substring(0, 50),
+        last_name: "POC",
+        company: placeholderName,
+        source: "sam_gov",
+      })
+      .select("id")
+      .single();
+    resolvedContactId = placeholderContact?.id || null;
+  }
+
+  if (!resolvedContactId) {
+    throw new Error("Failed to create or find a contact for this opportunity");
+  }
+
+  // 4. Parse close date from SAM.gov responseDeadLine (date column, needs YYYY-MM-DD)
+  let closeDate: string | null = null;
+  if (samData.responseDeadLine) {
+    try {
+      const d = new Date(samData.responseDeadLine as string);
+      closeDate = d.toISOString().split("T")[0]; // YYYY-MM-DD
+    } catch {
+      console.warn("[sam-gov-api] Could not parse responseDeadLine:", samData.responseDeadLine);
+    }
+  }
+
+  // 5. Build rich description with all solicitation details
+  const descParts: string[] = [];
+  if (samData.description) descParts.push(String(samData.description));
+  descParts.push("");
+  descParts.push(`Solicitation: ${samData.solicitationNumber || "N/A"}`);
+  descParts.push(`Agency: ${(samData.fullParentPathName as string) || (samData.department as string) || "N/A"}`);
+  if (samData.naicsCode) descParts.push(`NAICS: ${samData.naicsCode}`);
+  if (samData.classificationCode) descParts.push(`PSC: ${samData.classificationCode}`);
+  if (samData.typeOfSetAsideDescription || samData.typeOfSetAside) {
+    descParts.push(`Set-Aside: ${samData.typeOfSetAsideDescription || samData.typeOfSetAside}`);
+  }
+  if (samData.responseDeadLine) descParts.push(`Deadline: ${samData.responseDeadLine}`);
+  if (samData.postedDate) descParts.push(`Posted: ${samData.postedDate}`);
+  if (samData.type) descParts.push(`Type: ${samData.type}`);
+  if (poc) {
+    descParts.push("");
+    descParts.push("Point of Contact:");
+    if (poc.fullName) descParts.push(`  Name: ${poc.fullName}`);
+    if (poc.email) descParts.push(`  Email: ${poc.email}`);
+    if (poc.phone) descParts.push(`  Phone: ${poc.phone}`);
+    if (poc.title) descParts.push(`  Title: ${poc.title}`);
+  }
+  if (samData.uiLink) {
+    descParts.push("");
+    descParts.push(`SAM.gov Link: ${samData.uiLink}`);
+  }
+  const description = descParts.join("\n");
+
+  // 6. Create the opportunity record with all required fields
   const { data: opportunity, error: oppErr } = await supabase
     .from("opportunities")
     .insert({
       org_id: orgId,
       pipeline_id: pipeline.id,
       stage_id: stage.id,
-      contact_id: contactId || null,
+      contact_id: resolvedContactId,
+      created_by: userId,
       name: samData.title,
+      description: description,
       value_amount: samData.award?.amount ?? 0,
       source: "sam_gov",
       close_date: closeDate,
@@ -292,40 +392,59 @@ async function importOpportunity(
     throw new Error(`Failed to create opportunity: ${oppErr.message}`);
   }
 
-  // 5. Create the gov_opportunity_imports audit record
+  // 7. Create the gov_opportunity_imports audit record with full SAM.gov snapshot
+  // sam_notice_id is NOT NULL — use noticeId or solicitationNumber as fallback
+  const noticeIdValue = samData.noticeId || samData.solicitationNumber || `import-${Date.now()}`;
+
+  // sam_posted_date and sam_response_deadline are timestamptz — parse into ISO strings
+  let samPostedDate: string | null = null;
+  let samResponseDeadline: string | null = null;
+  try { if (samData.postedDate) samPostedDate = new Date(samData.postedDate as string).toISOString(); } catch { /* skip */ }
+  try { if (samData.responseDeadLine) samResponseDeadline = new Date(samData.responseDeadLine as string).toISOString(); } catch { /* skip */ }
+
   const { error: importErr } = await supabase
     .from("gov_opportunity_imports")
     .insert({
       org_id: orgId,
       opportunity_id: opportunity.id,
-      sam_notice_id: samData.noticeId ?? null,
+      sam_notice_id: noticeIdValue,
       sam_solicitation_number: samData.solicitationNumber ?? null,
       sam_title: samData.title ?? null,
-      sam_agency: samData.fullParentPathName ?? null,
-      sam_posted_date: samData.postedDate ?? null,
-      sam_response_deadline: samData.responseDeadLine ?? null,
+      sam_agency: (samData.fullParentPathName as string) ?? null,
+      sam_posted_date: samPostedDate,
+      sam_response_deadline: samResponseDeadline,
       sam_set_aside: samData.typeOfSetAside ?? null,
       sam_naics_code: samData.naicsCode ?? null,
       sam_type: samData.type ?? null,
       sam_data: samData,
+      imported_by: userId,
     });
 
   if (importErr) {
-    console.error(
-      "[sam-gov-api] gov_opportunity_imports insert error:",
-      importErr.message
-    );
-    // The opportunity was already created; log but don't fail the request
-    console.warn(
-      "[sam-gov-api] Opportunity created but import audit record failed"
-    );
+    console.error("[sam-gov-api] gov_opportunity_imports insert error:", importErr.message);
   }
 
-  console.log(
-    `[sam-gov-api] Imported SAM.gov opportunity ${samData.noticeId} as ${opportunity.id}`
-  );
+  // 8. Create a timeline event on the opportunity
+  try {
+    await supabase.from("activity_log").insert({
+      organization_id: orgId,
+      user_id: userId,
+      entity_type: "opportunity",
+      entity_id: opportunity.id,
+      event_type: "imported",
+      summary: `Imported from SAM.gov: ${samData.solicitationNumber || samData.noticeId || "N/A"}`,
+      payload: {
+        source: "sam_gov",
+        notice_id: samData.noticeId,
+        solicitation_number: samData.solicitationNumber,
+        agency: samData.fullParentPathName,
+      },
+    });
+  } catch { /* activity log is non-critical */ }
 
-  return { opportunityId: opportunity.id };
+  console.log(`[sam-gov-api] Imported SAM.gov opportunity ${samData.noticeId} as ${opportunity.id} (contact: ${resolvedContactId})`);
+
+  return { opportunityId: opportunity.id, contactId: resolvedContactId };
 }
 
 // ---------------------------------------------------------------------------
@@ -411,7 +530,7 @@ Deno.serve(async (req: Request) => {
             400
           );
         }
-        const result = await importOpportunity(supabase, user.orgId, {
+        const result = await importOpportunity(supabase, user.orgId, user.id, {
           samData: body.samData,
           contactId: body.contactId,
         });
