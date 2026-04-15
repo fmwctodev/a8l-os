@@ -2,14 +2,11 @@ import { supabase } from '../lib/supabase';
 import type {
   Contract,
   ContractSignatureRequest,
-  ContractSignature,
   ContractAuditEvent,
   ContractSignatureStatus,
 } from '../types';
 import { generateContractHTML } from './contractPdfExport';
 import { getBrandKits } from './brandboard';
-import { advanceOpportunityToStageByName, closeOpportunity } from './opportunities';
-import { createProject } from './projects';
 import { APP_BASE_URL } from '../constants';
 
 export async function computeDocumentHash(content: string): Promise<string> {
@@ -199,10 +196,25 @@ export async function markContractRequestViewed(requestId: string, contractId: s
   }
 }
 
+/**
+ * Finalize a contract signature from the public signing page.
+ *
+ * Calls the SECURITY DEFINER RPC `public_finalize_contract_signature` which
+ * atomically:
+ *   1. Verifies the signing token against contract_signature_requests
+ *   2. Inserts the contract_signatures record
+ *   3. Marks the signature request as 'signed'
+ *   4. Updates contracts.status + signature_status to 'signed'
+ *      (this fires handle_contract_signed -> opportunity to Closed Won +
+ *       auto-creates the Kickoff project)
+ *   5. Writes the 'signed' audit event
+ *
+ * The RPC is required because the public signing page runs as anon and
+ * cannot update the contracts table directly under RLS.
+ */
 export async function submitContractSignature(params: {
   requestId: string;
-  contractId: string;
-  orgId: string;
+  rawToken: string;
   signatureType: 'typed' | 'drawn';
   signatureText?: string;
   signatureImageUrl?: string;
@@ -212,192 +224,36 @@ export async function submitContractSignature(params: {
   userAgent?: string;
   consentText: string;
   documentHash: string;
-}): Promise<ContractSignature> {
-  const { data: signature, error } = await supabase
-    .from('contract_signatures')
-    .insert({
-      org_id: params.orgId,
-      contract_id: params.contractId,
-      signature_request_id: params.requestId,
-      signature_type: params.signatureType,
-      signature_text: params.signatureText || null,
-      signature_image_url: params.signatureImageUrl || null,
-      signer_name: params.signerName,
-      signer_email: params.signerEmail,
-      ip_address: params.ipAddress || null,
-      user_agent: params.userAgent || null,
-      consent_text: params.consentText,
-      document_hash: params.documentHash,
-    })
-    .select()
-    .single();
+}): Promise<{ contractId: string; signatureId: string; signedAt: string }> {
+  const tokenHash = await computeDocumentHash(params.rawToken);
 
-  if (error) throw error;
-
-  const now = new Date().toISOString();
-
-  await supabase
-    .from('contract_signature_requests')
-    .update({ status: 'signed', signed_at: now })
-    .eq('id', params.requestId);
-
-  await supabase
-    .from('contracts')
-    .update({
-      signature_status: 'signed' as ContractSignatureStatus,
-      status: 'signed',
-      signed_at: now,
-      signer_name: params.signerName,
-      signer_email: params.signerEmail,
-    })
-    .eq('id', params.contractId);
-
-  await createContractAuditEvent({
-    contractId: params.contractId,
-    orgId: params.orgId,
-    eventType: 'signed',
-    actorType: 'signer',
-    metadata: {
-      request_id: params.requestId,
-      signature_id: signature.id,
-      signer_name: params.signerName,
-      signer_email: params.signerEmail,
-      ip_address: params.ipAddress,
-      user_agent: params.userAgent,
-      document_hash: params.documentHash,
-    },
-  });
-
-  // Post-signature automation: advance the opportunity to "Closed Won"
-  // (+ flip status to 'won') and create a new Kickoff-stage project linked
-  // to the same contact/opportunity/proposal. All wrapped in try/catch so
-  // an automation failure never blocks the signing itself.
-  try {
-    const { data: contract } = await supabase
-      .from('contracts')
-      .select('opportunity_id, created_by')
-      .eq('id', params.contractId)
-      .maybeSingle();
-
-    const actorUserId = contract?.created_by ?? null;
-
-    if (contract?.opportunity_id) {
-      // 1. Advance opportunity stage to Closed Won. advanceOpportunityToStageByName
-      //    is a no-op if the opp is already past that stage or not open.
-      await advanceOpportunityToStageByName(
-        contract.opportunity_id,
-        'Closed Won',
-        actorUserId
-      );
-
-      // 2. Flip opportunity.status to 'won'. closeOpportunity throws if the
-      //    opportunity is not found; ignore errors so a stale link or an
-      //    already-closed opp does not fail the signature.
-      try {
-        await closeOpportunity(
-          contract.opportunity_id,
-          'won',
-          actorUserId ?? params.orgId
-        );
-      } catch (err) {
-        console.warn('[contract-signing] closeOpportunity skipped:', String(err));
-      }
-    }
-
-    // 3. Create a Kickoff-stage project from this contract (dedupes by opp/proposal).
-    await createKickoffProjectFromContract(
-      params.contractId,
-      actorUserId ?? params.orgId
-    );
-  } catch (err) {
-    console.error('[contract-signing] Post-sign automation failed:', err);
-  }
-
-  return signature;
-}
-
-/**
- * When a contract is signed by the client, spin up a matching project in the
- * Kickoff stage of the default project pipeline. Idempotent: if a project
- * already exists for this contract's opportunity (or proposal, or
- * contact+title as a last resort), this is a no-op.
- */
-async function createKickoffProjectFromContract(
-  contractId: string,
-  actorUserId: string
-): Promise<void> {
-  // 1. Fetch contract fields needed to seed the project.
-  const { data: contract } = await supabase
-    .from('contracts')
-    .select(
-      'id, org_id, contact_id, opportunity_id, proposal_id, title, total_value, currency, effective_date, created_by'
-    )
-    .eq('id', contractId)
-    .maybeSingle();
-
-  if (!contract || !contract.contact_id) return;
-
-  // 2. Dedupe — skip if a project already exists for this contract's
-  //    opportunity (preferred), proposal (fallback), or contact+title.
-  let dedupeQuery = supabase
-    .from('projects')
-    .select('id', { count: 'exact', head: true })
-    .eq('org_id', contract.org_id);
-
-  if (contract.opportunity_id) {
-    dedupeQuery = dedupeQuery.eq('opportunity_id', contract.opportunity_id);
-  } else if (contract.proposal_id) {
-    dedupeQuery = dedupeQuery.eq('proposal_id', contract.proposal_id);
-  } else {
-    dedupeQuery = dedupeQuery
-      .eq('contact_id', contract.contact_id)
-      .eq('name', contract.title ?? '');
-  }
-
-  const { count: existingCount } = await dedupeQuery;
-  if ((existingCount ?? 0) > 0) return;
-
-  // 3. Resolve the default project pipeline for this org.
-  const { data: pipeline } = await supabase
-    .from('project_pipelines')
-    .select('id')
-    .eq('org_id', contract.org_id)
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (!pipeline) return;
-
-  // 4. Resolve the Kickoff stage in that pipeline.
-  const { data: kickoffStage } = await supabase
-    .from('project_stages')
-    .select('id')
-    .eq('org_id', contract.org_id)
-    .eq('pipeline_id', pipeline.id)
-    .ilike('name', 'kickoff')
-    .maybeSingle();
-
-  if (!kickoffStage) return;
-
-  // 5. Create the project, delegating to the existing service so timeline
-  //    events and the project.created event get emitted for free.
-  await createProject(
+  const { data: result, error: rpcError } = await supabase.rpc(
+    'public_finalize_contract_signature',
     {
-      org_id: contract.org_id,
-      contact_id: contract.contact_id,
-      opportunity_id: contract.opportunity_id ?? null,
-      proposal_id: contract.proposal_id ?? null,
-      pipeline_id: pipeline.id,
-      stage_id: kickoffStage.id,
-      name: contract.title || 'New Project',
-      description: `Auto-created when contract "${contract.title ?? 'Untitled'}" was signed.`,
-      start_date: contract.effective_date ?? null,
-      budget_amount: contract.total_value ?? 0,
-      currency: contract.currency ?? 'USD',
-      created_by: contract.created_by ?? actorUserId,
-    },
-    actorUserId
+      p_request_id: params.requestId,
+      p_token_hash: tokenHash,
+      p_signer_name: params.signerName,
+      p_signer_email: params.signerEmail,
+      p_signature_type: params.signatureType,
+      p_signature_text: params.signatureText || null,
+      p_signature_image_url: params.signatureImageUrl || null,
+      p_ip_address: params.ipAddress || null,
+      p_user_agent: params.userAgent || null,
+      p_consent_text: params.consentText,
+      p_document_hash: params.documentHash,
+    }
   );
+
+  if (rpcError) throw rpcError;
+
+  const rpcData = result as { contract_id: string; signature_id: string; signed_at: string } | null;
+  if (!rpcData) throw new Error('Signature finalization returned no data');
+
+  return {
+    contractId: rpcData.contract_id,
+    signatureId: rpcData.signature_id,
+    signedAt: rpcData.signed_at,
+  };
 }
 
 export async function declineContractSignature(
