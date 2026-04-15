@@ -26,7 +26,7 @@ const OpportunitiesListPage = lazy(() => import('./pages/modules/OpportunitiesLi
 const OpportunityDetail = lazy(() => import('./pages/modules/OpportunityDetail').then(m => ({ default: m.OpportunityDetail })));
 const PipelinesPage = lazy(() => import('./pages/modules/PipelinesPage').then(m => ({ default: m.PipelinesPage })));
 const OpportunitiesLayout = lazy(() => import('./layouts/OpportunitiesLayout').then(m => ({ default: m.OpportunitiesLayout })));
-const GovContractSearch = lazy(() => import('./pages/modules/GovContractSearch').then(m => ({ default: m.GovContractSearch })));
+const GovContractSearch = lazy(() => import('./pages/modules/GovContractSearch'));
 const ProjectsLayout = lazy(() => import('./layouts/ProjectsLayout').then(m => ({ default: m.ProjectsLayout })));
 const Projects = lazy(() => import('./pages/modules/Projects').then(m => ({ default: m.Projects })));
 const ProjectsListPage = lazy(() => import('./pages/modules/ProjectsListPage').then(m => ({ default: m.ProjectsListPage })));
