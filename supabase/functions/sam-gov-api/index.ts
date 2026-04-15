@@ -40,6 +40,20 @@ function formatSamDate(date: Date): string {
   return `${mm}/${dd}/${yyyy}`;
 }
 
+/**
+ * Convert a date string to SAM.gov's required MM/dd/yyyy format.
+ * Accepts YYYY-MM-DD (from HTML date inputs) or MM/dd/yyyy (already correct).
+ */
+function toSamDateFormat(dateStr: string): string {
+  if (dateStr.includes("/")) return dateStr; // already MM/dd/yyyy
+  const parts = dateStr.split("-");
+  if (parts.length === 3) {
+    const [yyyy, mm, dd] = parts;
+    return `${mm}/${dd}/${yyyy}`;
+  }
+  return dateStr; // fallback
+}
+
 /** Return today and 30 days ago as MM/dd/yyyy strings. */
 function defaultDateRange(): { postedFrom: string; postedTo: string } {
   const now = new Date();
@@ -119,8 +133,8 @@ async function searchOpportunities(
   if (params.agencyName) qp.set("organizationName", params.agencyName);
   if (params.procurementType) qp.set("ptype", params.procurementType);
 
-  qp.set("postedFrom", params.postedFrom ?? defaults.postedFrom);
-  qp.set("postedTo", params.postedTo ?? defaults.postedTo);
+  qp.set("postedFrom", toSamDateFormat(params.postedFrom ?? defaults.postedFrom));
+  qp.set("postedTo", toSamDateFormat(params.postedTo ?? defaults.postedTo));
   qp.set("limit", String(params.limit ?? 25));
   qp.set("offset", String(params.offset ?? 0));
 
