@@ -26,6 +26,7 @@ export const ALLOWED_ACTION_TYPES = new Set([
   'query_proposals',
   'query_contracts',
   'query_files',
+  'query_gov_opportunities',
   'remember',
   'store_memory',
 ]);
@@ -53,6 +54,7 @@ const MODULE_MAP: Record<string, string> = {
   query_proposals: 'proposals',
   query_contracts: 'contracts',
   query_files: 'files',
+  query_gov_opportunities: 'government',
   remember: 'memory',
   store_memory: 'memory',
 };
@@ -188,6 +190,14 @@ const PAYLOAD_SCHEMAS: Record<string, Record<string, PayloadFieldDef>> = {
   },
   query_files: {
     search: { required: false, type: 'string' },
+    limit: { required: false, type: 'number' },
+  },
+  query_gov_opportunities: {
+    keywords: { required: false, type: 'string' },
+    naicsCode: { required: false, type: 'string' },
+    setAsideType: { required: false, type: 'string' },
+    state: { required: false, type: 'string' },
+    agencyName: { required: false, type: 'string' },
     limit: { required: false, type: 'number' },
   },
   query_analytics: {

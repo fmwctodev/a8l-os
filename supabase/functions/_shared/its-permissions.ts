@@ -36,6 +36,7 @@ const ACTION_PERMISSION_MAP: Record<string, string[]> = {
   query_proposals: ['personal_assistant.run'],
   query_contracts: ['personal_assistant.run'],
   query_files: ['personal_assistant.run'],
+  query_gov_opportunities: ['personal_assistant.run'],
   remember: ['personal_assistant.run'],
   store_memory: ['personal_assistant.run'],
 };

@@ -61,6 +61,7 @@ const READ_ACTION_TYPES = new Set([
   "query_proposals",
   "query_contracts",
   "query_files",
+  "query_gov_opportunities",
   "query_analytics",
 ]);
 
@@ -1527,6 +1528,62 @@ async function executeITSAction(
       };
     }
 
+    case "query_gov_opportunities": {
+      const samApiKey = Deno.env.get("SAM_GOV_API_KEY");
+      if (!samApiKey) return fail(action, "SAM.gov API key not configured");
+
+      const keywords = (p.keywords as string) || "";
+      const limit = Math.min((p.limit as number) || 10, 25);
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
+      const postedFrom = `${String(thirtyDaysAgo.getMonth() + 1).padStart(2, '0')}/${String(thirtyDaysAgo.getDate()).padStart(2, '0')}/${thirtyDaysAgo.getFullYear()}`;
+      const postedTo = `${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}/${now.getFullYear()}`;
+
+      const params = new URLSearchParams({
+        api_key: samApiKey,
+        postedFrom,
+        postedTo,
+        limit: String(limit),
+        offset: "0",
+      });
+      if (keywords) params.set("title", keywords);
+      if (p.naicsCode) params.set("ncode", p.naicsCode as string);
+      if (p.setAsideType) params.set("typeOfSetAside", p.setAsideType as string);
+      if (p.state) params.set("state", p.state as string);
+      if (p.agencyName) params.set("organizationName", p.agencyName as string);
+
+      try {
+        const samRes = await fetch(`https://api.sam.gov/opportunities/v2/search?${params.toString()}`);
+        if (!samRes.ok) {
+          const errText = await samRes.text();
+          return fail(action, `SAM.gov API error ${samRes.status}: ${errText.substring(0, 200)}`);
+        }
+        const samData = await samRes.json();
+        const opps = (samData.opportunitiesData || []).map((o: Record<string, unknown>) => ({
+          title: o.title,
+          solicitationNumber: o.solicitationNumber,
+          noticeId: o.noticeId,
+          agency: (o.department || "") + (o.subTier ? ` / ${o.subTier}` : ""),
+          type: o.type,
+          setAside: o.typeOfSetAsideDescription || o.typeOfSetAside || "None",
+          deadline: o.responseDeadLine,
+          postedDate: o.postedDate,
+          naicsCode: o.naicsCode,
+          active: o.active,
+          uiLink: o.uiLink,
+        }));
+        return {
+          action_id: action.action_id,
+          status: "success",
+          resource_id: null,
+          error: null,
+          query_data: { opportunities: opps, total: samData.totalRecords || opps.length, source: "SAM.gov" },
+        };
+      } catch (err) {
+        return fail(action, `SAM.gov search failed: ${String(err)}`);
+      }
+    }
+
     case "query_analytics": {
       const metric = p.metric as string;
       const dateRange = p.date_range as { from: string; to: string } | undefined;
@@ -1700,6 +1757,8 @@ function describeAction(action: ITSAction): string {
       return `Query contracts (${p.status || "all"})`;
     case "query_files":
       return `Search files${p.search ? `: ${p.search}` : ""}`;
+    case "query_gov_opportunities":
+      return `Search SAM.gov${p.keywords ? `: ${p.keywords}` : ""}`;
     case "query_analytics":
       return `Query analytics: ${p.metric}`;
     case "remember":

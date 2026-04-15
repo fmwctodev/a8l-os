@@ -100,6 +100,11 @@ query_files (module: "files")
   payload: { search: string (optional), limit: number (optional, default 20) }
   Returns: id, name, mime_type, size_bytes, web_view_link, created_at
 
+--- GOVERNMENT CONTRACTING (SAM.gov) ---
+query_gov_opportunities (module: "government")
+  payload: { keywords: string (optional), naicsCode: string (optional), setAsideType: "SBA"|"8A"|"HZC"|"SDVOSBC"|"WOSB"|"EDWOSB" (optional), state: string (optional, 2-letter code), agencyName: string (optional), limit: number (optional, default 10) }
+  Searches SAM.gov for active federal contract opportunities. Use when the user asks about government contracts, federal opportunities, or SAM.gov.
+
 --- ANALYTICS ---
 query_analytics (module: "reporting")
   payload: { metric: string (required), filters: {}, date_range: { from: "YYYY-MM-DD", to: "YYYY-MM-DD" } }
