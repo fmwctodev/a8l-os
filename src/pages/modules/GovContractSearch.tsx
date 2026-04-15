@@ -124,8 +124,8 @@ export default function GovContractSearch() {
         offset: newPage * PAGE_SIZE,
       };
       const res = await searchOpportunities(filters);
-      setResults(res.opportunities);
-      setTotalRecords(res.totalRecords);
+      setResults(res.opportunities || []);
+      setTotalRecords(res.totalRecords || 0);
       setHasSearched(true);
       setExpandedId(null);
     } catch (err: unknown) {

@@ -76,7 +76,13 @@ export async function searchOpportunities(
   const res = await callEdgeFunction('sam-gov-api', { action: 'search-opportunities', ...filters });
   const data = await res.json();
   if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error?.message || JSON.stringify(data.error));
-  return data.data || { opportunities: [], totalRecords: 0 };
+  // SAM.gov returns { totalRecords, opportunitiesData: [...] }
+  // Normalize to { opportunities, totalRecords } for the frontend
+  const raw = data.data || data || {};
+  return {
+    opportunities: raw.opportunitiesData || raw.opportunities || [],
+    totalRecords: raw.totalRecords || 0,
+  };
 }
 
 export async function getOpportunityDetail(noticeId: string): Promise<SamGovOpportunity | null> {
