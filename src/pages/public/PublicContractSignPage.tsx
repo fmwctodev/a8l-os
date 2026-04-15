@@ -173,56 +173,36 @@ export function PublicContractSignPage() {
 
       const consentText = `I, ${request.signer_name}, agree to electronically sign this contract. I understand this constitutes a legally binding signature.`;
 
-      const { error: sigError } = await supabase
-        .from('contract_signatures')
-        .insert({
-          org_id: contract.org_id,
-          contract_id: contract.id,
-          signature_request_id: request.id,
-          signature_type: signatureData.type,
-          signature_text: signatureData.text || null,
-          signature_image_url: signatureImageUrl,
-          signer_name: request.signer_name,
-          signer_email: request.signer_email,
-          ip_address: null,
-          user_agent: navigator.userAgent,
-          consent_text: consentText,
-          document_hash: documentHash,
-        });
+      if (!token) {
+        throw new Error('Signing token is missing from the URL');
+      }
+      const tokenHash = await hashToken(token);
 
-      if (sigError) throw sigError;
+      // Call the atomic RPC that:
+      // 1. Verifies the token
+      // 2. Inserts the signature
+      // 3. Updates the signature request
+      // 4. Updates the contract (fires handle_contract_signed trigger -> opp -> Closed Won + Kickoff project)
+      // 5. Records the audit event
+      // Runs with SECURITY DEFINER to bypass RLS safely.
+      const { error: rpcError } = await supabase.rpc(
+        'public_finalize_contract_signature',
+        {
+          p_request_id: request.id,
+          p_token_hash: tokenHash,
+          p_signer_name: request.signer_name,
+          p_signer_email: request.signer_email,
+          p_signature_type: signatureData.type,
+          p_signature_text: signatureData.text || null,
+          p_signature_image_url: signatureImageUrl,
+          p_ip_address: null,
+          p_user_agent: navigator.userAgent,
+          p_consent_text: consentText,
+          p_document_hash: documentHash,
+        }
+      );
 
-      const now = new Date().toISOString();
-
-      await supabase
-        .from('contract_signature_requests')
-        .update({ status: 'signed', signed_at: now })
-        .eq('id', request.id);
-
-      await supabase
-        .from('contracts')
-        .update({
-          signature_status: 'signed',
-          status: 'signed',
-          signed_at: now,
-          signer_name: request.signer_name,
-          signer_email: request.signer_email,
-        })
-        .eq('id', contract.id);
-
-      await supabase.from('contract_audit_events').insert({
-        org_id: contract.org_id,
-        contract_id: contract.id,
-        event_type: 'signed',
-        actor_type: 'signer',
-        metadata: {
-          request_id: request.id,
-          signer_name: request.signer_name,
-          signer_email: request.signer_email,
-          user_agent: navigator.userAgent,
-          document_hash: documentHash,
-        },
-      });
+      if (rpcError) throw rpcError;
 
       setPageState('signed');
       topRef.current?.scrollIntoView({ behavior: 'smooth' });
