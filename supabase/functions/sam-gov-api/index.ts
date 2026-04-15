@@ -341,8 +341,39 @@ async function importOpportunity(
   }
 
   // 5. Build rich description with all solicitation details
+  // If the description field is a URL (SAM.gov returns a URL, not text), fetch real content
+  let descriptionText = samData.description ? String(samData.description) : "";
+  if (descriptionText.startsWith("http")) {
+    try {
+      const apiKey = getApiKey();
+      const descFetchUrl = descriptionText.includes("api_key=")
+        ? descriptionText
+        : `${descriptionText}${descriptionText.includes("?") ? "&" : "?"}api_key=${apiKey}`;
+      const descFetchResp = await fetch(descFetchUrl);
+      if (descFetchResp.ok) {
+        const rawHtml = await descFetchResp.text();
+        descriptionText = rawHtml
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<\/p>/gi, "\n\n")
+          .replace(/<\/div>/gi, "\n")
+          .replace(/<\/li>/gi, "\n")
+          .replace(/<[^>]*>/g, "")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
+        console.log(`[sam-gov-api] Fetched real description (${descriptionText.length} chars)`);
+      }
+    } catch (e) {
+      console.warn("[sam-gov-api] Could not fetch description from URL:", e);
+    }
+  }
+
   const descParts: string[] = [];
-  if (samData.description) descParts.push(String(samData.description));
+  if (descriptionText) descParts.push(descriptionText);
   descParts.push("");
   descParts.push(`Solicitation: ${samData.solicitationNumber || "N/A"}`);
   descParts.push(`Agency: ${(samData.fullParentPathName as string) || (samData.department as string) || "N/A"}`);
@@ -522,6 +553,43 @@ Deno.serve(async (req: Request) => {
       }
 
       // ---------------------------------------------------------------
+      case "get-description": {
+        const descNoticeId = body.noticeId as string | undefined;
+        if (!descNoticeId) {
+          return errorResponse(
+            "MISSING_NOTICE_ID",
+            "noticeId is required for get-description",
+            400
+          );
+        }
+        const apiKey = getApiKey();
+        const descUrl = `https://api.sam.gov/prod/opportunities/v1/noticedesc?noticeid=${encodeURIComponent(descNoticeId)}&api_key=${apiKey}`;
+        console.log(`[sam-gov-api] Fetching description for ${descNoticeId}`);
+        const descResp = await fetch(descUrl);
+        if (!descResp.ok) {
+          const descBody = await descResp.text();
+          console.error(`[sam-gov-api] Description fetch failed ${descResp.status}: ${descBody.slice(0, 200)}`);
+          return errorResponse("DESC_FETCH_FAILED", `Failed to fetch description: ${descResp.status}`, 502);
+        }
+        const descHtml = await descResp.text();
+        // Strip HTML tags for plain text version
+        const descPlainText = descHtml
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<\/p>/gi, "\n\n")
+          .replace(/<\/div>/gi, "\n")
+          .replace(/<\/li>/gi, "\n")
+          .replace(/<[^>]*>/g, "")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
+        return successResponse({ html: descHtml, plainText: descPlainText });
+      }
+
+      // ---------------------------------------------------------------
       case "import-opportunity": {
         if (!body.samData) {
           return errorResponse(
@@ -542,7 +610,7 @@ Deno.serve(async (req: Request) => {
         return errorResponse(
           "UNKNOWN_ACTION",
           `Unknown action: "${action}". ` +
-            "Supported actions: search-opportunities, get-opportunity, search-psc, import-opportunity",
+            "Supported actions: search-opportunities, get-opportunity, get-description, search-psc, import-opportunity",
           400
         );
     }
