@@ -18,6 +18,7 @@ interface AuthContextValue {
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
+  signInWithMicrosoft: () => Promise<void>;
   signOut: () => Promise<void>;
   hasPermission: (permission: PermissionKey) => boolean;
   isFeatureEnabled: (featureKey: string) => boolean;
@@ -132,6 +133,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await authService.signInWithGoogle();
   };
 
+  const signInWithMicrosoft = async () => {
+    await authService.signInWithMicrosoft();
+  };
+
   const signOut = async () => {
     await authService.signOut();
     setSession(null);
@@ -161,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         signIn,
         signInWithGoogle,
+        signInWithMicrosoft,
         signOut,
         hasPermission,
         isFeatureEnabled,

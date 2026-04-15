@@ -64,6 +64,17 @@ export async function signInWithGoogle(redirectTo?: string) {
   if (error) throw error;
 }
 
+export async function signInWithMicrosoft(redirectTo?: string) {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'azure',
+    options: {
+      scopes: 'openid profile email offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite Files.ReadWrite.All Chat.ReadWrite OnlineMeetings.ReadWrite',
+      redirectTo: redirectTo || window.location.origin,
+    },
+  });
+  if (error) throw error;
+}
+
 export function onAuthStateChange(callback: (event: string, session: unknown) => void) {
   return supabase.auth.onAuthStateChange(callback);
 }

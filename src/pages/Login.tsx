@@ -45,8 +45,9 @@ export function Login() {
   const [emailError, setEmailError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isMicrosoftLoading, setIsMicrosoftLoading] = useState(false);
 
-  const { signIn, signInWithGoogle, user, isLoading: authLoading } = useAuth();
+  const { signIn, signInWithGoogle, signInWithMicrosoft, user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -101,6 +102,17 @@ export function Login() {
     } catch (err) {
       setError(getErrorMessage(err));
       setIsGoogleLoading(false);
+    }
+  };
+
+  const handleMicrosoftSignIn = async () => {
+    setError('');
+    setIsMicrosoftLoading(true);
+    try {
+      await signInWithMicrosoft();
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setIsMicrosoftLoading(false);
     }
   };
 
@@ -262,6 +274,25 @@ export function Login() {
               </svg>
             )}
             {isGoogleLoading ? 'Signing in...' : 'Sign in with Google'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleMicrosoftSignIn}
+            disabled={isMicrosoftLoading}
+            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-lg bg-[#2F2F2F] text-white font-medium hover:bg-[#404040] focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+          >
+            {isMicrosoftLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
+            ) : (
+              <svg className="w-5 h-5" viewBox="0 0 21 21">
+                <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+                <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+                <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+                <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+              </svg>
+            )}
+            {isMicrosoftLoading ? 'Signing in...' : 'Sign in with Microsoft'}
           </button>
         </div>
 
