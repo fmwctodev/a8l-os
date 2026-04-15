@@ -24,6 +24,8 @@ export const ALLOWED_ACTION_TYPES = new Set([
   'query_tasks',
   'query_projects',
   'query_proposals',
+  'query_contracts',
+  'query_files',
   'remember',
   'store_memory',
 ]);
@@ -49,6 +51,8 @@ const MODULE_MAP: Record<string, string> = {
   query_tasks: 'tasks',
   query_projects: 'projects',
   query_proposals: 'proposals',
+  query_contracts: 'contracts',
+  query_files: 'files',
   remember: 'memory',
   store_memory: 'memory',
 };
@@ -172,6 +176,17 @@ const PAYLOAD_SCHEMAS: Record<string, Record<string, PayloadFieldDef>> = {
   },
   query_proposals: {
     status: { required: false, type: 'string' },
+    signature_status: { required: false, type: 'string' },
+    search: { required: false, type: 'string' },
+    limit: { required: false, type: 'number' },
+  },
+  query_contracts: {
+    status: { required: false, type: 'string' },
+    signature_status: { required: false, type: 'string' },
+    search: { required: false, type: 'string' },
+    limit: { required: false, type: 'number' },
+  },
+  query_files: {
     search: { required: false, type: 'string' },
     limit: { required: false, type: 'number' },
   },

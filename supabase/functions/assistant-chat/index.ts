@@ -59,6 +59,8 @@ const READ_ACTION_TYPES = new Set([
   "query_tasks",
   "query_projects",
   "query_proposals",
+  "query_contracts",
+  "query_files",
   "query_analytics",
 ]);
 
@@ -1453,12 +1455,13 @@ async function executeITSAction(
 
       let query = supabase
         .from("proposals")
-        .select("id, title, status, total_value, contact_id, opportunity_id, created_at, sent_at, viewed_at, accepted_at")
+        .select("id, title, status, total_value, currency, contact_id, opportunity_id, signature_status, created_at, sent_at, viewed_at, signed_at, declined_at, valid_until, signer_name, signer_email")
         .eq("org_id", user.orgId)
         .order("created_at", { ascending: false })
         .limit(limit);
 
       if (status !== "all") query = query.eq("status", status);
+      if (p.signature_status) query = query.eq("signature_status", p.signature_status as string);
       if (p.search) {
         query = query.ilike("title", `%${p.search}%`);
       }
@@ -1471,6 +1474,56 @@ async function executeITSAction(
         resource_id: null,
         error: null,
         query_data: { proposals: data || [], total: (data || []).length },
+      };
+    }
+
+    case "query_contracts": {
+      const status = (p.status as string) || "all";
+      const limit = (p.limit as number) || 20;
+
+      let query = supabase
+        .from("contracts")
+        .select("id, title, contract_type, status, signature_status, total_value, currency, party_a_name, party_b_name, party_a_email, party_b_email, effective_date, signed_at, created_at")
+        .eq("org_id", user.orgId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (status !== "all") query = query.eq("status", status);
+      if (p.signature_status) query = query.eq("signature_status", p.signature_status as string);
+      if (p.search) query = query.ilike("title", `%${p.search}%`);
+
+      const { data, error } = await query;
+      if (error) return fail(action, error.message);
+      return {
+        action_id: action.action_id,
+        status: "success",
+        resource_id: null,
+        error: null,
+        query_data: { contracts: data || [], total: (data || []).length },
+      };
+    }
+
+    case "query_files": {
+      const limit = (p.limit as number) || 20;
+      const search = p.search as string | undefined;
+
+      let query = supabase
+        .from("drive_files")
+        .select("id, name, mime_type, size_bytes, web_view_link, thumbnail_link, created_at, updated_at")
+        .eq("org_id", user.orgId)
+        .order("updated_at", { ascending: false })
+        .limit(limit);
+
+      if (search) query = query.ilike("name", `%${search}%`);
+
+      const { data, error } = await query;
+      if (error) return fail(action, error.message);
+      return {
+        action_id: action.action_id,
+        status: "success",
+        resource_id: null,
+        error: null,
+        query_data: { files: data || [], total: (data || []).length },
       };
     }
 
@@ -1643,6 +1696,10 @@ function describeAction(action: ITSAction): string {
       return `Query projects (${p.status || "active"})`;
     case "query_proposals":
       return `Query proposals (${p.status || "all"})`;
+    case "query_contracts":
+      return `Query contracts (${p.status || "all"})`;
+    case "query_files":
+      return `Search files${p.search ? `: ${p.search}` : ""}`;
     case "query_analytics":
       return `Query analytics: ${p.metric}`;
     case "remember":

@@ -87,7 +87,18 @@ query_projects (module: "projects")
 
 --- PROPOSAL LOOKUP ---
 query_proposals (module: "proposals")
-  payload: { status: "draft"|"sent"|"viewed"|"accepted"|"declined"|"all" (optional, default "all"), search: string (optional), limit: number (optional, default 20) }
+  payload: { status: "draft"|"sent"|"viewed"|"signed"|"declined"|"all" (optional, default "all"), signature_status: "not_sent"|"pending_signature"|"signed"|"declined" (optional), search: string (optional), limit: number (optional, default 20) }
+  Note: Use signature_status="pending_signature" to find proposals awaiting client signature.
+
+--- CONTRACT LOOKUP ---
+query_contracts (module: "contracts")
+  payload: { status: "draft"|"sent"|"viewed"|"signed"|"declined"|"all" (optional, default "all"), signature_status: "not_sent"|"pending_signature"|"signed"|"declined" (optional), search: string (optional), limit: number (optional, default 20) }
+  Returns: id, title, contract_type, status, signature_status, total_value, currency, party_a_name, party_b_name, effective_date, signed_at, created_at
+
+--- FILE LOOKUP ---
+query_files (module: "files")
+  payload: { search: string (optional), limit: number (optional, default 20) }
+  Returns: id, name, mime_type, size_bytes, web_view_link, created_at
 
 --- ANALYTICS ---
 query_analytics (module: "reporting")
