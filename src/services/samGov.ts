@@ -75,21 +75,21 @@ export async function searchOpportunities(
 ): Promise<{ opportunities: SamGovOpportunity[]; totalRecords: number }> {
   const res = await callEdgeFunction('sam-gov-api', { action: 'search-opportunities', ...filters });
   const data = await res.json();
-  if (data.error) throw new Error(data.error);
+  if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error?.message || JSON.stringify(data.error));
   return data.data || { opportunities: [], totalRecords: 0 };
 }
 
 export async function getOpportunityDetail(noticeId: string): Promise<SamGovOpportunity | null> {
   const res = await callEdgeFunction('sam-gov-api', { action: 'get-opportunity', noticeId });
   const data = await res.json();
-  if (data.error) throw new Error(data.error);
+  if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error?.message || JSON.stringify(data.error));
   return data.data || null;
 }
 
 export async function searchPSC(query: string): Promise<PSCCode[]> {
   const res = await callEdgeFunction('sam-gov-api', { action: 'search-psc', query });
   const data = await res.json();
-  if (data.error) throw new Error(data.error);
+  if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error?.message || JSON.stringify(data.error));
   return data.data || [];
 }
 
@@ -99,7 +99,7 @@ export async function importToOpportunity(
 ): Promise<{ opportunityId: string }> {
   const res = await callEdgeFunction('sam-gov-api', { action: 'import-opportunity', samData, contactId });
   const data = await res.json();
-  if (data.error) throw new Error(data.error);
+  if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error?.message || JSON.stringify(data.error));
   return data.data;
 }
 
