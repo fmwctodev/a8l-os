@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Search,
   Filter,
@@ -16,6 +17,7 @@ import {
   Mail,
   FileText,
   Download,
+  FileSignature,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -71,6 +73,7 @@ function defaultDateRange(): { from: string; to: string } {
 
 export default function GovContractSearch() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const dates = defaultDateRange();
 
   // Search state
@@ -176,6 +179,21 @@ export default function GovContractSearch() {
       setTimeout(() => setImportSuccess(null), 3000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setImportingId(null);
+    }
+  }
+
+  async function handleGenerateResponse(opp: SamGovOpportunity) {
+    // First import the opportunity if not already imported
+    setImportingId(opp.noticeId);
+    try {
+      const result = await importToOpportunity(opp);
+      // Navigate to proposals page with the opportunity pre-selected
+      navigate(`/proposals?new=true&opportunity_id=${result.opportunityId}&contact_id=${result.contactId || ''}&source=sam_gov`);
+    } catch (err: unknown) {
+      // If import fails (e.g., already imported), still try to navigate
+      setError(err instanceof Error ? err.message : 'Failed to prepare response');
     } finally {
       setImportingId(null);
     }
@@ -361,6 +379,7 @@ export default function GovContractSearch() {
                         expanded={expandedId === opp.noticeId}
                         onToggle={() => setExpandedId(expandedId === opp.noticeId ? null : opp.noticeId)}
                         onImport={() => handleImport(opp)}
+                        onGenerateResponse={() => handleGenerateResponse(opp)}
                         importing={importingId === opp.noticeId}
                         importedSuccess={importSuccess === opp.noticeId}
                         resolvedDescription={descCache[opp.noticeId]}
@@ -415,13 +434,14 @@ interface ResultRowProps {
   expanded: boolean;
   onToggle: () => void;
   onImport: () => void;
+  onGenerateResponse: () => void;
   importing: boolean;
   importedSuccess: boolean;
   resolvedDescription?: string;
   descriptionLoading: boolean;
 }
 
-function ResultRow({ opp, expanded, onToggle, onImport, importing, importedSuccess, resolvedDescription, descriptionLoading }: ResultRowProps) {
+function ResultRow({ opp, expanded, onToggle, onImport, onGenerateResponse, importing, importedSuccess, resolvedDescription, descriptionLoading }: ResultRowProps) {
   const deadlineDate = opp.responseDeadLine ? new Date(opp.responseDeadLine) : null;
   const isPastDeadline = deadlineDate ? deadlineDate < new Date() : false;
 
@@ -636,6 +656,22 @@ function ResultRow({ opp, expanded, onToggle, onImport, importing, importedSucce
                     </div>
                   </div>
                 )}
+
+                {/* Generate Response Button */}
+                <div className="pt-2">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onGenerateResponse(); }}
+                    disabled={importing}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {importing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <FileSignature className="w-4 h-4" />
+                    )}
+                    Generate Response
+                  </button>
+                </div>
               </div>
             </div>
           </td>

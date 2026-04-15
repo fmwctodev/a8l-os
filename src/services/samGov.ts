@@ -111,7 +111,7 @@ export async function searchPSC(query: string): Promise<PSCCode[]> {
 export async function importToOpportunity(
   samData: SamGovOpportunity,
   contactId?: string
-): Promise<{ opportunityId: string }> {
+): Promise<{ opportunityId: string; contactId?: string }> {
   const res = await callEdgeFunction('sam-gov-api', { action: 'import-opportunity', samData, contactId });
   const data = await res.json();
   if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error?.message || JSON.stringify(data.error));
