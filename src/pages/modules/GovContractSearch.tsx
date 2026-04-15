@@ -21,6 +21,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import {
   searchOpportunities,
   importToOpportunity,
+  getOpportunityDescription,
   type SamGovOpportunity,
   type SamSearchFilters,
 } from '../../services/samGov';
@@ -90,6 +91,35 @@ export default function GovContractSearch() {
 
   // Detail expansion
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Description cache — lazy-loaded when row expanded
+  const [descCache, setDescCache] = useState<Record<string, string>>({});
+  const [descLoading, setDescLoading] = useState<Record<string, boolean>>({});
+
+  // Fetch real description when a row is expanded
+  useEffect(() => {
+    if (!expandedId) return;
+    // Already cached or already loading
+    if (descCache[expandedId] || descLoading[expandedId]) return;
+    // Find the opportunity
+    const opp = results.find((o) => o.noticeId === expandedId);
+    if (!opp) return;
+    const desc = opp.description || '';
+    // Only fetch if the description looks like a URL (SAM.gov returns URL, not text)
+    if (!desc.startsWith('http')) return;
+
+    setDescLoading((prev) => ({ ...prev, [expandedId]: true }));
+    getOpportunityDescription(expandedId)
+      .then((result) => {
+        setDescCache((prev) => ({ ...prev, [expandedId]: result.plainText || 'No description available.' }));
+      })
+      .catch(() => {
+        setDescCache((prev) => ({ ...prev, [expandedId]: 'Failed to load description.' }));
+      })
+      .finally(() => {
+        setDescLoading((prev) => ({ ...prev, [expandedId]: false }));
+      });
+  }, [expandedId, results, descCache, descLoading]);
 
   // Import state
   const [importingId, setImportingId] = useState<string | null>(null);
@@ -333,6 +363,8 @@ export default function GovContractSearch() {
                         onImport={() => handleImport(opp)}
                         importing={importingId === opp.noticeId}
                         importedSuccess={importSuccess === opp.noticeId}
+                        resolvedDescription={descCache[opp.noticeId]}
+                        descriptionLoading={descLoading[opp.noticeId] || false}
                       />
                     ))}
                   </tbody>
@@ -385,9 +417,11 @@ interface ResultRowProps {
   onImport: () => void;
   importing: boolean;
   importedSuccess: boolean;
+  resolvedDescription?: string;
+  descriptionLoading: boolean;
 }
 
-function ResultRow({ opp, expanded, onToggle, onImport, importing, importedSuccess }: ResultRowProps) {
+function ResultRow({ opp, expanded, onToggle, onImport, importing, importedSuccess, resolvedDescription, descriptionLoading }: ResultRowProps) {
   const deadlineDate = opp.responseDeadLine ? new Date(opp.responseDeadLine) : null;
   const isPastDeadline = deadlineDate ? deadlineDate < new Date() : false;
 
@@ -479,9 +513,16 @@ function ResultRow({ opp, expanded, onToggle, onImport, importing, importedSucce
                   <FileText className="w-4 h-4" />
                   Description
                 </h4>
-                <p className="text-sm text-slate-400 whitespace-pre-wrap line-clamp-6">
-                  {opp.description || 'No description available.'}
-                </p>
+                {descriptionLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading description...
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 whitespace-pre-wrap max-h-64 overflow-y-auto">
+                    {resolvedDescription || (opp.description?.startsWith('http') ? 'Loading...' : opp.description) || 'No description available.'}
+                  </p>
+                )}
 
                 {/* Resource Links */}
                 {opp.resourceLinks && opp.resourceLinks.length > 0 && (

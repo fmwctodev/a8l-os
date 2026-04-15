@@ -92,6 +92,15 @@ export async function getOpportunityDetail(noticeId: string): Promise<SamGovOppo
   return data.data || null;
 }
 
+export async function getOpportunityDescription(
+  noticeId: string
+): Promise<{ html: string; plainText: string }> {
+  const res = await callEdgeFunction('sam-gov-api', { action: 'get-description', noticeId });
+  const data = await res.json();
+  if (data.error) throw new Error(typeof data.error === 'string' ? data.error : data.error?.message || JSON.stringify(data.error));
+  return data.data || { html: '', plainText: '' };
+}
+
 export async function searchPSC(query: string): Promise<PSCCode[]> {
   const res = await callEdgeFunction('sam-gov-api', { action: 'search-psc', query });
   const data = await res.json();
