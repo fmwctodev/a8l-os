@@ -39,6 +39,21 @@ const SET_ASIDE_OPTIONS = [
   { value: 'EDWOSB', label: 'Economically Disadvantaged WOSB' },
 ];
 
+// SAM.gov notice type codes (ptype query param). Comma-separated values
+// can be passed to combine types — e.g. "o,k" for Solicitation + Combined.
+const NOTICE_TYPE_OPTIONS = [
+  { value: '', label: 'Any Type' },
+  { value: 'p', label: 'Pre-Solicitation' },
+  { value: 'o', label: 'Solicitation' },
+  { value: 'k', label: 'Combined Synopsis / Solicitation' },
+  { value: 'r', label: 'Sources Sought / RFI' },
+  { value: 's', label: 'Special Notice' },
+  { value: 'a', label: 'Award Notice' },
+  { value: 'u', label: 'Justification (J&A)' },
+  { value: 'g', label: 'Sale of Surplus Property' },
+  { value: 'i', label: 'Intent to Bundle (DoD)' },
+];
+
 const US_STATES = [
   '', 'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
   'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
@@ -80,6 +95,7 @@ export default function GovContractSearch() {
   const [keywords, setKeywords] = useState('');
   const [naicsCode, setNaicsCode] = useState('');
   const [setAsideType, setSetAsideType] = useState('');
+  const [noticeType, setNoticeType] = useState('');
   const [state, setState] = useState('');
   const [postedFrom, setPostedFrom] = useState(dates.from);
   const [postedTo, setPostedTo] = useState(dates.to);
@@ -139,6 +155,7 @@ export default function GovContractSearch() {
       keywords: keywords.trim() || undefined,
       naicsCode: naicsCode.trim() || undefined,
       setAsideType: setAsideType || undefined,
+      procurementType: noticeType || undefined,
       state: state || undefined,
       postedFrom: postedFrom || undefined,
       postedTo: postedTo || undefined,
@@ -262,7 +279,7 @@ export default function GovContractSearch() {
           </div>
 
           {/* Filter row */}
-          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 ${showFilters ? '' : 'hidden sm:grid'}`}>
+          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 ${showFilters ? '' : 'hidden sm:grid'}`}>
             <div>
               <label className="block text-xs text-slate-400 mb-1">NAICS Code</label>
               <input
@@ -273,6 +290,18 @@ export default function GovContractSearch() {
                 maxLength={6}
                 className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
               />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Notice Type</label>
+              <select
+                value={noticeType}
+                onChange={(e) => setNoticeType(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              >
+                {NOTICE_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs text-slate-400 mb-1">Set-Aside Type</label>
