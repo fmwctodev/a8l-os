@@ -6,6 +6,11 @@ import {
   CLARA_MODEL,
 } from "../_shared/claraConfig.ts";
 import { extractUserContext, getSupabaseClient } from "../_shared/auth.ts";
+import {
+  buildGovSystemPrompt,
+  classifySolicitationType,
+  GOV_SECTION_TYPES,
+} from "../_shared/gov-proposal-templates.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -53,6 +58,8 @@ interface OpportunityData {
   source: string | null;
   pipeline_name: string;
   stage_name: string;
+  name: string | null;
+  description: string | null;
 }
 
 interface MeetingData {
@@ -172,6 +179,8 @@ Deno.serve(async (req: Request) => {
           source: opp.source,
           pipeline_name: opp.pipeline?.name || "",
           stage_name: opp.stage?.name || "",
+          name: opp.name || null,
+          description: opp.description || null,
         };
       }
     }
@@ -283,19 +292,41 @@ Deno.serve(async (req: Request) => {
       website: org?.website || "",
     };
 
-    const systemPrompt = buildSystemPrompt(
-      companyInfo,
-      brandVoiceVersion,
-      brandKitVersion,
-      templateContent
-    );
+    // Detect government proposals
+    const isGovernment = opportunityData?.source === 'sam_gov' ||
+      opportunityData?.pipeline_name === 'Government';
+
+    let systemPrompt: string;
+    let effectiveSections = sections_to_generate;
+
+    if (isGovernment) {
+      // Classify solicitation type from opportunity description/metadata
+      const solType = classifySolicitationType(
+        opportunityData?.description || opportunityData?.name || '',
+        opportunityData?.stage_name
+      );
+      console.log(`[AI] Government proposal detected. Solicitation type: ${solType}`);
+
+      // Use government-specific sections if the user didn't specify custom ones
+      const govSections = GOV_SECTION_TYPES[solType] || GOV_SECTION_TYPES['RFP'];
+      effectiveSections = govSections as any;
+
+      systemPrompt = buildGovSystemPrompt(solType, companyInfo);
+    } else {
+      systemPrompt = buildSystemPrompt(
+        companyInfo,
+        brandVoiceVersion,
+        brandKitVersion,
+        templateContent
+      );
+    }
 
     const userPrompt = buildUserPrompt(
       contactData,
       opportunityData,
       meetingsData,
       contactHistory,
-      sections_to_generate,
+      effectiveSections,
       custom_instructions,
       uploaded_documents
     );
@@ -346,6 +377,7 @@ Deno.serve(async (req: Request) => {
       contact_history_included: include_contact_history || false,
       opportunity_data_included: include_opportunity_data || false,
       custom_instructions: custom_instructions || null,
+      is_government: isGovernment || false,
       generated_at: new Date().toISOString(),
     };
 
@@ -602,6 +634,16 @@ Client Information:
 - Stage: ${opportunity.stage_name}
 - Source: ${opportunity.source || "N/A"}
 `;
+
+    // Add government solicitation details if available
+    if (opportunity.source === 'sam_gov' && opportunity.description) {
+      prompt += `\nSolicitation Details (from SAM.gov):
+${opportunity.description}
+`;
+    }
+    if (opportunity.name) {
+      prompt += `- Opportunity/Solicitation Title: ${opportunity.name}\n`;
+    }
   }
 
   if (meetings.length > 0) {
