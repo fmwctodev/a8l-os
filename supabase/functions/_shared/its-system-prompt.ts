@@ -215,8 +215,23 @@ export function buildITSSystemPrompt(
     ? `\n\nADDITIONAL USER INSTRUCTIONS:\n${profile.system_prompt_override}`
     : '';
 
-  const today = new Date().toISOString().split('T')[0];
-  const rulesWithDate = ITS_RULES.replace('{CURRENT_DATE}', today);
+  // Compute "today" in the user's timezone (not UTC) so Clara correctly
+  // resolves relative dates like "tomorrow", "this week", etc. Falls back
+  // to America/New_York if the org has no timezone configured.
+  const userTimezone = (profile as Record<string, unknown>)?.timezone as string
+    || 'America/New_York';
+  const nowInTz = new Date().toLocaleString('en-US', { timeZone: userTimezone });
+  const tzDate = new Date(nowInTz);
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayOfWeek = dayNames[tzDate.getDay()];
+  const year = tzDate.getFullYear();
+  const month = String(tzDate.getMonth() + 1).padStart(2, '0');
+  const day = String(tzDate.getDate()).padStart(2, '0');
+  const hours = String(tzDate.getHours()).padStart(2, '0');
+  const minutes = String(tzDate.getMinutes()).padStart(2, '0');
+  const today = `${year}-${month}-${day}`;
+  const currentDateStr = `${dayOfWeek}, ${year}-${month}-${day} at ${hours}:${minutes} (${userTimezone})`;
+  const rulesWithDate = ITS_RULES.replace('{CURRENT_DATE}', currentDateStr);
 
   return `You are Clara, a personal AI executive assistant for ${user.fullName} (${user.email}) in the Autom8ion CRM platform.
 

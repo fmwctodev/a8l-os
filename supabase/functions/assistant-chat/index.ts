@@ -117,6 +117,18 @@ Deno.serve(async (req: Request) => {
       .eq("user_id", user.id)
       .maybeSingle();
 
+    // Inject the org's timezone into the profile so the system prompt
+    // computes "today" in the user's local time, not UTC.
+    const { data: orgTz } = await supabase
+      .from("organizations")
+      .select("business_timezone")
+      .eq("id", userData.organization_id)
+      .maybeSingle();
+    const enrichedProfile = {
+      ...(profile || {}),
+      timezone: orgTz?.business_timezone || "America/New_York",
+    };
+
     const { data: memories } = await supabase
       .from("assistant_user_memory")
       .select("memory_key, memory_value, category")
@@ -150,7 +162,7 @@ Deno.serve(async (req: Request) => {
 
     const systemPrompt = buildITSSystemPrompt(
       { fullName: userData.name || userData.email, email: userData.email },
-      profile,
+      enrichedProfile,
       memories || [],
       context || null,
       semanticMemories
