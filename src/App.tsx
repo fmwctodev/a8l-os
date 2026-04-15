@@ -224,13 +224,20 @@ function App() {
                 <Route index element={<Opportunities />} />
                 <Route path="list" element={<OpportunitiesListPage />} />
                 <Route path="pipelines" element={<PipelinesPage />} />
-                <Route path="government" element={<GovContractSearch />} />
               </Route>
               <Route
                 path="/opportunities/:id"
                 element={
                   <ProtectedRoute permission="opportunities.view" featureFlag="opportunities">
                     <OpportunityDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/government"
+                element={
+                  <ProtectedRoute permission="opportunities.view" featureFlag="opportunities">
+                    <GovContractSearch />
                   </ProtectedRoute>
                 }
               />

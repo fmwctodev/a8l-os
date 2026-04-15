@@ -15,6 +15,7 @@ import {
   Shield,
   FileText,
   FileSignature,
+  Landmark,
   type LucideIcon,
 } from 'lucide-react';
 import type { PermissionKey } from '../types';
@@ -55,6 +56,7 @@ export const navigationConfig: NavSection[] = [
     items: [
       { name: 'Conversations', path: '/conversations', icon: MessageSquare, permission: 'conversations.view', featureFlag: 'conversations' },
       { name: 'Opportunities', path: '/opportunities', icon: Target, permission: 'opportunities.view', featureFlag: 'opportunities' },
+      { name: 'Government', path: '/government', icon: Landmark, permission: 'opportunities.view', featureFlag: 'opportunities' },
       { name: 'Marketing', path: '/marketing', icon: Megaphone, permission: 'marketing.view', featureFlag: 'marketing' },
       { name: 'Reputation', path: '/reputation', icon: Star, permission: 'reputation.view', featureFlag: 'reputation' },
     ],
