@@ -9,7 +9,7 @@ interface SlideInDrawerProps {
   icon?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
-  width?: 'sm' | 'md' | 'lg' | 'xl';
+  width?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
 }
 
 const widthClasses = {
@@ -17,6 +17,8 @@ const widthClasses = {
   md: 'max-w-lg',
   lg: 'max-w-xl',
   xl: 'max-w-2xl',
+  '2xl': 'max-w-4xl',
+  '3xl': 'max-w-6xl',
 };
 
 export function SlideInDrawer({

@@ -28,6 +28,7 @@ import {
   type SamSearchFilters,
 } from '../../services/samGov';
 import { SavedSearchPanel } from '../../components/opportunities/SavedSearchPanel';
+import { SlideInDrawer } from '../../components/ui/SlideInDrawer';
 
 const SET_ASIDE_OPTIONS = [
   { value: '', label: 'Any' },
@@ -452,6 +453,18 @@ export default function GovContractSearch() {
         onClose={() => setShowSaved(false)}
         currentFilters={buildFilters()}
       />
+
+      <GovContractDrawer
+        opp={expandedId ? results.find(o => o.noticeId === expandedId) || null : null}
+        isOpen={!!expandedId}
+        onClose={() => setExpandedId(null)}
+        onImport={handleImport}
+        onGenerateResponse={handleGenerateResponse}
+        importing={importingId !== null}
+        importedSuccess={importSuccess !== null}
+        resolvedDescription={expandedId ? descCache[expandedId] : undefined}
+        descriptionLoading={expandedId ? (descLoading[expandedId] || false) : false}
+      />
     </div>
   );
 }
@@ -550,163 +563,214 @@ function ResultRow({ opp, expanded, onToggle, onImport, onGenerateResponse, impo
           </div>
         </td>
       </tr>
+    </>
+  );
+}
 
-      {/* Expanded detail row */}
-      {expanded && (
-        <tr>
-          <td colSpan={8} className="px-4 py-4 bg-slate-800/30 border-t border-slate-800">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Description */}
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium text-slate-300 flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  Description
-                </h4>
-                {descriptionLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-slate-500">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading description...
-                  </div>
-                ) : (
-                  <p className="text-sm text-slate-400 whitespace-pre-wrap max-h-64 overflow-y-auto">
-                    {resolvedDescription || (opp.description?.startsWith('http') ? 'Loading...' : opp.description) || 'No description available.'}
-                  </p>
-                )}
+interface GovContractDrawerProps {
+  opp: SamGovOpportunity | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onImport: (opp: SamGovOpportunity) => void;
+  onGenerateResponse: (opp: SamGovOpportunity) => void;
+  importing: boolean;
+  importedSuccess: boolean;
+  resolvedDescription?: string;
+  descriptionLoading: boolean;
+}
 
-                {/* Resource Links */}
-                {opp.resourceLinks && opp.resourceLinks.length > 0 && (
-                  <div>
-                    <h5 className="text-xs font-medium text-slate-400 mb-1">Attachments</h5>
-                    <div className="flex flex-wrap gap-2">
-                      {opp.resourceLinks.map((link, i) => (
-                        <a
-                          key={i}
-                          href={link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs text-cyan-400 transition-colors"
-                        >
-                          <Download className="w-3 h-3" />
-                          Resource {i + 1}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+function GovContractDrawer({ opp, isOpen, onClose, onImport, onGenerateResponse, importing, importedSuccess, resolvedDescription, descriptionLoading }: GovContractDrawerProps) {
+  if (!opp) return null;
 
-              {/* Details sidebar */}
-              <div className="space-y-4">
-                {/* Classification */}
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <span className="text-xs text-slate-500">NAICS Code</span>
-                    <p className="text-slate-300">{opp.naicsCode || '--'}</p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-500">PSC Code</span>
-                    <p className="text-slate-300">{opp.classificationCode || '--'}</p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-500">Notice ID</span>
-                    <p className="text-slate-300 text-xs break-all">{opp.noticeId}</p>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-500">Archive Date</span>
-                    <p className="text-slate-300">{formatDate(opp.archiveDate)}</p>
-                  </div>
-                </div>
+  return (
+    <SlideInDrawer
+      isOpen={isOpen}
+      onClose={onClose}
+      title={opp.title}
+      subtitle={opp.solicitationNumber ? `Solicitation #: ${opp.solicitationNumber}` : undefined}
+      icon={<FileText className="w-5 h-5" />}
+      width="3xl"
+      footer={
+        <div className="flex justify-end gap-3 w-full">
+          <button
+            onClick={() => onImport(opp)}
+            disabled={importing || importedSuccess}
+            className={`flex items-center gap-2 px-6 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+              importedSuccess
+                ? 'bg-emerald-500/20 text-emerald-400'
+                : 'bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white disabled:opacity-50'
+            }`}
+          >
+            {importing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : importedSuccess ? (
+              'Imported'
+            ) : (
+              <>
+                <Plus className="w-4 h-4" />
+                Import
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => onGenerateResponse(opp)}
+            disabled={importing}
+            className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+          >
+            {importing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <FileSignature className="w-4 h-4" />
+            )}
+            Generate Response
+          </button>
+        </div>
+      }
+    >
+      <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Description */}
+        <div className="space-y-4 min-w-0">
+          <h4 className="text-sm font-medium text-slate-300 flex items-center gap-2">
+            <FileText className="w-4 h-4" />
+            Description
+          </h4>
+          {descriptionLoading ? (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading description...
+            </div>
+          ) : (
+            <div className="text-sm text-slate-400 whitespace-pre-wrap overflow-x-hidden break-words break-all max-w-full">
+              {resolvedDescription || (opp.description?.startsWith('http') ? 'Loading...' : opp.description) || 'No description available.'}
+            </div>
+          )}
 
-                {/* Point of Contact */}
-                {opp.pointOfContact && opp.pointOfContact.length > 0 && (
-                  <div>
-                    <h5 className="text-xs font-medium text-slate-400 mb-2">Point of Contact</h5>
-                    <div className="space-y-2">
-                      {opp.pointOfContact.map((poc, i) => (
-                        <div key={i} className="bg-slate-800 rounded-lg p-3 text-sm space-y-1">
-                          <p className="text-white font-medium">{poc.fullName}</p>
-                          {poc.title && <p className="text-xs text-slate-400">{poc.title}</p>}
-                          {poc.email && (
-                            <p className="text-slate-400 flex items-center gap-1">
-                              <Mail className="w-3 h-3" />
-                              <a href={`mailto:${poc.email}`} className="text-cyan-400 hover:underline">{poc.email}</a>
-                            </p>
-                          )}
-                          {poc.phone && (
-                            <p className="text-slate-400 flex items-center gap-1">
-                              <Phone className="w-3 h-3" />{poc.phone}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Place of Performance */}
-                {opp.placeOfPerformance && (
-                  <div>
-                    <h5 className="text-xs font-medium text-slate-400 mb-1 flex items-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      Place of Performance
-                    </h5>
-                    <p className="text-sm text-slate-300">
-                      {[
-                        opp.placeOfPerformance.city?.name,
-                        opp.placeOfPerformance.state?.code,
-                        opp.placeOfPerformance.zip,
-                        opp.placeOfPerformance.country?.code !== 'USA' ? opp.placeOfPerformance.country?.code : null,
-                      ].filter(Boolean).join(', ') || '--'}
-                    </p>
-                  </div>
-                )}
-
-                {/* Award Info */}
-                {opp.award && (
-                  <div>
-                    <h5 className="text-xs font-medium text-slate-400 mb-1 flex items-center gap-1">
-                      <DollarSign className="w-3 h-3" />
-                      Award Information
-                    </h5>
-                    <div className="bg-slate-800 rounded-lg p-3 text-sm space-y-1">
-                      {opp.award.amount && <p className="text-emerald-400 font-medium">${Number(opp.award.amount).toLocaleString()}</p>}
-                      {opp.award.date && <p className="text-slate-400">Awarded: {formatDate(opp.award.date)}</p>}
-                      {opp.award.number && <p className="text-slate-400">Contract #: {opp.award.number}</p>}
-                      {opp.award.awardee && (
-                        <p className="text-slate-300">
-                          {opp.award.awardee.name}
-                          {opp.award.awardee.location && (
-                            <span className="text-slate-500 ml-1">
-                              ({opp.award.awardee.location.city}, {opp.award.awardee.location.state})
-                            </span>
-                          )}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Generate Response Button */}
-                <div className="pt-2">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onGenerateResponse(); }}
-                    disabled={importing}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+          {/* Resource Links */}
+          {opp.resourceLinks && opp.resourceLinks.length > 0 && (
+            <div className="pt-4 border-t border-slate-800">
+              <h5 className="text-xs font-medium text-slate-400 mb-2">Attachments</h5>
+              <div className="flex flex-wrap gap-2">
+                {opp.resourceLinks.map((link, i) => (
+                  <a
+                    key={i}
+                    href={link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-cyan-400 transition-colors"
                   >
-                    {importing ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <FileSignature className="w-4 h-4" />
-                    )}
-                    Generate Response
-                  </button>
-                </div>
+                    <Download className="w-3.5 h-3.5" />
+                    Resource {i + 1}
+                  </a>
+                ))}
               </div>
             </div>
-          </td>
-        </tr>
-      )}
-    </>
+          )}
+        </div>
+
+        {/* Details sidebar */}
+        <div className="space-y-8 min-w-0">
+          {/* Classification */}
+          <div>
+            <h4 className="text-sm font-medium text-slate-300 flex items-center gap-2 mb-3">
+              <FileText className="w-4 h-4" />
+              Classification
+            </h4>
+            <div className="grid grid-cols-2 bg-slate-800/30 rounded-xl p-4 gap-4 text-sm border border-slate-800">
+              <div>
+                <span className="text-xs text-slate-500 block mb-1">NAICS Code</span>
+                <p className="text-slate-300">{opp.naicsCode || '--'}</p>
+              </div>
+              <div>
+                <span className="text-xs text-slate-500 block mb-1">PSC Code</span>
+                <p className="text-slate-300">{opp.classificationCode || '--'}</p>
+              </div>
+              <div>
+                <span className="text-xs text-slate-500 block mb-1">Notice ID</span>
+                <p className="text-slate-300 text-xs break-all">{opp.noticeId}</p>
+              </div>
+              <div>
+                <span className="text-xs text-slate-500 block mb-1">Archive Date</span>
+                <p className="text-slate-300">{formatDate(opp.archiveDate)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Point of Contact */}
+          {opp.pointOfContact && opp.pointOfContact.length > 0 && (
+            <div>
+              <h5 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Point of Contact
+              </h5>
+              <div className="space-y-2">
+                {opp.pointOfContact.map((poc, i) => (
+                  <div key={i} className="bg-slate-800/50 border border-slate-800 rounded-xl p-4 text-sm space-y-1.5">
+                    <p className="text-white font-medium">{poc.fullName}</p>
+                    {poc.title && <p className="text-xs text-slate-400">{poc.title}</p>}
+                    {poc.email && (
+                      <p className="text-slate-400 flex items-center gap-2 mt-2">
+                        <Mail className="w-3.5 h-3.5 text-slate-500" />
+                        <a href={`mailto:${poc.email}`} className="text-cyan-400 hover:underline break-all">{poc.email}</a>
+                      </p>
+                    )}
+                    {poc.phone && (
+                      <p className="text-slate-400 flex items-center gap-2">
+                        <Phone className="w-3.5 h-3.5 text-slate-500" />{poc.phone}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Place of Performance */}
+          {opp.placeOfPerformance && (
+            <div>
+              <h5 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                Place of Performance
+              </h5>
+              <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-800">
+                <p className="text-sm text-slate-300">
+                  {[
+                    opp.placeOfPerformance.city?.name,
+                    opp.placeOfPerformance.state?.code,
+                    opp.placeOfPerformance.zip,
+                    opp.placeOfPerformance.country?.code !== 'USA' ? opp.placeOfPerformance.country?.code : null,
+                  ].filter(Boolean).join(', ') || '--'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Award Info */}
+          {opp.award && (
+            <div>
+              <h5 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                <DollarSign className="w-4 h-4" />
+                Award Information
+              </h5>
+              <div className="bg-slate-800/30 rounded-xl p-4 text-sm space-y-2 border border-slate-800">
+                {opp.award.amount && <p className="text-emerald-400 font-medium">${Number(opp.award.amount).toLocaleString()}</p>}
+                {opp.award.date && <p className="text-slate-400">Awarded: {formatDate(opp.award.date)}</p>}
+                {opp.award.number && <p className="text-slate-400">Contract #: {opp.award.number}</p>}
+                {opp.award.awardee && (
+                  <p className="text-slate-300 mt-2">
+                    {opp.award.awardee.name}
+                    {opp.award.awardee.location && (
+                      <span className="text-slate-500 ml-1 block mt-1">
+                        ({opp.award.awardee.location.city}, {opp.award.awardee.location.state})
+                      </span>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </SlideInDrawer>
   );
 }
 

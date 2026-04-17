@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getProposals, getProposalStats, deleteProposal, sendProposal, updateProposal } from '../../services/proposals';
+import { getProposals, getProposalStats, deleteProposal, deleteProposals, sendProposal, updateProposal } from '../../services/proposals';
 import type { Proposal, ProposalStats, ProposalStatus } from '../../types';
 import {
   FileText,
@@ -64,6 +64,8 @@ export function Proposals() {
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const pageSize = 25;
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const canView = hasPermission('proposals.view');
   const canCreate = hasPermission('proposals.create');
@@ -144,6 +146,38 @@ export function Proposals() {
       console.error('Failed to delete proposal:', err);
     }
     setActionMenuId(null);
+  };
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedIds(new Set(proposals.map(p => p.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelect = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const handleBulkDelete = async () => {
+    if (!confirm(`Are you sure you want to delete ${selectedIds.size} proposals?`)) return;
+    setIsDeleting(true);
+    try {
+      await deleteProposals(Array.from(selectedIds));
+      setSelectedIds(new Set());
+      loadData();
+    } catch (err) {
+      console.error('Failed to delete proposals:', err);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const copyPublicLink = (token: string) => {
@@ -358,10 +392,38 @@ export function Proposals() {
             )}
           </div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-slate-800/95 sticky top-0 z-10 backdrop-blur-sm">
-              <tr>
-                <th className="text-left px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">
+          <div className="flex flex-col h-full">
+            {selectedIds.size > 0 && (
+              <div className="bg-slate-800/95 border-b border-cyan-800/50 px-6 py-3 flex items-center justify-between sticky top-0 z-20 backdrop-blur-sm shadow-sm ring-1 ring-inset ring-cyan-500/20">
+                <span className="text-cyan-100 font-medium">
+                  {selectedIds.size} {selectedIds.size === 1 ? 'proposal' : 'proposals'} selected
+                </span>
+                <div className="flex gap-3">
+                  {canDelete && (
+                    <button
+                      onClick={handleBulkDelete}
+                      disabled={isDeleting}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors border border-red-500/20 font-medium text-sm disabled:opacity-50"
+                    >
+                      {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      Delete Selected
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            <table className="w-full">
+              <thead className={`bg-slate-800/95 sticky ${selectedIds.size > 0 ? 'top-[53px]' : 'top-0'} z-10 backdrop-blur-sm`}>
+                <tr>
+                  <th className="w-12 px-6 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={proposals.length > 0 && selectedIds.size === proposals.length}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-cyan-500 focus:ring-cyan-500/50"
+                    />
+                  </th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Proposal
                 </th>
                 <th className="text-left px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">
@@ -393,8 +455,16 @@ export function Proposals() {
                   <tr
                     key={proposal.id}
                     onClick={() => navigate(`/proposals/${proposal.id}`)}
-                    className="hover:bg-slate-800/30 cursor-pointer transition-colors"
+                    className={`cursor-pointer transition-colors ${selectedIds.has(proposal.id) ? 'bg-cyan-900/20 hover:bg-cyan-900/30' : 'hover:bg-slate-800/30'}`}
                   >
+                    <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(proposal.id)}
+                        onChange={() => handleSelect(proposal.id)}
+                        className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-cyan-500 focus:ring-cyan-500/50"
+                      />
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
@@ -535,6 +605,7 @@ export function Proposals() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getProposalByToken, updateProposalStatus, updateProposal } from '../../services/proposals';
+import { getProposalByToken, updateProposalStatus, acceptPublicProposal } from '../../services/proposals';
 import { getBrandKits } from '../../services/brandboard';
 import { SignatureCanvas } from '../../components/proposals/SignatureCanvas';
 import { sanitizeProposalContent } from '../../utils/proposalContentSanitizer';
@@ -94,18 +94,13 @@ export default function PublicProposalPage() {
         accepted_at: new Date().toISOString(),
       };
 
-      await updateProposal(
+      await acceptPublicProposal(
         proposal.id,
-        {
-          ai_context: {
-            ...(proposal.ai_context || {}),
-            acceptance: acceptanceData,
-          },
-        },
-        proposal.created_by
+        acceptanceData,
+        clientName,
+        clientEmail
       );
 
-      await updateProposalStatus(proposal.id, 'accepted', proposal.created_by);
       setAcceptanceComplete(true);
     } catch (err) {
       console.error('Failed to accept proposal:', err);

@@ -13,6 +13,8 @@ import type {
 } from '../types';
 import { emitEvent } from './eventDispatcher';
 import { createOpportunity, advanceOpportunityToStageByName } from './opportunities';
+import { createContractFromProposal } from './contracts';
+import { createNotification } from './notifications';
 
 const FROZEN_STATUSES = ['pending_signature', 'viewed', 'signed'] as const;
 
@@ -343,8 +345,17 @@ export async function sendProposal(id: string, actorUserId: string): Promise<Pro
 export async function deleteProposal(id: string): Promise<void> {
   const { error } = await supabase
     .from('proposals')
-    .delete()
+    .update({ archived_at: new Date().toISOString() })
     .eq('id', id);
+
+  if (error) throw error;
+}
+
+export async function deleteProposals(ids: string[]): Promise<void> {
+  const { error } = await supabase
+    .from('proposals')
+    .update({ archived_at: new Date().toISOString() })
+    .in('id', ids);
 
   if (error) throw error;
 }
@@ -910,6 +921,71 @@ export async function unarchiveProposal(proposalId: string, actorUserId: string)
     {},
     actorUserId
   );
+
+  return data;
+}
+
+export async function acceptPublicProposal(
+  id: string,
+  acceptanceData: Record<string, unknown>,
+  clientName: string,
+  clientEmail: string
+): Promise<Proposal> {
+  const proposal = await getProposalById(id);
+  if (!proposal) throw new Error("Proposal not found");
+
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('proposals')
+    .update({
+      status: 'accepted',
+      signature_status: 'signed',
+      signed_at: now,
+      signer_name: clientName,
+      signer_email: clientEmail,
+      ai_context: {
+        ...(proposal.ai_context || {}),
+        acceptance: acceptanceData
+      }
+    })
+    .eq('id', id)
+    .select(PROPOSAL_SELECT)
+    .single();
+
+  if (error) throw error;
+
+  if (data.opportunity_id) {
+    try {
+      await advanceOpportunityToStageByName(data.opportunity_id, 'Agreement Signed', data.created_by);
+    } catch(err) {
+      console.error('Failed advancing opportunity stage:', err);
+    }
+  }
+
+  let contractId = null;
+  try {
+    const contract = await createContractFromProposal(
+      id,
+      data.org_id,
+      data.created_by,
+      { contract_type: 'custom' }
+    );
+    contractId = contract.id;
+    
+    const targetUserId = data.assigned_user_id || data.created_by;
+    if (targetUserId) {
+      await createNotification({
+        user_id: targetUserId,
+        type: 'contract_ready',
+        title: 'Contract Ready for Prospect',
+        body: `A contract was automatically generated for ${clientName}.`,
+        link: `/contracts/${contractId}`
+      });
+    }
+  } catch(err) {
+    console.error('Failed auto-creating contract and alert:', err);
+  }
 
   return data;
 }

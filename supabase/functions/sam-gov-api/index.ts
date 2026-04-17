@@ -351,8 +351,16 @@ async function importOpportunity(
         : `${descriptionText}${descriptionText.includes("?") ? "&" : "?"}api_key=${apiKey}`;
       const descFetchResp = await fetch(descFetchUrl);
       if (descFetchResp.ok) {
-        const rawHtml = await descFetchResp.text();
-        descriptionText = rawHtml
+        let rawContent = await descFetchResp.text();
+        try {
+          const parsed = JSON.parse(rawContent);
+          if (parsed.description) rawContent = parsed.description;
+          else if (parsed.data) rawContent = parsed.data;
+        } catch {
+          // Fall back to raw string if not JSON
+        }
+        
+        descriptionText = rawContent
           .replace(/<br\s*\/?>/gi, "\n")
           .replace(/<\/p>/gi, "\n\n")
           .replace(/<\/div>/gi, "\n")
@@ -421,6 +429,58 @@ async function importOpportunity(
   if (oppErr) {
     console.error("[sam-gov-api] Opportunity insert error:", oppErr.message);
     throw new Error(`Failed to create opportunity: ${oppErr.message}`);
+  }
+
+  // 6a. Add description to opportunity_notes
+  if (description) {
+    const { error: noteErr } = await supabase
+      .from("opportunity_notes")
+      .insert({
+        org_id: orgId,
+        opportunity_id: opportunity.id,
+        body: description,
+        created_by: userId,
+      });
+    if (noteErr) console.error("[sam-gov-api] Failed to insert note:", noteErr.message);
+  }
+
+  // 6b. Import file resources as drive files and attach them
+  const resourceLinks = samData.resourceLinks as string[] | undefined;
+  if (resourceLinks && Array.isArray(resourceLinks) && resourceLinks.length > 0) {
+    for (let i = 0; i < resourceLinks.length; i++) {
+      const link = resourceLinks[i];
+      const fauxDriveFileId = `sam-gov-${opportunity.id}-res-${i}`;
+      
+      const { data: driveFile, error: fileErr } = await supabase
+        .from("drive_files")
+        .insert({
+          organization_id: orgId,
+          user_id: userId,
+          drive_file_id: fauxDriveFileId,
+          name: `SAM.gov Related Document ${i + 1}`,
+          mime_type: "application/pdf",
+          size_bytes: 0,
+          web_view_link: samData.uiLink || `https://sam.gov/opp/${samData.noticeId}/view`,
+        })
+        .select("id")
+        .single();
+        
+      if (fileErr) {
+        console.error("[sam-gov-api] Failed to insert drive_file:", fileErr.message);
+      } else if (driveFile) {
+        const { error: attachErr } = await supabase
+          .from("file_attachments")
+          .insert({
+            organization_id: orgId,
+            drive_file_id: driveFile.id,
+            entity_type: "opportunities",
+            entity_id: opportunity.id,
+            attached_by: userId,
+            note: "Imported SAM.gov Resource",
+          });
+        if (attachErr) console.error("[sam-gov-api] Failed to attach file:", attachErr.message);
+      }
+    }
   }
 
   // 7. Create the gov_opportunity_imports audit record with full SAM.gov snapshot

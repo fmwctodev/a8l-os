@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X, Search, Calendar } from 'lucide-react';
 import type { OpportunityFilters, User, Department, PipelineStage, Tag } from '../../types';
 import { getTags } from '../../services/tags';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface OpportunityFilterPanelProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export function OpportunityFilterPanel({
   onFilterChange,
   onClose
 }: OpportunityFilterPanelProps) {
+  const { user } = useAuth();
   const [localFilters, setLocalFilters] = useState<OpportunityFilters>(filters);
   const [tags, setTags] = useState<Tag[]>([]);
 
@@ -30,8 +32,10 @@ export function OpportunityFilterPanel({
   }, [filters]);
 
   useEffect(() => {
-    getTags().then(setTags).catch(console.error);
-  }, []);
+    if (user?.organization_id) {
+      getTags(user.organization_id).then(setTags).catch(console.error);
+    }
+  }, [user?.organization_id]);
 
   const handleStatusToggle = (status: 'open' | 'won' | 'lost') => {
     const current = localFilters.status || [];
