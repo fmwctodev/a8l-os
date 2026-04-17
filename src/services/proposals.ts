@@ -969,7 +969,7 @@ export async function acceptPublicProposal(
       id,
       data.org_id,
       data.created_by,
-      { contract_type: 'custom' }
+      { contract_type: 'freelance_service' }
     );
     contractId = contract.id;
     

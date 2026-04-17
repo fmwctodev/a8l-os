@@ -78,7 +78,7 @@ async function addContactTimelineEntry(event: {
 
   try {
     await supabase
-      .from('contact_timeline_events')
+      .from('contact_timeline')
       .insert({
         contact_id: event.contact_id,
         user_id: event.actor_user_id,

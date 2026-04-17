@@ -292,17 +292,19 @@ export async function markTaskComplete(
 
     if (error) throw error;
 
-    await supabase.from('contact_timeline_events').insert({
-      org_id: context.orgId,
+    await supabase.from('contact_timeline').insert({
       contact_id: context.contactId,
+      user_id: context.actorUserId,
       event_type: 'task_completed',
-      title: 'Task Completed',
-      description: task.title,
-      metadata: {
-        task_id: taskId,
-        completed_by_workflow: true,
-        enrollment_id: context.enrollmentId,
-      },
+      event_data: {
+        summary: 'Task Completed',
+        description: task.title,
+        metadata: {
+          task_id: taskId,
+          completed_by_workflow: true,
+          enrollment_id: context.enrollmentId,
+        },
+      }
     });
 
     return {

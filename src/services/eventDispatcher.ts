@@ -547,7 +547,7 @@ async function queueWebhookDelivery(
 function getTimelineTable(entityType: EntityType): string | null {
   const timelineTableMap: Record<string, string> = {
     contact: 'contact_timeline',
-    opportunity: 'opportunity_timeline',
+    opportunity: 'opportunity_timeline_events',
   };
   return timelineTableMap[entityType] || null;
 }
