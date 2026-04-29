@@ -224,6 +224,24 @@ export function CalendarDrawer({
     );
   }, [orgAppointmentTypes, typeSearch]);
 
+  const availableUsers = useMemo(
+    () =>
+      users.filter(
+        (u) => u.status === 'active' && !members.find((m) => m.user_id === u.id)
+      ),
+    [users, members]
+  );
+
+  const filteredAvailableUsers = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) return availableUsers;
+    return availableUsers.filter(
+      (u) =>
+        u.name?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q)
+    );
+  }, [availableUsers, memberSearch]);
+
   const handleNameChange = (name: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -660,20 +678,6 @@ export function CalendarDrawer({
       </div>
     </div>
   );
-
-  const availableUsers = users.filter(
-    (u) => u.status === 'active' && !members.find((m) => m.user_id === u.id)
-  );
-
-  const filteredAvailableUsers = useMemo(() => {
-    const q = memberSearch.trim().toLowerCase();
-    if (!q) return availableUsers;
-    return availableUsers.filter(
-      (u) =>
-        u.name?.toLowerCase().includes(q) ||
-        u.email?.toLowerCase().includes(q)
-    );
-  }, [availableUsers, memberSearch]);
 
   const renderTeamStep = () => {
     if (!isTeamType) {

@@ -35,6 +35,12 @@ function jsonResponse<T>(data: T, status = 200): Response {
   });
 }
 
+function isSystemCall(req: Request): boolean {
+  const auth = req.headers.get("Authorization") || "";
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  return !!key && auth === `Bearer ${key}`;
+}
+
 function errorResponse(
   code: string,
   message: string,
@@ -1380,7 +1386,8 @@ async function deleteGoogleCalendarEventById(
 
 async function handleSyncAppointment(req: Request, body: Record<string, unknown>): Promise<Response> {
   const supabase = getSupabaseClient();
-  const userCtx = requireAuth(await extractUserContext(req, supabase));
+  const systemCall = isSystemCall(req);
+  const userCtx = systemCall ? null : requireAuth(await extractUserContext(req, supabase));
 
   const { appointmentId, operation } = body as { appointmentId?: string; operation?: string };
   if (!appointmentId) throw new ValidationError("appointmentId is required");
@@ -1395,17 +1402,25 @@ async function handleSyncAppointment(req: Request, body: Record<string, unknown>
 
   if (!appointment) throw new ValidationError("Appointment not found");
 
-  let targetUserId = appointment.assigned_user_id || userCtx.id;
+  let targetUserId = appointment.assigned_user_id || userCtx?.id;
+  if (!targetUserId) {
+    return successResponse({ synced: false, reason: "no_assignee" });
+  }
+
   const { data: targetUser } = await supabase
     .from("users")
     .select("organization_id")
     .eq("id", targetUserId)
     .maybeSingle();
 
-  const targetOrgId = targetUser?.organization_id || userCtx.orgId;
+  const targetOrgId = targetUser?.organization_id || userCtx?.orgId;
+  if (!targetOrgId) {
+    return successResponse({ synced: false, reason: "no_org_id" });
+  }
+
   let connection = await getUserConnection(supabase, targetUserId, targetOrgId);
 
-  if (!connection && targetUserId !== userCtx.id) {
+  if (!connection && userCtx && targetUserId !== userCtx.id) {
     connection = await getUserConnection(supabase, userCtx.id, userCtx.orgId);
     if (connection) {
       targetUserId = userCtx.id;

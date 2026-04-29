@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Calendar as CalendarIcon,
@@ -13,9 +13,17 @@ import {
   Check,
   Download,
   ArrowLeft,
+  Mail,
+  ArrowRight,
 } from 'lucide-react';
+import { TimezoneSelect } from '../../components/booking/TimezoneSelect';
 
 interface CollectiveMember {
+  name: string;
+  initials: string;
+}
+
+interface HostInfo {
   name: string;
   initials: string;
 }
@@ -24,8 +32,10 @@ interface CalendarInfo {
   id: string;
   name: string;
   slug: string;
+  type?: 'user' | 'team';
   is_collective?: boolean;
   collective_members?: CollectiveMember[];
+  host?: HostInfo;
 }
 
 interface AppointmentTypeInfo {
@@ -90,6 +100,20 @@ export function BookingPage() {
   const [visitorTimezone, setVisitorTimezone] = useState(
     tzParam || Intl.DateTimeFormat().resolvedOptions().timeZone
   );
+
+  const [hour12, setHour12] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const stored = window.localStorage.getItem('bookingTimeFormat');
+    if (stored === '12') return true;
+    if (stored === '24') return false;
+    return true;
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('bookingTimeFormat', hour12 ? '12' : '24');
+    }
+  }, [hour12]);
 
   const rootRef = useRef<HTMLDivElement | null>(null);
 
@@ -265,9 +289,26 @@ export function BookingPage() {
     return new Date(isoString).toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
+      hour12,
       timeZone: visitorTimezone,
     });
   };
+
+  const nextAvailableDate = useMemo(() => {
+    if (!slots.length) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const sorted = [...slots].sort(
+      (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime()
+    );
+    for (const slot of sorted) {
+      const d = new Date(slot.start);
+      if (d >= today) return d;
+    }
+    return null;
+  }, [slots]);
+
+  const hasAnyAvailability = slots.length > 0;
 
   const generateICS = () => {
     if (!bookingResult || !appointmentType) return;
@@ -305,15 +346,40 @@ END:VCALENDAR`;
 
   if (isLoading) {
     return (
-      <div
-        ref={rootRef}
-        className={
-          isEmbed
-            ? 'bg-slate-950 flex items-center justify-center p-12'
-            : 'min-h-screen bg-slate-950 flex items-center justify-center'
-        }
-      >
-        <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+      <div ref={rootRef} className={outerClass}>
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+            <div className="p-6 border-b border-slate-800 space-y-3">
+              <div className="h-7 w-2/3 rounded bg-slate-800 animate-pulse" />
+              <div className="h-4 w-1/2 rounded bg-slate-800 animate-pulse" />
+              <div className="flex gap-3 pt-2">
+                <div className="h-4 w-20 rounded bg-slate-800 animate-pulse" />
+                <div className="h-4 w-28 rounded bg-slate-800 animate-pulse" />
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800">
+              <div className="p-6 space-y-3">
+                <div className="h-5 w-32 rounded bg-slate-800 animate-pulse" />
+                <div className="grid grid-cols-7 gap-1">
+                  {Array.from({ length: 35 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="aspect-square rounded-lg bg-slate-800/60 animate-pulse"
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="p-6 space-y-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-10 rounded-lg bg-slate-800 animate-pulse"
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -339,60 +405,93 @@ END:VCALENDAR`;
     return (
       <div ref={rootRef} className={outerClass}>
         <div className="max-w-md mx-auto">
-          <div className="bg-slate-900 rounded-2xl border border-slate-800 p-8 text-center">
-            <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6">
-              <Check className="w-8 h-8 text-green-400" />
-            </div>
-            <h1 className="text-2xl font-semibold text-white mb-2">Booking Confirmed</h1>
-            <p className="text-slate-400 mb-6">
-              Your {appointmentType.name} has been scheduled
-            </p>
-
-            <div className="bg-slate-800 rounded-lg p-4 mb-6 text-left">
-              <div className="flex items-center gap-3 mb-3">
-                <CalendarIcon className="w-5 h-5 text-cyan-400" />
-                <div>
-                  <p className="text-white font-medium">
-                    {new Date(bookingResult.start_at_utc).toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      month: 'long',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
-                  </p>
-                  <p className="text-sm text-slate-400">
-                    {formatSlotTime(bookingResult.start_at_utc)} -{' '}
-                    {formatSlotTime(bookingResult.end_at_utc)}
-                  </p>
-                </div>
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+            <div className="bg-gradient-to-br from-emerald-500/15 via-emerald-500/5 to-transparent border-b border-emerald-500/20 px-8 pt-8 pb-6 text-center">
+              <div className="w-14 h-14 rounded-full bg-emerald-500 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/30">
+                <Check className="w-7 h-7 text-white" strokeWidth={3} />
               </div>
-              <div className="flex items-center gap-3">
-                <Clock className="w-5 h-5 text-cyan-400" />
-                <p className="text-slate-300">{appointmentType.duration_minutes} minutes</p>
-              </div>
-              {bookingResult.google_meet_link && (
-                <div className="flex items-center gap-3 mt-3">
-                  <Video className="w-5 h-5 text-cyan-400" />
-                  <a
-                    href={bookingResult.google_meet_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-cyan-400 hover:text-cyan-300 underline"
-                  >
-                    Join Google Meet
-                  </a>
-                </div>
-              )}
+              <h1 className="text-2xl font-semibold text-white mb-1">
+                You're booked
+              </h1>
+              <p className="text-sm text-slate-400">
+                {appointmentType.name}
+                {calendarInfo.host ? ` with ${calendarInfo.host.name}` : ''}
+              </p>
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-800/60 rounded-lg p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <CalendarIcon className="w-5 h-5 text-cyan-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-slate-500 mb-0.5">
+                      When
+                    </p>
+                    <p className="text-white font-medium">
+                      {new Date(bookingResult.start_at_utc).toLocaleDateString('en-US', {
+                        weekday: 'long',
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric',
+                        timeZone: visitorTimezone,
+                      })}
+                    </p>
+                    <p className="text-sm text-slate-400">
+                      {formatSlotTime(bookingResult.start_at_utc)} -{' '}
+                      {formatSlotTime(bookingResult.end_at_utc)} ({appointmentType.duration_minutes}{' '}
+                      min)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  {getLocationIcon() ? (
+                    <div className="w-5 h-5 mt-0.5 shrink-0 text-cyan-400">{getLocationIcon()}</div>
+                  ) : (
+                    <MapPin className="w-5 h-5 text-cyan-400 mt-0.5 shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-xs uppercase tracking-wider text-slate-500 mb-0.5">
+                      Where
+                    </p>
+                    {bookingResult.google_meet_link ? (
+                      <a
+                        href={bookingResult.google_meet_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-cyan-400 hover:text-cyan-300 underline break-all"
+                      >
+                        Join Google Meet
+                      </a>
+                    ) : (
+                      <p className="text-slate-300">{getLocationText() || 'Details will follow'}</p>
+                    )}
+                  </div>
+                </div>
+
+                {calendarInfo.host && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-[9px] font-bold text-white mt-0.5 shrink-0">
+                      {calendarInfo.host.initials}
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wider text-slate-500 mb-0.5">
+                        With
+                      </p>
+                      <p className="text-slate-300">{calendarInfo.host.name}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <button
                 onClick={generateICS}
                 className="inline-flex items-center justify-center gap-2 w-full px-4 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition-colors"
               >
                 <Download className="w-4 h-4" />
-                Add to Calendar
+                Add to calendar
               </button>
+
               <div className="grid grid-cols-2 gap-2">
                 <a
                   href={`/appointments/reschedule/${bookingResult.reschedule_token}`}
@@ -411,9 +510,15 @@ END:VCALENDAR`;
                   Cancel
                 </a>
               </div>
-              <p className="text-xs text-slate-500">
-                A confirmation email has been sent to {formData.email}
-              </p>
+
+              <div className="flex items-start gap-2 text-xs text-slate-500 pt-1">
+                <Mail className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                <span>
+                  We've sent a confirmation to{' '}
+                  <span className="text-slate-300">{formData.email}</span> with a
+                  calendar invite and your reschedule and cancel links.
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -426,11 +531,24 @@ END:VCALENDAR`;
       <div className="max-w-4xl mx-auto">
         <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
           <div className="p-6 border-b border-slate-800">
+            {calendarInfo.host && (
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-xs font-bold text-white">
+                  {calendarInfo.host.initials}
+                </div>
+                <span className="text-sm text-slate-400">
+                  Meeting with{' '}
+                  <span className="text-slate-200 font-medium">
+                    {calendarInfo.host.name}
+                  </span>
+                </span>
+              </div>
+            )}
             <h1 className="text-2xl font-semibold text-white">{appointmentType.name}</h1>
             {appointmentType.description && (
               <p className="text-slate-400 mt-1">{appointmentType.description}</p>
             )}
-            <div className="flex items-center gap-4 mt-4 text-sm text-slate-400">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4 text-sm text-slate-400">
               <span className="flex items-center gap-1.5">
                 <Clock className="w-4 h-4" />
                 {appointmentType.duration_minutes} min
@@ -529,38 +647,92 @@ END:VCALENDAR`;
                   })}
                 </div>
 
+                {!hasAnyAvailability && nextAvailableDate === null && (
+                  <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                    <span>
+                      No times open this month. Try the next month or a
+                      different timezone.
+                    </span>
+                  </div>
+                )}
+
+                {nextAvailableDate &&
+                  (nextAvailableDate.getMonth() !== currentMonth.getMonth() ||
+                    nextAvailableDate.getFullYear() !== currentMonth.getFullYear()) && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCurrentMonth(
+                          new Date(
+                            nextAvailableDate.getFullYear(),
+                            nextAvailableDate.getMonth(),
+                            1
+                          )
+                        )
+                      }
+                      className="mt-4 w-full inline-flex items-center justify-between px-3 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-sm hover:bg-cyan-500/15 transition-colors"
+                    >
+                      <span>
+                        Next available:{' '}
+                        {nextAvailableDate.toLocaleDateString('en-US', {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
+
                 <div className="mt-4">
                   <label className="block text-sm font-medium text-slate-300 mb-1.5">
                     Timezone
                   </label>
-                  <select
+                  <TimezoneSelect
                     value={visitorTimezone}
-                    onChange={(e) => setVisitorTimezone(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  >
-                    <option value={Intl.DateTimeFormat().resolvedOptions().timeZone}>
-                      {Intl.DateTimeFormat().resolvedOptions().timeZone} (detected)
-                    </option>
-                    <option value="America/New_York">Eastern Time</option>
-                    <option value="America/Chicago">Central Time</option>
-                    <option value="America/Denver">Mountain Time</option>
-                    <option value="America/Los_Angeles">Pacific Time</option>
-                    <option value="UTC">UTC</option>
-                  </select>
+                    onChange={setVisitorTimezone}
+                  />
                 </div>
               </div>
 
               <div className="p-6">
                 {selectedDate ? (
                   <>
-                    <h3 className="text-lg font-medium text-white mb-4">
-                      {selectedDate.toLocaleDateString('en-US', {
-                        weekday: 'long',
-                        month: 'long',
-                        day: 'numeric',
-                      })}
-                    </h3>
-                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                    <div className="flex items-center justify-between mb-4 gap-3">
+                      <h3 className="text-lg font-medium text-white truncate">
+                        {selectedDate.toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          month: 'long',
+                          day: 'numeric',
+                        })}
+                      </h3>
+                      <div className="flex bg-slate-800 rounded-lg p-0.5 text-xs shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setHour12(true)}
+                          className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                            hour12
+                              ? 'bg-slate-700 text-white'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          12h
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHour12(false)}
+                          className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                            !hour12
+                              ? 'bg-slate-700 text-white'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          24h
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-2 md:max-h-80 overflow-y-auto">
                       {getSlotsForDate(selectedDate).map((slot) => (
                         <button
                           key={slot.start}
@@ -583,6 +755,16 @@ END:VCALENDAR`;
                   <div className="flex flex-col items-center justify-center h-full text-center py-12">
                     <CalendarIcon className="w-12 h-12 text-slate-600 mb-4" />
                     <p className="text-slate-400">Select a date to see available times</p>
+                    {nextAvailableDate && (
+                      <p className="text-sm text-slate-500 mt-2">
+                        Earliest opening:{' '}
+                        {nextAvailableDate.toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

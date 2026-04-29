@@ -51,6 +51,74 @@ function enqueueBookingEmail(
   }
 }
 
+type GoogleSyncOperation = "create" | "update" | "reschedule" | "delete";
+
+interface GoogleSyncResult {
+  synced: boolean;
+  meetLink?: string | null;
+  googleEventId?: string | null;
+  reason?: string;
+}
+
+async function syncAppointmentToGoogle(
+  appointmentId: string,
+  operation: GoogleSyncOperation
+): Promise<GoogleSyncResult | null> {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) return null;
+
+    const res = await fetch(`${supabaseUrl}/functions/v1/google-calendar-sync`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "sync-appointment",
+        appointmentId,
+        operation,
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("google-calendar-sync returned non-OK:", res.status);
+      return { synced: false };
+    }
+    const json = (await res.json()) as { success?: boolean; data?: GoogleSyncResult };
+    return json?.data || { synced: false };
+  } catch (err) {
+    console.error("google-calendar-sync await error:", err);
+    return { synced: false };
+  }
+}
+
+function enqueueGoogleSync(
+  appointmentId: string,
+  operation: GoogleSyncOperation
+): void {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) return;
+    fetch(`${supabaseUrl}/functions/v1/google-calendar-sync`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "sync-appointment",
+        appointmentId,
+        operation,
+      }),
+    }).catch((err) => console.error("google-calendar-sync enqueue failed:", err));
+  } catch (err) {
+    console.error("google-calendar-sync enqueue error:", err);
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -188,7 +256,9 @@ async function handleGetCalendarInfo(
 
   const { data: calendar } = await supabase
     .from("calendars")
-    .select("id, name, slug, org_id, settings, members:calendar_members(user_id, active)")
+    .select(
+      "id, name, slug, org_id, type, owner_user_id, settings, members:calendar_members(user_id, active)"
+    )
     .eq("slug", calendarSlug)
     .maybeSingle();
 
@@ -222,8 +292,31 @@ async function handleGetCalendarInfo(
 
   const settings = calendar.settings as { assignment_mode?: string } | null;
   const isCollective = settings?.assignment_mode === "collective";
+  const isUserCalendar = calendar.type === "user" && !!calendar.owner_user_id;
+
+  function makeInitials(name: string): string {
+    return (name || "TM")
+      .split(" ")
+      .map((n: string) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  }
 
   let collectiveMembers: Array<{ name: string; initials: string }> = [];
+  let host: { name: string; initials: string } | undefined;
+
+  if (isUserCalendar) {
+    const { data: ownerUser } = await supabase
+      .from("users")
+      .select("id, name")
+      .eq("id", calendar.owner_user_id)
+      .maybeSingle();
+    if (ownerUser) {
+      const ownerName = ownerUser.name || "Host";
+      host = { name: ownerName, initials: makeInitials(ownerName) };
+    }
+  }
 
   if (isCollective) {
     const members = (calendar.members as Array<{ user_id: string; active: boolean }>) || [];
@@ -237,12 +330,7 @@ async function handleGetCalendarInfo(
 
       collectiveMembers = (users || []).map((u) => ({
         name: u.name || "Team Member",
-        initials: (u.name || "TM")
-          .split(" ")
-          .map((n: string) => n[0])
-          .join("")
-          .toUpperCase()
-          .slice(0, 2),
+        initials: makeInitials(u.name || "TM"),
       }));
     }
   }
@@ -253,8 +341,10 @@ async function handleGetCalendarInfo(
         id: calendar.id,
         name: calendar.name,
         slug: calendar.slug,
+        type: calendar.type,
         is_collective: isCollective,
         collective_members: isCollective ? collectiveMembers : undefined,
+        host,
       },
       appointment_type: {
         id: appointmentType.id,
@@ -645,22 +735,8 @@ async function handleSubmitBooking(
     });
   }
 
-  let googleMeetLink = null;
-  if (appointmentType.generate_google_meet && appointmentType.location_type === "google_meet" && assignedUserId) {
-    const meetResult = await createGoogleMeetForAppointment(
-      supabase,
-      appointment,
-      appointmentType,
-      assignedUserId
-    );
-    if (meetResult?.meetLink) {
-      googleMeetLink = meetResult.meetLink;
-      await supabase
-        .from("appointments")
-        .update({ google_meet_link: googleMeetLink })
-        .eq("id", appointment.id);
-    }
-  }
+  const syncResult = await syncAppointmentToGoogle(appointment.id, "create");
+  const googleMeetLink = syncResult?.meetLink || null;
 
   enqueueBookingEmail(appointment.id, "confirmation");
 
@@ -844,23 +920,6 @@ async function findOrCreateContact(
   return newContact.id;
 }
 
-async function createGoogleMeetForAppointment(
-  supabase: ReturnType<typeof createClient>,
-  appointment: Record<string, unknown>,
-  appointmentType: Record<string, unknown>,
-  userId: string
-): Promise<{ meetLink: string } | null> {
-  const { data: connection } = await supabase
-    .from("google_calendar_connections")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (!connection) return null;
-
-  return null;
-}
-
 async function handleReschedule(
   req: Request,
   supabase: ReturnType<typeof createClient>
@@ -936,6 +995,7 @@ async function handleReschedule(
   }
 
   enqueueBookingEmail(appointment.id, "rescheduled");
+  enqueueGoogleSync(appointment.id, "reschedule");
 
   return new Response(
     JSON.stringify({
@@ -1024,6 +1084,7 @@ async function handleCancel(
   }
 
   enqueueBookingEmail(appointment.id, "canceled");
+  enqueueGoogleSync(appointment.id, "delete");
 
   return new Response(
     JSON.stringify({ success: true }),
