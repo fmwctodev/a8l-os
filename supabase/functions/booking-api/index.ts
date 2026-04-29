@@ -67,7 +67,7 @@ async function syncAppointmentToGoogle(
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!supabaseUrl || !serviceRoleKey) return null;
 
-    const res = await fetch(`${supabaseUrl}/functions/v1/google-calendar-sync`, {
+    const res = await fetch(`${supabaseUrl}/functions/v1/booking-google-sync`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${serviceRoleKey}`,
@@ -81,13 +81,13 @@ async function syncAppointmentToGoogle(
     });
 
     if (!res.ok) {
-      console.error("google-calendar-sync returned non-OK:", res.status);
+      console.error("booking-google-sync returned non-OK:", res.status);
       return { synced: false };
     }
     const json = (await res.json()) as { success?: boolean; data?: GoogleSyncResult };
     return json?.data || { synced: false };
   } catch (err) {
-    console.error("google-calendar-sync await error:", err);
+    console.error("booking-google-sync await error:", err);
     return { synced: false };
   }
 }
@@ -100,7 +100,7 @@ function enqueueGoogleSync(
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (!supabaseUrl || !serviceRoleKey) return;
-    fetch(`${supabaseUrl}/functions/v1/google-calendar-sync`, {
+    fetch(`${supabaseUrl}/functions/v1/booking-google-sync`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${serviceRoleKey}`,
@@ -111,9 +111,9 @@ function enqueueGoogleSync(
         appointmentId,
         operation,
       }),
-    }).catch((err) => console.error("google-calendar-sync enqueue failed:", err));
+    }).catch((err) => console.error("booking-google-sync enqueue failed:", err));
   } catch (err) {
-    console.error("google-calendar-sync enqueue error:", err);
+    console.error("booking-google-sync enqueue error:", err);
   }
 }
 
