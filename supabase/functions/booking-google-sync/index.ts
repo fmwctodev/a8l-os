@@ -221,6 +221,7 @@ async function createEvent(
   const url = new URL(
     `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events`
   );
+  url.searchParams.set("sendUpdates", "all");
   if (generateMeet) {
     url.searchParams.set("conferenceDataVersion", "1");
     payload.conferenceData = {
@@ -246,7 +247,7 @@ async function patchEvent(
 ): Promise<GoogleEvent> {
   const url = `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(
     calendarId
-  )}/events/${encodeURIComponent(eventId)}`;
+  )}/events/${encodeURIComponent(eventId)}?sendUpdates=all`;
   const resp = await googleApiCall("PATCH", url, accessToken, payload);
   if (!resp.ok) {
     const text = await resp.text();
@@ -262,7 +263,7 @@ async function deleteEvent(
 ): Promise<void> {
   const url = `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(
     calendarId
-  )}/events/${encodeURIComponent(eventId)}`;
+  )}/events/${encodeURIComponent(eventId)}?sendUpdates=all`;
   const resp = await googleApiCall("DELETE", url, accessToken);
   if (!resp.ok && resp.status !== 404 && resp.status !== 410) {
     const text = await resp.text();
@@ -313,11 +314,11 @@ Deno.serve(async (req: Request) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Load appointment + type + contact
+    // Load appointment + type + contact + parent calendar (for collective members)
     const { data: appointment, error: aptErr } = await supabase
       .from("appointments")
       .select(
-        "id, org_id, calendar_id, assigned_user_id, start_at_utc, end_at_utc, status, notes, location, google_event_id, appointment_type:appointment_types(id, name, generate_google_meet, location_type, location_value), contact:contacts(id, first_name, last_name, email)"
+        "id, org_id, calendar_id, assigned_user_id, start_at_utc, end_at_utc, status, notes, location, google_event_id, appointment_type:appointment_types(id, name, generate_google_meet, location_type, location_value), contact:contacts(id, first_name, last_name, email), calendar:calendars(id, type, settings, members:calendar_members(user_id, active))"
       )
       .eq("id", appointmentId)
       .maybeSingle();
@@ -331,6 +332,30 @@ Deno.serve(async (req: Request) => {
         success: true,
         data: { synced: false, reason: "no_assignee" },
       });
+    }
+
+    // For collective calendars, gather every active member's email so Google
+    // copies the event onto each member's calendar via the attendee list.
+    const calendarRow = appointment.calendar as {
+      type?: string;
+      settings?: { assignment_mode?: string } | null;
+      members?: { user_id: string; active: boolean }[];
+    } | null;
+    const isCollective = calendarRow?.settings?.assignment_mode === "collective";
+    let teamMemberEmails: string[] = [];
+    if (isCollective && calendarRow?.members?.length) {
+      const memberIds = calendarRow.members
+        .filter((m) => m.active)
+        .map((m) => m.user_id);
+      if (memberIds.length > 0) {
+        const { data: memberUsers } = await supabase
+          .from("users")
+          .select("id, email")
+          .in("id", memberIds);
+        teamMemberEmails = (memberUsers || [])
+          .map((u: { email: string | null }) => u.email)
+          .filter((e: string | null): e is string => !!e);
+      }
     }
 
     // Load Google connection
@@ -416,12 +441,28 @@ Deno.serve(async (req: Request) => {
       contact?.first_name || "Guest"
     } ${contact?.last_name || ""}`.trim();
 
+    const attendeeEmails = new Set<string>();
+    if (contact?.email) attendeeEmails.add(contact.email.toLowerCase());
+    for (const email of teamMemberEmails) {
+      attendeeEmails.add(email.toLowerCase());
+    }
+    // Don't invite the organizer to their own event (Google does that implicitly)
+    const { data: organizerUser } = await supabase
+      .from("users")
+      .select("email")
+      .eq("id", appointment.assigned_user_id)
+      .maybeSingle();
+    if (organizerUser?.email) attendeeEmails.delete(organizerUser.email.toLowerCase());
+    const attendees = Array.from(attendeeEmails).map((email) => ({ email }));
+
     const eventPayload: Record<string, unknown> = {
       summary,
       description: `Booked via CRM\n${appointment.notes || ""}`.trim(),
       start: { dateTime: appointment.start_at_utc, timeZone: "UTC" },
       end: { dateTime: appointment.end_at_utc, timeZone: "UTC" },
-      attendees: contact?.email ? [{ email: contact.email }] : undefined,
+      attendees: attendees.length > 0 ? attendees : undefined,
+      guestsCanModify: false,
+      guestsCanInviteOthers: false,
       extendedProperties: {
         private: {
           autom8ion_workspace_id: appointment.org_id,
