@@ -165,6 +165,7 @@ export function CalendarsTab() {
           onClose={handleDrawerClose}
           onSave={handleDrawerSave}
           calendar={editingCalendar}
+          calendars={calendars}
           departments={departments}
           users={users}
         />
@@ -417,6 +418,7 @@ export function CalendarsTab() {
         onClose={handleDrawerClose}
         onSave={handleDrawerSave}
         calendar={editingCalendar}
+        calendars={calendars}
         departments={departments}
         users={users}
       />

@@ -1,5 +1,21 @@
-import { useState, useEffect } from 'react';
-import { X, User, Users, Plus, Trash2, RefreshCw, Star, LayoutGrid } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  X,
+  User as UserIcon,
+  Users,
+  Plus,
+  Trash2,
+  RefreshCw,
+  LayoutGrid,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Clock,
+  Calendar as CalendarIconLucide,
+  ArrowRight,
+  AlertCircle,
+} from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
   createCalendar,
@@ -9,43 +25,119 @@ import {
   updateCalendarMember,
   removeCalendarMember,
 } from '../../../services/calendars';
-import type { Calendar, Department, User as UserType, CalendarMember, AssignmentMode } from '../../../types';
+import { updateAppointmentType } from '../../../services/appointmentTypes';
+import type {
+  Calendar,
+  Department,
+  User as UserType,
+  CalendarMember,
+  AssignmentMode,
+  AppointmentType,
+} from '../../../types';
 
 interface CalendarDrawerProps {
   open: boolean;
   onClose: () => void;
   onSave: () => void;
   calendar: Calendar | null;
+  calendars: Calendar[];
   departments: Department[];
   users: UserType[];
 }
 
-const ASSIGNMENT_MODES: { value: AssignmentMode; label: string; description: string; icon: typeof RefreshCw }[] = [
+type StepId = 'type' | 'basics' | 'team' | 'appointment-types';
+
+interface StepDef {
+  id: StepId;
+  label: string;
+  description: string;
+}
+
+const STEPS: StepDef[] = [
+  { id: 'type', label: 'Type', description: 'How appointments are routed' },
+  { id: 'basics', label: 'Basics', description: 'Name and booking URL' },
+  { id: 'team', label: 'Team', description: 'Who takes the bookings' },
   {
-    value: 'round_robin',
-    label: 'Round Robin',
-    description: 'Appointments rotate evenly across team members by weight',
-    icon: RefreshCw,
-  },
-  {
-    value: 'priority',
-    label: 'Priority',
-    description: 'Always assigned to the highest priority available member',
-    icon: Star,
-  },
-  {
-    value: 'collective',
-    label: 'Collective',
-    description: 'All members must be free — everyone meets with the visitor together',
-    icon: LayoutGrid,
+    id: 'appointment-types',
+    label: 'Appointment Types',
+    description: 'What clients can book',
   },
 ];
+
+interface CalendarTypeOption {
+  id: 'one_on_one' | 'round_robin' | 'collective';
+  label: string;
+  shortLabel: string;
+  description: string;
+  icon: typeof UserIcon;
+  type: 'user' | 'team';
+  assignmentMode: AssignmentMode;
+}
+
+const TYPE_OPTIONS: CalendarTypeOption[] = [
+  {
+    id: 'one_on_one',
+    label: 'One-on-One',
+    shortLabel: 'One-on-One',
+    description:
+      'A single host owns the calendar. Every booking goes to them.',
+    icon: UserIcon,
+    type: 'user',
+    assignmentMode: 'round_robin',
+  },
+  {
+    id: 'round_robin',
+    label: 'Round Robin',
+    shortLabel: 'Round Robin',
+    description:
+      'Bookings rotate evenly across team members so workload stays balanced.',
+    icon: RefreshCw,
+    type: 'team',
+    assignmentMode: 'round_robin',
+  },
+  {
+    id: 'collective',
+    label: 'Collective Booking',
+    shortLabel: 'Collective',
+    description:
+      'Everyone on the team must be free. Useful for panel interviews and group consults.',
+    icon: LayoutGrid,
+    type: 'team',
+    assignmentMode: 'collective',
+  },
+];
+
+function deriveTypeId(
+  type: 'user' | 'team',
+  mode: AssignmentMode
+): CalendarTypeOption['id'] {
+  if (type === 'user') return 'one_on_one';
+  if (mode === 'collective') return 'collective';
+  return 'round_robin';
+}
+
+interface FormState {
+  name: string;
+  slug: string;
+  typeId: CalendarTypeOption['id'];
+  department_id: string;
+  owner_user_id: string;
+}
+
+const EMPTY_FORM: FormState = {
+  name: '',
+  slug: '',
+  typeId: 'one_on_one',
+  department_id: '',
+  owner_user_id: '',
+};
 
 export function CalendarDrawer({
   open,
   onClose,
   onSave,
   calendar,
+  calendars,
   departments,
   users,
 }: CalendarDrawerProps) {
@@ -58,97 +150,200 @@ export function CalendarDrawer({
     userRole === 'Admin' ||
     user?.permissions?.includes('calendars.manage_all');
 
-  const [formData, setFormData] = useState({
-    name: '',
-    slug: '',
-    type: 'user' as 'user' | 'team',
-    department_id: '',
-    owner_user_id: '',
-    assignment_mode: 'round_robin' as AssignmentMode,
-  });
-
-  const [members, setMembers] = useState<(CalendarMember & { isNew?: boolean })[]>([]);
-  const [newMemberUserId, setNewMemberUserId] = useState('');
+  const [currentStep, setCurrentStep] = useState<StepId>('type');
+  const [formData, setFormData] = useState<FormState>(EMPTY_FORM);
+  const [members, setMembers] = useState<(CalendarMember & { isNew?: boolean })[]>(
+    []
+  );
+  const [memberSearch, setMemberSearch] = useState('');
+  const [selectedTypeIds, setSelectedTypeIds] = useState<Set<string>>(new Set());
+  const [typeSearch, setTypeSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const initiallyLinkedTypeIds = useMemo(() => {
+    if (!calendar) return new Set<string>();
+    const ids = (calendar.appointment_types || []).map((t) => t.id);
+    return new Set(ids);
+  }, [calendar]);
+
   useEffect(() => {
-    if (open) {
-      if (calendar) {
-        setFormData({
-          name: calendar.name,
-          slug: calendar.slug,
-          type: calendar.type,
-          department_id: calendar.department_id || '',
-          owner_user_id: calendar.owner_user_id || '',
-          assignment_mode: calendar.settings?.assignment_mode || 'round_robin',
-        });
-        setMembers(calendar.members || []);
-      } else {
-        setFormData({
-          name: '',
-          slug: '',
-          type: canManageTeamCalendars ? 'user' : 'user',
-          department_id: '',
-          owner_user_id: user?.id || '',
-          assignment_mode: 'round_robin',
-        });
-        setMembers([]);
-      }
-      setError('');
+    if (!open) return;
+
+    if (calendar) {
+      const typeId = deriveTypeId(
+        calendar.type,
+        calendar.settings?.assignment_mode || 'round_robin'
+      );
+      setFormData({
+        name: calendar.name,
+        slug: calendar.slug,
+        typeId,
+        department_id: calendar.department_id || '',
+        owner_user_id: calendar.owner_user_id || '',
+      });
+      setMembers(calendar.members || []);
+      setSelectedTypeIds(new Set(initiallyLinkedTypeIds));
+      setCurrentStep('basics');
+    } else {
+      setFormData({
+        ...EMPTY_FORM,
+        owner_user_id: user?.id || '',
+        typeId: canManageTeamCalendars ? 'one_on_one' : 'one_on_one',
+      });
+      setMembers([]);
+      setSelectedTypeIds(new Set());
+      setCurrentStep('type');
     }
-  }, [open, calendar, user]);
+    setError('');
+    setMemberSearch('');
+    setTypeSearch('');
+  }, [open, calendar, user, canManageTeamCalendars, initiallyLinkedTypeIds]);
+
+  const selectedType = TYPE_OPTIONS.find((t) => t.id === formData.typeId)!;
+  const isCollective = selectedType.assignmentMode === 'collective';
+  const isTeamType = selectedType.type === 'team';
+
+  const orgAppointmentTypes = useMemo(() => {
+    const types: AppointmentType[] = [];
+    for (const cal of calendars) {
+      for (const t of cal.appointment_types || []) {
+        types.push({ ...t, calendar: cal });
+      }
+    }
+    return types.sort((a, b) => a.name.localeCompare(b.name));
+  }, [calendars]);
+
+  const filteredAppointmentTypes = useMemo(() => {
+    const q = typeSearch.trim().toLowerCase();
+    if (!q) return orgAppointmentTypes;
+    return orgAppointmentTypes.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        t.calendar?.name.toLowerCase().includes(q)
+    );
+  }, [orgAppointmentTypes, typeSearch]);
 
   const handleNameChange = (name: string) => {
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       name,
-      slug: isEditing ? formData.slug : generateSlug(name),
-    });
+      slug: isEditing ? prev.slug : generateSlug(name),
+    }));
   };
 
-  const handleAddMember = () => {
-    if (!newMemberUserId) return;
+  const handleSelectType = (option: CalendarTypeOption) => {
+    if (option.type === 'team' && !canManageTeamCalendars) return;
+    setFormData((prev) => ({
+      ...prev,
+      typeId: option.id,
+      owner_user_id: option.type === 'user' ? user?.id || '' : '',
+    }));
+  };
 
-    const existingMember = members.find((m) => m.user_id === newMemberUserId);
-    if (existingMember) return;
-
-    const selectedUser = users.find((u) => u.id === newMemberUserId);
-    if (!selectedUser) return;
-
-    setMembers([
-      ...members,
+  const handleAddMember = (userId: string) => {
+    if (!userId) return;
+    if (members.find((m) => m.user_id === userId)) return;
+    const selected = users.find((u) => u.id === userId);
+    if (!selected) return;
+    setMembers((prev) => [
+      ...prev,
       {
         id: `new-${Date.now()}`,
         calendar_id: calendar?.id || '',
-        user_id: newMemberUserId,
+        user_id: userId,
         weight: 1,
         priority: 5,
         active: true,
         created_at: new Date().toISOString(),
-        user: selectedUser,
+        user: selected,
         isNew: true,
       },
     ]);
-    setNewMemberUserId('');
+    setMemberSearch('');
   };
 
   const handleUpdateMember = (
     memberId: string,
     updates: Partial<Pick<CalendarMember, 'weight' | 'priority' | 'active'>>
   ) => {
-    setMembers(
-      members.map((m) => (m.id === memberId ? { ...m, ...updates } : m))
+    setMembers((prev) =>
+      prev.map((m) => (m.id === memberId ? { ...m, ...updates } : m))
     );
   };
 
   const handleRemoveMember = (memberId: string) => {
-    setMembers(members.filter((m) => m.id !== memberId));
+    setMembers((prev) => prev.filter((m) => m.id !== memberId));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleToggleType = (typeId: string) => {
+    setSelectedTypeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(typeId)) next.delete(typeId);
+      else next.add(typeId);
+      return next;
+    });
+  };
+
+  const validateStep = (step: StepId): string | null => {
+    if (step === 'type') {
+      if (selectedType.type === 'team' && !canManageTeamCalendars) {
+        return 'You do not have permission to create team calendars';
+      }
+      return null;
+    }
+    if (step === 'basics') {
+      if (!formData.name.trim()) return 'Calendar name is required';
+      if (!formData.slug.trim()) return 'URL slug is required';
+      if (!/^[a-z0-9-]+$/.test(formData.slug))
+        return 'Slug can only contain lowercase letters, numbers, and dashes';
+      return null;
+    }
+    if (step === 'team') {
+      if (selectedType.type === 'user' && !formData.owner_user_id) {
+        return 'Pick an owner for this calendar';
+      }
+      if (selectedType.type === 'team' && members.length === 0) {
+        return 'Add at least one team member';
+      }
+      return null;
+    }
+    return null;
+  };
+
+  const goToStep = (step: StepId) => {
+    setError('');
+    setCurrentStep(step);
+  };
+
+  const handleNext = () => {
+    const err = validateStep(currentStep);
+    if (err) {
+      setError(err);
+      return;
+    }
+    setError('');
+    const idx = STEPS.findIndex((s) => s.id === currentStep);
+    if (idx < STEPS.length - 1) setCurrentStep(STEPS[idx + 1].id);
+  };
+
+  const handleBack = () => {
+    setError('');
+    const idx = STEPS.findIndex((s) => s.id === currentStep);
+    if (idx > 0) setCurrentStep(STEPS[idx - 1].id);
+  };
+
+  const handleSubmit = async () => {
     if (!user) return;
+
+    for (const step of STEPS) {
+      const err = validateStep(step.id);
+      if (err) {
+        setError(err);
+        setCurrentStep(step.id);
+        return;
+      }
+    }
 
     setError('');
     setSaving(true);
@@ -163,7 +358,7 @@ export function CalendarDrawer({
             name: formData.name,
             slug: formData.slug,
             department_id: formData.department_id || null,
-            settings: { assignment_mode: formData.assignment_mode },
+            settings: { assignment_mode: selectedType.assignmentMode },
           },
           user
         );
@@ -201,26 +396,40 @@ export function CalendarDrawer({
         const newCalendar = await createCalendar(
           user.organization_id,
           {
-            type: formData.type,
+            type: selectedType.type,
             name: formData.name,
             slug: formData.slug,
             department_id: formData.department_id || null,
-            owner_user_id: formData.type === 'user' ? formData.owner_user_id : null,
+            owner_user_id:
+              selectedType.type === 'user' ? formData.owner_user_id : null,
             settings: {
-              assignment_mode: formData.assignment_mode,
+              assignment_mode: selectedType.assignmentMode,
             },
           },
           user
         );
         calendarId = newCalendar.id;
 
-        if (formData.type === 'team') {
+        if (selectedType.type === 'team') {
           for (const member of members) {
             await addCalendarMember(calendarId, member.user_id, {
               weight: member.weight,
               priority: member.priority,
             });
           }
+        }
+      }
+
+      if (calendarId) {
+        const newlyAttached = Array.from(selectedTypeIds).filter(
+          (id) => !initiallyLinkedTypeIds.has(id)
+        );
+        for (const typeId of newlyAttached) {
+          await updateAppointmentType(
+            typeId,
+            { calendar_id: calendarId },
+            user
+          );
         }
       }
 
@@ -232,379 +441,679 @@ export function CalendarDrawer({
     }
   };
 
-  const availableUsers = users.filter(
-    (u) =>
-      u.status === 'active' &&
-      !members.find((m) => m.user_id === u.id)
+  if (!open) return null;
+
+  const stepIndex = STEPS.findIndex((s) => s.id === currentStep);
+  const isFinalStep = stepIndex === STEPS.length - 1;
+
+  const renderStepNav = () => (
+    <div className="px-6 py-4 border-b border-slate-700 bg-slate-900/50">
+      <ol className="flex items-center gap-2">
+        {STEPS.map((step, idx) => {
+          const isActive = step.id === currentStep;
+          const isComplete = idx < stepIndex;
+          const isClickable =
+            isEditing || isComplete || step.id === currentStep;
+          return (
+            <li key={step.id} className="flex items-center gap-2 flex-1">
+              <button
+                type="button"
+                disabled={!isClickable}
+                onClick={() => isClickable && goToStep(step.id)}
+                className={`flex items-center gap-2 text-left transition-colors ${
+                  isClickable ? 'cursor-pointer' : 'cursor-default'
+                }`}
+              >
+                <span
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-colors ${
+                    isActive
+                      ? 'bg-cyan-500 text-white'
+                      : isComplete
+                      ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'
+                      : 'bg-slate-800 text-slate-500 border border-slate-700'
+                  }`}
+                >
+                  {isComplete ? <Check className="w-3.5 h-3.5" /> : idx + 1}
+                </span>
+                <span
+                  className={`text-sm font-medium hidden sm:inline ${
+                    isActive
+                      ? 'text-white'
+                      : isComplete
+                      ? 'text-slate-300'
+                      : 'text-slate-500'
+                  }`}
+                >
+                  {step.label}
+                </span>
+              </button>
+              {idx < STEPS.length - 1 && (
+                <span
+                  className={`flex-1 h-px ${
+                    idx < stepIndex ? 'bg-cyan-500/40' : 'bg-slate-700'
+                  }`}
+                />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 
-  const isCollective = formData.assignment_mode === 'collective';
+  const renderTypeStep = () => (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-base font-semibold text-white">
+          What kind of calendar is this?
+        </h3>
+        <p className="text-sm text-slate-400 mt-1">
+          You can change settings later, but the routing type is fixed once
+          appointments start coming in.
+        </p>
+      </div>
 
-  if (!open) return null;
+      <div className="grid gap-3">
+        {TYPE_OPTIONS.map((option) => {
+          const Icon = option.icon;
+          const isSelected = formData.typeId === option.id;
+          const disabled = option.type === 'team' && !canManageTeamCalendars;
+          const lockedInEdit = isEditing && !isSelected;
+
+          return (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => !disabled && !lockedInEdit && handleSelectType(option)}
+              disabled={disabled || lockedInEdit}
+              className={`p-4 rounded-xl border-2 transition-all flex items-start gap-4 text-left ${
+                isSelected
+                  ? 'border-cyan-500 bg-cyan-500/10'
+                  : 'border-slate-700 bg-slate-800 hover:border-slate-600'
+              } ${disabled || lockedInEdit ? 'opacity-50 cursor-not-allowed hover:border-slate-700' : ''}`}
+            >
+              <div
+                className={`w-12 h-12 rounded-lg flex items-center justify-center shrink-0 ${
+                  isSelected
+                    ? 'bg-cyan-500/20'
+                    : 'bg-slate-700/50'
+                }`}
+              >
+                <Icon
+                  className={`w-6 h-6 ${
+                    isSelected ? 'text-cyan-400' : 'text-slate-400'
+                  }`}
+                />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <h4
+                    className={`font-semibold ${
+                      isSelected ? 'text-white' : 'text-slate-200'
+                    }`}
+                  >
+                    {option.label}
+                  </h4>
+                  {isSelected && (
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-cyan-500">
+                      <Check className="w-3 h-3 text-white" />
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-slate-400 mt-1">
+                  {option.description}
+                </p>
+                {disabled && (
+                  <p className="text-xs text-amber-400 mt-2">
+                    Requires admin permissions
+                  </p>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {isEditing && (
+        <p className="text-xs text-slate-500 flex items-center gap-1.5">
+          <AlertCircle className="w-3.5 h-3.5" />
+          Calendar type is locked once created. Create a new calendar to switch routing.
+        </p>
+      )}
+    </div>
+  );
+
+  const renderBasicsStep = () => (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-base font-semibold text-white">
+          Name your calendar
+        </h3>
+        <p className="text-sm text-slate-400 mt-1">
+          Clients see this on the booking page.
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-2">
+          Calendar Name
+        </label>
+        <input
+          type="text"
+          value={formData.name}
+          onChange={(e) => handleNameChange(e.target.value)}
+          placeholder="e.g. Sales Discovery Call"
+          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+          autoFocus
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-2">
+          Booking URL
+        </label>
+        <div className="flex items-stretch rounded-lg border border-slate-700 bg-slate-800 overflow-hidden focus-within:ring-2 focus-within:ring-cyan-500">
+          <span className="px-3 py-2 bg-slate-800/50 border-r border-slate-700 text-slate-500 text-sm font-mono flex items-center">
+            {typeof window !== 'undefined' ? window.location.host : 'app'}
+            /book/
+          </span>
+          <input
+            type="text"
+            value={formData.slug}
+            onChange={(e) =>
+              setFormData({
+                ...formData,
+                slug: e.target.value
+                  .toLowerCase()
+                  .replace(/[^a-z0-9-]/g, '-')
+                  .replace(/-+/g, '-')
+                  .replace(/^-|-$/g, ''),
+              })
+            }
+            placeholder="my-calendar"
+            className="flex-1 px-3 py-2 bg-transparent text-white focus:outline-none font-mono text-sm"
+          />
+        </div>
+        <p className="text-xs text-slate-500 mt-1.5">
+          Lowercase letters, numbers and dashes only.
+        </p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-300 mb-2">
+          Department <span className="text-slate-500 font-normal">(optional)</span>
+        </label>
+        <select
+          value={formData.department_id}
+          onChange={(e) =>
+            setFormData({ ...formData, department_id: e.target.value })
+          }
+          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+        >
+          <option value="">No department</option>
+          {departments.map((dept) => (
+            <option key={dept.id} value={dept.id}>
+              {dept.name}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+
+  const availableUsers = users.filter(
+    (u) => u.status === 'active' && !members.find((m) => m.user_id === u.id)
+  );
+
+  const filteredAvailableUsers = useMemo(() => {
+    const q = memberSearch.trim().toLowerCase();
+    if (!q) return availableUsers;
+    return availableUsers.filter(
+      (u) =>
+        u.name?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q)
+    );
+  }, [availableUsers, memberSearch]);
+
+  const renderTeamStep = () => {
+    if (!isTeamType) {
+      return (
+        <div className="space-y-5">
+          <div>
+            <h3 className="text-base font-semibold text-white">
+              Who owns this calendar?
+            </h3>
+            <p className="text-sm text-slate-400 mt-1">
+              All bookings on this calendar will be assigned to this person.
+            </p>
+          </div>
+
+          {isEditing ? (
+            <div className="px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-sm font-semibold text-white">
+                {(users.find((u) => u.id === formData.owner_user_id)?.name || 'U')
+                  .charAt(0)
+                  .toUpperCase()}
+              </div>
+              <div className="flex-1">
+                <p className="text-white font-medium text-sm">
+                  {users.find((u) => u.id === formData.owner_user_id)?.name ||
+                    'Unknown'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  Owner cannot be changed after creation
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+              {users
+                .filter((u) => u.status === 'active')
+                .map((u) => {
+                  const isSelected = formData.owner_user_id === u.id;
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() =>
+                        setFormData({ ...formData, owner_user_id: u.id })
+                      }
+                      className={`w-full p-3 rounded-lg border-2 transition-all flex items-center gap-3 text-left ${
+                        isSelected
+                          ? 'border-cyan-500 bg-cyan-500/10'
+                          : 'border-slate-700 bg-slate-800 hover:border-slate-600'
+                      }`}
+                    >
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-sm font-semibold text-white">
+                        {(u.name || 'U').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className={`font-medium text-sm truncate ${
+                            isSelected ? 'text-white' : 'text-slate-200'
+                          }`}
+                        >
+                          {u.name}
+                        </p>
+                        <p className="text-xs text-slate-500 truncate">
+                          {u.email}
+                        </p>
+                      </div>
+                      {isSelected && (
+                        <Check className="w-4 h-4 text-cyan-400 shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-5">
+        <div>
+          <h3 className="text-base font-semibold text-white">
+            Who's on this team?
+          </h3>
+          <p className="text-sm text-slate-400 mt-1">
+            {selectedType.assignmentMode === 'collective'
+              ? "Bookings only show times when every member is free."
+              : 'Bookings will rotate across these members. Adjust weights to bias the rotation.'}
+          </p>
+        </div>
+
+        {availableUsers.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Add members
+            </label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input
+                type="text"
+                value={memberSearch}
+                onChange={(e) => setMemberSearch(e.target.value)}
+                placeholder="Search teammates..."
+                className="w-full pl-10 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+              />
+            </div>
+            {memberSearch && filteredAvailableUsers.length > 0 && (
+              <div className="mt-2 max-h-48 overflow-y-auto border border-slate-700 rounded-lg bg-slate-800 divide-y divide-slate-700">
+                {filteredAvailableUsers.map((u) => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => handleAddMember(u.id)}
+                    className="w-full px-3 py-2 flex items-center gap-3 hover:bg-slate-700 text-left"
+                  >
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-xs font-semibold text-white">
+                      {(u.name || 'U').charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm truncate">{u.name}</p>
+                      <p className="text-xs text-slate-500 truncate">
+                        {u.email}
+                      </p>
+                    </div>
+                    <Plus className="w-4 h-4 text-slate-400" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {members.length > 0 ? (
+          <div className="space-y-2">
+            {members.map((member) => (
+              <div
+                key={member.id}
+                className="p-3 bg-slate-800 border border-slate-700 rounded-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-teal-600 flex items-center justify-center text-xs font-semibold text-white shrink-0">
+                    {(member.user?.name || 'U').charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-sm font-medium truncate">
+                      {member.user?.name || 'Unknown user'}
+                    </p>
+                    <p className="text-xs text-slate-500 truncate">
+                      {member.user?.email}
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={member.active}
+                      onChange={(e) =>
+                        handleUpdateMember(member.id, {
+                          active: e.target.checked,
+                        })
+                      }
+                      className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500"
+                    />
+                    <span className="text-xs text-slate-400">Active</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveMember(member.id)}
+                    className="p-1 text-slate-500 hover:text-red-400 transition-colors"
+                    aria-label="Remove member"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {!isCollective && (
+                  <div className="mt-3 pl-11">
+                    <label className="flex items-center gap-3">
+                      <span className="text-xs text-slate-400 w-16">
+                        Weight
+                      </span>
+                      <input
+                        type="range"
+                        min="1"
+                        max="10"
+                        value={member.weight}
+                        onChange={(e) =>
+                          handleUpdateMember(member.id, {
+                            weight: parseInt(e.target.value) || 1,
+                          })
+                        }
+                        className="flex-1 accent-cyan-500"
+                      />
+                      <span className="text-xs text-white font-mono w-6 text-right">
+                        {member.weight}
+                      </span>
+                    </label>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 border-2 border-dashed border-slate-700 rounded-lg">
+            <Users className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+            <p className="text-sm text-slate-400">No team members yet</p>
+            <p className="text-xs text-slate-500 mt-1">
+              Search above to add the first one.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderAppointmentTypesStep = () => (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-base font-semibold text-white">
+          What can clients book?
+        </h3>
+        <p className="text-sm text-slate-400 mt-1">
+          Pick one or more appointment types to show on this calendar's booking
+          page.
+        </p>
+      </div>
+
+      {orgAppointmentTypes.length === 0 ? (
+        <div className="text-center py-10 border-2 border-dashed border-slate-700 rounded-lg">
+          <Clock className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+          <p className="text-sm text-slate-300 font-medium">
+            No appointment types yet
+          </p>
+          <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+            After saving this calendar, head to the Appointment Types tab to
+            create durations, locations, and intake questions.
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <input
+              type="text"
+              value={typeSearch}
+              onChange={(e) => setTypeSearch(e.target.value)}
+              placeholder="Search appointment types..."
+              className="w-full pl-10 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            />
+          </div>
+
+          <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+            {filteredAppointmentTypes.map((type) => {
+              const isSelected = selectedTypeIds.has(type.id);
+              const currentCalendar = type.calendar;
+              const isOnAnotherCalendar =
+                currentCalendar && currentCalendar.id !== calendar?.id;
+              const wasInitiallyLinked = initiallyLinkedTypeIds.has(type.id);
+              return (
+                <label
+                  key={type.id}
+                  className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                    isSelected
+                      ? 'border-cyan-500 bg-cyan-500/10'
+                      : 'border-slate-700 bg-slate-800 hover:border-slate-600'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => handleToggleType(type.id)}
+                    className="mt-1 w-4 h-4 rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p
+                        className={`font-medium text-sm ${
+                          isSelected ? 'text-white' : 'text-slate-200'
+                        }`}
+                      >
+                        {type.name}
+                      </p>
+                      {!type.active && (
+                        <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">
+                          Inactive
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {type.duration_minutes} min
+                      </span>
+                      {currentCalendar && (
+                        <span className="flex items-center gap-1">
+                          <CalendarIconLucide className="w-3 h-3" />
+                          {currentCalendar.name}
+                        </span>
+                      )}
+                    </div>
+                    {isSelected &&
+                      isOnAnotherCalendar &&
+                      !wasInitiallyLinked && (
+                        <p className="text-xs text-amber-400 mt-1.5 flex items-center gap-1">
+                          <ArrowRight className="w-3 h-3" />
+                          Will move from {currentCalendar?.name} to this
+                          calendar
+                        </p>
+                      )}
+                  </div>
+                </label>
+              );
+            })}
+            {filteredAppointmentTypes.length === 0 && (
+              <p className="text-center text-sm text-slate-500 py-6">
+                No appointment types match "{typeSearch}"
+              </p>
+            )}
+          </div>
+
+          <p className="text-xs text-slate-500">
+            {selectedTypeIds.size === 0
+              ? 'Pick at least one type so this calendar has something bookable.'
+              : `${selectedTypeIds.size} appointment type${
+                  selectedTypeIds.size === 1 ? '' : 's'
+                } selected.`}
+          </p>
+        </>
+      )}
+    </div>
+  );
+
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 'type':
+        return renderTypeStep();
+      case 'basics':
+        return renderBasicsStep();
+      case 'team':
+        return renderTeamStep();
+      case 'appointment-types':
+        return renderAppointmentTypesStep();
+    }
+  };
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 w-full max-w-lg bg-slate-900 border-l border-slate-700 z-50 flex flex-col">
+      <div className="fixed inset-0 bg-black/60 z-40" onClick={onClose} />
+      <div className="fixed right-0 top-0 bottom-0 w-full max-w-3xl bg-slate-900 border-l border-slate-700 z-50 flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
-          <h2 className="text-lg font-semibold text-white">
-            {isEditing ? 'Edit Calendar' : 'Create Calendar'}
-          </h2>
+          <div>
+            <h2 className="text-lg font-semibold text-white">
+              {isEditing ? 'Edit Calendar' : 'Create Calendar'}
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {STEPS[stepIndex].description}
+            </p>
+          </div>
           <button
             onClick={onClose}
             className="p-1 text-slate-400 hover:text-white rounded"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
-          <div className="p-6 space-y-6">
+        {renderStepNav()}
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-6">
             {error && (
-              <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                {error}
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                <span>{error}</span>
               </div>
             )}
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Calendar Name
-              </label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => handleNameChange(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                URL Slug
-              </label>
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500 text-sm">/book/</span>
-                <input
-                  type="text"
-                  value={formData.slug}
-                  onChange={(e) =>
-                    setFormData({ ...formData, slug: e.target.value })
-                  }
-                  className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                  required
-                />
-              </div>
-            </div>
-
-            {!isEditing && (
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-3">
-                  Calendar Type
-                </label>
-                <div className={`grid gap-3 ${canManageTeamCalendars ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setFormData({ ...formData, type: 'user', owner_user_id: user?.id || '', assignment_mode: 'round_robin' })
-                    }
-                    className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${
-                      formData.type === 'user'
-                        ? 'border-cyan-500 bg-cyan-500/10'
-                        : 'border-slate-700 bg-slate-800 hover:border-slate-600'
-                    }`}
-                  >
-                    <User
-                      className={`w-6 h-6 ${
-                        formData.type === 'user' ? 'text-cyan-400' : 'text-slate-400'
-                      }`}
-                    />
-                    <span
-                      className={`font-medium ${
-                        formData.type === 'user' ? 'text-cyan-400' : 'text-slate-300'
-                      }`}
-                    >
-                      User Calendar
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      Assigned to one person
-                    </span>
-                  </button>
-
-                  {canManageTeamCalendars && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setFormData({ ...formData, type: 'team', owner_user_id: '' })
-                      }
-                      className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-2 ${
-                        formData.type === 'team'
-                          ? 'border-cyan-500 bg-cyan-500/10'
-                          : 'border-slate-700 bg-slate-800 hover:border-slate-600'
-                      }`}
-                    >
-                      <Users
-                        className={`w-6 h-6 ${
-                          formData.type === 'team' ? 'text-cyan-400' : 'text-slate-400'
-                        }`}
-                      />
-                      <span
-                        className={`font-medium ${
-                          formData.type === 'team' ? 'text-cyan-400' : 'text-slate-300'
-                        }`}
-                      >
-                        Team Calendar
-                      </span>
-                      <span className="text-xs text-slate-500">
-                        Multi-member routing
-                      </span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                Department
-              </label>
-              <select
-                value={formData.department_id}
-                onChange={(e) =>
-                  setFormData({ ...formData, department_id: e.target.value })
-                }
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-              >
-                <option value="">No Department</option>
-                {departments.map((dept) => (
-                  <option key={dept.id} value={dept.id}>
-                    {dept.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {formData.type === 'user' && (
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Owner
-                </label>
-                {isEditing ? (
-                  <div className="px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-400 text-sm">
-                    {users.find((u) => u.id === formData.owner_user_id)?.name || 'Unknown'}
-                    <span className="ml-2 text-xs text-slate-500">(cannot be changed)</span>
-                  </div>
-                ) : (
-                  <select
-                    value={formData.owner_user_id}
-                    onChange={(e) =>
-                      setFormData({ ...formData, owner_user_id: e.target.value })
-                    }
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    required
-                  >
-                    <option value="">Select Owner</option>
-                    {users
-                      .filter((u) => u.status === 'active')
-                      .map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                  </select>
-                )}
-              </div>
-            )}
-
-            {formData.type === 'team' && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-3">
-                    Assignment Mode
-                  </label>
-                  <div className="space-y-2">
-                    {ASSIGNMENT_MODES.map((mode) => {
-                      const Icon = mode.icon;
-                      const isSelected = formData.assignment_mode === mode.value;
-                      return (
-                        <button
-                          key={mode.value}
-                          type="button"
-                          onClick={() =>
-                            setFormData({
-                              ...formData,
-                              assignment_mode: mode.value,
-                            })
-                          }
-                          className={`w-full p-3 rounded-lg border-2 transition-all flex items-start gap-3 text-left ${
-                            isSelected
-                              ? 'border-cyan-500 bg-cyan-500/10'
-                              : 'border-slate-700 bg-slate-800 hover:border-slate-600'
-                          }`}
-                        >
-                          <Icon
-                            className={`w-5 h-5 mt-0.5 shrink-0 ${
-                              isSelected ? 'text-cyan-400' : 'text-slate-400'
-                            }`}
-                          />
-                          <div>
-                            <p className={`font-medium text-sm ${isSelected ? 'text-cyan-400' : 'text-slate-300'}`}>
-                              {mode.label}
-                            </p>
-                            <p className="text-xs text-slate-500 mt-0.5">{mode.description}</p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="text-sm font-medium text-slate-300">
-                      Team Members
-                    </label>
-                    {isCollective && (
-                      <span className="text-xs text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-full">
-                        All must be free for a slot to appear
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex gap-2 mb-3">
-                    <select
-                      value={newMemberUserId}
-                      onChange={(e) => setNewMemberUserId(e.target.value)}
-                      className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    >
-                      <option value="">Select team member...</option>
-                      {availableUsers.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={handleAddMember}
-                      disabled={!newMemberUserId}
-                      className="px-3 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {members.length > 0 ? (
-                    <div className="space-y-2">
-                      {members.map((member) => (
-                        <div
-                          key={member.id}
-                          className="p-3 bg-slate-800 rounded-lg border border-slate-700"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-7 h-7 rounded-full bg-slate-600 flex items-center justify-center text-xs font-medium text-white">
-                                {(member.user?.name || 'U').charAt(0).toUpperCase()}
-                              </div>
-                              <span className="text-white font-medium text-sm">
-                                {member.user?.name || 'Unknown User'}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <label className="flex items-center gap-1.5 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={member.active}
-                                  onChange={(e) =>
-                                    handleUpdateMember(member.id, {
-                                      active: e.target.checked,
-                                    })
-                                  }
-                                  className="w-3.5 h-3.5 rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500"
-                                />
-                                <span className="text-xs text-slate-400">Active</span>
-                              </label>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveMember(member.id)}
-                                className="p-1 text-slate-500 hover:text-red-400 transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-
-                          {!isCollective && (
-                            <div className="grid grid-cols-2 gap-3 mt-3">
-                              {formData.assignment_mode === 'round_robin' && (
-                                <div>
-                                  <label className="block text-xs text-slate-400 mb-1">
-                                    Weight (1–10)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    max="10"
-                                    value={member.weight}
-                                    onChange={(e) =>
-                                      handleUpdateMember(member.id, {
-                                        weight: parseInt(e.target.value) || 1,
-                                      })
-                                    }
-                                    className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                                  />
-                                </div>
-                              )}
-                              {formData.assignment_mode === 'priority' && (
-                                <div>
-                                  <label className="block text-xs text-slate-400 mb-1">
-                                    Priority (1–10)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    max="10"
-                                    value={member.priority}
-                                    onChange={(e) =>
-                                      handleUpdateMember(member.id, {
-                                        priority: parseInt(e.target.value) || 5,
-                                      })
-                                    }
-                                    className="w-full px-2 py-1 bg-slate-700 border border-slate-600 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-6 border border-dashed border-slate-700 rounded-lg text-slate-500 text-sm">
-                      No team members added yet
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
+            {renderStepContent()}
           </div>
-        </form>
+        </div>
 
-        <div className="px-6 py-4 border-t border-slate-700 flex justify-end gap-3">
+        <div className="px-6 py-4 border-t border-slate-700 flex items-center justify-between gap-3">
           <button
             type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
+            onClick={stepIndex === 0 ? onClose : handleBack}
             disabled={saving}
-            className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-lg font-medium hover:from-cyan-600 hover:to-teal-600 transition-all disabled:opacity-50"
+            className="inline-flex items-center gap-1 px-4 py-2 text-slate-300 hover:text-white transition-colors disabled:opacity-50"
           >
-            {saving ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Calendar'}
+            {stepIndex === 0 ? (
+              'Cancel'
+            ) : (
+              <>
+                <ChevronLeft className="w-4 h-4" />
+                Back
+              </>
+            )}
           </button>
+
+          <div className="flex items-center gap-2">
+            {isEditing && (
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={saving}
+                className="px-4 py-2 text-cyan-400 hover:text-cyan-300 text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            )}
+            {!isFinalStep ? (
+              <button
+                type="button"
+                onClick={handleNext}
+                disabled={saving}
+                className="inline-flex items-center gap-1 px-4 py-2 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-lg font-medium hover:from-cyan-600 hover:to-teal-600 transition-all disabled:opacity-50"
+              >
+                Continue
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={saving}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-lg font-medium hover:from-cyan-600 hover:to-teal-600 transition-all disabled:opacity-50"
+              >
+                {saving ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Saving...
+                  </>
+                ) : isEditing ? (
+                  'Save Changes'
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Create Calendar
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </>
