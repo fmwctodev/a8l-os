@@ -137,6 +137,22 @@ export async function createCalendar(
 
   if (error) throw error;
 
+  const detectedTimezone =
+    typeof Intl !== 'undefined'
+      ? Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'
+      : 'America/New_York';
+
+  const { error: ruleError } = await supabase.from('availability_rules').insert({
+    org_id: organizationId,
+    calendar_id: data.id,
+    user_id: null,
+    timezone: detectedTimezone,
+  });
+
+  if (ruleError) {
+    console.error('Failed to seed default availability_rules:', ruleError);
+  }
+
   await logAudit({
     userId: currentUser.id,
     action: 'create',

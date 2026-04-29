@@ -469,6 +469,8 @@ async function getBusyBlocks(
 ): Promise<Array<{ userId: string; start: Date; end: Date }>> {
   const busyBlocks: Array<{ userId: string; start: Date; end: Date }> = [];
 
+  const eligibleUserIds = getEligibleUserIds(calendar);
+
   const { data: existingAppointments } = await supabase
     .from("appointments")
     .select("assigned_user_id, start_at_utc, end_at_utc")
@@ -484,6 +486,46 @@ async function getBusyBlocks(
         start: new Date(apt.start_at_utc),
         end: new Date(apt.end_at_utc),
       });
+    }
+  }
+
+  if (eligibleUserIds.length > 0) {
+    const { data: googleEvents } = await supabase
+      .from("google_calendar_events")
+      .select("user_id, start_time, end_time, status, all_day, appointment_id, transparency")
+      .in("user_id", eligibleUserIds)
+      .gte("end_time", startDate)
+      .lte("start_time", endDate);
+
+    for (const evt of googleEvents || []) {
+      if (!evt.user_id || !evt.start_time || !evt.end_time) continue;
+      if (evt.status === "cancelled") continue;
+      if (evt.appointment_id) continue;
+      if (evt.transparency === "transparent") continue;
+      busyBlocks.push({
+        userId: evt.user_id,
+        start: new Date(evt.start_time),
+        end: new Date(evt.end_time),
+      });
+    }
+  }
+
+  const { data: blockedSlots } = await supabase
+    .from("blocked_slots")
+    .select("user_id, start_at_utc, end_at_utc")
+    .eq("calendar_id", calendar.id)
+    .gte("end_at_utc", startDate)
+    .lte("start_at_utc", endDate);
+
+  for (const slot of blockedSlots || []) {
+    const start = new Date(slot.start_at_utc);
+    const end = new Date(slot.end_at_utc);
+    if (slot.user_id) {
+      busyBlocks.push({ userId: slot.user_id, start, end });
+    } else {
+      for (const userId of eligibleUserIds) {
+        busyBlocks.push({ userId, start, end });
+      }
     }
   }
 
