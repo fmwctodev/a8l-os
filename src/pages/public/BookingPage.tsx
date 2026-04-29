@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -65,6 +65,9 @@ export function BookingPage() {
     calendarSlug: string;
     typeSlug: string;
   }>();
+  const [searchParams] = useSearchParams();
+  const isEmbed = searchParams.get('embed') === '1';
+  const tzParam = searchParams.get('tz');
 
   const [calendarInfo, setCalendarInfo] = useState<CalendarInfo | null>(null);
   const [appointmentType, setAppointmentType] = useState<AppointmentTypeInfo | null>(null);
@@ -85,8 +88,32 @@ export function BookingPage() {
     phone: '',
   });
   const [visitorTimezone, setVisitorTimezone] = useState(
-    Intl.DateTimeFormat().resolvedOptions().timeZone
+    tzParam || Intl.DateTimeFormat().resolvedOptions().timeZone
   );
+
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isEmbed) return;
+
+    const postHeight = () => {
+      const height = rootRef.current?.scrollHeight ?? document.body.scrollHeight;
+      window.parent?.postMessage(
+        { type: 'booking-widget:height', height },
+        '*'
+      );
+    };
+
+    postHeight();
+    const observer = new ResizeObserver(() => postHeight());
+    if (rootRef.current) observer.observe(rootRef.current);
+    window.addEventListener('resize', postHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', postHeight);
+    };
+  }, [isEmbed, step, selectedDate, slots, bookingResult]);
 
   const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/booking-api`;
 
@@ -163,6 +190,13 @@ export function BookingPage() {
 
       setBookingResult(data.appointment);
       setStep('confirmation');
+
+      if (isEmbed) {
+        window.parent?.postMessage(
+          { type: 'booking-widget:booked', appointment: data.appointment },
+          '*'
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to book appointment');
     } finally {
@@ -265,9 +299,20 @@ END:VCALENDAR`;
     URL.revokeObjectURL(url);
   };
 
+  const outerClass = isEmbed
+    ? 'bg-slate-950 p-4'
+    : 'min-h-screen bg-slate-950 py-12 px-4';
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div
+        ref={rootRef}
+        className={
+          isEmbed
+            ? 'bg-slate-950 flex items-center justify-center p-12'
+            : 'min-h-screen bg-slate-950 flex items-center justify-center'
+        }
+      >
         <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
       </div>
     );
@@ -275,7 +320,14 @@ END:VCALENDAR`;
 
   if (error || !calendarInfo || !appointmentType) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+      <div
+        ref={rootRef}
+        className={
+          isEmbed
+            ? 'bg-slate-950 flex flex-col items-center justify-center p-8'
+            : 'min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4'
+        }
+      >
         <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
         <h1 className="text-xl font-semibold text-white mb-2">Booking Unavailable</h1>
         <p className="text-slate-400">{error || 'This booking page is not available'}</p>
@@ -285,7 +337,7 @@ END:VCALENDAR`;
 
   if (step === 'confirmation' && bookingResult) {
     return (
-      <div className="min-h-screen bg-slate-950 py-12 px-4">
+      <div ref={rootRef} className={outerClass}>
         <div className="max-w-md mx-auto">
           <div className="bg-slate-900 rounded-2xl border border-slate-800 p-8 text-center">
             <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6">
@@ -341,6 +393,24 @@ END:VCALENDAR`;
                 <Download className="w-4 h-4" />
                 Add to Calendar
               </button>
+              <div className="grid grid-cols-2 gap-2">
+                <a
+                  href={`/appointments/reschedule/${bookingResult.reschedule_token}`}
+                  target={isEmbed ? '_blank' : undefined}
+                  rel={isEmbed ? 'noopener noreferrer' : undefined}
+                  className="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm"
+                >
+                  Reschedule
+                </a>
+                <a
+                  href={`/appointments/cancel/${bookingResult.cancel_token}`}
+                  target={isEmbed ? '_blank' : undefined}
+                  rel={isEmbed ? 'noopener noreferrer' : undefined}
+                  className="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-red-500/10 hover:text-red-300 hover:border-red-500/30 transition-colors text-sm"
+                >
+                  Cancel
+                </a>
+              </div>
               <p className="text-xs text-slate-500">
                 A confirmation email has been sent to {formData.email}
               </p>
@@ -352,7 +422,7 @@ END:VCALENDAR`;
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 py-12 px-4">
+    <div ref={rootRef} className={outerClass}>
       <div className="max-w-4xl mx-auto">
         <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
           <div className="p-6 border-b border-slate-800">
@@ -621,9 +691,11 @@ END:VCALENDAR`;
           )}
         </div>
 
-        <p className="text-center text-slate-500 text-sm mt-6">
-          Powered by Your CRM
-        </p>
+        {!isEmbed && (
+          <p className="text-center text-slate-500 text-sm mt-6">
+            Powered by Your CRM
+          </p>
+        )}
       </div>
     </div>
   );

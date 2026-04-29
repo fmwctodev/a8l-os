@@ -107,6 +107,8 @@ const AssistantSettingsPage = lazy(() => import('./pages/settings/AssistantSetti
 const MediaStylePresetsPage = lazy(() => import('./pages/settings/MediaStylePresetsPage').then(m => ({ default: m.MediaStylePresetsPage })));
 const BookingPage = lazy(() => import('./pages/public/BookingPage').then(m => ({ default: m.BookingPage })));
 const CalendarLandingPage = lazy(() => import('./pages/public/CalendarLandingPage').then(m => ({ default: m.CalendarLandingPage })));
+const RescheduleAppointmentPage = lazy(() => import('./pages/public/RescheduleAppointmentPage'));
+const CancelAppointmentPage = lazy(() => import('./pages/public/CancelAppointmentPage'));
 const PublicFormPage = lazy(() => import('./pages/public/PublicFormPage').then(m => ({ default: m.PublicFormPage })));
 const PublicSurveyPage = lazy(() => import('./pages/public/PublicSurveyPage').then(m => ({ default: m.PublicSurveyPage })));
 const ReviewPage = lazy(() => import('./pages/public/ReviewPage').then(m => ({ default: m.ReviewPage })));
@@ -766,6 +768,8 @@ function App() {
 
             <Route path="/book/:calendarSlug" element={<CalendarLandingPage />} />
             <Route path="/book/:calendarSlug/:typeSlug" element={<BookingPage />} />
+            <Route path="/appointments/reschedule/:token" element={<RescheduleAppointmentPage />} />
+            <Route path="/appointments/cancel/:token" element={<CancelAppointmentPage />} />
             <Route path="/f/:slug" element={<PublicFormPage />} />
             <Route path="/s/:slug" element={<PublicSurveyPage />} />
             <Route path="/r/:slug" element={<ReviewPage />} />

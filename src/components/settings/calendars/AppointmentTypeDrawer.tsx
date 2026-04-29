@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { X, Phone, Video, MapPin, Link as LinkIcon, Plus, Trash2, GripVertical } from 'lucide-react';
+import { X, Phone, Video, MapPin, Link as LinkIcon, Plus, Trash2, GripVertical, Share2 } from 'lucide-react';
+import { ShareCalendarModal } from './ShareCalendarModal';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
   createAppointmentType,
@@ -39,6 +40,7 @@ export function AppointmentTypeDrawer({
 }: AppointmentTypeDrawerProps) {
   const { user } = useAuth();
   const isEditing = !!appointmentType;
+  const [shareOpen, setShareOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     calendar_id: '',
@@ -240,9 +242,21 @@ export function AppointmentTypeDrawer({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  URL Slug
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-slate-300">
+                    URL Slug
+                  </label>
+                  {isEditing && formData.slug && (
+                    <button
+                      type="button"
+                      onClick={() => setShareOpen(true)}
+                      className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 font-medium"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      Share
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   value={formData.slug}
@@ -628,6 +642,22 @@ export function AppointmentTypeDrawer({
           </button>
         </div>
       </div>
+
+      <ShareCalendarModal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        calendarName={
+          calendars.find((c) => c.id === formData.calendar_id)?.name ||
+          calendar?.name ||
+          ''
+        }
+        calendarSlug={
+          calendars.find((c) => c.id === formData.calendar_id)?.slug ||
+          calendar?.slug ||
+          ''
+        }
+        typeSlug={formData.slug}
+      />
     </>
   );
 }

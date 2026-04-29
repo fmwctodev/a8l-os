@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Search, User, Users, MoreVertical, CreditCard as Edit2, Copy, Trash2, ToggleLeft, ToggleRight, Calendar, Check, X } from 'lucide-react';
+import { Plus, Search, User, Users, MoreVertical, CreditCard as Edit2, Share2, Trash2, ToggleLeft, ToggleRight, Calendar, Check, X } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getCalendars, enableCalendar, disableCalendar } from '../../../services/calendars';
 import { getDepartments } from '../../../services/departments';
@@ -8,6 +8,7 @@ import type { Calendar as CalendarType, Department, User as UserType, CalendarFi
 import { canManageCalendar, canDeleteCalendar } from '../../../utils/calendarPermissions';
 import { CalendarDrawer } from './CalendarDrawer';
 import { DeleteCalendarModal } from './DeleteCalendarModal';
+import { ShareCalendarModal } from './ShareCalendarModal';
 
 export function CalendarsTab() {
   const { user } = useAuth();
@@ -22,6 +23,8 @@ export function CalendarsTab() {
   const [editingCalendar, setEditingCalendar] = useState<CalendarType | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deletingCalendar, setDeletingCalendar] = useState<CalendarType | null>(null);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [sharingCalendar, setSharingCalendar] = useState<CalendarType | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const menuButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -86,9 +89,9 @@ export function CalendarsTab() {
     setActiveMenu(null);
   };
 
-  const handleCopyLink = (calendar: CalendarType) => {
-    const bookingUrl = `${window.location.origin}/book/${calendar.slug}`;
-    navigator.clipboard.writeText(bookingUrl);
+  const handleShareCalendar = (calendar: CalendarType) => {
+    setSharingCalendar(calendar);
+    setShareModalOpen(true);
     setActiveMenu(null);
   };
 
@@ -350,11 +353,11 @@ export function CalendarsTab() {
                                   </button>
                                 )}
                                 <button
-                                  onClick={() => handleCopyLink(calendar)}
+                                  onClick={() => handleShareCalendar(calendar)}
                                   className="w-full px-4 py-2 text-left text-slate-300 hover:bg-slate-700 flex items-center gap-2"
                                 >
-                                  <Copy className="w-4 h-4" />
-                                  Copy Booking Link
+                                  <Share2 className="w-4 h-4" />
+                                  Share
                                 </button>
                                 {canToggleStatus && (
                                   <button
@@ -426,6 +429,16 @@ export function CalendarsTab() {
         }}
         onConfirm={handleDeleteConfirm}
         calendar={deletingCalendar}
+      />
+
+      <ShareCalendarModal
+        open={shareModalOpen}
+        onClose={() => {
+          setShareModalOpen(false);
+          setSharingCalendar(null);
+        }}
+        calendarName={sharingCalendar?.name || ''}
+        calendarSlug={sharingCalendar?.slug || ''}
       />
     </>
   );

@@ -30,6 +30,27 @@ interface AvailabilitySlot {
   eligible_user_ids: string[];
 }
 
+function enqueueBookingEmail(
+  appointmentId: string,
+  action: "confirmation" | "rescheduled" | "canceled"
+): void {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceRoleKey) return;
+    fetch(`${supabaseUrl}/functions/v1/booking-email`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ appointment_id: appointmentId, action }),
+    }).catch((err) => console.error("booking-email enqueue failed:", err));
+  } catch (err) {
+    console.error("booking-email enqueue error:", err);
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -641,6 +662,8 @@ async function handleSubmitBooking(
     }
   }
 
+  enqueueBookingEmail(appointment.id, "confirmation");
+
   return new Response(
     JSON.stringify({
       success: true,
@@ -912,6 +935,8 @@ async function handleReschedule(
     });
   }
 
+  enqueueBookingEmail(appointment.id, "rescheduled");
+
   return new Response(
     JSON.stringify({
       success: true,
@@ -997,6 +1022,8 @@ async function handleCancel(
       },
     });
   }
+
+  enqueueBookingEmail(appointment.id, "canceled");
 
   return new Response(
     JSON.stringify({ success: true }),
