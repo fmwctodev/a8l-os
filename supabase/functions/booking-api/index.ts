@@ -7,8 +7,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-const DAYS_OF_WEEK = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
-
 interface TimeRange {
   start: string;
   end: string;
@@ -532,6 +530,57 @@ async function getBusyBlocks(
   return busyBlocks;
 }
 
+function dateStrInZone(d: Date, tz: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)!.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function dayOfWeekInZone(d: Date, tz: string): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "long" })
+    .format(d)
+    .toLowerCase();
+}
+
+function dateInZone(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  tz: string
+): Date {
+  const naiveUtcMs = Date.UTC(year, month - 1, day, hour, minute);
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = dtf.formatToParts(new Date(naiveUtcMs));
+  const get = (t: string) => parseInt(parts.find((p) => p.type === t)!.value, 10);
+  const h = get("hour") % 24;
+  const tzMs = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    h,
+    get("minute"),
+    get("second")
+  );
+  const offsetMs = tzMs - naiveUtcMs;
+  return new Date(naiveUtcMs - offsetMs);
+}
+
 function generateSlots(
   startDate: string,
   endDate: string,
@@ -553,20 +602,40 @@ function generateSlots(
   const calendarLevelRule = rules.find((r) => r.user_id === null) || rules[0];
   if (!calendarLevelRule) return slots;
 
+  const ruleTimezone =
+    (calendarLevelRule.timezone as string) || "America/New_York";
+  const seenDates = new Set<string>();
+
   for (
-    let date = new Date(startDateObj);
-    date <= endDateObj;
-    date.setDate(date.getDate() + 1)
+    let cursor = new Date(startDateObj);
+    cursor <= endDateObj;
+    cursor = new Date(cursor.getTime() + 86400000)
   ) {
-    const dateStr = date.toISOString().split("T")[0];
-    const dayOfWeek = DAYS_OF_WEEK[date.getDay()];
+    const noonUtc = new Date(
+      Date.UTC(
+        cursor.getUTCFullYear(),
+        cursor.getUTCMonth(),
+        cursor.getUTCDate(),
+        12,
+        0
+      )
+    );
+    const dateStr = dateStrInZone(noonUtc, ruleTimezone);
+    if (seenDates.has(dateStr)) continue;
+    seenDates.add(dateStr);
+
+    const dayOfWeek = dayOfWeekInZone(noonUtc, ruleTimezone);
 
     const dayRanges = getDayRanges(calendarLevelRule, dateStr, dayOfWeek);
     if (dayRanges.length === 0) continue;
 
+    const [yyyy, mm, dd] = dateStr.split("-").map(Number);
+
     for (const range of dayRanges) {
-      const rangeStart = parseTimeToDate(date, range.start);
-      const rangeEnd = parseTimeToDate(date, range.end);
+      const [sh, sm] = range.start.split(":").map(Number);
+      const [eh, em] = range.end.split(":").map(Number);
+      const rangeStart = dateInZone(yyyy, mm, dd, sh, sm, ruleTimezone);
+      const rangeEnd = dateInZone(yyyy, mm, dd, eh, em, ruleTimezone);
 
       let current = new Date(rangeStart);
       const durationMs = (appointmentType.duration_minutes as number) * 60 * 1000;
@@ -590,11 +659,18 @@ function generateSlots(
         for (const userId of eligibleUserIds) {
           const userRule = rules.find((r) => r.user_id === userId);
           const effectiveRule = userRule || calendarLevelRule;
-          const memberDayRanges = getDayRanges(effectiveRule, dateStr, dayOfWeek);
+          const memberTz = (effectiveRule.timezone as string) || ruleTimezone;
+          const memberDayRanges = getDayRanges(
+            effectiveRule,
+            dateStr,
+            dayOfWeek
+          );
 
           const withinMemberSchedule = memberDayRanges.some((mr) => {
-            const mStart = parseTimeToDate(date, mr.start);
-            const mEnd = parseTimeToDate(date, mr.end);
+            const [msh, msm] = mr.start.split(":").map(Number);
+            const [meh, mem] = mr.end.split(":").map(Number);
+            const mStart = dateInZone(yyyy, mm, dd, msh, msm, memberTz);
+            const mEnd = dateInZone(yyyy, mm, dd, meh, mem, memberTz);
             return current >= mStart && slotEnd <= mEnd;
           });
 
@@ -651,13 +727,6 @@ function getDayRanges(
 
   const schedule = rule.rules as DaySchedule;
   return schedule[dayOfWeek] || [];
-}
-
-function parseTimeToDate(date: Date, time: string): Date {
-  const [hours, minutes] = time.split(":").map(Number);
-  const result = new Date(date);
-  result.setHours(hours, minutes, 0, 0);
-  return result;
 }
 
 async function handleSubmitBooking(
