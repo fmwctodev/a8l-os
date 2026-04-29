@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Calendar, Clock, Video, Phone, MapPin, AlertCircle, ChevronRight } from 'lucide-react';
+import { Calendar, AlertCircle } from 'lucide-react';
 
 interface AppointmentTypeInfo {
   id: string;
@@ -77,34 +77,13 @@ export function CalendarLandingPage() {
     }
   };
 
-  const getLocationIcon = (locationType: string) => {
-    switch (locationType) {
-      case 'google_meet':
-      case 'zoom':
-        return <Video className="w-4 h-4" />;
-      case 'phone':
-        return <Phone className="w-4 h-4" />;
-      case 'in_person':
-        return <MapPin className="w-4 h-4" />;
-      default:
-        return null;
+  useEffect(() => {
+    if (!isLoading && !error && appointmentTypes.length > 0 && calendarSlug) {
+      navigate(`/book/${calendarSlug}/${appointmentTypes[0].slug}${embedQuery}`, {
+        replace: true,
+      });
     }
-  };
-
-  const getLocationText = (locationType: string) => {
-    switch (locationType) {
-      case 'google_meet':
-        return 'Google Meet';
-      case 'zoom':
-        return 'Zoom';
-      case 'phone':
-        return 'Phone call';
-      case 'in_person':
-        return 'In-person';
-      default:
-        return '';
-    }
-  };
+  }, [isLoading, error, appointmentTypes, calendarSlug, embedQuery, navigate]);
 
   const outerClass = isEmbed
     ? 'bg-slate-950 p-4'
@@ -147,72 +126,21 @@ export function CalendarLandingPage() {
   if (appointmentTypes.length === 0) {
     return (
       <div ref={rootRef} className={isEmbed ? 'bg-slate-950 p-8' : 'min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4'}>
-        <div className="flex flex-col items-center text-center">
+        <div className="flex flex-col items-center text-center max-w-md">
           <Calendar className="w-12 h-12 text-slate-600 mb-4" />
-          <h1 className="text-xl font-semibold text-white mb-2">No Appointment Types</h1>
-          <p className="text-slate-400">There are no bookable appointment types available.</p>
+          <h1 className="text-xl font-semibold text-white mb-2">Booking Unavailable</h1>
+          <p className="text-slate-400">
+            This calendar isn't accepting bookings yet.
+          </p>
         </div>
       </div>
     );
   }
 
-  if (appointmentTypes.length === 1) {
-    navigate(`/book/${calendarSlug}/${appointmentTypes[0].slug}${embedQuery}`, {
-      replace: true,
-    });
-    return null;
-  }
-
   return (
     <div ref={rootRef} className={outerClass}>
-      <div className="max-w-xl mx-auto">
-        <div className="text-center mb-10">
-          <div className="w-14 h-14 bg-cyan-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Calendar className="w-7 h-7 text-cyan-400" />
-          </div>
-          <h1 className="text-3xl font-semibold text-white mb-2">{calendarInfo.name}</h1>
-          {calendarInfo.description && (
-            <p className="text-slate-400">{calendarInfo.description}</p>
-          )}
-        </div>
-
-        <p className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-4 text-center">
-          Select an appointment type
-        </p>
-
-        <div className="space-y-3">
-          {appointmentTypes.map((type) => (
-            <button
-              key={type.id}
-              onClick={() => navigate(`/book/${calendarSlug}/${type.slug}${embedQuery}`)}
-              className="w-full bg-slate-900 border border-slate-800 hover:border-cyan-500/50 rounded-xl p-5 text-left transition-all group"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-white font-semibold text-lg group-hover:text-cyan-400 transition-colors">
-                    {type.name}
-                  </h3>
-                  {type.description && (
-                    <p className="text-slate-400 text-sm mt-1 line-clamp-2">{type.description}</p>
-                  )}
-                  <div className="flex items-center gap-4 mt-3 text-sm text-slate-400">
-                    <span className="flex items-center gap-1.5">
-                      <Clock className="w-4 h-4" />
-                      {type.duration_minutes} min
-                    </span>
-                    {type.location_type && (
-                      <span className="flex items-center gap-1.5">
-                        {getLocationIcon(type.location_type)}
-                        {getLocationText(type.location_type)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-cyan-400 transition-colors ml-4 flex-shrink-0" />
-              </div>
-            </button>
-          ))}
-        </div>
+      <div className="max-w-md mx-auto flex items-center justify-center min-h-[200px]">
+        <div className="text-center text-slate-500 text-sm">Loading booking…</div>
       </div>
     </div>
   );

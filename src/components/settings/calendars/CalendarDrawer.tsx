@@ -59,8 +59,8 @@ const STEPS: StepDef[] = [
   { id: 'team', label: 'Team', description: 'Who takes the bookings' },
   {
     id: 'appointment-types',
-    label: 'Appointment Types',
-    description: 'What clients can book',
+    label: 'Appointment Type',
+    description: 'What this calendar books',
   },
 ];
 
@@ -156,15 +156,14 @@ export function CalendarDrawer({
     []
   );
   const [memberSearch, setMemberSearch] = useState('');
-  const [selectedTypeIds, setSelectedTypeIds] = useState<Set<string>>(new Set());
+  const [selectedTypeId, setSelectedTypeId] = useState<string | null>(null);
   const [typeSearch, setTypeSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const initiallyLinkedTypeIds = useMemo(() => {
-    if (!calendar) return new Set<string>();
-    const ids = (calendar.appointment_types || []).map((t) => t.id);
-    return new Set(ids);
+  const initiallyLinkedTypeId = useMemo(() => {
+    if (!calendar) return null;
+    return calendar.appointment_types?.[0]?.id || null;
   }, [calendar]);
 
   useEffect(() => {
@@ -183,7 +182,7 @@ export function CalendarDrawer({
         owner_user_id: calendar.owner_user_id || '',
       });
       setMembers(calendar.members || []);
-      setSelectedTypeIds(new Set(initiallyLinkedTypeIds));
+      setSelectedTypeId(initiallyLinkedTypeId);
       setCurrentStep('basics');
     } else {
       setFormData({
@@ -192,13 +191,13 @@ export function CalendarDrawer({
         typeId: canManageTeamCalendars ? 'one_on_one' : 'one_on_one',
       });
       setMembers([]);
-      setSelectedTypeIds(new Set());
+      setSelectedTypeId(null);
       setCurrentStep('type');
     }
     setError('');
     setMemberSearch('');
     setTypeSearch('');
-  }, [open, calendar, user, canManageTeamCalendars, initiallyLinkedTypeIds]);
+  }, [open, calendar, user, canManageTeamCalendars, initiallyLinkedTypeId]);
 
   const selectedType = TYPE_OPTIONS.find((t) => t.id === formData.typeId)!;
   const isCollective = selectedType.assignmentMode === 'collective';
@@ -294,13 +293,8 @@ export function CalendarDrawer({
     setMembers((prev) => prev.filter((m) => m.id !== memberId));
   };
 
-  const handleToggleType = (typeId: string) => {
-    setSelectedTypeIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(typeId)) next.delete(typeId);
-      else next.add(typeId);
-      return next;
-    });
+  const handleSelectAppointmentType = (typeId: string) => {
+    setSelectedTypeId((prev) => (prev === typeId ? null : typeId));
   };
 
   const validateStep = (step: StepId): string | null => {
@@ -438,17 +432,12 @@ export function CalendarDrawer({
         }
       }
 
-      if (calendarId) {
-        const newlyAttached = Array.from(selectedTypeIds).filter(
-          (id) => !initiallyLinkedTypeIds.has(id)
+      if (calendarId && selectedTypeId && selectedTypeId !== initiallyLinkedTypeId) {
+        await updateAppointmentType(
+          selectedTypeId,
+          { calendar_id: calendarId },
+          user
         );
-        for (const typeId of newlyAttached) {
-          await updateAppointmentType(
-            typeId,
-            { calendar_id: calendarId },
-            user
-          );
-        }
       }
 
       onSave();
@@ -895,11 +884,12 @@ export function CalendarDrawer({
     <div className="space-y-5">
       <div>
         <h3 className="text-base font-semibold text-white">
-          What can clients book?
+          What does this calendar book?
         </h3>
         <p className="text-sm text-slate-400 mt-1">
-          Pick one or more appointment types to show on this calendar's booking
-          page.
+          Pick the appointment type clients see when they land on this
+          calendar's booking page. They won't be asked to choose — they go
+          straight to picking a time.
         </p>
       </div>
 
@@ -911,7 +901,8 @@ export function CalendarDrawer({
           </p>
           <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
             After saving this calendar, head to the Appointment Types tab to
-            create durations, locations, and intake questions.
+            create one. Set the duration, location, and intake questions
+            there.
           </p>
         </div>
       ) : (
@@ -927,28 +918,41 @@ export function CalendarDrawer({
             />
           </div>
 
-          <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+          <div
+            role="radiogroup"
+            aria-label="Appointment type"
+            className="space-y-2 max-h-[420px] overflow-y-auto pr-1"
+          >
             {filteredAppointmentTypes.map((type) => {
-              const isSelected = selectedTypeIds.has(type.id);
+              const isSelected = selectedTypeId === type.id;
               const currentCalendar = type.calendar;
               const isOnAnotherCalendar =
                 currentCalendar && currentCalendar.id !== calendar?.id;
-              const wasInitiallyLinked = initiallyLinkedTypeIds.has(type.id);
+              const wasInitiallyLinked = initiallyLinkedTypeId === type.id;
               return (
-                <label
+                <button
                   key={type.id}
-                  className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  onClick={() => handleSelectAppointmentType(type.id)}
+                  className={`w-full flex items-start gap-3 p-3 rounded-lg border-2 text-left transition-all ${
                     isSelected
                       ? 'border-cyan-500 bg-cyan-500/10'
                       : 'border-slate-700 bg-slate-800 hover:border-slate-600'
                   }`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => handleToggleType(type.id)}
-                    className="mt-1 w-4 h-4 rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500"
-                  />
+                  <span
+                    className={`mt-1 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      isSelected
+                        ? 'border-cyan-500'
+                        : 'border-slate-600'
+                    }`}
+                  >
+                    {isSelected && (
+                      <span className="w-2 h-2 rounded-full bg-cyan-500" />
+                    )}
+                  </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p
@@ -986,7 +990,7 @@ export function CalendarDrawer({
                         </p>
                       )}
                   </div>
-                </label>
+                </button>
               );
             })}
             {filteredAppointmentTypes.length === 0 && (
@@ -997,11 +1001,9 @@ export function CalendarDrawer({
           </div>
 
           <p className="text-xs text-slate-500">
-            {selectedTypeIds.size === 0
-              ? 'Pick at least one type so this calendar has something bookable.'
-              : `${selectedTypeIds.size} appointment type${
-                  selectedTypeIds.size === 1 ? '' : 's'
-                } selected.`}
+            {selectedTypeId
+              ? 'Clients booking on this calendar will go straight to picking a time.'
+              : 'Pick one type so this calendar has something bookable.'}
           </p>
         </>
       )}
