@@ -1364,35 +1364,33 @@ function FormPreview({ form }: { form: Form }) {
 }
 
 function EmbedModal({ form, onClose }: { form: Form; onClose: () => void }) {
-  const [embedType, setEmbedType] = useState<'inline' | 'popup' | 'fullpage'>('inline');
+  const [embedType, setEmbedType] = useState<'inline' | 'popup' | 'link'>('inline');
   const [copied, setCopied] = useState(false);
 
   const baseUrl = window.location.origin;
   const formUrl = `${baseUrl}/f/${form.public_slug}`;
+  const containerId = `a8l-form-${form.public_slug}`;
 
   const getEmbedCode = () => {
-    if (embedType === 'fullpage') {
+    if (embedType === 'link') {
       return formUrl;
     }
 
     if (embedType === 'popup') {
-      return `<script src="${baseUrl}/sdk/autom8ion-forms.js"></script>
-<script>
-  Autom8ionForms.popup('${form.public_slug}', {
-    trigger: '${form.settings.embedOptions?.popupTrigger || 'button'}',
-    delay: ${form.settings.embedOptions?.popupDelay || 5000}
-  });
-</script>`;
+      return `<script src="${baseUrl}/forms-widget.js"
+  data-base-url="${baseUrl}"
+  data-form-slug="${form.public_slug}"
+  data-mode="popup"
+  data-button-text="Get in touch"
+  data-primary-color="#0891b2"></script>`;
     }
 
-    return `<script src="${baseUrl}/sdk/autom8ion-forms.js"></script>
-<div id="autom8ion-form-${form.public_slug}"></div>
-<script>
-  Autom8ionForms.embed('${form.public_slug}', {
-    container: '#autom8ion-form-${form.public_slug}',
-    onSubmit: function(data) { console.log('Form submitted:', data); }
-  });
-</script>`;
+    return `<div id="${containerId}"></div>
+<script src="${baseUrl}/forms-widget.js"
+  data-base-url="${baseUrl}"
+  data-form-slug="${form.public_slug}"
+  data-mode="inline"
+  data-target="#${containerId}"></script>`;
   };
 
   const handleCopy = () => {
@@ -1417,8 +1415,8 @@ function EmbedModal({ form, onClose }: { form: Form; onClose: () => void }) {
             <div className="flex gap-2">
               {[
                 { id: 'inline', label: 'Inline', desc: 'Embed directly in page' },
-                { id: 'popup', label: 'Popup', desc: 'Show as modal' },
-                { id: 'fullpage', label: 'Full Page', desc: 'Direct link' },
+                { id: 'popup', label: 'Popup', desc: 'Floating button + modal' },
+                { id: 'link', label: 'Link', desc: 'Share customer-facing URL' },
               ].map((type) => (
                 <button
                   key={type.id}
@@ -1439,7 +1437,7 @@ function EmbedModal({ form, onClose }: { form: Form; onClose: () => void }) {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-gray-700">
-                {embedType === 'fullpage' ? 'Direct Link' : 'Embed Code'}
+                {embedType === 'link' ? 'Direct Link' : 'Embed Code'}
               </label>
               <button
                 onClick={handleCopy}
@@ -1448,12 +1446,12 @@ function EmbedModal({ form, onClose }: { form: Form; onClose: () => void }) {
                 {copied ? 'Copied!' : <><Copy className="w-4 h-4" /> Copy</>}
               </button>
             </div>
-            <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto">
+            <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto whitespace-pre-wrap">
               {getEmbedCode()}
             </pre>
           </div>
 
-          {embedType === 'fullpage' && (
+          {embedType === 'link' && (
             <a
               href={formUrl}
               target="_blank"

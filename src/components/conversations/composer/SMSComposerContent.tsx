@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ChevronDown, FileText, Paperclip, X, Image, File, AlertCircle } from 'lucide-react';
+import { ChevronDown, FileText, Paperclip, X, Image, File, AlertCircle, ClipboardList } from 'lucide-react';
 import { calculateSMSSegments } from '../../../services/channels/twilio';
 import { ComposerToolbar } from './ComposerToolbar';
+import { FormSurveyPicker, type PickerItem } from './FormSurveyPicker';
 import { MMS_MAX_FILES, MMS_MAX_FILE_SIZE } from '../../../services/sendSms';
 import type { TwilioNumber } from '../../../services/phoneNumbers';
 
@@ -49,8 +50,29 @@ export function SMSComposerContent({
   onMediaError,
 }: SMSComposerContentProps) {
   const [showFromDropdown, setShowFromDropdown] = useState(false);
+  const [showFormSurveyPicker, setShowFormSurveyPicker] = useState(false);
   const fromRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleInsertFormSurveyLink = (item: PickerItem) => {
+    const path = item.kind === 'form' ? 'f' : 's';
+    const url = `${window.location.origin}/${path}/${item.slug}`;
+    let newBody = body;
+    let textarea: HTMLTextAreaElement | null = null;
+    if (textareaRef && typeof textareaRef === 'object' && 'current' in textareaRef) {
+      textarea = (textareaRef as React.RefObject<HTMLTextAreaElement>).current;
+    }
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      newBody = body.substring(0, start) + url + body.substring(end);
+    } else {
+      const sep = body.length > 0 && !/\s$/.test(body) ? ' ' : '';
+      newBody = body + sep + url;
+    }
+    onBodyChange(newBody);
+    setShowFormSurveyPicker(false);
+  };
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -206,6 +228,13 @@ export function SMSComposerContent({
               </button>
             )}
             <button
+              onClick={() => setShowFormSurveyPicker(true)}
+              className="p-2 text-slate-400 hover:text-white rounded transition-colors"
+              title="Insert form or survey link"
+            >
+              <ClipboardList size={18} />
+            </button>
+            <button
               onClick={() => fileInputRef.current?.click()}
               disabled={!canSendMms}
               className={`p-2 rounded transition-colors ${
@@ -233,6 +262,12 @@ export function SMSComposerContent({
         onSend={onSend}
         sendDisabled={sendDisabled}
         sending={sending}
+      />
+
+      <FormSurveyPicker
+        open={showFormSurveyPicker}
+        onClose={() => setShowFormSurveyPicker(false)}
+        onSelect={handleInsertFormSurveyLink}
       />
     </div>
   );

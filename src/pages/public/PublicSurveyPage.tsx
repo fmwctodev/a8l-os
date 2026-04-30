@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckCircle, AlertCircle, Loader2, ArrowLeft, ArrowRight, Star, GripVertical } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Survey, SurveyQuestion } from '../../types';
 
 export function PublicSurveyPage() {
   const { slug } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -15,9 +16,43 @@ export function PublicSurveyPage() {
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
+  const embed = useMemo(() => {
+    const v = searchParams.get('embed');
+    return v === '1' || v === 'true';
+  }, [searchParams]);
+
   useEffect(() => {
     if (slug) loadSurvey();
   }, [slug]);
+
+  useEffect(() => {
+    if (!embed) return;
+    if (typeof window === 'undefined' || window.parent === window) return;
+    const post = () => {
+      const height = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight
+      );
+      window.parent.postMessage({ type: 'forms-widget:height', height }, '*');
+      window.parent.postMessage({ type: 'autom8ion:resize', height }, '*');
+    };
+    post();
+    const observer = new ResizeObserver(post);
+    observer.observe(document.body);
+    window.addEventListener('load', post);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('load', post);
+    };
+  }, [embed, loading, submitted, error, currentStepIndex]);
+
+  useEffect(() => {
+    if (!embed || !submitted) return;
+    if (typeof window === 'undefined' || window.parent === window) return;
+    const payload = { surveyId: survey?.id, slug: survey?.public_slug };
+    window.parent.postMessage({ type: 'forms-widget:submitted', payload }, '*');
+    window.parent.postMessage({ type: 'autom8ion:survey:complete', payload }, '*');
+  }, [embed, submitted, survey?.id, survey?.public_slug]);
 
   async function loadSurvey() {
     try {
@@ -476,9 +511,16 @@ export function PublicSurveyPage() {
     );
   }
 
+  const rootClass = embed
+    ? 'bg-transparent p-4'
+    : 'min-h-screen bg-gray-50 py-8 px-4';
+  const centeredRootClass = embed
+    ? 'bg-transparent flex items-center justify-center p-4'
+    : 'min-h-screen bg-gray-50 flex items-center justify-center p-4';
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className={centeredRootClass}>
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
       </div>
     );
@@ -486,7 +528,7 @@ export function PublicSurveyPage() {
 
   if (error && !survey) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className={centeredRootClass}>
         <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-gray-900 mb-2">Survey Not Available</h1>
@@ -498,7 +540,7 @@ export function PublicSurveyPage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className={centeredRootClass}>
         <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
           <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-gray-900 mb-2">Thank You!</h1>
@@ -521,7 +563,7 @@ export function PublicSurveyPage() {
   const isLastStep = currentStepIndex === totalSteps - 1;
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    <div className={rootClass}>
       <div className="max-w-2xl mx-auto">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
           <h1 className="text-2xl font-semibold text-gray-900 mb-2">{survey.name}</h1>

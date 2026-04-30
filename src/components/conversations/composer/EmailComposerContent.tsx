@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { ChevronDown, MoreHorizontal, FileText, Braces, MoreVertical, Type, Link, Image } from 'lucide-react';
+import { ChevronDown, MoreHorizontal, FileText, Braces, MoreVertical, Type, Link, Image, ClipboardList } from 'lucide-react';
 import { ComposerToolbar } from './ComposerToolbar';
 import { ContactEmailAutocomplete } from './ContactEmailAutocomplete';
+import { FormSurveyPicker, type PickerItem } from './FormSurveyPicker';
 
 interface EmailRecipient {
   email: string;
@@ -58,6 +59,27 @@ export function EmailComposerContent({
 }: EmailComposerContentProps) {
   const [showCc, setShowCc] = useState(ccRecipients.length > 0);
   const [showBcc, setShowBcc] = useState(bccRecipients.length > 0);
+  const [showFormSurveyPicker, setShowFormSurveyPicker] = useState(false);
+
+  const handleInsertFormSurveyLink = (item: PickerItem) => {
+    const path = item.kind === 'form' ? 'f' : 's';
+    const url = `${window.location.origin}/${path}/${item.slug}`;
+    let newBody = body;
+    let textarea: HTMLTextAreaElement | null = null;
+    if (textareaRef && typeof textareaRef === 'object' && 'current' in textareaRef) {
+      textarea = (textareaRef as React.RefObject<HTMLTextAreaElement>).current;
+    }
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      newBody = body.substring(0, start) + url + body.substring(end);
+    } else {
+      const sep = body.length > 0 && !/\s$/.test(body) ? ' ' : '';
+      newBody = body + sep + url;
+    }
+    onBodyChange(newBody);
+    setShowFormSurveyPicker(false);
+  };
 
   const wordCount = body.trim() ? body.trim().split(/\s+/).length : 0;
 
@@ -190,6 +212,13 @@ export function EmailComposerContent({
               <Link size={18} />
             </button>
             <button
+              onClick={() => setShowFormSurveyPicker(true)}
+              className="p-2 text-slate-400 hover:text-white rounded transition-colors"
+              title="Insert form or survey link"
+            >
+              <ClipboardList size={18} />
+            </button>
+            <button
               className="p-2 text-slate-400 hover:text-white rounded transition-colors"
               title="Insert image"
             >
@@ -214,6 +243,12 @@ export function EmailComposerContent({
         onSend={onSend}
         sendDisabled={sendDisabled}
         sending={sending}
+      />
+
+      <FormSurveyPicker
+        open={showFormSurveyPicker}
+        onClose={() => setShowFormSurveyPicker(false)}
+        onSelect={handleInsertFormSurveyLink}
       />
     </div>
   );

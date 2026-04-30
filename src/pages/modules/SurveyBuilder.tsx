@@ -1531,35 +1531,33 @@ function BranchingRuleBuilder({
 }
 
 function SurveyEmbedModal({ survey, onClose }: { survey: Survey; onClose: () => void }) {
-  const [embedType, setEmbedType] = useState<'inline' | 'popup' | 'fullpage'>('inline');
+  const [embedType, setEmbedType] = useState<'inline' | 'popup' | 'link'>('inline');
   const [copied, setCopied] = useState(false);
 
   const baseUrl = window.location.origin;
   const surveyUrl = `${baseUrl}/s/${survey.public_slug}`;
+  const containerId = `a8l-survey-${survey.public_slug}`;
 
   const getEmbedCode = () => {
-    if (embedType === 'fullpage') {
+    if (embedType === 'link') {
       return surveyUrl;
     }
 
     if (embedType === 'popup') {
-      return `<script src="${baseUrl}/sdk/autom8ion-surveys.js"></script>
-<script>
-  Autom8ionSurveys.popup('${survey.public_slug}', {
-    trigger: 'button',
-    buttonText: 'Take Survey'
-  });
-</script>`;
+      return `<script src="${baseUrl}/forms-widget.js"
+  data-base-url="${baseUrl}"
+  data-survey-slug="${survey.public_slug}"
+  data-mode="popup"
+  data-button-text="Take Survey"
+  data-primary-color="#0891b2"></script>`;
     }
 
-    return `<script src="${baseUrl}/sdk/autom8ion-surveys.js"></script>
-<div id="autom8ion-survey-${survey.public_slug}"></div>
-<script>
-  Autom8ionSurveys.embed('${survey.public_slug}', {
-    container: '#autom8ion-survey-${survey.public_slug}',
-    onComplete: function(data) { console.log('Survey completed:', data); }
-  });
-</script>`;
+    return `<div id="${containerId}"></div>
+<script src="${baseUrl}/forms-widget.js"
+  data-base-url="${baseUrl}"
+  data-survey-slug="${survey.public_slug}"
+  data-mode="inline"
+  data-target="#${containerId}"></script>`;
   };
 
   const handleCopy = () => {
@@ -1584,8 +1582,8 @@ function SurveyEmbedModal({ survey, onClose }: { survey: Survey; onClose: () => 
             <div className="flex gap-2">
               {[
                 { id: 'inline', label: 'Inline', desc: 'Embed directly in page' },
-                { id: 'popup', label: 'Popup', desc: 'Show as modal' },
-                { id: 'fullpage', label: 'Full Page', desc: 'Direct link' },
+                { id: 'popup', label: 'Popup', desc: 'Floating button + modal' },
+                { id: 'link', label: 'Link', desc: 'Share customer-facing URL' },
               ].map((type) => (
                 <button
                   key={type.id}
@@ -1606,7 +1604,7 @@ function SurveyEmbedModal({ survey, onClose }: { survey: Survey; onClose: () => 
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-gray-700">
-                {embedType === 'fullpage' ? 'Direct Link' : 'Embed Code'}
+                {embedType === 'link' ? 'Direct Link' : 'Embed Code'}
               </label>
               <button
                 onClick={handleCopy}
@@ -1615,12 +1613,12 @@ function SurveyEmbedModal({ survey, onClose }: { survey: Survey; onClose: () => 
                 {copied ? 'Copied!' : <><Copy className="w-4 h-4" /> Copy</>}
               </button>
             </div>
-            <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto">
+            <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto whitespace-pre-wrap">
               {getEmbedCode()}
             </pre>
           </div>
 
-          {embedType === 'fullpage' && (
+          {embedType === 'link' && (
             <a
               href={surveyUrl}
               target="_blank"

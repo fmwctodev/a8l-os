@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckCircle, AlertCircle, Loader2, Upload, X, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Form, FormField } from '../../types';
@@ -16,6 +16,7 @@ interface UploadedFile {
 
 export function PublicFormPage() {
   const { slug } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
   const [form, setForm] = useState<Form | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -26,9 +27,43 @@ export function PublicFormPage() {
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+  const embed = useMemo(() => {
+    const v = searchParams.get('embed');
+    return v === '1' || v === 'true';
+  }, [searchParams]);
+
   useEffect(() => {
     if (slug) loadForm();
   }, [slug]);
+
+  useEffect(() => {
+    if (!embed) return;
+    if (typeof window === 'undefined' || window.parent === window) return;
+    const post = () => {
+      const height = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight
+      );
+      window.parent.postMessage({ type: 'forms-widget:height', height }, '*');
+      window.parent.postMessage({ type: 'autom8ion:resize', height }, '*');
+    };
+    post();
+    const observer = new ResizeObserver(post);
+    observer.observe(document.body);
+    window.addEventListener('load', post);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('load', post);
+    };
+  }, [embed, loading, submitted, error]);
+
+  useEffect(() => {
+    if (!embed || !submitted) return;
+    if (typeof window === 'undefined' || window.parent === window) return;
+    const payload = { formId: form?.id, slug: form?.public_slug };
+    window.parent.postMessage({ type: 'forms-widget:submitted', payload }, '*');
+    window.parent.postMessage({ type: 'autom8ion:form:submit', payload }, '*');
+  }, [embed, submitted, form?.id, form?.public_slug]);
 
   async function loadForm() {
     try {
@@ -495,9 +530,16 @@ export function PublicFormPage() {
     }
   }
 
+  const rootClass = embed
+    ? 'bg-transparent p-4'
+    : 'min-h-screen bg-gray-50 py-8 px-4';
+  const centeredRootClass = embed
+    ? 'bg-transparent flex items-center justify-center p-4'
+    : 'min-h-screen bg-gray-50 flex items-center justify-center p-4';
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className={centeredRootClass}>
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
       </div>
     );
@@ -505,7 +547,7 @@ export function PublicFormPage() {
 
   if (error && !form) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className={centeredRootClass}>
         <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-gray-900 mb-2">Form Not Available</h1>
@@ -517,7 +559,7 @@ export function PublicFormPage() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className={centeredRootClass}>
         <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
           <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-gray-900 mb-2">Thank You!</h1>
@@ -535,7 +577,7 @@ export function PublicFormPage() {
   if (!form) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    <div className={rootClass}>
       <div className="max-w-xl mx-auto">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
           <h1 className="text-2xl font-semibold text-gray-900 mb-2">{form.name}</h1>
