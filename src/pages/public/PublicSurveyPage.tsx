@@ -84,6 +84,23 @@ export function PublicSurveyPage() {
       }
 
       setSurvey(data);
+
+      const defaults: Record<string, unknown> = {};
+      const allQuestions: SurveyQuestion[] = (data.definition?.steps || []).flatMap((s: { questions?: SurveyQuestion[] }) => s.questions || []);
+      for (const q of allQuestions) {
+        if (q.defaultValue === undefined || q.defaultValue === null || q.defaultValue === '') continue;
+        if (q.type === 'checkbox' || q.type === 'consent') {
+          defaults[q.id] = q.defaultValue === 'true' || q.defaultValue === true;
+        } else if (q.type === 'number' || q.type === 'monetary' || q.type === 'rating' || q.type === 'nps') {
+          const n = parseFloat(String(q.defaultValue));
+          defaults[q.id] = isNaN(n) ? q.defaultValue : n;
+        } else {
+          defaults[q.id] = q.defaultValue;
+        }
+      }
+      if (Object.keys(defaults).length > 0) {
+        setAnswers((prev) => ({ ...defaults, ...prev }));
+      }
     } catch (err) {
       console.error('Failed to load survey:', err);
       setError('Failed to load survey');
@@ -103,10 +120,58 @@ export function PublicSurveyPage() {
       : currentStep.questions;
 
     for (const question of questionsToValidate) {
-      if (question.required) {
-        const answer = answers[question.id];
-        if (answer === undefined || answer === '' || (Array.isArray(answer) && answer.length === 0)) {
-          errors[question.id] = 'This question is required';
+      const answer = answers[question.id];
+      const isEmpty = answer === undefined || answer === '' || (Array.isArray(answer) && answer.length === 0);
+
+      if (question.required && isEmpty) {
+        errors[question.id] = 'This question is required';
+        continue;
+      }
+
+      if (question.validationRules && !isEmpty) {
+        const value = String(answer ?? '');
+        const numValue = typeof answer === 'number' ? answer : parseFloat(value);
+        for (const rule of question.validationRules) {
+          if (errors[question.id]) break;
+          if (rule.type === 'min_length' && value.length < Number(rule.value)) {
+            errors[question.id] = rule.message || `Minimum ${rule.value} characters required`;
+          } else if (rule.type === 'max_length' && value.length > Number(rule.value)) {
+            errors[question.id] = rule.message || `Maximum ${rule.value} characters allowed`;
+          } else if (rule.type === 'pattern') {
+            try {
+              if (!new RegExp(String(rule.value)).test(value)) {
+                errors[question.id] = rule.message || 'Invalid format';
+              }
+            } catch {
+              // bad pattern
+            }
+          } else if (rule.type === 'min' && !isNaN(numValue) && numValue < Number(rule.value)) {
+            errors[question.id] = rule.message || `Must be at least ${rule.value}`;
+          } else if (rule.type === 'max' && !isNaN(numValue) && numValue > Number(rule.value)) {
+            errors[question.id] = rule.message || `Must be at most ${rule.value}`;
+          } else if (rule.type === 'min_date' && value < String(rule.value)) {
+            errors[question.id] = rule.message || `Must be on or after ${rule.value}`;
+          } else if (rule.type === 'max_date' && value > String(rule.value)) {
+            errors[question.id] = rule.message || `Must be on or before ${rule.value}`;
+          } else if (rule.type === 'format') {
+            if (question.type === 'email') {
+              if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+                errors[question.id] = rule.message || 'Please enter a valid email address';
+              }
+            } else if (question.type === 'phone') {
+              const digits = value.replace(/\D+/g, '');
+              if (digits.length < 7 || digits.length > 15) {
+                errors[question.id] = rule.message || 'Please enter a valid phone number';
+              }
+            } else if (question.type === 'website') {
+              try {
+                const u = new URL(value.includes('://') ? value : `https://${value}`);
+                if (!u.hostname.includes('.')) throw new Error();
+              } catch {
+                errors[question.id] = rule.message || 'Please enter a valid URL';
+              }
+            }
+          }
         }
       }
     }
@@ -273,6 +338,19 @@ export function PublicSurveyPage() {
     }
   }
 
+  function optionsLayoutClass(question: SurveyQuestion): string {
+    switch (question.optionsLayout) {
+      case 'horizontal':
+        return 'flex flex-wrap gap-3';
+      case 'columns_2':
+        return 'grid grid-cols-1 sm:grid-cols-2 gap-2';
+      case 'columns_3':
+        return 'grid grid-cols-1 sm:grid-cols-3 gap-2';
+      default:
+        return 'space-y-2';
+    }
+  }
+
   function renderQuestion(question: SurveyQuestion, index: number) {
     const hasError = !!validationErrors[question.id];
     const answer = answers[question.id];
@@ -318,10 +396,11 @@ export function PublicSurveyPage() {
     }
 
     const isCheckboxType = question.type === 'checkbox' || question.type === 'consent';
+    const hideLabel = question.labelAlignment === 'inline';
 
     return (
       <div key={question.id} className="mb-8">
-        {!isCheckboxType && (
+        {!isCheckboxType && !hideLabel && (
           <label className="block text-base font-medium text-[var(--form-text-primary)] mb-2">
             {index + 1}. {question.label}
             {question.required && <span className="text-[var(--form-error-text)] ml-1">*</span>}
@@ -473,7 +552,7 @@ export function PublicSurveyPage() {
         )}
 
         {(question.type === 'multiple_choice' || question.type === 'yes_no') && (
-          <div className="space-y-2">
+          <div className={optionsLayoutClass(question)}>
             {(question.options || []).map((option) => (
               <label
                 key={option.id}
@@ -527,7 +606,7 @@ export function PublicSurveyPage() {
         )}
 
         {(question.type === 'multi_select' || question.type === 'checkbox_group') && (
-          <div className="space-y-2">
+          <div className={optionsLayoutClass(question)}>
             {(question.options || []).map((option) => {
               const selected = Array.isArray(answer) && answer.includes(option.value);
               return (
@@ -1087,10 +1166,10 @@ export function PublicSurveyPage() {
                   Submitting...
                 </>
               ) : isLastQuestionOverall ? (
-                'Submit'
+                currentStep.submitButtonText || 'Submit'
               ) : (
                 <>
-                  Next
+                  {currentStep.nextButtonText || 'Next'}
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}

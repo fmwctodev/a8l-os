@@ -101,6 +101,25 @@ export function PublicFormPage() {
       }
 
       setForm(data);
+
+      const defaults: Record<string, FormFieldValue> = {};
+      const fields: FormField[] = data.definition?.fields || [];
+      for (const f of fields) {
+        if (f.defaultValue === undefined || f.defaultValue === null || f.defaultValue === '') continue;
+        if (f.type === 'checkbox' || f.type === 'consent') {
+          defaults[f.id] = f.defaultValue === 'true' || f.defaultValue === true;
+        } else if (f.type === 'number' || f.type === 'monetary') {
+          const n = parseFloat(String(f.defaultValue));
+          defaults[f.id] = isNaN(n) ? f.defaultValue : n;
+        } else if (f.type === 'multi_select' || f.type === 'checkbox_group' || f.type === 'multi_dropdown') {
+          defaults[f.id] = String(f.defaultValue).split(',').map((s) => s.trim()).filter(Boolean);
+        } else {
+          defaults[f.id] = f.defaultValue;
+        }
+      }
+      if (Object.keys(defaults).length > 0) {
+        setFormData((prev) => ({ ...defaults, ...prev }));
+      }
     } catch (err) {
       console.error('Failed to load form:', err);
       setError('Failed to load form');
@@ -162,17 +181,50 @@ export function PublicFormPage() {
         }
       }
 
-      if (field.validationRules) {
-        const value = String(formData[field.id] || '');
+      if (field.validationRules && formData[field.id] !== undefined && formData[field.id] !== '') {
+        const rawValue = formData[field.id];
+        const value = String(rawValue ?? '');
+        const numValue = typeof rawValue === 'number' ? rawValue : parseFloat(value);
         for (const rule of field.validationRules) {
-          if (rule.type === 'minLength' && value.length < (rule.value as number)) {
+          if (errors[field.id]) break;
+          if (rule.type === 'min_length' && value.length < Number(rule.value)) {
             errors[field.id] = rule.message || `Minimum ${rule.value} characters required`;
-          }
-          if (rule.type === 'maxLength' && value.length > (rule.value as number)) {
+          } else if (rule.type === 'max_length' && value.length > Number(rule.value)) {
             errors[field.id] = rule.message || `Maximum ${rule.value} characters allowed`;
-          }
-          if (rule.type === 'pattern' && !new RegExp(rule.value as string).test(value)) {
-            errors[field.id] = rule.message || 'Invalid format';
+          } else if (rule.type === 'pattern') {
+            try {
+              if (!new RegExp(String(rule.value)).test(value)) {
+                errors[field.id] = rule.message || 'Invalid format';
+              }
+            } catch {
+              // bad pattern in builder — ignore at runtime
+            }
+          } else if (rule.type === 'min' && !isNaN(numValue) && numValue < Number(rule.value)) {
+            errors[field.id] = rule.message || `Must be at least ${rule.value}`;
+          } else if (rule.type === 'max' && !isNaN(numValue) && numValue > Number(rule.value)) {
+            errors[field.id] = rule.message || `Must be at most ${rule.value}`;
+          } else if (rule.type === 'min_date' && value && value < String(rule.value)) {
+            errors[field.id] = rule.message || `Must be on or after ${rule.value}`;
+          } else if (rule.type === 'max_date' && value && value > String(rule.value)) {
+            errors[field.id] = rule.message || `Must be on or before ${rule.value}`;
+          } else if (rule.type === 'format') {
+            if (field.type === 'email') {
+              if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+                errors[field.id] = rule.message || 'Please enter a valid email address';
+              }
+            } else if (field.type === 'phone') {
+              const digits = value.replace(/\D+/g, '');
+              if (digits.length < 7 || digits.length > 15) {
+                errors[field.id] = rule.message || 'Please enter a valid phone number';
+              }
+            } else if (field.type === 'website') {
+              try {
+                const u = new URL(value.includes('://') ? value : `https://${value}`);
+                if (!u.hostname.includes('.')) throw new Error();
+              } catch {
+                errors[field.id] = rule.message || 'Please enter a valid URL';
+              }
+            }
           }
         }
       }
@@ -356,6 +408,19 @@ export function PublicFormPage() {
     }
   }
 
+  function optionsLayoutClass(field: FormField): string {
+    switch (field.optionsLayout) {
+      case 'horizontal':
+        return 'flex flex-wrap gap-3';
+      case 'columns_2':
+        return 'grid grid-cols-1 sm:grid-cols-2 gap-2';
+      case 'columns_3':
+        return 'grid grid-cols-1 sm:grid-cols-3 gap-2';
+      default:
+        return 'space-y-2';
+    }
+  }
+
   function renderField(field: FormField) {
     const hasError = !!validationErrors[field.id];
 
@@ -423,7 +488,7 @@ export function PublicFormPage() {
 
       case 'radio':
         return (
-          <div className="space-y-2">
+          <div className={optionsLayoutClass(field)}>
             {(field.options || []).map((opt) => (
               <label
                 key={opt.value}
@@ -449,7 +514,7 @@ export function PublicFormPage() {
       case 'multi_select':
       case 'checkbox_group':
         return (
-          <div className="space-y-2">
+          <div className={optionsLayoutClass(field)}>
             {(field.options || []).map((opt) => (
               <label key={opt.value} className="flex items-center gap-2">
                 <input
@@ -880,23 +945,50 @@ export function PublicFormPage() {
             {form.definition.fields.map((field) => {
               if (!shouldShowField(field)) return null;
 
-              return (
-                <div
-                  key={field.id}
-                  className={field.width === 'half' ? 'inline-block w-1/2 pr-2 align-top' : ''}
+              const widthCls = field.width === 'half' ? 'inline-block w-1/2 pr-2 align-top' : '';
+              const showLabel =
+                field.type !== 'hidden' &&
+                field.type !== 'checkbox' &&
+                field.type !== 'consent' &&
+                field.type !== 'divider' &&
+                field.labelAlignment !== 'inline';
+              const isLeftAligned = field.labelAlignment === 'left' && showLabel;
+
+              const labelEl = showLabel ? (
+                <label
+                  className={`block text-sm font-medium text-[var(--form-text-secondary)] ${
+                    isLeftAligned ? 'sm:mb-0 sm:pt-3 sm:w-1/3 sm:pr-3' : 'mb-2'
+                  }`}
                 >
-                  {field.type !== 'hidden' && field.type !== 'checkbox' && field.type !== 'consent' && field.type !== 'divider' && (
-                    <label className="block text-sm font-medium text-[var(--form-text-secondary)] mb-2">
-                      {field.label}
-                      {field.required && <span className="text-[var(--form-error-text)] ml-1">*</span>}
-                    </label>
-                  )}
+                  {field.label}
+                  {field.required && <span className="text-[var(--form-error-text)] ml-1">*</span>}
+                </label>
+              ) : null;
+
+              const inputBlock = (
+                <div className={isLeftAligned ? 'sm:flex-1' : ''}>
                   {field.helpText && field.type !== 'divider' && (
                     <p className="text-sm text-[var(--form-text-muted)] mb-2">{field.helpText}</p>
                   )}
                   {renderField(field)}
                   {validationErrors[field.id] && (
                     <p className="mt-1 text-sm text-[var(--form-error-text)]">{validationErrors[field.id]}</p>
+                  )}
+                </div>
+              );
+
+              return (
+                <div key={field.id} className={widthCls}>
+                  {isLeftAligned ? (
+                    <div className="sm:flex sm:items-start">
+                      {labelEl}
+                      {inputBlock}
+                    </div>
+                  ) : (
+                    <>
+                      {labelEl}
+                      {inputBlock}
+                    </>
                   )}
                 </div>
               );

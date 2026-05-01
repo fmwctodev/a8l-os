@@ -733,6 +733,14 @@ function FieldCard({
           )}
         </div>
         <div className="text-sm text-gray-500">{fieldType?.label}</div>
+        {!isLayoutOnly && field.type !== 'checkbox' && field.type !== 'consent' && field.type !== 'file_upload' && field.type !== 'hidden' && (
+          <EditableText
+            value={field.placeholder || ''}
+            onChange={(next) => onUpdate({ placeholder: next })}
+            placeholder="Click to add placeholder…"
+            className="text-xs text-gray-400 italic mt-1"
+          />
+        )}
         {field.options && field.options.length > 0 && !isLayoutOnly && (
           <div className="mt-2 space-y-1">
             {field.options.map((opt, i) => (
@@ -815,7 +823,7 @@ function FieldEditor({
                 activeSection === 'validation' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              Rules
+              Validation
             </button>
           </>
         )}
@@ -884,6 +892,41 @@ function FieldEditor({
               <option value="third">1/3 Width</option>
             </select>
           </div>
+
+          {!isDivider && field.type !== 'column' && field.type !== 'custom_html' && field.type !== 'hidden' && field.type !== 'file_upload' && (
+            <DefaultValueInput field={field} onUpdate={onUpdate} />
+          )}
+
+          {!isDivider && field.type !== 'column' && field.type !== 'custom_html' && field.type !== 'hidden' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Label Alignment</label>
+              <select
+                value={field.labelAlignment || 'top'}
+                onChange={(e) => onUpdate({ labelAlignment: e.target.value as FormField['labelAlignment'] })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="top">Top (default)</option>
+                <option value="left">Left of input</option>
+                <option value="inline">Inline (hide label, use placeholder)</option>
+              </select>
+            </div>
+          )}
+
+          {(field.type === 'dropdown' || field.type === 'radio' || field.type === 'multi_select' || field.type === 'multi_dropdown' || field.type === 'checkbox_group') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Options Layout</label>
+              <select
+                value={field.optionsLayout || 'vertical'}
+                onChange={(e) => onUpdate({ optionsLayout: e.target.value as FormField['optionsLayout'] })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="vertical">Vertical (default)</option>
+                <option value="horizontal">Horizontal (inline)</option>
+                <option value="columns_2">2 columns</option>
+                <option value="columns_3">3 columns</option>
+              </select>
+            </div>
+          )}
 
           {!isDivider && field.type !== 'column' && field.type !== 'custom_html' && field.type !== 'hidden' && (
             <MappingPicker
@@ -1049,6 +1092,94 @@ function FieldEditor({
       {activeSection === 'validation' && (
         <ValidationRulesEditor field={field} onUpdate={onUpdate} />
       )}
+    </div>
+  );
+}
+
+function DefaultValueInput({
+  field,
+  onUpdate,
+}: {
+  field: FormField;
+  onUpdate: (updates: Partial<FormField>) => void;
+}) {
+  const value = field.defaultValue ?? '';
+  const cls =
+    'w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+  let input: React.ReactNode = null;
+
+  if (field.type === 'number' || field.type === 'monetary') {
+    input = (
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => onUpdate({ defaultValue: e.target.value })}
+        className={cls}
+      />
+    );
+  } else if (field.type === 'date') {
+    input = (
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onUpdate({ defaultValue: e.target.value })}
+        className={cls}
+      />
+    );
+  } else if (field.type === 'textarea') {
+    input = (
+      <textarea
+        rows={2}
+        value={value}
+        onChange={(e) => onUpdate({ defaultValue: e.target.value })}
+        className={cls}
+      />
+    );
+  } else if (field.type === 'dropdown' || field.type === 'radio') {
+    const opts = field.options || [];
+    input = (
+      <select
+        value={value}
+        onChange={(e) => onUpdate({ defaultValue: e.target.value })}
+        className={cls}
+      >
+        <option value="">— None —</option>
+        {opts.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    );
+  } else if (field.type === 'checkbox' || field.type === 'consent') {
+    input = (
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          checked={value === 'true'}
+          onChange={(e) => onUpdate({ defaultValue: e.target.checked ? 'true' : '' })}
+          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        />
+        Pre-checked by default
+      </label>
+    );
+  } else {
+    input = (
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onUpdate({ defaultValue: e.target.value })}
+        className={cls}
+      />
+    );
+  }
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">Default Value</label>
+      {input}
+      <p className="text-xs text-gray-500 mt-1">Pre-fills the field on load.</p>
     </div>
   );
 }
@@ -1279,14 +1410,33 @@ function ValidationRulesEditor({
   const fieldType = field.type;
 
   const availableRules: { type: FormValidationRule['type']; label: string }[] = [];
-  if (fieldType === 'text' || fieldType === 'textarea') {
+  if (
+    fieldType === 'text' ||
+    fieldType === 'textarea' ||
+    fieldType === 'first_name' ||
+    fieldType === 'last_name' ||
+    fieldType === 'full_name' ||
+    fieldType === 'company' ||
+    fieldType === 'address' ||
+    fieldType === 'city' ||
+    fieldType === 'state' ||
+    fieldType === 'postal_code' ||
+    fieldType === 'source'
+  ) {
     availableRules.push({ type: 'min_length', label: 'Minimum Length' });
     availableRules.push({ type: 'max_length', label: 'Maximum Length' });
     availableRules.push({ type: 'pattern', label: 'Regex Pattern' });
   }
-  if (fieldType === 'number') {
+  if (fieldType === 'number' || fieldType === 'monetary') {
     availableRules.push({ type: 'min', label: 'Minimum Value' });
     availableRules.push({ type: 'max', label: 'Maximum Value' });
+  }
+  if (fieldType === 'date') {
+    availableRules.push({ type: 'min_date', label: 'Earliest Date' });
+    availableRules.push({ type: 'max_date', label: 'Latest Date' });
+  }
+  if (fieldType === 'email' || fieldType === 'phone' || fieldType === 'website') {
+    availableRules.push({ type: 'format', label: 'Strict format check' });
   }
 
   function addRule(type: FormValidationRule['type']) {
@@ -1324,13 +1474,31 @@ function ValidationRulesEditor({
               <X className="w-4 h-4" />
             </button>
           </div>
-          <input
-            type={rule.type === 'pattern' ? 'text' : 'number'}
-            value={rule.value}
-            onChange={(e) => updateRule(idx, { value: rule.type === 'pattern' ? e.target.value : parseInt(e.target.value) })}
-            placeholder={rule.type === 'pattern' ? '^[a-zA-Z]+$' : '0'}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          {rule.type !== 'format' && (
+            <input
+              type={
+                rule.type === 'pattern'
+                  ? 'text'
+                  : rule.type === 'min_date' || rule.type === 'max_date'
+                  ? 'date'
+                  : 'number'
+              }
+              value={rule.value}
+              onChange={(e) =>
+                updateRule(idx, {
+                  value:
+                    rule.type === 'pattern' || rule.type === 'min_date' || rule.type === 'max_date'
+                      ? e.target.value
+                      : parseFloat(e.target.value),
+                })
+              }
+              placeholder={rule.type === 'pattern' ? '^[a-zA-Z]+$' : '0'}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          )}
+          {rule.type === 'format' && (
+            <p className="text-xs text-gray-500 italic">Built-in format check (no value needed).</p>
+          )}
           <input
             type="text"
             value={rule.message || ''}

@@ -1750,7 +1750,15 @@ export interface FormSubmitRule {
 }
 
 export interface FormValidationRule {
-  type: 'min_length' | 'max_length' | 'pattern' | 'min' | 'max';
+  type:
+    | 'min_length'
+    | 'max_length'
+    | 'pattern'
+    | 'min'
+    | 'max'
+    | 'min_date'
+    | 'max_date'
+    | 'format';
   value: string | number;
   message?: string;
 }
@@ -1776,6 +1784,8 @@ export interface FormField {
   options?: FormFieldOption[];
   mapping?: FormFieldMapping;
   width?: 'full' | 'half' | 'third' | 'two_thirds';
+  labelAlignment?: 'top' | 'left' | 'inline';
+  optionsLayout?: 'vertical' | 'horizontal' | 'columns_2' | 'columns_3';
   conditionalRules?: FormConditionalRule[];
   validationRules?: FormValidationRule[];
   fileUploadConfig?: FormFileUploadConfig;
@@ -1943,6 +1953,9 @@ export interface SurveyQuestion {
   formula?: string;
   columnCount?: 2 | 3 | 4;
   productIds?: string[];
+  labelAlignment?: 'top' | 'left' | 'inline';
+  optionsLayout?: 'vertical' | 'horizontal' | 'columns_2' | 'columns_3';
+  validationRules?: FormValidationRule[];
 }
 
 export interface SurveyStep {
@@ -1951,6 +1964,8 @@ export interface SurveyStep {
   description?: string;
   questions: SurveyQuestion[];
   branchRules?: SurveyBranchRule[];
+  nextButtonText?: string;
+  submitButtonText?: string;
 }
 
 export interface SurveyDefinition {

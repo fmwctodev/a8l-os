@@ -54,7 +54,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { getSurveyById, updateSurvey, publishSurvey, unpublishSurvey } from '../../services/surveys';
-import type { Survey, SurveyQuestion, SurveyQuestionType, SurveyStep, SurveySettings, SurveyBranchRule } from '../../types';
+import type { Survey, SurveyQuestion, SurveyQuestionType, SurveyStep, SurveySettings, SurveyBranchRule, FormValidationRule } from '../../types';
 import {
   US_STATES,
   COUNTRIES,
@@ -712,6 +712,34 @@ export function SurveyBuilder() {
                         placeholder="Step description (optional)"
                         className="text-sm text-gray-500 border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 -ml-2 w-full mt-1"
                       />
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Next button text</label>
+                          <input
+                            type="text"
+                            value={currentStep.nextButtonText || ''}
+                            onChange={(e) =>
+                              updateStep(activeStepIndex, { nextButtonText: e.target.value })
+                            }
+                            placeholder="Next"
+                            className="w-full text-sm px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">
+                            Submit button text {activeStepIndex === survey.definition.steps.length - 1 ? '' : '(last step)'}
+                          </label>
+                          <input
+                            type="text"
+                            value={currentStep.submitButtonText || ''}
+                            onChange={(e) =>
+                              updateStep(activeStepIndex, { submitButtonText: e.target.value })
+                            }
+                            placeholder="Submit"
+                            className="w-full text-sm px-2 py-1 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     {currentStep.questions.length === 0 ? (
@@ -918,6 +946,24 @@ function QuestionCard({
           />
         )}
         <div className="text-sm text-gray-500 mt-1">{qType?.label}</div>
+        {!isLayoutOnly &&
+          question.type !== 'rating' &&
+          question.type !== 'nps' &&
+          question.type !== 'matrix' &&
+          question.type !== 'image_choice' &&
+          question.type !== 'multiple_choice' &&
+          question.type !== 'multi_select' &&
+          question.type !== 'ranking' &&
+          question.type !== 'consent' &&
+          question.type !== 'checkbox' &&
+          question.type !== 'hidden' && (
+            <EditableText
+              value={question.placeholder || ''}
+              onChange={(next) => onUpdate({ placeholder: next })}
+              placeholder="Click to add placeholder…"
+              className="text-xs text-gray-400 italic mt-1"
+            />
+          )}
         {question.options && question.options.length > 0 && !isLayoutOnly && (
           <div className="mt-2 space-y-1">
             {question.options.map((opt, i) => (
@@ -960,6 +1006,23 @@ function QuestionEditor({
   onUpdate: (updates: Partial<SurveyQuestion>) => void;
   onClose: () => void;
 }) {
+  const [activeSection, setActiveSection] = useState<'general' | 'validation'>('general');
+  const isLayoutOnly = question.type === 'divider' || question.type === 'column' || question.type === 'custom_html';
+  const supportsPlaceholder =
+    question.type !== 'divider' &&
+    question.type !== 'column' &&
+    question.type !== 'custom_html' &&
+    question.type !== 'hidden' &&
+    question.type !== 'rating' &&
+    question.type !== 'nps' &&
+    question.type !== 'matrix' &&
+    question.type !== 'image_choice' &&
+    question.type !== 'multiple_choice' &&
+    question.type !== 'multi_select' &&
+    question.type !== 'ranking' &&
+    question.type !== 'consent' &&
+    question.type !== 'checkbox';
+
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-4">
@@ -969,6 +1032,28 @@ function QuestionEditor({
         </button>
       </div>
 
+      {!isLayoutOnly && (
+        <div className="flex gap-1 mb-4 p-1 bg-gray-100 rounded-lg">
+          <button
+            onClick={() => setActiveSection('general')}
+            className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              activeSection === 'general' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            General
+          </button>
+          <button
+            onClick={() => setActiveSection('validation')}
+            className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              activeSection === 'validation' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            Validation
+          </button>
+        </div>
+      )}
+
+      {(isLayoutOnly || activeSection === 'general') && (
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Question Text</label>
@@ -990,6 +1075,18 @@ function QuestionEditor({
           />
         </div>
 
+        {supportsPlaceholder && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Placeholder</label>
+            <input
+              type="text"
+              value={question.placeholder || ''}
+              onChange={(e) => onUpdate({ placeholder: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -1000,6 +1097,41 @@ function QuestionEditor({
           />
           <label htmlFor="required" className="text-sm text-gray-700">Required</label>
         </div>
+
+        {!isLayoutOnly && question.type !== 'hidden' && (
+          <QuestionDefaultValueInput question={question} onUpdate={onUpdate} />
+        )}
+
+        {!isLayoutOnly && question.type !== 'hidden' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Label Alignment</label>
+            <select
+              value={question.labelAlignment || 'top'}
+              onChange={(e) => onUpdate({ labelAlignment: e.target.value as SurveyQuestion['labelAlignment'] })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="top">Top (default)</option>
+              <option value="left">Left of input</option>
+              <option value="inline">Inline (hide label, use placeholder)</option>
+            </select>
+          </div>
+        )}
+
+        {(question.type === 'multiple_choice' || question.type === 'multi_select') && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Options Layout</label>
+            <select
+              value={question.optionsLayout || 'vertical'}
+              onChange={(e) => onUpdate({ optionsLayout: e.target.value as SurveyQuestion['optionsLayout'] })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="vertical">Vertical (default)</option>
+              <option value="horizontal">Horizontal (inline)</option>
+              <option value="columns_2">2 columns</option>
+              <option value="columns_3">3 columns</option>
+            </select>
+          </div>
+        )}
 
         {question.type !== 'divider' && question.type !== 'column' && question.type !== 'custom_html' && question.type !== 'hidden' && (
           <MappingPicker
@@ -1313,6 +1445,238 @@ function QuestionEditor({
           </>
         )}
       </div>
+      )}
+
+      {!isLayoutOnly && activeSection === 'validation' && (
+        <QuestionValidationRulesEditor question={question} onUpdate={onUpdate} />
+      )}
+    </div>
+  );
+}
+
+function QuestionDefaultValueInput({
+  question,
+  onUpdate,
+}: {
+  question: SurveyQuestion;
+  onUpdate: (updates: Partial<SurveyQuestion>) => void;
+}) {
+  const value = question.defaultValue ?? '';
+  const cls =
+    'w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+  let input: React.ReactNode = null;
+
+  if (question.type === 'number' || question.type === 'monetary' || question.type === 'rating' || question.type === 'nps') {
+    input = (
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => onUpdate({ defaultValue: e.target.value })}
+        className={cls}
+      />
+    );
+  } else if (question.type === 'date') {
+    input = (
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onUpdate({ defaultValue: e.target.value })}
+        className={cls}
+      />
+    );
+  } else if (question.type === 'long_text') {
+    input = (
+      <textarea
+        rows={2}
+        value={value}
+        onChange={(e) => onUpdate({ defaultValue: e.target.value })}
+        className={cls}
+      />
+    );
+  } else if (question.type === 'multiple_choice' || question.type === 'dropdown') {
+    const opts = question.options || [];
+    input = (
+      <select
+        value={value}
+        onChange={(e) => onUpdate({ defaultValue: e.target.value })}
+        className={cls}
+      >
+        <option value="">— None —</option>
+        {opts.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    );
+  } else if (question.type === 'checkbox' || question.type === 'consent') {
+    input = (
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          checked={value === 'true'}
+          onChange={(e) => onUpdate({ defaultValue: e.target.checked ? 'true' : '' })}
+          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        />
+        Pre-checked by default
+      </label>
+    );
+  } else if (
+    question.type === 'matrix' ||
+    question.type === 'image_choice' ||
+    question.type === 'multi_select' ||
+    question.type === 'ranking' ||
+    question.type === 'file_upload' ||
+    question.type === 'signature'
+  ) {
+    return null;
+  } else {
+    input = (
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onUpdate({ defaultValue: e.target.value })}
+        className={cls}
+      />
+    );
+  }
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">Default Value</label>
+      {input}
+      <p className="text-xs text-gray-500 mt-1">Pre-fills the question on load.</p>
+    </div>
+  );
+}
+
+function QuestionValidationRulesEditor({
+  question,
+  onUpdate,
+}: {
+  question: SurveyQuestion;
+  onUpdate: (updates: Partial<SurveyQuestion>) => void;
+}) {
+  const rules = question.validationRules || [];
+  const qType = question.type;
+
+  const availableRules: { type: FormValidationRule['type']; label: string }[] = [];
+  if (
+    qType === 'short_text' ||
+    qType === 'long_text' ||
+    qType === 'first_name' ||
+    qType === 'last_name' ||
+    qType === 'full_name' ||
+    qType === 'company' ||
+    qType === 'address' ||
+    qType === 'city' ||
+    qType === 'state' ||
+    qType === 'postal_code'
+  ) {
+    availableRules.push({ type: 'min_length', label: 'Minimum Length' });
+    availableRules.push({ type: 'max_length', label: 'Maximum Length' });
+    availableRules.push({ type: 'pattern', label: 'Regex Pattern' });
+  }
+  if (qType === 'number' || qType === 'monetary') {
+    availableRules.push({ type: 'min', label: 'Minimum Value' });
+    availableRules.push({ type: 'max', label: 'Maximum Value' });
+  }
+  if (qType === 'date') {
+    availableRules.push({ type: 'min_date', label: 'Earliest Date' });
+    availableRules.push({ type: 'max_date', label: 'Latest Date' });
+  }
+  if (qType === 'email' || qType === 'phone' || qType === 'website') {
+    availableRules.push({ type: 'format', label: 'Strict format check' });
+  }
+
+  function addRule(type: FormValidationRule['type']) {
+    const newRule: FormValidationRule = { type, value: '' };
+    onUpdate({ validationRules: [...rules, newRule] });
+  }
+
+  function updateRule(index: number, updates: Partial<FormValidationRule>) {
+    const newRules = [...rules];
+    newRules[index] = { ...newRules[index], ...updates };
+    onUpdate({ validationRules: newRules });
+  }
+
+  function removeRule(index: number) {
+    onUpdate({ validationRules: rules.filter((_, i) => i !== index) });
+  }
+
+  if (availableRules.length === 0) {
+    return (
+      <div className="text-center py-6 bg-gray-50 rounded-lg">
+        <p className="text-sm text-gray-500">No validation rules available for this question type</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {rules.map((rule, idx) => (
+        <div key={idx} className="p-3 bg-gray-50 rounded-lg space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">
+              {availableRules.find((r) => r.type === rule.type)?.label}
+            </span>
+            <button onClick={() => removeRule(idx)} className="p-1 text-gray-400 hover:text-red-500">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {rule.type !== 'format' && (
+            <input
+              type={
+                rule.type === 'pattern'
+                  ? 'text'
+                  : rule.type === 'min_date' || rule.type === 'max_date'
+                  ? 'date'
+                  : 'number'
+              }
+              value={rule.value}
+              onChange={(e) =>
+                updateRule(idx, {
+                  value:
+                    rule.type === 'pattern' || rule.type === 'min_date' || rule.type === 'max_date'
+                      ? e.target.value
+                      : parseFloat(e.target.value),
+                })
+              }
+              placeholder={rule.type === 'pattern' ? '^[a-zA-Z]+$' : '0'}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          )}
+          {rule.type === 'format' && (
+            <p className="text-xs text-gray-500 italic">Built-in format check (no value needed).</p>
+          )}
+          <input
+            type="text"
+            value={rule.message || ''}
+            onChange={(e) => updateRule(idx, { message: e.target.value })}
+            placeholder="Custom error message (optional)"
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      ))}
+
+      {availableRules.filter((r) => !rules.some((rule) => rule.type === r.type)).length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Add Rule</label>
+          <select
+            value=""
+            onChange={(e) => e.target.value && addRule(e.target.value as FormValidationRule['type'])}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Select rule type...</option>
+            {availableRules
+              .filter((r) => !rules.some((rule) => rule.type === r.type))
+              .map((r) => (
+                <option key={r.type} value={r.type}>{r.label}</option>
+              ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 }
