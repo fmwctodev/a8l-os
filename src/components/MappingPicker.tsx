@@ -3,12 +3,14 @@ import { Plus, Check, Loader2, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { createCustomField, generateFieldKey } from '../services/customFields';
+import { getCustomObjectDefinitions } from '../services/customObjects';
 import type {
   FormFieldMapping,
   FormFieldType,
   CustomField,
   CustomFieldType,
   CustomFieldScope,
+  CustomObjectDefinition,
 } from '../types';
 
 const BUILTIN_CONTACT_FIELDS: { value: string; label: string }[] = [
@@ -48,7 +50,7 @@ interface MappingPickerProps {
   visibleInProperty?: 'visible_in_forms' | 'visible_in_surveys';
 }
 
-type Mode = 'none' | 'contact' | 'custom';
+type Mode = 'none' | 'contact' | 'custom' | 'object';
 
 export function MappingPicker({
   value,
@@ -60,10 +62,17 @@ export function MappingPicker({
 }: MappingPickerProps) {
   const { user } = useAuth();
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [objectDefs, setObjectDefs] = useState<CustomObjectDefinition[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
 
-  const mode: Mode = value?.customFieldId ? 'custom' : value?.contactField ? 'contact' : 'none';
+  const mode: Mode = value?.objectId
+    ? 'object'
+    : value?.customFieldId
+    ? 'custom'
+    : value?.contactField
+    ? 'contact'
+    : 'none';
 
   useEffect(() => {
     if (!user?.organization_id) return;
@@ -71,17 +80,21 @@ export function MappingPicker({
     (async () => {
       setLoading(true);
       try {
-        const { data } = await supabase
-          .from('custom_fields')
-          .select('*')
-          .eq('organization_id', user.organization_id)
-          .eq('scope', scope)
-          .eq('active', true)
-          .is('deleted_at', null)
-          .order('display_order')
-          .order('name');
+        const [{ data }, defs] = await Promise.all([
+          supabase
+            .from('custom_fields')
+            .select('*')
+            .eq('organization_id', user.organization_id)
+            .eq('scope', scope)
+            .eq('active', true)
+            .is('deleted_at', null)
+            .order('display_order')
+            .order('name'),
+          getCustomObjectDefinitions(user.organization_id),
+        ]);
         if (cancelled) return;
         setCustomFields((data || []) as CustomField[]);
+        setObjectDefs(defs);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -96,9 +109,15 @@ export function MappingPicker({
       onChange(undefined);
     } else if (next === 'contact') {
       onChange({ contactField: BUILTIN_CONTACT_FIELDS[0].value });
-    } else {
+    } else if (next === 'custom') {
       const first = customFields[0];
       onChange(first ? { customFieldId: first.id } : {});
+    } else {
+      const firstDef = objectDefs[0];
+      const firstFieldKey = firstDef?.field_definitions?.[0]?.key;
+      onChange(firstDef && firstFieldKey
+        ? { objectId: firstDef.id, objectFieldKey: firstFieldKey }
+        : {});
     }
   };
 
@@ -108,21 +127,24 @@ export function MappingPicker({
     setShowCreate(false);
   };
 
+  const selectedObjectDef = objectDefs.find((d) => d.id === value?.objectId);
+
   return (
     <div className="space-y-3">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Maps to</label>
-        <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+        <div className="grid grid-cols-2 gap-1 p-1 bg-gray-100 rounded-lg sm:grid-cols-4">
           {([
             { id: 'none', label: 'No mapping' },
-            { id: 'contact', label: 'Contact field' },
+            { id: 'contact', label: 'Contact' },
             { id: 'custom', label: 'Custom field' },
+            { id: 'object', label: 'Object field' },
           ] as { id: Mode; label: string }[]).map((opt) => (
             <button
               key={opt.id}
               type="button"
               onClick={() => handleModeChange(opt.id)}
-              className={`flex-1 px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+              className={`px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
                 mode === opt.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
@@ -174,6 +196,53 @@ export function MappingPicker({
             <Plus className="w-3.5 h-3.5" />
             Create new custom field
           </button>
+        </div>
+      )}
+
+      {mode === 'object' && (
+        <div className="space-y-2">
+          {loading ? (
+            <div className="flex items-center justify-center py-3">
+              <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+            </div>
+          ) : objectDefs.length === 0 ? (
+            <p className="text-xs text-gray-500 italic">No custom objects yet. Create one in Settings → Custom Objects.</p>
+          ) : (
+            <>
+              <select
+                value={value?.objectId || ''}
+                onChange={(e) => {
+                  const nextDef = objectDefs.find((d) => d.id === e.target.value);
+                  onChange({
+                    objectId: e.target.value,
+                    objectFieldKey: nextDef?.field_definitions?.[0]?.key || '',
+                  });
+                }}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select an object...</option>
+                {objectDefs.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+              {selectedObjectDef && (
+                <select
+                  value={value?.objectFieldKey || ''}
+                  onChange={(e) =>
+                    onChange({ objectId: selectedObjectDef.id, objectFieldKey: e.target.value })
+                  }
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select a field...</option>
+                  {selectedObjectDef.field_definitions.map((fd) => (
+                    <option key={fd.key} value={fd.key}>
+                      {fd.label}{fd.is_primary ? ' (primary)' : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </>
+          )}
         </div>
       )}
 

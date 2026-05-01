@@ -1771,6 +1771,57 @@ export interface FormFieldOption {
 export interface FormFieldMapping {
   contactField?: string;
   customFieldId?: string;
+  objectId?: string;
+  objectFieldKey?: string;
+}
+
+export type CustomObjectFieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'date'
+  | 'email'
+  | 'phone'
+  | 'url'
+  | 'currency'
+  | 'select'
+  | 'boolean';
+
+export interface CustomObjectFieldDefinition {
+  key: string;
+  label: string;
+  type: CustomObjectFieldType;
+  required?: boolean;
+  is_primary?: boolean;
+  options?: { label: string; value: string }[];
+  help_text?: string;
+}
+
+export interface CustomObjectDefinition {
+  id: string;
+  organization_id: string;
+  slug: string;
+  name: string;
+  icon?: string | null;
+  primary_field_key: string;
+  field_definitions: CustomObjectFieldDefinition[];
+  is_builtin: boolean;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string | null;
+}
+
+export interface CustomObjectRecord {
+  id: string;
+  organization_id: string;
+  object_def_id: string;
+  contact_id?: string | null;
+  primary_value?: string | null;
+  values: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string | null;
 }
 
 export interface FormField {

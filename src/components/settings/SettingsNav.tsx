@@ -18,6 +18,7 @@ import {
   HeartPulse,
   Sparkles,
   Film,
+  Database,
   LucideIcon,
 } from 'lucide-react';
 
@@ -123,6 +124,11 @@ const settingsNavSections: SettingsNavSection[] = [
         name: 'Custom Fields',
         path: '/settings/custom-fields',
         icon: LayoutList,
+      },
+      {
+        name: 'Custom Objects',
+        path: '/settings/custom-objects',
+        icon: Database,
       },
       {
         name: 'Lead Scoring',

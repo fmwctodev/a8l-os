@@ -14,6 +14,8 @@ interface FormField {
   mapping?: {
     contactField?: string;
     customFieldId?: string;
+    objectId?: string;
+    objectFieldKey?: string;
   };
 }
 
@@ -292,6 +294,79 @@ async function writeCustomFieldValues(
   }
 }
 
+async function writeObjectRecords(
+  supabase: ReturnType<typeof createClient>,
+  organizationId: string,
+  contactId: string | null,
+  payload: Record<string, unknown>,
+  fields: FormField[]
+): Promise<void> {
+  // Group submitted values by objectId
+  const groups = new Map<string, Record<string, unknown>>();
+  for (const field of fields) {
+    const objectId = field.mapping?.objectId;
+    const fieldKey = field.mapping?.objectFieldKey;
+    if (!objectId || !fieldKey) continue;
+    const value = payload[field.id];
+    if (value === undefined || value === null || value === "") continue;
+    const existing = groups.get(objectId) || {};
+    existing[fieldKey] = value;
+    groups.set(objectId, existing);
+  }
+
+  if (groups.size === 0) return;
+
+  // Look up object definitions to find primary_field_key
+  const objectIds = Array.from(groups.keys());
+  const { data: defs, error: defsError } = await supabase
+    .from("custom_object_definitions")
+    .select("id, primary_field_key")
+    .in("id", objectIds);
+  if (defsError) {
+    console.error("Error loading object definitions:", defsError);
+    return;
+  }
+
+  for (const def of (defs || []) as { id: string; primary_field_key: string }[]) {
+    const values = groups.get(def.id) || {};
+    const primaryValue = (values[def.primary_field_key] as string | undefined) ?? null;
+
+    // Try to find an existing record for this contact + object
+    if (contactId) {
+      const { data: existing } = await supabase
+        .from("custom_object_records")
+        .select("id, values, primary_value")
+        .eq("organization_id", organizationId)
+        .eq("object_def_id", def.id)
+        .eq("contact_id", contactId)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (existing) {
+        const merged = { ...(existing.values as Record<string, unknown> || {}), ...values };
+        const { error } = await supabase
+          .from("custom_object_records")
+          .update({
+            values: merged,
+            primary_value: primaryValue ?? existing.primary_value,
+          })
+          .eq("id", existing.id);
+        if (error) console.error("Error updating object record:", error);
+        continue;
+      }
+    }
+
+    const { error } = await supabase.from("custom_object_records").insert({
+      organization_id: organizationId,
+      object_def_id: def.id,
+      contact_id: contactId,
+      primary_value: primaryValue,
+      values,
+    });
+    if (error) console.error("Error inserting object record:", error);
+  }
+}
+
 async function createTimelineEvent(
   supabase: ReturnType<typeof createClient>,
   contactId: string,
@@ -458,6 +533,14 @@ Deno.serve(async (req: Request) => {
     if (contactId) {
       await writeCustomFieldValues(supabase, contactId, body, typedForm.definition.fields);
     }
+
+    await writeObjectRecords(
+      supabase,
+      typedForm.organization_id,
+      contactId,
+      body,
+      typedForm.definition.fields,
+    );
 
     const { data: submission, error: submitError } = await supabase
       .from("form_submissions")

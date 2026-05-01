@@ -96,6 +96,7 @@ const AIAgentsSettingsPage = lazy(() => import('./pages/settings/AIAgentsSetting
 const EmailServicesSettingsPage = lazy(() => import('./pages/settings/EmailServicesSettingsPage').then(m => ({ default: m.EmailServicesSettingsPage })));
 const PhoneSystemSettingsPage = lazy(() => import('./pages/settings/PhoneSystemSettingsPage'));
 const CustomFieldsSettingsPage = lazy(() => import('./pages/settings/CustomFieldsSettingsPage').then(m => ({ default: m.CustomFieldsSettingsPage })));
+const CustomObjectsSettingsPage = lazy(() => import('./pages/settings/CustomObjectsSettingsPage').then(m => ({ default: m.CustomObjectsSettingsPage })));
 const CustomValuesSettingsPage = lazy(() => import('./pages/settings/CustomValuesSettingsPage').then(m => ({ default: m.CustomValuesSettingsPage })));
 const ScoringSettingsPage = lazy(() => import('./pages/settings/ScoringSettingsPage'));
 const IntegrationsSettingsPage = lazy(() => import('./pages/settings/IntegrationsSettingsPage').then(m => ({ default: m.IntegrationsSettingsPage })));
@@ -704,6 +705,14 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <CustomFieldsSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="custom-objects"
+                  element={
+                    <ProtectedRoute>
+                      <CustomObjectsSettingsPage />
                     </ProtectedRoute>
                   }
                 />
