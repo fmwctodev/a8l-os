@@ -166,7 +166,7 @@ class FormsWidget {
       .a8l-forms-overlay.open { display: flex; }
       .a8l-forms-modal {
         position: relative; width: 100%; max-width: 640px; height: 80vh;
-        max-height: 720px; background: white; border-radius: 16px;
+        max-height: 720px; background: #020617; border-radius: 16px;
         overflow: hidden; box-shadow: 0 24px 64px rgba(0,0,0,0.4);
       }
       .a8l-forms-close {

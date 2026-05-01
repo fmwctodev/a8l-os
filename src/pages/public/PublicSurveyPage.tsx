@@ -176,8 +176,8 @@ export function PublicSurveyPage() {
   function renderQuestion(question: SurveyQuestion, index: number) {
     const hasError = !!validationErrors[question.id];
     const answer = answers[question.id];
-    const inputClass = `w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-      hasError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+    const inputClass = `w-full px-4 py-3 bg-slate-800 text-white placeholder-slate-500 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+      hasError ? 'border-red-500/40 focus:ring-red-500' : 'border-slate-700 focus:ring-cyan-500'
     }`;
 
     if (question.type === 'hidden') return null;
@@ -185,9 +185,9 @@ export function PublicSurveyPage() {
     if (question.type === 'divider') {
       return (
         <div key={question.id} className="py-4">
-          <hr className="border-gray-200" />
+          <hr className="border-slate-700" />
           {question.label && (
-            <p className="text-sm text-gray-500 mt-2">{question.label}</p>
+            <p className="text-sm text-slate-400 mt-2">{question.label}</p>
           )}
         </div>
       );
@@ -222,13 +222,13 @@ export function PublicSurveyPage() {
     return (
       <div key={question.id} className="mb-8">
         {!isCheckboxType && (
-          <label className="block text-base font-medium text-gray-900 mb-2">
+          <label className="block text-base font-medium text-white mb-2">
             {index + 1}. {question.label}
-            {question.required && <span className="text-red-500 ml-1">*</span>}
+            {question.required && <span className="text-red-300 ml-1">*</span>}
           </label>
         )}
         {question.description && (
-          <p className="text-sm text-gray-500 mb-3">{question.description}</p>
+          <p className="text-sm text-slate-400 mb-3">{question.description}</p>
         )}
 
         {question.type === 'short_answer' && (
@@ -263,7 +263,7 @@ export function PublicSurveyPage() {
 
         {question.type === 'monetary' && (
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">
               {currencySymbol(question.currency)}
             </span>
             <input
@@ -379,8 +379,8 @@ export function PublicSurveyPage() {
                 key={option.id}
                 className={`flex items-center gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
                   answer === option.value
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                    ? 'border-cyan-500 bg-cyan-500/20'
+                    : 'border-slate-700 hover:border-slate-700'
                 }`}
               >
                 <input
@@ -388,9 +388,9 @@ export function PublicSurveyPage() {
                   name={question.id}
                   checked={answer === option.value}
                   onChange={() => updateAnswer(question.id, option.value)}
-                  className="text-blue-600 focus:ring-blue-500"
+                  className="text-cyan-400 focus:ring-cyan-500"
                 />
-                <span className="text-gray-700">{option.label}</span>
+                <span className="text-slate-300">{option.label}</span>
               </label>
             ))}
           </div>
@@ -435,8 +435,8 @@ export function PublicSurveyPage() {
                   key={option.id}
                   className={`flex items-center gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
                     selected
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-cyan-500 bg-cyan-500/20'
+                      : 'border-slate-700 hover:border-slate-700'
                   }`}
                 >
                   <input
@@ -449,9 +449,9 @@ export function PublicSurveyPage() {
                         : current.filter((v) => v !== option.value);
                       updateAnswer(question.id, newValue);
                     }}
-                    className="rounded text-blue-600 focus:ring-blue-500"
+                    className="rounded text-cyan-400 focus:ring-cyan-500"
                   />
-                  <span className="text-gray-700">{option.label}</span>
+                  <span className="text-slate-300">{option.label}</span>
                 </label>
               );
             })}
@@ -464,9 +464,9 @@ export function PublicSurveyPage() {
               type="checkbox"
               checked={Boolean(answer)}
               onChange={(e) => updateAnswer(question.id, e.target.checked)}
-              className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              className="mt-1 rounded border-slate-700 text-cyan-400 focus:ring-cyan-500"
             />
-            <span className="text-gray-700">{question.label}</span>
+            <span className="text-slate-300">{question.label}</span>
           </label>
         )}
 
@@ -485,13 +485,13 @@ export function PublicSurveyPage() {
                       updateAnswer(question.id, next);
                     }}
                     placeholder={question.placeholder || `Item ${i + 1}`}
-                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="flex-1 px-4 py-3 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   />
                   {items.length > 1 && (
                     <button
                       type="button"
                       onClick={() => updateAnswer(question.id, items.filter((_, j) => j !== i))}
-                      className="p-2 text-gray-400 hover:text-red-500"
+                      className="p-2 text-slate-500 hover:text-red-300"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -501,7 +501,7 @@ export function PublicSurveyPage() {
               <button
                 type="button"
                 onClick={() => updateAnswer(question.id, [...items, ''])}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
+                className="flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-400 hover:bg-cyan-500/20 rounded-lg"
               >
                 <Plus className="w-4 h-4" />
                 Add item
@@ -511,10 +511,10 @@ export function PublicSurveyPage() {
         })()}
 
         {question.type === 'file_upload' && (
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-            <Upload className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-            <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
-            <p className="text-xs text-gray-400 mt-1">
+          <div className="border-2 border-dashed border-slate-700 rounded-lg p-6 text-center">
+            <Upload className="w-8 h-8 mx-auto text-slate-500 mb-2" />
+            <p className="text-sm text-slate-300">Click to upload or drag and drop</p>
+            <p className="text-xs text-slate-500 mt-1">
               Max {Math.round((question.fileUploadConfig?.maxSizeBytes || 10485760) / 1048576)}MB
             </p>
           </div>
@@ -533,7 +533,7 @@ export function PublicSurveyPage() {
                 className={`p-2 transition-colors ${
                   answer !== undefined && n <= Number(answer)
                     ? 'text-yellow-400'
-                    : 'text-gray-300 hover:text-yellow-300'
+                    : 'text-slate-600 hover:text-yellow-300'
                 }`}
               >
                 <Star className="w-8 h-8 fill-current" />
@@ -551,14 +551,14 @@ export function PublicSurveyPage() {
                 onClick={() => updateAnswer(question.id, n)}
                 className={`w-12 h-12 border rounded-lg font-medium transition-colors ${
                   answer === n
-                    ? 'bg-blue-600 border-blue-600 text-white'
-                    : 'border-gray-300 text-gray-700 hover:border-blue-500 hover:bg-blue-50'
+                    ? 'bg-cyan-500 border-cyan-500 text-white'
+                    : 'border-slate-700 text-slate-300 hover:border-cyan-500 hover:bg-cyan-500/10'
                 }`}
               >
                 {n}
               </button>
             ))}
-            <div className="w-full flex justify-between text-xs text-gray-500 mt-1">
+            <div className="w-full flex justify-between text-xs text-slate-400 mt-1">
               <span>{question.minLabel || 'Not at all likely'}</span>
               <span>{question.maxLabel || 'Extremely likely'}</span>
             </div>
@@ -578,15 +578,15 @@ export function PublicSurveyPage() {
                   onClick={() => updateAnswer(question.id, n)}
                   className={`flex-1 py-3 border rounded-lg font-medium transition-colors ${
                     answer === n
-                      ? 'bg-blue-600 border-blue-600 text-white'
-                      : 'border-gray-300 text-gray-700 hover:border-blue-500 hover:bg-blue-50'
+                      ? 'bg-cyan-500 border-cyan-500 text-white'
+                      : 'border-slate-700 text-slate-300 hover:border-cyan-500 hover:bg-cyan-500/10'
                   }`}
                 >
                   {n}
                 </button>
               ))}
             </div>
-            <div className="flex justify-between text-xs text-gray-500 mt-2">
+            <div className="flex justify-between text-xs text-slate-400 mt-2">
               <span>{question.minLabel || 'Strongly Disagree'}</span>
               <span>{question.maxLabel || 'Strongly Agree'}</span>
             </div>
@@ -597,16 +597,16 @@ export function PublicSurveyPage() {
           const value = (answer as Record<string, string>) || {};
           return (
             <div className="grid grid-cols-2 gap-3">
-              <input type="text" value={value.first_name || ''} onChange={(e) => updateAnswer(question.id, { ...value, first_name: e.target.value })} placeholder="First name" className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              <input type="text" value={value.last_name || ''} onChange={(e) => updateAnswer(question.id, { ...value, last_name: e.target.value })} placeholder="Last name" className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              <input type="email" value={value.email || ''} onChange={(e) => updateAnswer(question.id, { ...value, email: e.target.value })} placeholder="Email" className="col-span-2 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              <input type="tel" value={value.phone || ''} onChange={(e) => updateAnswer(question.id, { ...value, phone: e.target.value })} placeholder="Phone (optional)" className="col-span-2 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="text" value={value.first_name || ''} onChange={(e) => updateAnswer(question.id, { ...value, first_name: e.target.value })} placeholder="First name" className="px-4 py-3 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+              <input type="text" value={value.last_name || ''} onChange={(e) => updateAnswer(question.id, { ...value, last_name: e.target.value })} placeholder="Last name" className="px-4 py-3 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+              <input type="email" value={value.email || ''} onChange={(e) => updateAnswer(question.id, { ...value, email: e.target.value })} placeholder="Email" className="col-span-2 px-4 py-3 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+              <input type="tel" value={value.phone || ''} onChange={(e) => updateAnswer(question.id, { ...value, phone: e.target.value })} placeholder="Phone (optional)" className="col-span-2 px-4 py-3 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500" />
             </div>
           );
         })()}
 
         {question.type === 'payment' && (
-          <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 text-sm text-gray-600 flex items-center gap-2">
+          <div className="border border-slate-700 rounded-lg p-4 bg-slate-800/60 text-sm text-slate-300 flex items-center gap-2">
             <CreditCard className="w-4 h-4" />
             <span>Payment processing not yet configured for this survey.</span>
           </div>
@@ -629,9 +629,9 @@ export function PublicSurveyPage() {
                   value={value.code || ''}
                   onChange={(e) => updateAnswer(question.id, { ...value, code: e.target.value })}
                   placeholder="Verification code"
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 px-4 py-3 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
-                <button type="button" disabled className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg" title="SMS sending not yet configured">
+                <button type="button" disabled className="px-3 py-2 text-sm bg-slate-700 text-slate-300 rounded-lg" title="SMS sending not yet configured">
                   Send code
                 </button>
               </div>
@@ -647,10 +647,10 @@ export function PublicSurveyPage() {
               onChange={(e) => updateAnswer(question.id, e.target.value)}
               placeholder={question.placeholder || 'you@example.com'}
               className={`flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                hasError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+                hasError ? 'border-red-500/40 focus:ring-red-500' : 'border-slate-700 focus:ring-cyan-500'
               }`}
             />
-            <button type="button" disabled className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg" title="Email validation not yet configured">
+            <button type="button" disabled className="px-3 py-2 text-sm bg-slate-700 text-slate-300 rounded-lg" title="Email validation not yet configured">
               Verify
             </button>
           </div>
@@ -662,7 +662,7 @@ export function PublicSurveyPage() {
             readOnly
             value={String(answer || '')}
             placeholder={question.formula ? `= ${question.formula}` : 'Computed value'}
-            className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-500"
+            className="w-full px-4 py-3 bg-slate-800/60 border border-slate-700 rounded-lg text-slate-400"
           />
         )}
 
@@ -673,7 +673,7 @@ export function PublicSurveyPage() {
                 <tr>
                   <th className="p-2 text-left"></th>
                   {question.matrixColumns.map(col => (
-                    <th key={col.id} className="p-2 text-center text-sm text-gray-600 min-w-[80px]">
+                    <th key={col.id} className="p-2 text-center text-sm text-slate-300 min-w-[80px]">
                       {col.label}
                     </th>
                   ))}
@@ -683,8 +683,8 @@ export function PublicSurveyPage() {
                 {question.matrixRows.map(row => {
                   const rowAnswer = (answer as Record<string, string>)?.[row.id];
                   return (
-                    <tr key={row.id} className="border-t border-gray-200">
-                      <td className="p-3 text-sm text-gray-700">{row.label}</td>
+                    <tr key={row.id} className="border-t border-slate-700">
+                      <td className="p-3 text-sm text-slate-300">{row.label}</td>
                       {question.matrixColumns!.map(col => (
                         <td key={col.id} className="p-2 text-center">
                           <input
@@ -695,7 +695,7 @@ export function PublicSurveyPage() {
                               const current = (answer as Record<string, string>) || {};
                               updateAnswer(question.id, { ...current, [row.id]: col.value });
                             }}
-                            className="text-blue-600 focus:ring-blue-500"
+                            className="text-cyan-400 focus:ring-cyan-500"
                           />
                         </td>
                       ))}
@@ -726,8 +726,8 @@ export function PublicSurveyPage() {
                   onClick={() => updateAnswer(question.id, option.value)}
                   className={`relative rounded-lg overflow-hidden border-2 transition-all ${
                     isSelected
-                      ? 'border-blue-500 ring-2 ring-blue-200'
-                      : 'border-gray-200 hover:border-gray-300'
+                      ? 'border-cyan-500 ring-2 ring-cyan-500/30'
+                      : 'border-slate-700 hover:border-slate-700'
                   }`}
                 >
                   <img
@@ -736,12 +736,12 @@ export function PublicSurveyPage() {
                     className="w-full aspect-square object-cover"
                   />
                   <div className={`p-2 text-center text-sm ${
-                    isSelected ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-700'
+                    isSelected ? 'bg-cyan-500/20 text-cyan-300' : 'bg-slate-900 text-slate-300'
                   }`}>
                     {option.label}
                   </div>
                   {isSelected && (
-                    <div className="absolute top-2 right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                    <div className="absolute top-2 right-2 w-6 h-6 bg-cyan-500/200 rounded-full flex items-center justify-center">
                       <CheckCircle className="w-4 h-4 text-white" />
                     </div>
                   )}
@@ -752,7 +752,7 @@ export function PublicSurveyPage() {
         )}
 
         {hasError && (
-          <p className="mt-2 text-sm text-red-500">{validationErrors[question.id]}</p>
+          <p className="mt-2 text-sm text-red-300">{validationErrors[question.id]}</p>
         )}
       </div>
     );
@@ -805,7 +805,7 @@ export function PublicSurveyPage() {
 
     return (
       <div className="space-y-2">
-        <p className="text-xs text-gray-500 mb-2">Drag to reorder (1 = highest priority)</p>
+        <p className="text-xs text-slate-400 mb-2">Drag to reorder (1 = highest priority)</p>
         {items.map((item, idx) => (
           <div
             key={item}
@@ -813,15 +813,15 @@ export function PublicSurveyPage() {
             onDragStart={() => handleDragStart(idx)}
             onDragOver={(e) => handleDragOver(e, idx)}
             onDragEnd={handleDragEnd}
-            className={`flex items-center gap-3 p-3 bg-white border rounded-lg cursor-grab ${
-              draggedIdx === idx ? 'opacity-50 border-blue-500' : 'border-gray-200'
+            className={`flex items-center gap-3 p-3 bg-slate-900 border rounded-lg cursor-grab ${
+              draggedIdx === idx ? 'opacity-50 border-cyan-500' : 'border-slate-700'
             }`}
           >
-            <span className="w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-sm font-medium">
+            <span className="w-6 h-6 bg-cyan-500/20 text-cyan-300 rounded-full flex items-center justify-center text-sm font-medium">
               {idx + 1}
             </span>
-            <GripVertical className="w-4 h-4 text-gray-400" />
-            <span className="flex-1 text-gray-700">{getLabel(item)}</span>
+            <GripVertical className="w-4 h-4 text-slate-500" />
+            <span className="flex-1 text-slate-300">{getLabel(item)}</span>
           </div>
         ))}
       </div>
@@ -829,16 +829,16 @@ export function PublicSurveyPage() {
   }
 
   const rootClass = embed
-    ? 'bg-transparent p-4'
-    : 'min-h-screen bg-gray-50 py-8 px-4';
+    ? 'bg-slate-950 p-4'
+    : 'min-h-screen bg-slate-950 py-12 px-4';
   const centeredRootClass = embed
-    ? 'bg-transparent flex items-center justify-center p-4'
-    : 'min-h-screen bg-gray-50 flex items-center justify-center p-4';
+    ? 'bg-slate-950 flex items-center justify-center p-4'
+    : 'min-h-screen bg-slate-950 flex items-center justify-center p-4';
 
   if (loading) {
     return (
       <div className={centeredRootClass}>
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
       </div>
     );
   }
@@ -846,10 +846,10 @@ export function PublicSurveyPage() {
   if (error && !survey) {
     return (
       <div className={centeredRootClass}>
-        <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">Survey Not Available</h1>
-          <p className="text-gray-500">{error}</p>
+        <div className="max-w-md w-full bg-slate-900 rounded-2xl border border-slate-800 p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-red-300 mx-auto mb-4" />
+          <h1 className="text-xl font-semibold text-white mb-2">Survey Not Available</h1>
+          <p className="text-slate-400">{error}</p>
         </div>
       </div>
     );
@@ -858,14 +858,14 @@ export function PublicSurveyPage() {
   if (submitted) {
     return (
       <div className={centeredRootClass}>
-        <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-          <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">Thank You!</h1>
-          <p className="text-gray-500">
+        <div className="max-w-md w-full bg-slate-900 rounded-2xl border border-slate-800 p-8 text-center">
+          <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
+          <h1 className="text-xl font-semibold text-white mb-2">Thank You!</h1>
+          <p className="text-slate-400">
             {survey?.settings.thankYouMessage || 'Your response has been submitted successfully.'}
           </p>
           {survey?.settings.redirectUrl && (
-            <p className="text-sm text-gray-400 mt-4">Redirecting...</p>
+            <p className="text-sm text-slate-500 mt-4">Redirecting...</p>
           )}
         </div>
       </div>
@@ -882,21 +882,21 @@ export function PublicSurveyPage() {
   return (
     <div className={rootClass}>
       <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">{survey.name}</h1>
+        <div className="bg-slate-900 rounded-2xl border border-slate-800 p-8">
+          <h1 className="text-2xl font-semibold text-white mb-2">{survey.name}</h1>
           {survey.description && (
-            <p className="text-gray-500 mb-6">{survey.description}</p>
+            <p className="text-slate-400 mb-6">{survey.description}</p>
           )}
 
           {survey.settings.showProgressBar && (
             <div className="mb-8">
-              <div className="flex justify-between text-sm text-gray-500 mb-2">
+              <div className="flex justify-between text-sm text-slate-400 mb-2">
                 <span>Step {currentStepIndex + 1} of {totalSteps}</span>
                 <span>{Math.round(progress)}%</span>
               </div>
-              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-blue-600 transition-all duration-300"
+                  className="h-full bg-cyan-500 transition-all duration-300"
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -904,16 +904,16 @@ export function PublicSurveyPage() {
           )}
 
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
-              <div className="text-sm text-red-600">{error}</div>
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-300 mt-0.5" />
+              <div className="text-sm text-red-300">{error}</div>
             </div>
           )}
 
           <div className="mb-8">
-            <h2 className="text-lg font-medium text-gray-900 mb-1">{currentStep.title}</h2>
+            <h2 className="text-lg font-medium text-white mb-1">{currentStep.title}</h2>
             {currentStep.description && (
-              <p className="text-sm text-gray-500">{currentStep.description}</p>
+              <p className="text-sm text-slate-400">{currentStep.description}</p>
             )}
           </div>
 
@@ -921,11 +921,11 @@ export function PublicSurveyPage() {
             {currentStep.questions.map((question, idx) => renderQuestion(question, idx))}
           </div>
 
-          <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
+          <div className="flex justify-between mt-8 pt-6 border-t border-slate-700">
             <button
               onClick={handleBack}
               disabled={currentStepIndex === 0 || !survey.settings.allowBackNavigation}
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-slate-300 hover:bg-slate-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               Back
@@ -934,7 +934,7 @@ export function PublicSurveyPage() {
             <button
               onClick={handleNext}
               disabled={submitting}
-              className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-cyan-500 to-teal-600 text-white font-medium rounded-lg hover:from-cyan-600 hover:to-teal-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {submitting ? (
                 <>
@@ -952,6 +952,11 @@ export function PublicSurveyPage() {
             </button>
           </div>
         </div>
+        {!embed && (
+          <p className="text-center text-slate-500 text-sm mt-6">
+            Powered by Your CRM
+          </p>
+        )}
       </div>
     </div>
   );

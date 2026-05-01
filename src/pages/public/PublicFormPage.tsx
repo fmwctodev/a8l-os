@@ -341,9 +341,9 @@ export function PublicFormPage() {
       case 'divider':
         return (
           <div className="py-4">
-            <hr className="border-gray-200" />
+            <hr className="border-slate-700" />
             {field.label && (
-              <p className="text-sm text-gray-500 mt-2">{field.label}</p>
+              <p className="text-sm text-slate-400 mt-2">{field.label}</p>
             )}
           </div>
         );
@@ -357,14 +357,14 @@ export function PublicFormPage() {
               placeholder={field.placeholder}
               rows={4}
               maxLength={field.characterLimit}
-              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+              className={`w-full px-4 py-3 bg-slate-800 text-white placeholder-slate-500 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
                 hasError
-                  ? 'border-red-300 focus:ring-red-500'
-                  : 'border-gray-300 focus:ring-blue-500'
+                  ? 'border-red-500/40 focus:ring-red-500'
+                  : 'border-slate-700 focus:ring-cyan-500'
               }`}
             />
             {field.characterLimit && (
-              <div className="absolute bottom-2 right-2 text-xs text-gray-400">
+              <div className="absolute bottom-2 right-2 text-xs text-slate-500">
                 {String(formData[field.id] || '').length}/{field.characterLimit}
               </div>
             )}
@@ -376,10 +376,10 @@ export function PublicFormPage() {
           <select
             value={String(formData[field.id] || '')}
             onChange={(e) => updateField(field.id, e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+            className={`w-full px-4 py-3 bg-slate-800 text-white placeholder-slate-500 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
               hasError
-                ? 'border-red-300 focus:ring-red-500'
-                : 'border-gray-300 focus:ring-blue-500'
+                ? 'border-red-500/40 focus:ring-red-500'
+                : 'border-slate-700 focus:ring-cyan-500'
             }`}
           >
             <option value="">{field.placeholder || 'Select an option'}</option>
@@ -399,8 +399,8 @@ export function PublicFormPage() {
                 key={opt.value}
                 className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
                   formData[field.id] === opt.value
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
+                    ? 'border-cyan-500 bg-cyan-500/20'
+                    : 'border-slate-700 hover:border-slate-700'
                 }`}
               >
                 <input
@@ -408,9 +408,9 @@ export function PublicFormPage() {
                   name={field.id}
                   checked={formData[field.id] === opt.value}
                   onChange={() => updateField(field.id, opt.value)}
-                  className="text-blue-600 focus:ring-blue-500"
+                  className="text-cyan-400 focus:ring-cyan-500"
                 />
-                <span className="text-gray-700">{opt.label}</span>
+                <span className="text-slate-300">{opt.label}</span>
               </label>
             ))}
           </div>
@@ -432,9 +432,9 @@ export function PublicFormPage() {
                       : current.filter((v) => v !== opt.value);
                     updateField(field.id, newValue);
                   }}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="rounded border-slate-700 text-cyan-400 focus:ring-cyan-500"
                 />
-                <span className="text-gray-700">{opt.label}</span>
+                <span className="text-slate-300">{opt.label}</span>
               </label>
             ))}
           </div>
@@ -450,8 +450,8 @@ export function PublicFormPage() {
               const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
               updateField(field.id, selected);
             }}
-            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-              hasError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+            className={`w-full px-4 py-3 bg-slate-800 text-white placeholder-slate-500 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+              hasError ? 'border-red-500/40 focus:ring-red-500' : 'border-slate-700 focus:ring-cyan-500'
             }`}
           >
             {(field.options || []).map((opt) => (
@@ -479,8 +479,8 @@ export function PublicFormPage() {
           <select
             value={String(formData[field.id] || '')}
             onChange={(e) => updateField(field.id, e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-              hasError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+            className={`w-full px-4 py-3 bg-slate-800 text-white placeholder-slate-500 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+              hasError ? 'border-red-500/40 focus:ring-red-500' : 'border-slate-700 focus:ring-cyan-500'
             }`}
           >
             <option value="">{placeholder}</option>
@@ -506,13 +506,13 @@ export function PublicFormPage() {
                     updateField(field.id, next);
                   }}
                   placeholder={field.placeholder || `Item ${i + 1}`}
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 px-4 py-3 bg-slate-800 text-white placeholder-slate-500 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
                 {items.length > 1 && (
                   <button
                     type="button"
                     onClick={() => updateField(field.id, items.filter((_, j) => j !== i))}
-                    className="p-2 text-gray-400 hover:text-red-500"
+                    className="p-2 text-slate-500 hover:text-red-300"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -522,7 +522,7 @@ export function PublicFormPage() {
             <button
               type="button"
               onClick={() => updateField(field.id, [...items, ''])}
-              className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
+              className="flex items-center gap-1 px-3 py-1.5 text-sm text-cyan-400 hover:bg-cyan-500/10 rounded-lg"
             >
               <Plus className="w-4 h-4" />
               Add item
@@ -534,7 +534,7 @@ export function PublicFormPage() {
       case 'monetary':
         return (
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">
               {currencySymbol(field.currency)}
             </span>
             <input
@@ -544,7 +544,7 @@ export function PublicFormPage() {
               onChange={(e) => updateField(field.id, e.target.value)}
               placeholder={field.placeholder || '0.00'}
               className={`w-full pl-8 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                hasError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+                hasError ? 'border-red-500/40 focus:ring-red-500' : 'border-slate-700 focus:ring-cyan-500'
               }`}
             />
           </div>
@@ -572,7 +572,7 @@ export function PublicFormPage() {
 
       case 'payment':
         return (
-          <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 text-sm text-gray-600 flex items-center gap-2">
+          <div className="border border-slate-700 rounded-lg p-4 bg-slate-800/60 text-sm text-slate-300 flex items-center gap-2">
             <CreditCard className="w-4 h-4" />
             <span>Payment processing not yet configured for this form.</span>
           </div>
@@ -587,8 +587,8 @@ export function PublicFormPage() {
               value={value.phone || ''}
               onChange={(e) => updateField(field.id, { ...value, phone: e.target.value })}
               placeholder="Phone number"
-              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                hasError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+              className={`w-full px-4 py-3 bg-slate-800 text-white placeholder-slate-500 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                hasError ? 'border-red-500/40 focus:ring-red-500' : 'border-slate-700 focus:ring-cyan-500'
               }`}
             />
             <div className="flex gap-2">
@@ -597,11 +597,11 @@ export function PublicFormPage() {
                 value={value.code || ''}
                 onChange={(e) => updateField(field.id, { ...value, code: e.target.value })}
                 placeholder="Verification code"
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 px-4 py-3 bg-slate-800 text-white placeholder-slate-500 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
               />
               <button
                 type="button"
-                className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                className="px-3 py-2 text-sm bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600"
                 disabled
                 title="SMS sending not yet configured"
               >
@@ -621,12 +621,12 @@ export function PublicFormPage() {
               onChange={(e) => updateField(field.id, e.target.value)}
               placeholder={field.placeholder || 'you@example.com'}
               className={`flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-                hasError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+                hasError ? 'border-red-500/40 focus:ring-red-500' : 'border-slate-700 focus:ring-cyan-500'
               }`}
             />
             <button
               type="button"
-              className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              className="px-3 py-2 text-sm bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600"
               disabled
               title="Email validation not yet configured"
             >
@@ -642,7 +642,7 @@ export function PublicFormPage() {
             readOnly
             value={String(formData[field.id] || '')}
             placeholder={field.formula ? `= ${field.formula}` : 'Computed value'}
-            className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-500"
+            className="w-full px-4 py-3 bg-slate-800/60 border border-slate-700 rounded-lg text-slate-400 placeholder-slate-500"
           />
         );
 
@@ -654,9 +654,9 @@ export function PublicFormPage() {
               type="checkbox"
               checked={Boolean(formData[field.id])}
               onChange={(e) => updateField(field.id, e.target.checked)}
-              className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              className="mt-1 rounded border-slate-700 text-cyan-400 focus:ring-cyan-500"
             />
-            <span className="text-gray-700">{field.label}</span>
+            <span className="text-slate-300">{field.label}</span>
           </label>
         );
 
@@ -678,15 +678,15 @@ export function PublicFormPage() {
               onClick={() => fileInputRefs.current[field.id]?.click()}
               className={`w-full p-6 border-2 border-dashed rounded-lg text-center transition-colors ${
                 hasError
-                  ? 'border-red-300 bg-red-50'
-                  : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+                  ? 'border-red-500/40 bg-red-500/10'
+                  : 'border-slate-700 hover:border-cyan-500 hover:bg-cyan-500/10'
               }`}
             >
-              <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-600">
+              <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
+              <p className="text-sm text-slate-300">
                 Click to upload or drag and drop
               </p>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Max {Math.round(config.maxSizeBytes / 1024 / 1024)}MB
                 {config.maxFiles > 1 && ` - Up to ${config.maxFiles} files`}
               </p>
@@ -696,15 +696,15 @@ export function PublicFormPage() {
                 {files.map((file) => (
                   <div
                     key={file.id}
-                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+                    className="flex items-center gap-3 p-3 bg-slate-800/60 rounded-lg"
                   >
-                    <FileText className="w-5 h-5 text-gray-400" />
+                    <FileText className="w-5 h-5 text-slate-500" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-700 truncate">{file.name}</p>
+                      <p className="text-sm text-slate-300 truncate">{file.name}</p>
                       {file.status === 'uploading' && (
-                        <div className="mt-1 h-1 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="mt-1 h-1 bg-slate-700 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-blue-500 transition-all"
+                            className="h-full bg-cyan-500 transition-all"
                             style={{ width: `${file.progress}%` }}
                           />
                         </div>
@@ -713,7 +713,7 @@ export function PublicFormPage() {
                     <button
                       type="button"
                       onClick={() => removeFile(field.id, file.id)}
-                      className="p-1 text-gray-400 hover:text-red-500"
+                      className="p-1 text-slate-500 hover:text-red-300"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -743,10 +743,10 @@ export function PublicFormPage() {
             value={String(formData[field.id] || '')}
             onChange={(e) => updateField(field.id, e.target.value)}
             placeholder={field.placeholder}
-            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+            className={`w-full px-4 py-3 bg-slate-800 text-white placeholder-slate-500 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
               hasError
-                ? 'border-red-300 focus:ring-red-500'
-                : 'border-gray-300 focus:ring-blue-500'
+                ? 'border-red-500/40 focus:ring-red-500'
+                : 'border-slate-700 focus:ring-cyan-500'
             }`}
           />
         );
@@ -754,16 +754,16 @@ export function PublicFormPage() {
   }
 
   const rootClass = embed
-    ? 'bg-transparent p-4'
-    : 'min-h-screen bg-gray-50 py-8 px-4';
+    ? 'bg-slate-950 p-4'
+    : 'min-h-screen bg-slate-950 py-12 px-4';
   const centeredRootClass = embed
-    ? 'bg-transparent flex items-center justify-center p-4'
-    : 'min-h-screen bg-gray-50 flex items-center justify-center p-4';
+    ? 'bg-slate-950 flex items-center justify-center p-4'
+    : 'min-h-screen bg-slate-950 flex items-center justify-center p-4';
 
   if (loading) {
     return (
       <div className={centeredRootClass}>
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
       </div>
     );
   }
@@ -771,10 +771,10 @@ export function PublicFormPage() {
   if (error && !form) {
     return (
       <div className={centeredRootClass}>
-        <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">Form Not Available</h1>
-          <p className="text-gray-500">{error}</p>
+        <div className="max-w-md w-full bg-slate-900 rounded-2xl border border-slate-800 p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-red-300 mx-auto mb-4" />
+          <h1 className="text-xl font-semibold text-white mb-2">Form Not Available</h1>
+          <p className="text-slate-400">{error}</p>
         </div>
       </div>
     );
@@ -783,14 +783,14 @@ export function PublicFormPage() {
   if (submitted) {
     return (
       <div className={centeredRootClass}>
-        <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-          <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">Thank You!</h1>
-          <p className="text-gray-500">
+        <div className="max-w-md w-full bg-slate-900 rounded-2xl border border-slate-800 p-8 text-center">
+          <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto mb-4" />
+          <h1 className="text-xl font-semibold text-white mb-2">Thank You!</h1>
+          <p className="text-slate-400">
             {form?.settings.thankYouMessage || 'Your response has been submitted successfully.'}
           </p>
           {form?.settings.redirectUrl && (
-            <p className="text-sm text-gray-400 mt-4">Redirecting...</p>
+            <p className="text-sm text-slate-500 mt-4">Redirecting...</p>
           )}
         </div>
       </div>
@@ -802,16 +802,16 @@ export function PublicFormPage() {
   return (
     <div className={rootClass}>
       <div className="max-w-xl mx-auto">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">{form.name}</h1>
+        <div className="bg-slate-900 rounded-2xl border border-slate-800 p-8">
+          <h1 className="text-2xl font-semibold text-white mb-1">{form.name}</h1>
           {form.description && (
-            <p className="text-gray-500 mb-6">{form.description}</p>
+            <p className="text-slate-400 mb-6">{form.description}</p>
           )}
 
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-500 mt-0.5" />
-              <div className="text-sm text-red-600">{error}</div>
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-red-300 mt-0.5" />
+              <div className="text-sm text-red-300">{error}</div>
             </div>
           )}
 
@@ -835,17 +835,17 @@ export function PublicFormPage() {
                   className={field.width === 'half' ? 'inline-block w-1/2 pr-2 align-top' : ''}
                 >
                   {field.type !== 'hidden' && field.type !== 'checkbox' && field.type !== 'consent' && field.type !== 'divider' && (
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
                       {field.label}
-                      {field.required && <span className="text-red-500 ml-1">*</span>}
+                      {field.required && <span className="text-red-300 ml-1">*</span>}
                     </label>
                   )}
                   {field.helpText && field.type !== 'divider' && (
-                    <p className="text-sm text-gray-500 mb-2">{field.helpText}</p>
+                    <p className="text-sm text-slate-400 mb-2">{field.helpText}</p>
                   )}
                   {renderField(field)}
                   {validationErrors[field.id] && (
-                    <p className="mt-1 text-sm text-red-500">{validationErrors[field.id]}</p>
+                    <p className="mt-1 text-sm text-red-300">{validationErrors[field.id]}</p>
                   )}
                 </div>
               );
@@ -854,7 +854,7 @@ export function PublicFormPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-teal-600 text-white font-medium rounded-lg hover:from-cyan-600 hover:to-teal-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-950 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {submitting ? (
                 <>
@@ -867,6 +867,11 @@ export function PublicFormPage() {
             </button>
           </form>
         </div>
+        {!embed && (
+          <p className="text-center text-slate-500 text-sm mt-6">
+            Powered by Your CRM
+          </p>
+        )}
       </div>
     </div>
   );
