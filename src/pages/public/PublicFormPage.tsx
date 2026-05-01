@@ -1,8 +1,14 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { CheckCircle, AlertCircle, Loader2, Upload, X, FileText } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, Upload, X, FileText, Plus, CreditCard } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Form, FormField } from '../../types';
+import {
+  US_STATES,
+  COUNTRIES,
+  COMMON_TIMEZONES,
+  currencySymbol,
+} from '../../constants/formFieldOptions';
 
 interface UploadedFile {
   id: string;
@@ -14,6 +20,14 @@ interface UploadedFile {
   progress: number;
 }
 
+type FormFieldValue =
+  | string
+  | string[]
+  | boolean
+  | number
+  | Record<string, string>
+  | undefined;
+
 export function PublicFormPage() {
   const { slug } = useParams<{ slug: string }>();
   const [searchParams] = useSearchParams();
@@ -22,7 +36,7 @@ export function PublicFormPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [formData, setFormData] = useState<Record<string, string | string[] | boolean>>({});
+  const [formData, setFormData] = useState<Record<string, FormFieldValue>>({});
   const [fileData, setFileData] = useState<Record<string, UploadedFile[]>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -301,7 +315,7 @@ export function PublicFormPage() {
     }
   }
 
-  function updateField(fieldId: string, value: string | string[] | boolean) {
+  function updateField(fieldId: string, value: FormFieldValue) {
     setFormData((prev) => ({ ...prev, [fieldId]: value }));
     if (validationErrors[fieldId]) {
       setValidationErrors((prev) => {
@@ -403,6 +417,7 @@ export function PublicFormPage() {
         );
 
       case 'multi_select':
+      case 'checkbox_group':
         return (
           <div className="space-y-2">
             {(field.options || []).map((opt) => (
@@ -423,6 +438,212 @@ export function PublicFormPage() {
               </label>
             ))}
           </div>
+        );
+
+      case 'multi_dropdown':
+        return (
+          <select
+            multiple
+            size={Math.min(6, (field.options || []).length || 3)}
+            value={(formData[field.id] as string[]) || []}
+            onChange={(e) => {
+              const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+              updateField(field.id, selected);
+            }}
+            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+              hasError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+            }`}
+          >
+            {(field.options || []).map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        );
+
+      case 'state':
+      case 'country':
+      case 'timezone':
+      case 'product_selection': {
+        const opts =
+          field.type === 'state' ? US_STATES :
+          field.type === 'country' ? COUNTRIES :
+          field.type === 'timezone' ? COMMON_TIMEZONES :
+          (field.options || []);
+        const placeholder =
+          field.placeholder ||
+          (field.type === 'state' ? 'Select state...' :
+           field.type === 'country' ? 'Select country...' :
+           field.type === 'timezone' ? 'Select timezone...' :
+           'Select an option');
+        return (
+          <select
+            value={String(formData[field.id] || '')}
+            onChange={(e) => updateField(field.id, e.target.value)}
+            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+              hasError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+            }`}
+          >
+            <option value="">{placeholder}</option>
+            {opts.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        );
+      }
+
+      case 'textbox_list': {
+        const items = (formData[field.id] as string[]) || [''];
+        return (
+          <div className="space-y-2">
+            {items.map((item, i) => (
+              <div key={i} className="flex gap-2">
+                <input
+                  type="text"
+                  value={item}
+                  onChange={(e) => {
+                    const next = [...items];
+                    next[i] = e.target.value;
+                    updateField(field.id, next);
+                  }}
+                  placeholder={field.placeholder || `Item ${i + 1}`}
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {items.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => updateField(field.id, items.filter((_, j) => j !== i))}
+                    className="p-2 text-gray-400 hover:text-red-500"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => updateField(field.id, [...items, ''])}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
+            >
+              <Plus className="w-4 h-4" />
+              Add item
+            </button>
+          </div>
+        );
+      }
+
+      case 'monetary':
+        return (
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none">
+              {currencySymbol(field.currency)}
+            </span>
+            <input
+              type="number"
+              step="0.01"
+              value={String(formData[field.id] || '')}
+              onChange={(e) => updateField(field.id, e.target.value)}
+              placeholder={field.placeholder || '0.00'}
+              className={`w-full pl-8 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                hasError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+              }`}
+            />
+          </div>
+        );
+
+      case 'custom_html':
+        return (
+          <div
+            className="prose prose-sm max-w-none"
+            dangerouslySetInnerHTML={{ __html: field.htmlContent || '' }}
+          />
+        );
+
+      case 'column':
+        return (
+          <div
+            className="grid gap-3"
+            style={{ gridTemplateColumns: `repeat(${field.columnCount || 2}, minmax(0, 1fr))` }}
+          >
+            {Array.from({ length: field.columnCount || 2 }).map((_, i) => (
+              <div key={i} />
+            ))}
+          </div>
+        );
+
+      case 'payment':
+        return (
+          <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 text-sm text-gray-600 flex items-center gap-2">
+            <CreditCard className="w-4 h-4" />
+            <span>Payment processing not yet configured for this form.</span>
+          </div>
+        );
+
+      case 'sms_verification': {
+        const value = (formData[field.id] as Record<string, string>) || {};
+        return (
+          <div className="space-y-2">
+            <input
+              type="tel"
+              value={value.phone || ''}
+              onChange={(e) => updateField(field.id, { ...value, phone: e.target.value })}
+              placeholder="Phone number"
+              className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                hasError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+              }`}
+            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={value.code || ''}
+                onChange={(e) => updateField(field.id, { ...value, code: e.target.value })}
+                placeholder="Verification code"
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                disabled
+                title="SMS sending not yet configured"
+              >
+                Send code
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      case 'email_validation':
+        return (
+          <div className="flex gap-2">
+            <input
+              type="email"
+              value={String(formData[field.id] || '')}
+              onChange={(e) => updateField(field.id, e.target.value)}
+              placeholder={field.placeholder || 'you@example.com'}
+              className={`flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                hasError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+              }`}
+            />
+            <button
+              type="button"
+              className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              disabled
+              title="Email validation not yet configured"
+            >
+              Verify
+            </button>
+          </div>
+        );
+
+      case 'math_calculation':
+        return (
+          <input
+            type="text"
+            readOnly
+            value={String(formData[field.id] || '')}
+            placeholder={field.formula ? `= ${field.formula}` : 'Computed value'}
+            className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-500"
+          />
         );
 
       case 'checkbox':
@@ -515,6 +736,8 @@ export function PublicFormPage() {
                 ? 'number'
                 : field.type === 'date'
                 ? 'date'
+                : field.type === 'website'
+                ? 'url'
                 : 'text'
             }
             value={String(formData[field.id] || '')}

@@ -1722,9 +1722,13 @@ export type SubmissionProcessedStatus = 'pending' | 'processed' | 'failed';
 export type FormFieldType =
   | 'first_name' | 'last_name' | 'full_name' | 'email' | 'phone'
   | 'company' | 'website' | 'address'
-  | 'text' | 'textarea' | 'number' | 'dropdown' | 'multi_select'
-  | 'checkbox' | 'radio' | 'date' | 'hidden' | 'consent'
-  | 'file_upload' | 'divider';
+  | 'city' | 'state' | 'postal_code' | 'country' | 'timezone'
+  | 'text' | 'textarea' | 'textbox_list' | 'number' | 'monetary'
+  | 'dropdown' | 'multi_select' | 'multi_dropdown'
+  | 'checkbox' | 'checkbox_group' | 'radio' | 'date' | 'hidden' | 'consent'
+  | 'file_upload' | 'divider' | 'column' | 'custom_html'
+  | 'source' | 'payment' | 'product_selection'
+  | 'sms_verification' | 'email_validation' | 'math_calculation';
 
 export interface FormFileUploadConfig {
   maxSizeBytes: number;
@@ -1769,6 +1773,11 @@ export interface FormField {
   validationRules?: FormValidationRule[];
   fileUploadConfig?: FormFileUploadConfig;
   characterLimit?: number;
+  currency?: string;
+  htmlContent?: string;
+  formula?: string;
+  columnCount?: 2 | 3 | 4;
+  productIds?: string[];
 }
 
 export interface FormDefinition {

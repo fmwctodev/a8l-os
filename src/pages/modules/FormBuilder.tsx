@@ -18,6 +18,7 @@ import {
   AlignLeft,
   Hash,
   ChevronDown,
+  ChevronsUpDown,
   CheckSquare,
   Calendar,
   EyeOff,
@@ -26,19 +27,39 @@ import {
   Upload,
   Minus,
   Code,
+  FileCode,
   GitBranch,
   X,
   Copy,
   ExternalLink,
+  DollarSign,
+  Map,
+  Mailbox,
+  Clock,
+  CreditCard,
+  ShoppingCart,
+  Smartphone,
+  BadgeCheck,
+  Calculator,
+  Columns,
+  Tag,
+  ListChecks,
+  List,
 } from 'lucide-react';
 import { getFormById, updateForm, publishForm, unpublishForm } from '../../services/forms';
 import type { Form, FormField, FormFieldType, FormDefinition, FormSettings, FormConditionalRule, FormValidationRule } from '../../types';
+import {
+  US_STATES,
+  COUNTRIES,
+  COMMON_TIMEZONES,
+  currencySymbol,
+} from '../../constants/formFieldOptions';
 
 interface FieldTypeConfig {
   type: FormFieldType;
   label: string;
   icon: React.ElementType;
-  category: 'contact' | 'input' | 'choice' | 'layout' | 'special';
+  category: 'contact' | 'address' | 'input' | 'choice' | 'advanced' | 'layout' | 'special';
 }
 
 const FIELD_TYPES: FieldTypeConfig[] = [
@@ -47,27 +68,52 @@ const FIELD_TYPES: FieldTypeConfig[] = [
   { type: 'full_name', label: 'Full Name', icon: Type, category: 'contact' },
   { type: 'email', label: 'Email', icon: Mail, category: 'contact' },
   { type: 'phone', label: 'Phone', icon: Phone, category: 'contact' },
-  { type: 'company', label: 'Company', icon: Building2, category: 'contact' },
-  { type: 'website', label: 'Website', icon: LinkIcon, category: 'contact' },
-  { type: 'address', label: 'Address', icon: MapPin, category: 'contact' },
-  { type: 'text', label: 'Single Line Text', icon: Type, category: 'input' },
-  { type: 'textarea', label: 'Paragraph', icon: AlignLeft, category: 'input' },
+  { type: 'company', label: 'Company Name', icon: Building2, category: 'contact' },
+  { type: 'website', label: 'URL / Website', icon: LinkIcon, category: 'contact' },
+
+  { type: 'address', label: 'Address', icon: MapPin, category: 'address' },
+  { type: 'city', label: 'City', icon: Building2, category: 'address' },
+  { type: 'state', label: 'State', icon: Map, category: 'address' },
+  { type: 'postal_code', label: 'Postal / Zip Code', icon: Mailbox, category: 'address' },
+  { type: 'country', label: 'Country', icon: Globe, category: 'address' },
+  { type: 'timezone', label: 'Timezone', icon: Clock, category: 'address' },
+
+  { type: 'text', label: 'Single Line / Short Text', icon: Type, category: 'input' },
+  { type: 'textarea', label: 'Multi Line / Long Text', icon: AlignLeft, category: 'input' },
+  { type: 'textbox_list', label: 'Textbox List', icon: List, category: 'input' },
   { type: 'number', label: 'Number', icon: Hash, category: 'input' },
-  { type: 'date', label: 'Date', icon: Calendar, category: 'input' },
-  { type: 'dropdown', label: 'Dropdown', icon: ChevronDown, category: 'choice' },
-  { type: 'multi_select', label: 'Multi-Select', icon: CheckSquare, category: 'choice' },
+  { type: 'monetary', label: 'Monetary', icon: DollarSign, category: 'input' },
+  { type: 'date', label: 'Date Picker', icon: Calendar, category: 'input' },
+
+  { type: 'radio', label: 'Radio Select', icon: Circle, category: 'choice' },
+  { type: 'dropdown', label: 'Single Dropdown', icon: ChevronDown, category: 'choice' },
+  { type: 'multi_dropdown', label: 'Multi Dropdown', icon: ChevronsUpDown, category: 'choice' },
+  { type: 'multi_select', label: 'Multi-Select Checkboxes', icon: CheckSquare, category: 'choice' },
   { type: 'checkbox', label: 'Checkbox', icon: CheckSquare, category: 'choice' },
-  { type: 'radio', label: 'Radio Buttons', icon: Circle, category: 'choice' },
-  { type: 'file_upload', label: 'File Upload', icon: Upload, category: 'special' },
+  { type: 'checkbox_group', label: 'Checkbox Group', icon: ListChecks, category: 'choice' },
+
+  { type: 'source', label: 'Source', icon: Tag, category: 'advanced' },
+  { type: 'payment', label: 'Payment Element', icon: CreditCard, category: 'advanced' },
+  { type: 'product_selection', label: 'Product Selection', icon: ShoppingCart, category: 'advanced' },
+  { type: 'sms_verification', label: 'SMS Verification', icon: Smartphone, category: 'advanced' },
+  { type: 'email_validation', label: 'Email Validation', icon: BadgeCheck, category: 'advanced' },
+  { type: 'math_calculation', label: 'Math Calculation', icon: Calculator, category: 'advanced' },
+
   { type: 'divider', label: 'Section Divider', icon: Minus, category: 'layout' },
+  { type: 'column', label: 'Column / Layout', icon: Columns, category: 'layout' },
+  { type: 'custom_html', label: 'Custom HTML', icon: FileCode, category: 'layout' },
+
+  { type: 'file_upload', label: 'File Upload', icon: Upload, category: 'special' },
   { type: 'hidden', label: 'Hidden Field', icon: EyeOff, category: 'special' },
   { type: 'consent', label: 'Consent Checkbox', icon: ShieldCheck, category: 'special' },
 ];
 
 const FIELD_CATEGORIES = [
   { id: 'contact', label: 'Contact Fields' },
+  { id: 'address', label: 'Address Fields' },
   { id: 'input', label: 'Input Fields' },
   { id: 'choice', label: 'Choice Fields' },
+  { id: 'advanced', label: 'Advanced' },
   { id: 'layout', label: 'Layout' },
   { id: 'special', label: 'Special' },
 ];
@@ -93,8 +139,10 @@ export function FormBuilder() {
   const [showEmbedModal, setShowEmbedModal] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     contact: true,
+    address: false,
     input: true,
     choice: true,
+    advanced: false,
     layout: false,
     special: false,
   });
@@ -167,12 +215,19 @@ export function FormBuilder() {
     const newField: FormField = {
       id: generateFieldId(),
       type,
-      label: type === 'divider' ? '' : getDefaultLabel(type),
+      label: type === 'divider' || type === 'column' || type === 'custom_html' ? '' : getDefaultLabel(type),
       required: false,
       width: 'full',
     };
 
-    if (type === 'dropdown' || type === 'multi_select' || type === 'radio') {
+    if (
+      type === 'dropdown' ||
+      type === 'multi_select' ||
+      type === 'multi_dropdown' ||
+      type === 'radio' ||
+      type === 'checkbox_group' ||
+      type === 'product_selection'
+    ) {
       newField.options = [
         { label: 'Option 1', value: 'option_1' },
         { label: 'Option 2', value: 'option_2' },
@@ -185,6 +240,28 @@ export function FormBuilder() {
         allowedTypes: ['image/*', 'application/pdf', '.doc', '.docx'],
         maxFiles: 1,
       };
+    }
+
+    if (type === 'monetary') {
+      newField.currency = 'USD';
+    }
+
+    if (type === 'custom_html') {
+      newField.htmlContent = '<p>Custom HTML content</p>';
+    }
+
+    if (type === 'math_calculation') {
+      newField.formula = '';
+    }
+
+    if (type === 'column') {
+      newField.columnCount = 2;
+    }
+
+    if (type === 'textbox_list') {
+      newField.options = [
+        { label: 'Item', value: '' },
+      ];
     }
 
     setForm({
@@ -1273,6 +1350,19 @@ function FormPreview({ form }: { form: Form }) {
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mt-4">{field.label}</p>
                   )}
                 </div>
+              ) : field.type === 'column' ? (
+                <div className="grid gap-3 py-2" style={{ gridTemplateColumns: `repeat(${field.columnCount || 2}, minmax(0, 1fr))` }}>
+                  {Array.from({ length: field.columnCount || 2 }).map((_, i) => (
+                    <div key={i} className="border border-dashed border-gray-300 rounded-lg p-4 text-center text-xs text-gray-400">
+                      Column {i + 1}
+                    </div>
+                  ))}
+                </div>
+              ) : field.type === 'custom_html' ? (
+                <div
+                  className="prose prose-sm max-w-none border border-dashed border-gray-200 rounded-lg p-3"
+                  dangerouslySetInnerHTML={{ __html: field.htmlContent || '<p class="text-gray-400 text-sm">Custom HTML</p>' }}
+                />
               ) : field.type === 'hidden' ? null : (
                 <>
                   {field.type !== 'checkbox' && field.type !== 'consent' && (
@@ -1292,10 +1382,48 @@ function FormPreview({ form }: { form: Form }) {
                       maxLength={field.characterLimit}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
-                  ) : field.type === 'dropdown' ? (
+                  ) : field.type === 'textbox_list' ? (
+                    <div className="space-y-2">
+                      {(field.options || [{ label: 'Item', value: '' }]).map((_, i) => (
+                        <input
+                          key={i}
+                          type="text"
+                          placeholder={`Item ${i + 1}`}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      ))}
+                    </div>
+                  ) : field.type === 'dropdown' || field.type === 'product_selection' ? (
                     <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                       <option value="">{field.placeholder || 'Select...'}</option>
                       {(field.options || []).map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  ) : field.type === 'multi_dropdown' ? (
+                    <select multiple size={Math.min(5, (field.options || []).length || 3)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      {(field.options || []).map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  ) : field.type === 'state' ? (
+                    <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">{field.placeholder || 'Select state...'}</option>
+                      {US_STATES.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  ) : field.type === 'country' ? (
+                    <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">{field.placeholder || 'Select country...'}</option>
+                      {COUNTRIES.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  ) : field.type === 'timezone' ? (
+                    <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">{field.placeholder || 'Select timezone...'}</option>
+                      {COMMON_TIMEZONES.map((opt) => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                       ))}
                     </select>
@@ -1313,7 +1441,7 @@ function FormPreview({ form }: { form: Form }) {
                         </label>
                       ))}
                     </div>
-                  ) : field.type === 'multi_select' ? (
+                  ) : field.type === 'multi_select' || field.type === 'checkbox_group' ? (
                     <div className="space-y-2">
                       {(field.options || []).map((opt) => (
                         <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
@@ -1335,6 +1463,38 @@ function FormPreview({ form }: { form: Form }) {
                         Max {Math.round((field.fileUploadConfig?.maxSizeBytes || 10485760) / 1048576)}MB
                       </p>
                     </div>
+                  ) : field.type === 'monetary' ? (
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">{currencySymbol(field.currency)}</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder={field.placeholder || '0.00'}
+                        className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  ) : field.type === 'payment' ? (
+                    <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 text-sm text-gray-600">
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="w-4 h-4" />
+                        <span>Payment field — connect Stripe to collect payments here.</span>
+                      </div>
+                    </div>
+                  ) : field.type === 'sms_verification' ? (
+                    <div className="space-y-2">
+                      <input type="tel" placeholder="Phone number" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <div className="flex gap-2">
+                        <input type="text" placeholder="Verification code" className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <button type="button" className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Send code</button>
+                      </div>
+                    </div>
+                  ) : field.type === 'email_validation' ? (
+                    <div className="flex gap-2">
+                      <input type="email" placeholder={field.placeholder || 'you@example.com'} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <button type="button" className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Verify</button>
+                    </div>
+                  ) : field.type === 'math_calculation' ? (
+                    <input type="text" readOnly placeholder={field.formula ? `= ${field.formula}` : 'Computed value'} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-500" />
                   ) : (
                     <input
                       type={
@@ -1342,6 +1502,7 @@ function FormPreview({ form }: { form: Form }) {
                         field.type === 'phone' ? 'tel' :
                         field.type === 'number' ? 'number' :
                         field.type === 'date' ? 'date' :
+                        field.type === 'website' ? 'url' :
                         'text'
                       }
                       placeholder={field.placeholder}
