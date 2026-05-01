@@ -314,23 +314,46 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    let body: Record<string, unknown>;
+    const contentType = req.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+      body = await req.json();
+    } else if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+      body = Object.fromEntries(formData.entries());
+    } else {
+      body = await req.json().catch(() => ({}));
+    }
+
+    // Form submission data may live under body.data or directly on body
+    if (body.data && typeof body.data === "object") {
+      body = { ...body, ...(body.data as Record<string, unknown>) };
+    }
+
     const url = new URL(req.url);
     const pathParts = url.pathname.split("/").filter(Boolean);
-    const slug = pathParts[pathParts.length - 1];
+    const trailingSlug = pathParts[pathParts.length - 1];
+    const slug = trailingSlug && trailingSlug !== "form-submit" ? trailingSlug : undefined;
+    const formIdFromBody = body.formId as string | undefined;
 
-    if (!slug) {
+    if (!slug && !formIdFromBody) {
       return new Response(
-        JSON.stringify({ error: "Form slug is required" }),
+        JSON.stringify({ error: "Form slug or formId is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const { data: form, error: formError } = await supabase
+    let formQuery = supabase
       .from("forms")
       .select("*")
-      .eq("public_slug", slug)
-      .eq("status", "published")
-      .maybeSingle();
+      .eq("status", "published");
+    if (slug) {
+      formQuery = formQuery.eq("public_slug", slug);
+    } else if (formIdFromBody) {
+      formQuery = formQuery.eq("id", formIdFromBody);
+    }
+    const { data: form, error: formError } = await formQuery.maybeSingle();
 
     if (formError || !form) {
       return new Response(
@@ -349,18 +372,6 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
         { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-    }
-
-    let body: Record<string, unknown>;
-    const contentType = req.headers.get("content-type") || "";
-
-    if (contentType.includes("application/json")) {
-      body = await req.json();
-    } else if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
-      const formData = await req.formData();
-      body = Object.fromEntries(formData.entries());
-    } else {
-      body = await req.json().catch(() => ({}));
     }
 
     if (settings.honeypotEnabled && body._honeypot) {

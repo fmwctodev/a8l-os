@@ -52,6 +52,7 @@ interface SurveySettings {
     answerValue: string;
     tagId: string;
   }>;
+  partialCompletionEnabled?: boolean;
 }
 
 interface Survey {
@@ -117,7 +118,20 @@ function calculateScore(
         }
       }
 
-      if (question.type === "nps" || question.type === "rating") {
+      if (
+        question.type === "nps" ||
+        question.type === "rating" ||
+        question.type === "opinion_scale" ||
+        question.type === "math_calculation"
+      ) {
+        const numValue = Number(answer);
+        if (!isNaN(numValue)) {
+          totalScore += numValue;
+        }
+      }
+
+      // Auto-detect: any question with "score" in its label is treated as a numeric scoring element
+      if (question.label && /\bscore\b/i.test(question.label) && !question.options) {
         const numValue = Number(answer);
         if (!isNaN(numValue)) {
           totalScore += numValue;
@@ -375,23 +389,38 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    let body: Record<string, unknown>;
+    const contentType = req.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+      body = await req.json();
+    } else {
+      body = await req.json().catch(() => ({}));
+    }
+
     const url = new URL(req.url);
     const pathParts = url.pathname.split("/").filter(Boolean);
-    const slug = pathParts[pathParts.length - 1];
+    const trailingSlug = pathParts[pathParts.length - 1];
+    const slug = trailingSlug && trailingSlug !== "survey-submit" ? trailingSlug : undefined;
+    const surveyIdFromBody = body.surveyId as string | undefined;
 
-    if (!slug) {
+    if (!slug && !surveyIdFromBody) {
       return new Response(
-        JSON.stringify({ error: "Survey slug is required" }),
+        JSON.stringify({ error: "Survey slug or surveyId is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const { data: survey, error: surveyError } = await supabase
+    let surveyQuery = supabase
       .from("surveys")
       .select("*")
-      .eq("public_slug", slug)
-      .eq("status", "published")
-      .maybeSingle();
+      .eq("status", "published");
+    if (slug) {
+      surveyQuery = surveyQuery.eq("public_slug", slug);
+    } else if (surveyIdFromBody) {
+      surveyQuery = surveyQuery.eq("id", surveyIdFromBody);
+    }
+    const { data: survey, error: surveyError } = await surveyQuery.maybeSingle();
 
     if (surveyError || !survey) {
       return new Response(
@@ -403,16 +432,47 @@ Deno.serve(async (req: Request) => {
     const typedSurvey = survey as Survey;
     const settings = typedSurvey.settings;
 
-    let body: Record<string, unknown>;
-    const contentType = req.headers.get("content-type") || "";
-
-    if (contentType.includes("application/json")) {
-      body = await req.json();
-    } else {
-      body = await req.json().catch(() => ({}));
-    }
-
     const answers = (body.answers as Record<string, unknown>) || body;
+    const isPartial = body.partial === true;
+
+    if (isPartial) {
+      // Partial completion: only create/match the contact, don't store a submission row
+      if (!settings.partialCompletionEnabled) {
+        return new Response(
+          JSON.stringify({ error: "Partial completion is not enabled for this survey" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { data: defaultDept } = await supabase
+        .from("departments")
+        .select("id")
+        .eq("organization_id", typedSurvey.organization_id)
+        .limit(1)
+        .maybeSingle();
+
+      const departmentId = defaultDept?.id;
+      if (!departmentId) {
+        return new Response(
+          JSON.stringify({ error: "No department configured" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const partialContactId = await findOrCreateContact(
+        supabase,
+        typedSurvey.organization_id,
+        departmentId,
+        answers,
+        typedSurvey.definition,
+        settings
+      );
+
+      return new Response(
+        JSON.stringify({ success: true, partial: true, contact_id: partialContactId }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const idempotencyKey = body._idempotency_key as string | undefined;
     if (idempotencyKey) {

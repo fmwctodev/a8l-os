@@ -1378,6 +1378,18 @@ function SurveySettingsPanel({
           {settings.saveAndContinueEnabled && (
             <p className="text-xs text-gray-500 ml-6">Users can save progress and receive email link to continue</p>
           )}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.partialCompletionEnabled || false}
+              onChange={(e) => onUpdate({ partialCompletionEnabled: e.target.checked })}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700">Create contact on partial completion</span>
+          </label>
+          {settings.partialCompletionEnabled && (
+            <p className="text-xs text-gray-500 ml-6">Capture leads as soon as email or phone is collected, even if they don't finish the survey</p>
+          )}
         </div>
       )}
 

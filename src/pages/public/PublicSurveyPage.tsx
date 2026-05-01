@@ -22,6 +22,7 @@ export function PublicSurveyPage() {
   const [error, setError] = useState<string | null>(null);
   const [disqualifyMessage, setDisqualifyMessage] = useState<string | null>(null);
   const [customSuccessMessage, setCustomSuccessMessage] = useState<string | null>(null);
+  const [hasSavedPartial, setHasSavedPartial] = useState(false);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [currentQuestionInStep, setCurrentQuestionInStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
@@ -127,12 +128,47 @@ export function PublicSurveyPage() {
     }
 
     if (!isLastStep) {
+      maybeSendPartial();
       setCurrentStepIndex(currentStepIndex + 1);
       setCurrentQuestionInStep(0);
       setValidationErrors({});
     } else {
       handleSubmit();
     }
+  }
+
+  function maybeSendPartial() {
+    if (!survey || hasSavedPartial || !survey.settings.partialCompletionEnabled) return;
+
+    const hasContactInfo = survey.definition.steps.some((step) =>
+      step.questions.some((q) => {
+        const answer = answers[q.id];
+        if (answer === undefined || answer === null || answer === '') return false;
+        if (q.type === 'email' || q.type === 'phone') return true;
+        if (q.type === 'contact_capture' && typeof answer === 'object') {
+          const co = answer as Record<string, string>;
+          return !!(co.email || co.phone);
+        }
+        return false;
+      })
+    );
+    if (!hasContactInfo) return;
+
+    setHasSavedPartial(true);
+    fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/survey-submit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({
+        surveyId: survey.id,
+        answers,
+        partial: true,
+      }),
+    }).catch((err) => {
+      console.warn('Partial submission failed (non-blocking):', err);
+    });
   }
 
   function handleBack() {

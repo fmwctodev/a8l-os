@@ -1992,6 +1992,7 @@ export interface SurveySettings {
   weightedScoring?: boolean;
   theme?: string;
   submitRules?: FormSubmitRule[];
+  partialCompletionEnabled?: boolean;
 }
 
 export interface Survey {
