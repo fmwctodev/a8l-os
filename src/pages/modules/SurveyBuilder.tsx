@@ -64,6 +64,7 @@ import {
 import { EditableText } from '../../components/EditableText';
 import { ThemePicker } from '../../components/ThemePicker';
 import { SubmitRulesEditor } from '../../components/SubmitRulesEditor';
+import { MappingPicker } from '../../components/MappingPicker';
 import { Monitor, LayoutTemplate, Sparkles } from 'lucide-react';
 import { SURVEY_TEMPLATES, type SurveyTemplate } from '../../constants/surveyTemplates';
 
@@ -999,6 +1000,17 @@ function QuestionEditor({
           />
           <label htmlFor="required" className="text-sm text-gray-700">Required</label>
         </div>
+
+        {question.type !== 'divider' && question.type !== 'column' && question.type !== 'custom_html' && question.type !== 'hidden' && (
+          <MappingPicker
+            value={question.mapping}
+            onChange={(mapping) => onUpdate({ mapping })}
+            fieldType={question.type as never}
+            fieldLabel={question.label}
+            scope="contact"
+            visibleInProperty="visible_in_surveys"
+          />
+        )}
 
         {(question.type === 'multiple_choice' || question.type === 'multi_select' || question.type === 'ranking') && (
           <div>

@@ -265,6 +265,33 @@ async function applyTags(
   await supabase.from("contact_tags").upsert(inserts, { onConflict: "contact_id,tag_id" });
 }
 
+async function writeCustomFieldValues(
+  supabase: ReturnType<typeof createClient>,
+  contactId: string,
+  payload: Record<string, unknown>,
+  fields: FormField[]
+): Promise<void> {
+  const inserts: { contact_id: string; custom_field_id: string; value: unknown }[] = [];
+  for (const field of fields) {
+    const customFieldId = field.mapping?.customFieldId;
+    if (!customFieldId) continue;
+    const value = payload[field.id];
+    if (value === undefined) continue;
+    inserts.push({
+      contact_id: contactId,
+      custom_field_id: customFieldId,
+      value: value === null ? null : value,
+    });
+  }
+  if (inserts.length === 0) return;
+  const { error } = await supabase
+    .from("contact_custom_field_values")
+    .upsert(inserts, { onConflict: "contact_id,custom_field_id" });
+  if (error) {
+    console.error("Error writing custom field values:", error);
+  }
+}
+
 async function createTimelineEvent(
   supabase: ReturnType<typeof createClient>,
   contactId: string,
@@ -426,6 +453,10 @@ Deno.serve(async (req: Request) => {
 
     if (settings.tagIds && settings.tagIds.length > 0 && contactId) {
       await applyTags(supabase, contactId, settings.tagIds);
+    }
+
+    if (contactId) {
+      await writeCustomFieldValues(supabase, contactId, body, typedForm.definition.fields);
     }
 
     const { data: submission, error: submitError } = await supabase

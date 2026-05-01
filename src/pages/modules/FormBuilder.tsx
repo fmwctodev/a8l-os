@@ -57,6 +57,7 @@ import {
 import { EditableText } from '../../components/EditableText';
 import { ThemePicker } from '../../components/ThemePicker';
 import { SubmitRulesEditor } from '../../components/SubmitRulesEditor';
+import { MappingPicker } from '../../components/MappingPicker';
 import { Monitor, LayoutTemplate, Sparkles } from 'lucide-react';
 import { FORM_TEMPLATES, type FormTemplate } from '../../constants/formTemplates';
 
@@ -883,6 +884,17 @@ function FieldEditor({
               <option value="third">1/3 Width</option>
             </select>
           </div>
+
+          {!isDivider && field.type !== 'column' && field.type !== 'custom_html' && field.type !== 'hidden' && (
+            <MappingPicker
+              value={field.mapping}
+              onChange={(mapping) => onUpdate({ mapping })}
+              fieldType={field.type}
+              fieldLabel={field.label}
+              scope="contact"
+              visibleInProperty="visible_in_forms"
+            />
+          )}
 
           {(field.type === 'dropdown' || field.type === 'multi_select' || field.type === 'radio') && (
             <div>
