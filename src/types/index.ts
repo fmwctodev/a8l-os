@@ -1742,6 +1742,13 @@ export interface FormConditionalRule {
   value: string;
 }
 
+export interface FormSubmitRule {
+  id: string;
+  conditions: FormConditionalRule[];
+  action: 'redirect' | 'message' | 'disqualify';
+  payload: string;
+}
+
 export interface FormValidationRule {
   type: 'min_length' | 'max_length' | 'pattern' | 'min' | 'max';
   value: string | number;
@@ -1804,6 +1811,7 @@ export interface FormSettings {
   webhookUrl?: string;
   customCss?: string;
   theme?: string;
+  submitRules?: FormSubmitRule[];
   embedOptions?: {
     width?: string;
     height?: string;
@@ -1983,6 +1991,7 @@ export interface SurveySettings {
   }>;
   weightedScoring?: boolean;
   theme?: string;
+  submitRules?: FormSubmitRule[];
 }
 
 export interface Survey {

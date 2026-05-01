@@ -10,6 +10,7 @@ import {
   currencySymbol,
 } from '../../constants/formFieldOptions';
 import { getTheme, themeStyleVars } from '../../constants/formThemes';
+import { evaluateRule } from '../../components/SubmitRulesEditor';
 
 interface UploadedFile {
   id: string;
@@ -37,6 +38,8 @@ export function PublicFormPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [disqualifyMessage, setDisqualifyMessage] = useState<string | null>(null);
+  const [customSuccessMessage, setCustomSuccessMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState<Record<string, FormFieldValue>>({});
   const [fileData, setFileData] = useState<Record<string, UploadedFile[]>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -261,6 +264,16 @@ export function PublicFormPage() {
 
     if (!form || !validateForm()) return;
 
+    const submitRules = form.settings.submitRules || [];
+
+    const disqualifyHit = submitRules.find(
+      (r) => r.action === 'disqualify' && evaluateRule(r, formData as Record<string, unknown>)
+    );
+    if (disqualifyHit) {
+      setDisqualifyMessage(disqualifyHit.payload || "Sorry, you don't qualify based on your answers.");
+      return;
+    }
+
     try {
       setSubmitting(true);
 
@@ -301,9 +314,22 @@ export function PublicFormPage() {
         throw new Error(errorData.error || 'Submission failed');
       }
 
+      const matchedRule = submitRules.find(
+        (r) => (r.action === 'redirect' || r.action === 'message') && evaluateRule(r, formData as Record<string, unknown>)
+      );
+
+      if (matchedRule?.action === 'redirect' && matchedRule.payload) {
+        window.location.href = matchedRule.payload;
+        return;
+      }
+
+      if (matchedRule?.action === 'message' && matchedRule.payload) {
+        setCustomSuccessMessage(matchedRule.payload);
+      }
+
       setSubmitted(true);
 
-      if (form.settings.redirectUrl) {
+      if (!matchedRule && form.settings.redirectUrl) {
         setTimeout(() => {
           window.location.href = form.settings.redirectUrl!;
         }, 2000);
@@ -783,16 +809,27 @@ export function PublicFormPage() {
     );
   }
 
+  if (disqualifyMessage) {
+    return (
+      <div className={centeredRootClass} style={themeStyle}>
+        <div className="max-w-md w-full bg-[var(--form-card-bg)] rounded-2xl border border-[var(--form-card-border)] p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-[var(--form-text-muted)] mx-auto mb-4" />
+          <h1 className="text-xl font-semibold text-[var(--form-text-primary)] mb-2">Thanks for your interest</h1>
+          <p className="text-[var(--form-text-muted)] whitespace-pre-line">{disqualifyMessage}</p>
+        </div>
+      </div>
+    );
+  }
+
   if (submitted) {
+    const message = customSuccessMessage || form?.settings.thankYouMessage || 'Your response has been submitted successfully.';
     return (
       <div className={centeredRootClass} style={themeStyle}>
         <div className="max-w-md w-full bg-[var(--form-card-bg)] rounded-2xl border border-[var(--form-card-border)] p-8 text-center">
           <CheckCircle className="w-12 h-12 text-[var(--form-success-text)] mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-[var(--form-text-primary)] mb-2">Thank You!</h1>
-          <p className="text-[var(--form-text-muted)]">
-            {form?.settings.thankYouMessage || 'Your response has been submitted successfully.'}
-          </p>
-          {form?.settings.redirectUrl && (
+          <p className="text-[var(--form-text-muted)] whitespace-pre-line">{message}</p>
+          {!customSuccessMessage && form?.settings.redirectUrl && (
             <p className="text-sm text-[var(--form-text-muted)] mt-4">Redirecting...</p>
           )}
         </div>

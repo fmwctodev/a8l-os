@@ -63,6 +63,7 @@ import {
 } from '../../constants/formFieldOptions';
 import { EditableText } from '../../components/EditableText';
 import { ThemePicker } from '../../components/ThemePicker';
+import { SubmitRulesEditor } from '../../components/SubmitRulesEditor';
 import { Monitor, LayoutTemplate, Sparkles } from 'lucide-react';
 import { SURVEY_TEMPLATES, type SurveyTemplate } from '../../constants/surveyTemplates';
 
@@ -664,6 +665,10 @@ export function SurveyBuilder() {
               <SurveySettingsPanel
                 settings={survey.settings}
                 onUpdate={updateSettings}
+                availableFields={survey.definition.steps
+                  .flatMap((s) => s.questions)
+                  .filter((q) => q.type !== 'divider' && q.type !== 'column' && q.type !== 'custom_html' && q.type !== 'hidden')
+                  .map((q) => ({ id: q.id, label: q.label || `(unnamed ${q.type})` }))}
               />
             )}
           </div>
@@ -1246,19 +1251,22 @@ function QuestionEditor({
 function SurveySettingsPanel({
   settings,
   onUpdate,
+  availableFields,
 }: {
   settings: SurveySettings;
   onUpdate: (updates: Partial<SurveySettings>) => void;
+  availableFields: { id: string; label: string }[];
 }) {
-  const [activeSection, setActiveSection] = useState<'theme' | 'completion' | 'behavior' | 'scoring' | 'limits'>('theme');
+  const [activeSection, setActiveSection] = useState<'theme' | 'completion' | 'behavior' | 'logic' | 'scoring' | 'limits'>('theme');
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+      <div className="flex flex-wrap gap-1 p-1 bg-gray-100 rounded-lg">
         {[
           { id: 'theme', label: 'Theme' },
           { id: 'completion', label: 'Done' },
           { id: 'behavior', label: 'Flow' },
+          { id: 'logic', label: 'Logic' },
           { id: 'scoring', label: 'Score' },
           { id: 'limits', label: 'Limits' },
         ].map((section) => (
@@ -1278,6 +1286,14 @@ function SurveySettingsPanel({
         <ThemePicker
           value={settings.theme}
           onChange={(theme) => onUpdate({ theme })}
+        />
+      )}
+
+      {activeSection === 'logic' && (
+        <SubmitRulesEditor
+          rules={settings.submitRules || []}
+          onChange={(submitRules) => onUpdate({ submitRules })}
+          availableFields={availableFields}
         />
       )}
 

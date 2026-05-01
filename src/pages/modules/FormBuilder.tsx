@@ -56,6 +56,7 @@ import {
 } from '../../constants/formFieldOptions';
 import { EditableText } from '../../components/EditableText';
 import { ThemePicker } from '../../components/ThemePicker';
+import { SubmitRulesEditor } from '../../components/SubmitRulesEditor';
 import { Monitor, LayoutTemplate, Sparkles } from 'lucide-react';
 import { FORM_TEMPLATES, type FormTemplate } from '../../constants/formTemplates';
 
@@ -519,6 +520,9 @@ export function FormBuilder() {
               <FormSettingsPanel
                 settings={form.settings}
                 onUpdate={updateSettings}
+                availableFields={form.definition.fields
+                  .filter((f) => f.type !== 'divider' && f.type !== 'column' && f.type !== 'custom_html' && f.type !== 'hidden')
+                  .map((f) => ({ id: f.id, label: f.label || `(unnamed ${f.type})` }))}
               />
             )}
           </div>
@@ -1269,18 +1273,21 @@ function ValidationRulesEditor({
 function FormSettingsPanel({
   settings,
   onUpdate,
+  availableFields,
 }: {
   settings: FormSettings;
   onUpdate: (updates: Partial<FormSettings>) => void;
+  availableFields: { id: string; label: string }[];
 }) {
-  const [activeSection, setActiveSection] = useState<'theme' | 'submission' | 'contacts' | 'spam' | 'notifications'>('theme');
+  const [activeSection, setActiveSection] = useState<'theme' | 'submission' | 'logic' | 'contacts' | 'spam' | 'notifications'>('theme');
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
+      <div className="flex flex-wrap gap-1 p-1 bg-gray-100 rounded-lg">
         {[
           { id: 'theme', label: 'Theme' },
           { id: 'submission', label: 'Submit' },
+          { id: 'logic', label: 'Logic' },
           { id: 'contacts', label: 'Contacts' },
           { id: 'spam', label: 'Spam' },
           { id: 'notifications', label: 'Notify' },
@@ -1301,6 +1308,14 @@ function FormSettingsPanel({
         <ThemePicker
           value={settings.theme}
           onChange={(theme) => onUpdate({ theme })}
+        />
+      )}
+
+      {activeSection === 'logic' && (
+        <SubmitRulesEditor
+          rules={settings.submitRules || []}
+          onChange={(submitRules) => onUpdate({ submitRules })}
+          availableFields={availableFields}
         />
       )}
 

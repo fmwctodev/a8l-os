@@ -10,6 +10,7 @@ import {
   currencySymbol,
 } from '../../constants/formFieldOptions';
 import { getTheme, themeStyleVars } from '../../constants/formThemes';
+import { evaluateRule } from '../../components/SubmitRulesEditor';
 
 export function PublicSurveyPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -19,6 +20,8 @@ export function PublicSurveyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [disqualifyMessage, setDisqualifyMessage] = useState<string | null>(null);
+  const [customSuccessMessage, setCustomSuccessMessage] = useState<string | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [currentQuestionInStep, setCurrentQuestionInStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
@@ -152,6 +155,16 @@ export function PublicSurveyPage() {
   async function handleSubmit() {
     if (!survey || !validateCurrentStep()) return;
 
+    const submitRules = survey.settings.submitRules || [];
+
+    const disqualifyHit = submitRules.find(
+      (r) => r.action === 'disqualify' && evaluateRule(r, answers)
+    );
+    if (disqualifyHit) {
+      setDisqualifyMessage(disqualifyHit.payload || "Sorry, you don't qualify based on your answers.");
+      return;
+    }
+
     try {
       setSubmitting(true);
 
@@ -175,9 +188,22 @@ export function PublicSurveyPage() {
         throw new Error(errorData.error || 'Submission failed');
       }
 
+      const matchedRule = submitRules.find(
+        (r) => (r.action === 'redirect' || r.action === 'message') && evaluateRule(r, answers)
+      );
+
+      if (matchedRule?.action === 'redirect' && matchedRule.payload) {
+        window.location.href = matchedRule.payload;
+        return;
+      }
+
+      if (matchedRule?.action === 'message' && matchedRule.payload) {
+        setCustomSuccessMessage(matchedRule.payload);
+      }
+
       setSubmitted(true);
 
-      if (survey.settings.redirectUrl) {
+      if (!matchedRule && survey.settings.redirectUrl) {
         setTimeout(() => {
           window.location.href = survey.settings.redirectUrl!;
         }, 2000);
@@ -885,16 +911,27 @@ export function PublicSurveyPage() {
     );
   }
 
+  if (disqualifyMessage) {
+    return (
+      <div className={centeredRootClass} style={themeStyle}>
+        <div className="max-w-md w-full bg-[var(--form-card-bg)] rounded-2xl border border-[var(--form-card-border)] p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-[var(--form-text-muted)] mx-auto mb-4" />
+          <h1 className="text-xl font-semibold text-[var(--form-text-primary)] mb-2">Thanks for your interest</h1>
+          <p className="text-[var(--form-text-muted)] whitespace-pre-line">{disqualifyMessage}</p>
+        </div>
+      </div>
+    );
+  }
+
   if (submitted) {
+    const message = customSuccessMessage || survey?.settings.thankYouMessage || 'Your response has been submitted successfully.';
     return (
       <div className={centeredRootClass} style={themeStyle}>
         <div className="max-w-md w-full bg-[var(--form-card-bg)] rounded-2xl border border-[var(--form-card-border)] p-8 text-center">
           <CheckCircle className="w-12 h-12 text-[var(--form-success-text)] mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-[var(--form-text-primary)] mb-2">Thank You!</h1>
-          <p className="text-[var(--form-text-muted)]">
-            {survey?.settings.thankYouMessage || 'Your response has been submitted successfully.'}
-          </p>
-          {survey?.settings.redirectUrl && (
+          <p className="text-[var(--form-text-muted)] whitespace-pre-line">{message}</p>
+          {!customSuccessMessage && survey?.settings.redirectUrl && (
             <p className="text-sm text-[var(--form-text-muted)] mt-4">Redirecting...</p>
           )}
         </div>
