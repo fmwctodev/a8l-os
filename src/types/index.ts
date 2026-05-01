@@ -1803,6 +1803,7 @@ export interface FormSettings {
   notificationEmails?: string[];
   webhookUrl?: string;
   customCss?: string;
+  theme?: string;
   embedOptions?: {
     width?: string;
     height?: string;
@@ -1968,7 +1969,10 @@ export interface SurveySettings {
     tagId: string;
   }>;
   progressBarStyle?: 'percentage' | 'steps' | 'none';
+  showProgressBar?: boolean;
   showBackButton?: boolean;
+  allowBackNavigation?: boolean;
+  oneQuestionPerStep?: boolean;
   saveAndContinueEnabled?: boolean;
   responseLimit?: number;
   expiresAt?: string;
@@ -1978,6 +1982,7 @@ export interface SurveySettings {
     url: string;
   }>;
   weightedScoring?: boolean;
+  theme?: string;
 }
 
 export interface Survey {

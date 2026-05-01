@@ -61,6 +61,9 @@ import {
   COMMON_TIMEZONES,
   currencySymbol,
 } from '../../constants/formFieldOptions';
+import { EditableText } from '../../components/EditableText';
+import { ThemePicker } from '../../components/ThemePicker';
+import { Monitor } from 'lucide-react';
 
 interface QuestionTypeConfig {
   type: SurveyQuestionType;
@@ -149,6 +152,7 @@ export function SurveyBuilder() {
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
   const [activeStepIndex, setActiveStepIndex] = useState(0);
   const [previewMode, setPreviewMode] = useState(false);
+  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [showEmbedModal, setShowEmbedModal] = useState(false);
   const [showBranchingPanel, setShowBranchingPanel] = useState(false);
 
@@ -477,6 +481,32 @@ export function SurveyBuilder() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {previewMode && (
+            <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setPreviewDevice('desktop')}
+                title="Desktop preview"
+                className={`p-1.5 rounded ${
+                  previewDevice === 'desktop'
+                    ? 'bg-white shadow text-gray-900'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Monitor className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setPreviewDevice('mobile')}
+                title="Mobile preview"
+                className={`p-1.5 rounded ${
+                  previewDevice === 'mobile'
+                    ? 'bg-white shadow text-gray-900'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Smartphone className="w-4 h-4" />
+              </button>
+            </div>
+          )}
           <button
             onClick={() => setPreviewMode(!previewMode)}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
@@ -639,7 +669,15 @@ export function SurveyBuilder() {
 
         <div className="flex-1 bg-gray-50 overflow-y-auto p-6">
           {previewMode ? (
-            <SurveyPreview survey={survey} />
+            <div
+              className={
+                previewDevice === 'mobile'
+                  ? 'mx-auto max-w-[375px] border border-gray-300 rounded-2xl shadow-lg overflow-hidden'
+                  : ''
+              }
+            >
+              <SurveyPreview survey={survey} />
+            </div>
           ) : (
             <div className="max-w-2xl mx-auto">
               <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -683,6 +721,7 @@ export function SurveyBuilder() {
                             isSelected={selectedQuestionId === question.id}
                             onSelect={() => setSelectedQuestionId(question.id)}
                             onRemove={() => removeQuestion(question.id)}
+                            onUpdate={(updates) => updateQuestion(question.id, updates)}
                           />
                         ))}
                       </div>
@@ -730,15 +769,18 @@ function QuestionCard({
   isSelected,
   onSelect,
   onRemove,
+  onUpdate,
 }: {
   question: SurveyQuestion;
   index: number;
   isSelected: boolean;
   onSelect: () => void;
   onRemove: () => void;
+  onUpdate: (updates: Partial<SurveyQuestion>) => void;
 }) {
   const qType = QUESTION_TYPES.find((q) => q.type === question.type);
   const Icon = qType?.icon || Type;
+  const isLayoutOnly = question.type === 'divider' || question.type === 'column' || question.type === 'custom_html';
 
   return (
     <div
@@ -752,16 +794,44 @@ function QuestionCard({
       <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <GripVertical className="w-4 h-4 text-gray-400" />
       </div>
-      <div className="flex-1">
+      <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium text-gray-500">Q{index + 1}</span>
-          <Icon className="w-4 h-4 text-gray-400" />
+          <span className="text-sm font-medium text-gray-500 shrink-0">Q{index + 1}</span>
+          <Icon className="w-4 h-4 text-gray-400 shrink-0" />
           {question.required && (
             <span className="text-red-500 text-sm">*</span>
           )}
         </div>
-        <div className="font-medium text-gray-900">{question.label}</div>
+        {isLayoutOnly ? (
+          <div className="font-medium text-gray-500 italic">{qType?.label}</div>
+        ) : (
+          <EditableText
+            value={question.label}
+            onChange={(next) => onUpdate({ label: next })}
+            placeholder="Untitled question"
+            className="font-medium text-gray-900"
+          />
+        )}
         <div className="text-sm text-gray-500 mt-1">{qType?.label}</div>
+        {question.options && question.options.length > 0 && !isLayoutOnly && (
+          <div className="mt-2 space-y-1">
+            {question.options.map((opt, i) => (
+              <div key={opt.id} className="flex items-center gap-2 text-xs text-gray-600 pl-1">
+                <span className="w-1 h-1 bg-gray-400 rounded-full shrink-0" />
+                <EditableText
+                  value={opt.label}
+                  onChange={(next) => {
+                    const nextOptions = [...(question.options || [])];
+                    nextOptions[i] = { ...nextOptions[i], label: next };
+                    onUpdate({ options: nextOptions });
+                  }}
+                  placeholder={`Option ${i + 1}`}
+                  className="text-gray-600"
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <button
         onClick={(e) => {
@@ -1081,12 +1151,13 @@ function SurveySettingsPanel({
   settings: SurveySettings;
   onUpdate: (updates: Partial<SurveySettings>) => void;
 }) {
-  const [activeSection, setActiveSection] = useState<'completion' | 'behavior' | 'scoring' | 'limits'>('completion');
+  const [activeSection, setActiveSection] = useState<'theme' | 'completion' | 'behavior' | 'scoring' | 'limits'>('theme');
 
   return (
     <div className="space-y-4">
       <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
         {[
+          { id: 'theme', label: 'Theme' },
           { id: 'completion', label: 'Done' },
           { id: 'behavior', label: 'Flow' },
           { id: 'scoring', label: 'Score' },
@@ -1103,6 +1174,13 @@ function SurveySettingsPanel({
           </button>
         ))}
       </div>
+
+      {activeSection === 'theme' && (
+        <ThemePicker
+          value={settings.theme}
+          onChange={(theme) => onUpdate({ theme })}
+        />
+      )}
 
       {activeSection === 'completion' && (
         <div className="space-y-4">

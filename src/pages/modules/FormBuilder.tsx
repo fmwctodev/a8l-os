@@ -54,6 +54,9 @@ import {
   COMMON_TIMEZONES,
   currencySymbol,
 } from '../../constants/formFieldOptions';
+import { EditableText } from '../../components/EditableText';
+import { ThemePicker } from '../../components/ThemePicker';
+import { Monitor } from 'lucide-react';
 
 interface FieldTypeConfig {
   type: FormFieldType;
@@ -136,6 +139,7 @@ export function FormBuilder() {
   const [activeTab, setActiveTab] = useState<'fields' | 'settings'>('fields');
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
+  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [showEmbedModal, setShowEmbedModal] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
     contact: true,
@@ -366,6 +370,32 @@ export function FormBuilder() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {previewMode && (
+            <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setPreviewDevice('desktop')}
+                title="Desktop preview"
+                className={`p-1.5 rounded ${
+                  previewDevice === 'desktop'
+                    ? 'bg-white shadow text-gray-900'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Monitor className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setPreviewDevice('mobile')}
+                title="Mobile preview"
+                className={`p-1.5 rounded ${
+                  previewDevice === 'mobile'
+                    ? 'bg-white shadow text-gray-900'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Smartphone className="w-4 h-4" />
+              </button>
+            </div>
+          )}
           <button
             onClick={() => setPreviewMode(!previewMode)}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
@@ -494,7 +524,15 @@ export function FormBuilder() {
 
         <div className="flex-1 bg-gray-50 overflow-y-auto p-6">
           {previewMode ? (
-            <FormPreview form={form} />
+            <div
+              className={
+                previewDevice === 'mobile'
+                  ? 'mx-auto max-w-[375px] border border-gray-300 rounded-2xl shadow-lg overflow-hidden'
+                  : ''
+              }
+            >
+              <FormPreview form={form} />
+            </div>
           ) : (
             <div className="max-w-2xl mx-auto">
               <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -520,6 +558,7 @@ export function FormBuilder() {
                           index < form.definition.fields.length - 1 &&
                           moveField(index, index + 1)
                         }
+                        onUpdate={(updates) => updateField(field.id, updates)}
                       />
                     ))}
                   </div>
@@ -553,12 +592,11 @@ export function FormBuilder() {
 
 function FieldCard({
   field,
-  index,
   isSelected,
   onSelect,
   onRemove,
   onMoveUp,
-  onMoveDown,
+  onUpdate,
 }: {
   field: FormField;
   index: number;
@@ -567,9 +605,11 @@ function FieldCard({
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onUpdate: (updates: Partial<FormField>) => void;
 }) {
   const fieldType = FIELD_TYPES.find((f) => f.type === field.type);
   const Icon = fieldType?.icon || Type;
+  const isLayoutOnly = field.type === 'divider' || field.type === 'column' || field.type === 'custom_html';
 
   return (
     <div
@@ -591,15 +631,43 @@ function FieldCard({
           <GripVertical className="w-4 h-4 text-gray-400" />
         </button>
       </div>
-      <div className="flex-1">
+      <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <Icon className="w-4 h-4 text-gray-400" />
-          <span className="font-medium text-gray-900">{field.label}</span>
+          <Icon className="w-4 h-4 text-gray-400 shrink-0" />
+          {isLayoutOnly ? (
+            <span className="font-medium text-gray-500 italic">{fieldType?.label}</span>
+          ) : (
+            <EditableText
+              value={field.label}
+              onChange={(next) => onUpdate({ label: next })}
+              placeholder="Untitled field"
+              className="font-medium text-gray-900"
+            />
+          )}
           {field.required && (
             <span className="text-red-500 text-sm">*</span>
           )}
         </div>
         <div className="text-sm text-gray-500">{fieldType?.label}</div>
+        {field.options && field.options.length > 0 && !isLayoutOnly && (
+          <div className="mt-2 space-y-1">
+            {field.options.map((opt, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs text-gray-600 pl-1">
+                <span className="w-1 h-1 bg-gray-400 rounded-full shrink-0" />
+                <EditableText
+                  value={opt.label}
+                  onChange={(next) => {
+                    const nextOptions = [...(field.options || [])];
+                    nextOptions[i] = { ...nextOptions[i], label: next };
+                    onUpdate({ options: nextOptions });
+                  }}
+                  placeholder={`Option ${i + 1}`}
+                  className="text-gray-600"
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <button
         onClick={(e) => {
@@ -1126,12 +1194,13 @@ function FormSettingsPanel({
   settings: FormSettings;
   onUpdate: (updates: Partial<FormSettings>) => void;
 }) {
-  const [activeSection, setActiveSection] = useState<'submission' | 'contacts' | 'spam' | 'notifications'>('submission');
+  const [activeSection, setActiveSection] = useState<'theme' | 'submission' | 'contacts' | 'spam' | 'notifications'>('theme');
 
   return (
     <div className="space-y-4">
       <div className="flex gap-1 p-1 bg-gray-100 rounded-lg">
         {[
+          { id: 'theme', label: 'Theme' },
           { id: 'submission', label: 'Submit' },
           { id: 'contacts', label: 'Contacts' },
           { id: 'spam', label: 'Spam' },
@@ -1148,6 +1217,13 @@ function FormSettingsPanel({
           </button>
         ))}
       </div>
+
+      {activeSection === 'theme' && (
+        <ThemePicker
+          value={settings.theme}
+          onChange={(theme) => onUpdate({ theme })}
+        />
+      )}
 
       {activeSection === 'submission' && (
         <div className="space-y-4">
