@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -36,11 +37,43 @@ export function MarketingForms() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<FormStatus | 'all'>('all');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const [showEmbedModal, setShowEmbedModal] = useState<Form | null>(null);
+  const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  function openMenu(formId: string) {
+    const btn = triggerRefs.current[formId];
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      setMenuPos({
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setActiveMenu(formId);
+  }
+
+  function closeMenu() {
+    setActiveMenu(null);
+    setMenuPos(null);
+  }
 
   useEffect(() => {
     loadForms();
   }, [user?.organization_id, statusFilter, searchQuery]);
+
+  useEffect(() => {
+    if (!activeMenu) return;
+    function handleClose() {
+      closeMenu();
+    }
+    window.addEventListener('scroll', handleClose, true);
+    window.addEventListener('resize', handleClose);
+    return () => {
+      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('resize', handleClose);
+    };
+  }, [activeMenu]);
 
   async function loadForms() {
     if (!user?.organization_id) return;
@@ -302,22 +335,28 @@ export function MarketingForms() {
                           </button>
                         </>
                       )}
-                      <div className="relative">
-                        <button
-                          onClick={() =>
-                            setActiveMenu(activeMenu === form.id ? null : form.id)
-                          }
-                          className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </button>
-                        {activeMenu === form.id && (
+                      <button
+                        ref={(el) => {
+                          triggerRefs.current[form.id] = el;
+                        }}
+                        onClick={() =>
+                          activeMenu === form.id ? closeMenu() : openMenu(form.id)
+                        }
+                        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                      >
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+                      {activeMenu === form.id && menuPos &&
+                        createPortal(
                           <>
                             <div
-                              className="fixed inset-0 z-10"
-                              onClick={() => setActiveMenu(null)}
+                              className="fixed inset-0 z-40"
+                              onClick={closeMenu}
                             />
-                            <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+                            <div
+                              className="fixed w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50"
+                              style={{ top: menuPos.top, right: menuPos.right }}
+                            >
                               <Link
                                 to={`/marketing/forms/${form.id}/edit`}
                                 className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
@@ -328,7 +367,7 @@ export function MarketingForms() {
                               <button
                                 onClick={() => {
                                   handleDuplicate(form);
-                                  setActiveMenu(null);
+                                  closeMenu();
                                 }}
                                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                               >
@@ -339,7 +378,7 @@ export function MarketingForms() {
                                 <button
                                   onClick={() => {
                                     handlePublish(form);
-                                    setActiveMenu(null);
+                                    closeMenu();
                                   }}
                                   className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-700 hover:bg-green-50"
                                 >
@@ -351,7 +390,7 @@ export function MarketingForms() {
                                 <button
                                   onClick={() => {
                                     handleUnpublish(form);
-                                    setActiveMenu(null);
+                                    closeMenu();
                                   }}
                                   className="w-full flex items-center gap-2 px-4 py-2 text-sm text-yellow-700 hover:bg-yellow-50"
                                 >
@@ -363,7 +402,7 @@ export function MarketingForms() {
                                 <button
                                   onClick={() => {
                                     handleArchive(form);
-                                    setActiveMenu(null);
+                                    closeMenu();
                                   }}
                                   className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                 >
@@ -382,7 +421,7 @@ export function MarketingForms() {
                               <button
                                 onClick={() => {
                                   handleDelete(form);
-                                  setActiveMenu(null);
+                                  closeMenu();
                                 }}
                                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                               >
@@ -390,9 +429,9 @@ export function MarketingForms() {
                                 Delete
                               </button>
                             </div>
-                          </>
+                          </>,
+                          document.body
                         )}
-                      </div>
                     </div>
                   </td>
                 </tr>

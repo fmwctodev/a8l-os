@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -36,11 +37,43 @@ export function MarketingSurveys() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<SurveyStatus | 'all'>('all');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const [showEmbedModal, setShowEmbedModal] = useState<Survey | null>(null);
+  const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  function openMenu(surveyId: string) {
+    const btn = triggerRefs.current[surveyId];
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      setMenuPos({
+        top: rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setActiveMenu(surveyId);
+  }
+
+  function closeMenu() {
+    setActiveMenu(null);
+    setMenuPos(null);
+  }
 
   useEffect(() => {
     loadSurveys();
   }, [user?.organization_id, statusFilter, searchQuery]);
+
+  useEffect(() => {
+    if (!activeMenu) return;
+    function handleClose() {
+      closeMenu();
+    }
+    window.addEventListener('scroll', handleClose, true);
+    window.addEventListener('resize', handleClose);
+    return () => {
+      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('resize', handleClose);
+    };
+  }, [activeMenu]);
 
   async function loadSurveys() {
     if (!user?.organization_id) return;
@@ -302,22 +335,28 @@ export function MarketingSurveys() {
                           </button>
                         </>
                       )}
-                      <div className="relative">
-                        <button
-                          onClick={() =>
-                            setActiveMenu(activeMenu === survey.id ? null : survey.id)
-                          }
-                          className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
-                        >
-                          <MoreHorizontal className="w-4 h-4" />
-                        </button>
-                        {activeMenu === survey.id && (
+                      <button
+                        ref={(el) => {
+                          triggerRefs.current[survey.id] = el;
+                        }}
+                        onClick={() =>
+                          activeMenu === survey.id ? closeMenu() : openMenu(survey.id)
+                        }
+                        className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                      >
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+                      {activeMenu === survey.id && menuPos &&
+                        createPortal(
                           <>
                             <div
-                              className="fixed inset-0 z-10"
-                              onClick={() => setActiveMenu(null)}
+                              className="fixed inset-0 z-40"
+                              onClick={closeMenu}
                             />
-                            <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+                            <div
+                              className="fixed w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50"
+                              style={{ top: menuPos.top, right: menuPos.right }}
+                            >
                               <Link
                                 to={`/marketing/surveys/${survey.id}/edit`}
                                 className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
@@ -328,7 +367,7 @@ export function MarketingSurveys() {
                               <button
                                 onClick={() => {
                                   handleDuplicate(survey);
-                                  setActiveMenu(null);
+                                  closeMenu();
                                 }}
                                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                               >
@@ -339,7 +378,7 @@ export function MarketingSurveys() {
                                 <button
                                   onClick={() => {
                                     handlePublish(survey);
-                                    setActiveMenu(null);
+                                    closeMenu();
                                   }}
                                   className="w-full flex items-center gap-2 px-4 py-2 text-sm text-green-700 hover:bg-green-50"
                                 >
@@ -351,7 +390,7 @@ export function MarketingSurveys() {
                                 <button
                                   onClick={() => {
                                     handleUnpublish(survey);
-                                    setActiveMenu(null);
+                                    closeMenu();
                                   }}
                                   className="w-full flex items-center gap-2 px-4 py-2 text-sm text-yellow-700 hover:bg-yellow-50"
                                 >
@@ -363,7 +402,7 @@ export function MarketingSurveys() {
                                 <button
                                   onClick={() => {
                                     handleArchive(survey);
-                                    setActiveMenu(null);
+                                    closeMenu();
                                   }}
                                   className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
                                 >
@@ -382,7 +421,7 @@ export function MarketingSurveys() {
                               <button
                                 onClick={() => {
                                   handleDelete(survey);
-                                  setActiveMenu(null);
+                                  closeMenu();
                                 }}
                                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                               >
@@ -390,9 +429,9 @@ export function MarketingSurveys() {
                                 Delete
                               </button>
                             </div>
-                          </>
+                          </>,
+                          document.body
                         )}
-                      </div>
                     </div>
                   </td>
                 </tr>
