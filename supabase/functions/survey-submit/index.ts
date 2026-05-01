@@ -212,6 +212,20 @@ async function findOrCreateContact(
             contactData.last_name = nameParts.slice(1).join(" ") || "";
           }
         }
+      } else if (question.type === "email") {
+        contactData.email = value;
+      } else if (question.type === "phone") {
+        contactData.phone = value;
+      } else if (question.type === "first_name") {
+        contactData.first_name = value;
+      } else if (question.type === "last_name") {
+        contactData.last_name = value;
+      } else if (question.type === "full_name") {
+        const nameParts = String(value).trim().split(/\s+/);
+        contactData.first_name = nameParts[0] || "";
+        contactData.last_name = nameParts.slice(1).join(" ") || "";
+      } else if (question.type === "company") {
+        contactData.company = value;
       }
     }
   }
@@ -233,6 +247,7 @@ async function findOrCreateContact(
         last_name: contactData.last_name || "",
         email: email || null,
         phone: phone || null,
+        company: contactData.company || null,
         source: "survey",
         status: "active",
       })
