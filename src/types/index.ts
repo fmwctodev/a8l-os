@@ -1861,8 +1861,16 @@ export interface FormSubmission {
 
 export type SurveyQuestionType =
   | 'multiple_choice' | 'multi_select' | 'short_answer' | 'long_answer'
-  | 'number' | 'date' | 'yes_no' | 'nps' | 'rating' | 'contact_capture' | 'hidden'
-  | 'matrix' | 'ranking' | 'image_choice';
+  | 'number' | 'date' | 'yes_no' | 'nps' | 'rating' | 'opinion_scale'
+  | 'contact_capture' | 'hidden' | 'matrix' | 'ranking' | 'image_choice'
+  | 'first_name' | 'last_name' | 'full_name' | 'email' | 'phone'
+  | 'company' | 'website'
+  | 'address' | 'city' | 'state' | 'postal_code' | 'country' | 'timezone'
+  | 'dropdown' | 'multi_dropdown' | 'checkbox' | 'checkbox_group'
+  | 'textbox_list' | 'monetary'
+  | 'divider' | 'column' | 'custom_html' | 'consent' | 'file_upload'
+  | 'source' | 'payment' | 'product_selection'
+  | 'sms_verification' | 'email_validation' | 'math_calculation';
 
 export interface SurveyQuestionOption {
   id: string;
@@ -1917,6 +1925,15 @@ export interface SurveyQuestion {
   matrixColumns?: SurveyMatrixColumn[];
   imageOptions?: SurveyImageOption[];
   answerPipingVariable?: string;
+  placeholder?: string;
+  defaultValue?: string;
+  characterLimit?: number;
+  fileUploadConfig?: FormFileUploadConfig;
+  currency?: string;
+  htmlContent?: string;
+  formula?: string;
+  columnCount?: 2 | 3 | 4;
+  productIds?: string[];
 }
 
 export interface SurveyStep {

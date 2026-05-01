@@ -1,8 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { CheckCircle, AlertCircle, Loader2, ArrowLeft, ArrowRight, Star, GripVertical } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, ArrowLeft, ArrowRight, Star, GripVertical, Plus, X, Upload, CreditCard } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Survey, SurveyQuestion } from '../../types';
+import {
+  US_STATES,
+  COUNTRIES,
+  COMMON_TIMEZONES,
+  currencySymbol,
+} from '../../constants/formFieldOptions';
 
 export function PublicSurveyPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -170,40 +176,78 @@ export function PublicSurveyPage() {
   function renderQuestion(question: SurveyQuestion, index: number) {
     const hasError = !!validationErrors[question.id];
     const answer = answers[question.id];
+    const inputClass = `w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+      hasError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+    }`;
+
+    if (question.type === 'hidden') return null;
+
+    if (question.type === 'divider') {
+      return (
+        <div key={question.id} className="py-4">
+          <hr className="border-gray-200" />
+          {question.label && (
+            <p className="text-sm text-gray-500 mt-2">{question.label}</p>
+          )}
+        </div>
+      );
+    }
+
+    if (question.type === 'column') {
+      return (
+        <div
+          key={question.id}
+          className="grid gap-3"
+          style={{ gridTemplateColumns: `repeat(${question.columnCount || 2}, minmax(0, 1fr))` }}
+        >
+          {Array.from({ length: question.columnCount || 2 }).map((_, i) => (
+            <div key={i} />
+          ))}
+        </div>
+      );
+    }
+
+    if (question.type === 'custom_html') {
+      return (
+        <div
+          key={question.id}
+          className="prose prose-sm max-w-none mb-6"
+          dangerouslySetInnerHTML={{ __html: question.htmlContent || '' }}
+        />
+      );
+    }
+
+    const isCheckboxType = question.type === 'checkbox' || question.type === 'consent';
 
     return (
       <div key={question.id} className="mb-8">
-        <label className="block text-base font-medium text-gray-900 mb-2">
-          {index + 1}. {question.text}
-          {question.required && <span className="text-red-500 ml-1">*</span>}
-        </label>
+        {!isCheckboxType && (
+          <label className="block text-base font-medium text-gray-900 mb-2">
+            {index + 1}. {question.label}
+            {question.required && <span className="text-red-500 ml-1">*</span>}
+          </label>
+        )}
         {question.description && (
           <p className="text-sm text-gray-500 mb-3">{question.description}</p>
         )}
 
-        {question.type === 'short_text' && (
+        {question.type === 'short_answer' && (
           <input
             type="text"
             value={String(answer || '')}
             onChange={(e) => updateAnswer(question.id, e.target.value)}
-            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-              hasError
-                ? 'border-red-300 focus:ring-red-500'
-                : 'border-gray-300 focus:ring-blue-500'
-            }`}
+            placeholder={question.placeholder}
+            className={inputClass}
           />
         )}
 
-        {question.type === 'long_text' && (
+        {question.type === 'long_answer' && (
           <textarea
             value={String(answer || '')}
             onChange={(e) => updateAnswer(question.id, e.target.value)}
             rows={4}
-            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-              hasError
-                ? 'border-red-300 focus:ring-red-500'
-                : 'border-gray-300 focus:ring-blue-500'
-            }`}
+            placeholder={question.placeholder}
+            className={inputClass}
           />
         )}
 
@@ -212,15 +256,123 @@ export function PublicSurveyPage() {
             type="number"
             value={answer !== undefined ? String(answer) : ''}
             onChange={(e) => updateAnswer(question.id, e.target.value ? Number(e.target.value) : undefined)}
-            className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-              hasError
-                ? 'border-red-300 focus:ring-red-500'
-                : 'border-gray-300 focus:ring-blue-500'
-            }`}
+            placeholder={question.placeholder}
+            className={inputClass}
           />
         )}
 
-        {question.type === 'single_choice' && (
+        {question.type === 'monetary' && (
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm pointer-events-none">
+              {currencySymbol(question.currency)}
+            </span>
+            <input
+              type="number"
+              step="0.01"
+              value={String(answer || '')}
+              onChange={(e) => updateAnswer(question.id, e.target.value)}
+              placeholder={question.placeholder || '0.00'}
+              className={`pl-8 ${inputClass}`}
+            />
+          </div>
+        )}
+
+        {question.type === 'date' && (
+          <input
+            type="date"
+            value={String(answer || '')}
+            onChange={(e) => updateAnswer(question.id, e.target.value)}
+            className={inputClass}
+          />
+        )}
+
+        {question.type === 'email' && (
+          <input
+            type="email"
+            value={String(answer || '')}
+            onChange={(e) => updateAnswer(question.id, e.target.value)}
+            placeholder={question.placeholder || 'you@example.com'}
+            className={inputClass}
+          />
+        )}
+
+        {question.type === 'phone' && (
+          <input
+            type="tel"
+            value={String(answer || '')}
+            onChange={(e) => updateAnswer(question.id, e.target.value)}
+            placeholder={question.placeholder}
+            className={inputClass}
+          />
+        )}
+
+        {question.type === 'website' && (
+          <input
+            type="url"
+            value={String(answer || '')}
+            onChange={(e) => updateAnswer(question.id, e.target.value)}
+            placeholder={question.placeholder || 'https://'}
+            className={inputClass}
+          />
+        )}
+
+        {(question.type === 'first_name' ||
+          question.type === 'last_name' ||
+          question.type === 'full_name' ||
+          question.type === 'company' ||
+          question.type === 'address' ||
+          question.type === 'city' ||
+          question.type === 'postal_code' ||
+          question.type === 'source') && (
+          <input
+            type="text"
+            value={String(answer || '')}
+            onChange={(e) => updateAnswer(question.id, e.target.value)}
+            placeholder={question.placeholder}
+            className={inputClass}
+          />
+        )}
+
+        {question.type === 'state' && (
+          <select
+            value={String(answer || '')}
+            onChange={(e) => updateAnswer(question.id, e.target.value)}
+            className={inputClass}
+          >
+            <option value="">{question.placeholder || 'Select state...'}</option>
+            {US_STATES.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        )}
+
+        {question.type === 'country' && (
+          <select
+            value={String(answer || '')}
+            onChange={(e) => updateAnswer(question.id, e.target.value)}
+            className={inputClass}
+          >
+            <option value="">{question.placeholder || 'Select country...'}</option>
+            {COUNTRIES.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        )}
+
+        {question.type === 'timezone' && (
+          <select
+            value={String(answer || '')}
+            onChange={(e) => updateAnswer(question.id, e.target.value)}
+            className={inputClass}
+          >
+            <option value="">{question.placeholder || 'Select timezone...'}</option>
+            {COMMON_TIMEZONES.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        )}
+
+        {(question.type === 'multiple_choice' || question.type === 'yes_no') && (
           <div className="space-y-2">
             {(question.options || []).map((option) => (
               <label
@@ -244,7 +396,37 @@ export function PublicSurveyPage() {
           </div>
         )}
 
-        {question.type === 'multiple_choice' && (
+        {(question.type === 'dropdown' || question.type === 'product_selection') && (
+          <select
+            value={String(answer || '')}
+            onChange={(e) => updateAnswer(question.id, e.target.value)}
+            className={inputClass}
+          >
+            <option value="">{question.placeholder || 'Select an option'}</option>
+            {(question.options || []).map((opt) => (
+              <option key={opt.id} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        )}
+
+        {question.type === 'multi_dropdown' && (
+          <select
+            multiple
+            size={Math.min(6, (question.options || []).length || 3)}
+            value={(answer as string[]) || []}
+            onChange={(e) => {
+              const selected = Array.from(e.target.selectedOptions).map((o) => o.value);
+              updateAnswer(question.id, selected);
+            }}
+            className={inputClass}
+          >
+            {(question.options || []).map((opt) => (
+              <option key={opt.id} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        )}
+
+        {(question.type === 'multi_select' || question.type === 'checkbox_group') && (
           <div className="space-y-2">
             {(question.options || []).map((option) => {
               const selected = Array.isArray(answer) && answer.includes(option.value);
@@ -276,11 +458,73 @@ export function PublicSurveyPage() {
           </div>
         )}
 
+        {isCheckboxType && (
+          <label className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              checked={Boolean(answer)}
+              onChange={(e) => updateAnswer(question.id, e.target.checked)}
+              className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-gray-700">{question.label}</span>
+          </label>
+        )}
+
+        {question.type === 'textbox_list' && (() => {
+          const items = Array.isArray(answer) ? (answer as string[]) : [''];
+          return (
+            <div className="space-y-2">
+              {items.map((item, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={item}
+                    onChange={(e) => {
+                      const next = [...items];
+                      next[i] = e.target.value;
+                      updateAnswer(question.id, next);
+                    }}
+                    placeholder={question.placeholder || `Item ${i + 1}`}
+                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  {items.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => updateAnswer(question.id, items.filter((_, j) => j !== i))}
+                      className="p-2 text-gray-400 hover:text-red-500"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => updateAnswer(question.id, [...items, ''])}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
+              >
+                <Plus className="w-4 h-4" />
+                Add item
+              </button>
+            </div>
+          );
+        })()}
+
+        {question.type === 'file_upload' && (
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+            <Upload className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+            <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
+            <p className="text-xs text-gray-400 mt-1">
+              Max {Math.round((question.fileUploadConfig?.maxSizeBytes || 10485760) / 1048576)}MB
+            </p>
+          </div>
+        )}
+
         {question.type === 'rating' && (
           <div className="flex gap-2">
             {Array.from(
-              { length: (question.max || 5) - (question.min || 1) + 1 },
-              (_, i) => (question.min || 1) + i
+              { length: (question.maxValue || 5) - (question.minValue || 1) + 1 },
+              (_, i) => (question.minValue || 1) + i
             ).map((n) => (
               <button
                 key={n}
@@ -315,8 +559,8 @@ export function PublicSurveyPage() {
               </button>
             ))}
             <div className="w-full flex justify-between text-xs text-gray-500 mt-1">
-              <span>Not at all likely</span>
-              <span>Extremely likely</span>
+              <span>{question.minLabel || 'Not at all likely'}</span>
+              <span>{question.maxLabel || 'Extremely likely'}</span>
             </div>
           </div>
         )}
@@ -325,8 +569,8 @@ export function PublicSurveyPage() {
           <div>
             <div className="flex gap-2">
               {Array.from(
-                { length: (question.max || 5) - (question.min || 1) + 1 },
-                (_, i) => (question.min || 1) + i
+                { length: (question.maxValue || 5) - (question.minValue || 1) + 1 },
+                (_, i) => (question.minValue || 1) + i
               ).map((n) => (
                 <button
                   key={n}
@@ -347,6 +591,79 @@ export function PublicSurveyPage() {
               <span>{question.maxLabel || 'Strongly Agree'}</span>
             </div>
           </div>
+        )}
+
+        {question.type === 'contact_capture' && (() => {
+          const value = (answer as Record<string, string>) || {};
+          return (
+            <div className="grid grid-cols-2 gap-3">
+              <input type="text" value={value.first_name || ''} onChange={(e) => updateAnswer(question.id, { ...value, first_name: e.target.value })} placeholder="First name" className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="text" value={value.last_name || ''} onChange={(e) => updateAnswer(question.id, { ...value, last_name: e.target.value })} placeholder="Last name" className="px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="email" value={value.email || ''} onChange={(e) => updateAnswer(question.id, { ...value, email: e.target.value })} placeholder="Email" className="col-span-2 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="tel" value={value.phone || ''} onChange={(e) => updateAnswer(question.id, { ...value, phone: e.target.value })} placeholder="Phone (optional)" className="col-span-2 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          );
+        })()}
+
+        {question.type === 'payment' && (
+          <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 text-sm text-gray-600 flex items-center gap-2">
+            <CreditCard className="w-4 h-4" />
+            <span>Payment processing not yet configured for this survey.</span>
+          </div>
+        )}
+
+        {question.type === 'sms_verification' && (() => {
+          const value = (answer as Record<string, string>) || {};
+          return (
+            <div className="space-y-2">
+              <input
+                type="tel"
+                value={value.phone || ''}
+                onChange={(e) => updateAnswer(question.id, { ...value, phone: e.target.value })}
+                placeholder="Phone number"
+                className={inputClass}
+              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={value.code || ''}
+                  onChange={(e) => updateAnswer(question.id, { ...value, code: e.target.value })}
+                  placeholder="Verification code"
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button type="button" disabled className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg" title="SMS sending not yet configured">
+                  Send code
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
+        {question.type === 'email_validation' && (
+          <div className="flex gap-2">
+            <input
+              type="email"
+              value={String(answer || '')}
+              onChange={(e) => updateAnswer(question.id, e.target.value)}
+              placeholder={question.placeholder || 'you@example.com'}
+              className={`flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                hasError ? 'border-red-300 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+              }`}
+            />
+            <button type="button" disabled className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg" title="Email validation not yet configured">
+              Verify
+            </button>
+          </div>
+        )}
+
+        {question.type === 'math_calculation' && (
+          <input
+            type="text"
+            readOnly
+            value={String(answer || '')}
+            placeholder={question.formula ? `= ${question.formula}` : 'Computed value'}
+            className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-500"
+          />
         )}
 
         {question.type === 'matrix' && question.matrixRows && question.matrixColumns && (

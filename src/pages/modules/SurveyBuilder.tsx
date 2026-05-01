@@ -13,51 +13,126 @@ import {
   AlignLeft,
   Hash,
   ChevronDown,
+  ChevronsUpDown,
   CheckSquare,
+  Circle,
   Star,
   Layers,
   ArrowRight,
   Grid3X3,
   List,
+  ListChecks,
   Image,
   GitBranch,
   X,
   Code,
+  FileCode,
   Copy,
   ExternalLink,
   Clock,
   Calendar,
+  Mail,
+  Phone,
+  Building2,
+  Link as LinkIcon,
+  MapPin,
+  Map,
+  Mailbox,
+  EyeOff,
+  ShieldCheck,
+  Upload,
+  Minus,
+  DollarSign,
+  CreditCard,
+  ShoppingCart,
+  Smartphone,
+  BadgeCheck,
+  Calculator,
+  Columns,
+  Tag,
+  SlidersHorizontal,
+  UserCheck,
 } from 'lucide-react';
 import { getSurveyById, updateSurvey, publishSurvey, unpublishSurvey } from '../../services/surveys';
 import type { Survey, SurveyQuestion, SurveyQuestionType, SurveyStep, SurveySettings, SurveyBranchRule } from '../../types';
+import {
+  US_STATES,
+  COUNTRIES,
+  COMMON_TIMEZONES,
+  currencySymbol,
+} from '../../constants/formFieldOptions';
 
 interface QuestionTypeConfig {
   type: SurveyQuestionType;
   label: string;
   icon: React.ElementType;
-  category: 'basic' | 'choice' | 'scale' | 'advanced';
+  category: 'contact' | 'address' | 'input' | 'choice' | 'survey' | 'advanced' | 'layout' | 'special';
 }
 
 const QUESTION_TYPES: QuestionTypeConfig[] = [
-  { type: 'short_answer', label: 'Short Text', icon: Type, category: 'basic' },
-  { type: 'long_answer', label: 'Long Text', icon: AlignLeft, category: 'basic' },
-  { type: 'number', label: 'Number', icon: Hash, category: 'basic' },
-  { type: 'date', label: 'Date', icon: Calendar, category: 'basic' },
-  { type: 'multiple_choice', label: 'Single Choice', icon: ChevronDown, category: 'choice' },
-  { type: 'multi_select', label: 'Multi-Select', icon: CheckSquare, category: 'choice' },
-  { type: 'yes_no', label: 'Yes/No', icon: CheckSquare, category: 'choice' },
-  { type: 'rating', label: 'Star Rating', icon: Star, category: 'scale' },
-  { type: 'nps', label: 'NPS Score', icon: Layers, category: 'scale' },
-  { type: 'matrix', label: 'Matrix Grid', icon: Grid3X3, category: 'advanced' },
-  { type: 'ranking', label: 'Ranking', icon: List, category: 'advanced' },
-  { type: 'image_choice', label: 'Image Choice', icon: Image, category: 'advanced' },
+  { type: 'first_name', label: 'First Name', icon: Type, category: 'contact' },
+  { type: 'last_name', label: 'Last Name', icon: Type, category: 'contact' },
+  { type: 'full_name', label: 'Full Name', icon: Type, category: 'contact' },
+  { type: 'email', label: 'Email', icon: Mail, category: 'contact' },
+  { type: 'phone', label: 'Phone', icon: Phone, category: 'contact' },
+  { type: 'company', label: 'Company Name', icon: Building2, category: 'contact' },
+  { type: 'website', label: 'URL / Website', icon: LinkIcon, category: 'contact' },
+
+  { type: 'address', label: 'Address', icon: MapPin, category: 'address' },
+  { type: 'city', label: 'City', icon: Building2, category: 'address' },
+  { type: 'state', label: 'State', icon: Map, category: 'address' },
+  { type: 'postal_code', label: 'Postal / Zip Code', icon: Mailbox, category: 'address' },
+  { type: 'country', label: 'Country', icon: Globe, category: 'address' },
+  { type: 'timezone', label: 'Timezone', icon: Clock, category: 'address' },
+
+  { type: 'short_answer', label: 'Single Line / Short Text', icon: Type, category: 'input' },
+  { type: 'long_answer', label: 'Multi Line / Long Text', icon: AlignLeft, category: 'input' },
+  { type: 'textbox_list', label: 'Textbox List', icon: List, category: 'input' },
+  { type: 'number', label: 'Number', icon: Hash, category: 'input' },
+  { type: 'monetary', label: 'Monetary', icon: DollarSign, category: 'input' },
+  { type: 'date', label: 'Date Picker', icon: Calendar, category: 'input' },
+
+  { type: 'multiple_choice', label: 'Radio Select', icon: Circle, category: 'choice' },
+  { type: 'dropdown', label: 'Single Dropdown', icon: ChevronDown, category: 'choice' },
+  { type: 'multi_dropdown', label: 'Multi Dropdown', icon: ChevronsUpDown, category: 'choice' },
+  { type: 'multi_select', label: 'Multi-Select Checkboxes', icon: CheckSquare, category: 'choice' },
+  { type: 'checkbox', label: 'Checkbox', icon: CheckSquare, category: 'choice' },
+  { type: 'checkbox_group', label: 'Checkbox Group', icon: ListChecks, category: 'choice' },
+  { type: 'yes_no', label: 'Yes / No', icon: CheckSquare, category: 'choice' },
+
+  { type: 'rating', label: 'Star Rating', icon: Star, category: 'survey' },
+  { type: 'nps', label: 'NPS Score', icon: Layers, category: 'survey' },
+  { type: 'opinion_scale', label: 'Opinion Scale', icon: SlidersHorizontal, category: 'survey' },
+  { type: 'matrix', label: 'Matrix Grid', icon: Grid3X3, category: 'survey' },
+  { type: 'ranking', label: 'Ranking', icon: List, category: 'survey' },
+  { type: 'image_choice', label: 'Image Choice', icon: Image, category: 'survey' },
+  { type: 'contact_capture', label: 'Contact Capture', icon: UserCheck, category: 'survey' },
+
+  { type: 'source', label: 'Source', icon: Tag, category: 'advanced' },
+  { type: 'payment', label: 'Payment Element', icon: CreditCard, category: 'advanced' },
+  { type: 'product_selection', label: 'Product Selection', icon: ShoppingCart, category: 'advanced' },
+  { type: 'sms_verification', label: 'SMS Verification', icon: Smartphone, category: 'advanced' },
+  { type: 'email_validation', label: 'Email Validation', icon: BadgeCheck, category: 'advanced' },
+  { type: 'math_calculation', label: 'Math Calculation', icon: Calculator, category: 'advanced' },
+
+  { type: 'divider', label: 'Section Divider', icon: Minus, category: 'layout' },
+  { type: 'column', label: 'Column / Layout', icon: Columns, category: 'layout' },
+  { type: 'custom_html', label: 'Custom HTML', icon: FileCode, category: 'layout' },
+
+  { type: 'file_upload', label: 'File Upload', icon: Upload, category: 'special' },
+  { type: 'hidden', label: 'Hidden Field', icon: EyeOff, category: 'special' },
+  { type: 'consent', label: 'Consent Checkbox', icon: ShieldCheck, category: 'special' },
 ];
 
 const QUESTION_CATEGORIES = [
-  { id: 'basic', label: 'Basic' },
-  { id: 'choice', label: 'Choice' },
-  { id: 'scale', label: 'Scale' },
+  { id: 'contact', label: 'Contact Fields' },
+  { id: 'address', label: 'Address Fields' },
+  { id: 'input', label: 'Input Fields' },
+  { id: 'choice', label: 'Choice Fields' },
+  { id: 'survey', label: 'Survey Questions' },
   { id: 'advanced', label: 'Advanced' },
+  { id: 'layout', label: 'Layout' },
+  { id: 'special', label: 'Special' },
 ];
 
 function generateId(): string {
@@ -162,14 +237,22 @@ export function SurveyBuilder() {
     if (!survey) return;
 
     const typeConfig = QUESTION_TYPES.find((q) => q.type === type);
+    const isLayoutType = type === 'divider' || type === 'column' || type === 'custom_html';
     const newQuestion: SurveyQuestion = {
       id: generateId(),
       type,
-      label: typeConfig?.label || 'Question',
+      label: isLayoutType ? '' : (typeConfig?.label || 'Question'),
       required: false,
     };
 
-    if (type === 'multiple_choice' || type === 'multi_select') {
+    if (
+      type === 'multiple_choice' ||
+      type === 'multi_select' ||
+      type === 'dropdown' ||
+      type === 'multi_dropdown' ||
+      type === 'checkbox_group' ||
+      type === 'product_selection'
+    ) {
       newQuestion.options = [
         { id: generateId(), label: 'Option 1', value: 'option_1', score: 0 },
         { id: generateId(), label: 'Option 2', value: 'option_2', score: 0 },
@@ -193,6 +276,13 @@ export function SurveyBuilder() {
       newQuestion.maxValue = 10;
       newQuestion.minLabel = 'Not at all likely';
       newQuestion.maxLabel = 'Extremely likely';
+    }
+
+    if (type === 'opinion_scale') {
+      newQuestion.minValue = 1;
+      newQuestion.maxValue = 5;
+      newQuestion.minLabel = 'Strongly Disagree';
+      newQuestion.maxLabel = 'Strongly Agree';
     }
 
     if (type === 'matrix') {
@@ -220,6 +310,36 @@ export function SurveyBuilder() {
       newQuestion.imageOptions = [
         { id: generateId(), label: 'Option 1', value: 'option_1', imageUrl: 'https://images.pexels.com/photos/1181671/pexels-photo-1181671.jpeg?w=200&h=200&fit=crop' },
         { id: generateId(), label: 'Option 2', value: 'option_2', imageUrl: 'https://images.pexels.com/photos/3184291/pexels-photo-3184291.jpeg?w=200&h=200&fit=crop' },
+      ];
+    }
+
+    if (type === 'file_upload') {
+      newQuestion.fileUploadConfig = {
+        maxSizeBytes: 10485760,
+        allowedTypes: ['image/*', 'application/pdf', '.doc', '.docx'],
+        maxFiles: 1,
+      };
+    }
+
+    if (type === 'monetary') {
+      newQuestion.currency = 'USD';
+    }
+
+    if (type === 'custom_html') {
+      newQuestion.htmlContent = '<p>Custom HTML content</p>';
+    }
+
+    if (type === 'math_calculation') {
+      newQuestion.formula = '';
+    }
+
+    if (type === 'column') {
+      newQuestion.columnCount = 2;
+    }
+
+    if (type === 'textbox_list') {
+      newQuestion.options = [
+        { id: generateId(), label: 'Item', value: '' },
       ];
     }
 
@@ -1205,121 +1325,320 @@ function SurveyPreview({ survey }: { survey: Survey }) {
         </div>
 
         <div className="space-y-6">
-          {currentStep.questions.map((question, idx) => (
-            <div key={question.id}>
-              <label className="block text-sm font-medium text-gray-900 mb-2">
-                {idx + 1}. {question.text}
-                {question.required && <span className="text-red-500 ml-1">*</span>}
-              </label>
-              {question.description && (
-                <p className="text-sm text-gray-500 mb-2">{question.description}</p>
-              )}
+          {currentStep.questions.map((question, idx) => {
+            if (question.type === 'hidden') return null;
 
-              {question.type === 'short_text' && (
-                <input
-                  type="text"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            if (question.type === 'divider') {
+              return (
+                <div key={question.id} className="py-2">
+                  <hr className="border-gray-200" />
+                  {question.label && (
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mt-3">{question.label}</p>
+                  )}
+                </div>
+              );
+            }
+
+            if (question.type === 'column') {
+              return (
+                <div
+                  key={question.id}
+                  className="grid gap-3"
+                  style={{ gridTemplateColumns: `repeat(${question.columnCount || 2}, minmax(0, 1fr))` }}
+                >
+                  {Array.from({ length: question.columnCount || 2 }).map((_, i) => (
+                    <div key={i} className="border border-dashed border-gray-300 rounded-lg p-4 text-center text-xs text-gray-400">
+                      Column {i + 1}
+                    </div>
+                  ))}
+                </div>
+              );
+            }
+
+            if (question.type === 'custom_html') {
+              return (
+                <div
+                  key={question.id}
+                  className="prose prose-sm max-w-none border border-dashed border-gray-200 rounded-lg p-3"
+                  dangerouslySetInnerHTML={{ __html: question.htmlContent || '<p class="text-gray-400 text-sm">Custom HTML</p>' }}
                 />
-              )}
+              );
+            }
 
-              {question.type === 'long_text' && (
-                <textarea
-                  rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              )}
+            const isCheckboxType = question.type === 'checkbox' || question.type === 'consent';
 
-              {question.type === 'number' && (
-                <input
-                  type="number"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              )}
+            return (
+              <div key={question.id}>
+                {!isCheckboxType && (
+                  <label className="block text-sm font-medium text-gray-900 mb-2">
+                    {idx + 1}. {question.label}
+                    {question.required && <span className="text-red-500 ml-1">*</span>}
+                  </label>
+                )}
+                {question.description && (
+                  <p className="text-sm text-gray-500 mb-2">{question.description}</p>
+                )}
 
-              {question.type === 'single_choice' && (
-                <div className="space-y-2">
-                  {(question.options || []).map((option) => (
-                    <label key={option.id} className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name={question.id}
-                        className="text-blue-600 focus:ring-blue-500"
-                      />
-                      <span>{option.label}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
+                {question.type === 'short_answer' && (
+                  <input type="text" placeholder={question.placeholder} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                )}
 
-              {question.type === 'multiple_choice' && (
-                <div className="space-y-2">
-                  {(question.options || []).map((option) => (
-                    <label key={option.id} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="rounded text-blue-600 focus:ring-blue-500"
-                      />
-                      <span>{option.label}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
+                {question.type === 'long_answer' && (
+                  <textarea rows={4} placeholder={question.placeholder} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                )}
 
-              {question.type === 'rating' && (
-                <div className="flex gap-2">
-                  {Array.from(
-                    { length: (question.max || 5) - (question.min || 1) + 1 },
-                    (_, i) => (question.min || 1) + i
-                  ).map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      className="p-2 text-gray-400 hover:text-yellow-400"
-                    >
-                      <Star className="w-6 h-6" />
-                    </button>
-                  ))}
-                </div>
-              )}
+                {question.type === 'textbox_list' && (
+                  <div className="space-y-2">
+                    {(question.options || [{ id: 'tmp', label: 'Item', value: '' }]).map((_, i) => (
+                      <input key={i} type="text" placeholder={`Item ${i + 1}`} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    ))}
+                  </div>
+                )}
 
-              {question.type === 'nps' && (
-                <div className="flex gap-1">
-                  {Array.from({ length: 11 }, (_, i) => i).map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      className="w-10 h-10 border border-gray-300 rounded hover:bg-blue-50 hover:border-blue-500 text-sm font-medium"
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              )}
+                {question.type === 'number' && (
+                  <input type="number" placeholder={question.placeholder} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                )}
 
-              {question.type === 'opinion_scale' && (
-                <div>
-                  <div className="flex gap-1 mb-1">
+                {question.type === 'monetary' && (
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">{currencySymbol(question.currency)}</span>
+                    <input type="number" step="0.01" placeholder={question.placeholder || '0.00'} className="w-full pl-8 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                )}
+
+                {question.type === 'date' && (
+                  <input type="date" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                )}
+
+                {question.type === 'email' && (
+                  <input type="email" placeholder={question.placeholder || 'you@example.com'} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                )}
+
+                {question.type === 'phone' && (
+                  <input type="tel" placeholder={question.placeholder} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                )}
+
+                {question.type === 'website' && (
+                  <input type="url" placeholder={question.placeholder || 'https://'} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                )}
+
+                {(question.type === 'first_name' ||
+                  question.type === 'last_name' ||
+                  question.type === 'full_name' ||
+                  question.type === 'company' ||
+                  question.type === 'address' ||
+                  question.type === 'city' ||
+                  question.type === 'postal_code' ||
+                  question.type === 'source') && (
+                  <input type="text" placeholder={question.placeholder} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                )}
+
+                {question.type === 'state' && (
+                  <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">{question.placeholder || 'Select state...'}</option>
+                    {US_STATES.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                )}
+
+                {question.type === 'country' && (
+                  <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">{question.placeholder || 'Select country...'}</option>
+                    {COUNTRIES.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                )}
+
+                {question.type === 'timezone' && (
+                  <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">{question.placeholder || 'Select timezone...'}</option>
+                    {COMMON_TIMEZONES.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                )}
+
+                {(question.type === 'multiple_choice' || question.type === 'yes_no') && (
+                  <div className="space-y-2">
+                    {(question.options || []).map((option) => (
+                      <label key={option.id} className="flex items-center gap-2">
+                        <input type="radio" name={question.id} className="text-blue-600 focus:ring-blue-500" />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                {(question.type === 'dropdown' || question.type === 'product_selection') && (
+                  <select className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">{question.placeholder || 'Select...'}</option>
+                    {(question.options || []).map((opt) => (
+                      <option key={opt.id} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                )}
+
+                {question.type === 'multi_dropdown' && (
+                  <select multiple size={Math.min(5, (question.options || []).length || 3)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {(question.options || []).map((opt) => (
+                      <option key={opt.id} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                )}
+
+                {(question.type === 'multi_select' || question.type === 'checkbox_group') && (
+                  <div className="space-y-2">
+                    {(question.options || []).map((option) => (
+                      <label key={option.id} className="flex items-center gap-2">
+                        <input type="checkbox" className="rounded text-blue-600 focus:ring-blue-500" />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                {isCheckboxType && (
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" className="rounded text-blue-600 focus:ring-blue-500 mt-0.5" />
+                    <span className="text-sm text-gray-700">{question.label}</span>
+                  </label>
+                )}
+
+                {question.type === 'file_upload' && (
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                    <Upload className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+                    <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
+                    <p className="text-xs text-gray-400 mt-1">Max {Math.round((question.fileUploadConfig?.maxSizeBytes || 10485760) / 1048576)}MB</p>
+                  </div>
+                )}
+
+                {question.type === 'rating' && (
+                  <div className="flex gap-2">
                     {Array.from(
-                      { length: (question.max || 5) - (question.min || 1) + 1 },
-                      (_, i) => (question.min || 1) + i
+                      { length: (question.maxValue || 5) - (question.minValue || 1) + 1 },
+                      (_, i) => (question.minValue || 1) + i
                     ).map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        className="flex-1 py-2 border border-gray-300 rounded hover:bg-blue-50 hover:border-blue-500 text-sm font-medium"
-                      >
-                        {n}
+                      <button key={n} type="button" className="p-2 text-gray-400 hover:text-yellow-400">
+                        <Star className="w-6 h-6" />
                       </button>
                     ))}
                   </div>
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <span>{question.minLabel}</span>
-                    <span>{question.maxLabel}</span>
+                )}
+
+                {question.type === 'nps' && (
+                  <div className="flex gap-1 flex-wrap">
+                    {Array.from({ length: 11 }, (_, i) => i).map((n) => (
+                      <button key={n} type="button" className="w-10 h-10 border border-gray-300 rounded hover:bg-blue-50 hover:border-blue-500 text-sm font-medium">{n}</button>
+                    ))}
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
+                )}
+
+                {question.type === 'opinion_scale' && (
+                  <div>
+                    <div className="flex gap-1 mb-1">
+                      {Array.from(
+                        { length: (question.maxValue || 5) - (question.minValue || 1) + 1 },
+                        (_, i) => (question.minValue || 1) + i
+                      ).map((n) => (
+                        <button key={n} type="button" className="flex-1 py-2 border border-gray-300 rounded hover:bg-blue-50 hover:border-blue-500 text-sm font-medium">{n}</button>
+                      ))}
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>{question.minLabel}</span>
+                      <span>{question.maxLabel}</span>
+                    </div>
+                  </div>
+                )}
+
+                {question.type === 'matrix' && question.matrixRows && question.matrixColumns && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="p-2"></th>
+                          {question.matrixColumns.map((col) => (
+                            <th key={col.id} className="p-2 text-center text-xs text-gray-600">{col.label}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {question.matrixRows.map((row) => (
+                          <tr key={row.id} className="border-t border-gray-200">
+                            <td className="p-2 text-sm text-gray-700">{row.label}</td>
+                            {question.matrixColumns!.map((col) => (
+                              <td key={col.id} className="p-2 text-center">
+                                <input type="radio" name={`${question.id}-${row.id}`} className="text-blue-600 focus:ring-blue-500" />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {question.type === 'ranking' && (
+                  <div className="space-y-2">
+                    {(question.options || []).map((opt, i) => (
+                      <div key={opt.id} className="flex items-center gap-2 p-2 border border-gray-200 rounded">
+                        <span className="w-6 h-6 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-sm font-medium">{i + 1}</span>
+                        <span className="flex-1 text-sm">{opt.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {question.type === 'image_choice' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {(question.imageOptions || []).map((opt) => (
+                      <div key={opt.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <img src={opt.imageUrl} alt={opt.label} className="w-full aspect-square object-cover" />
+                        <div className="p-2 text-center text-sm text-gray-700">{opt.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {question.type === 'contact_capture' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <input type="text" placeholder="First name" className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <input type="text" placeholder="Last name" className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <input type="email" placeholder="Email" className="col-span-2 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  </div>
+                )}
+
+                {question.type === 'payment' && (
+                  <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 text-sm text-gray-600 flex items-center gap-2">
+                    <CreditCard className="w-4 h-4" />
+                    <span>Payment field — connect Stripe to collect payments here.</span>
+                  </div>
+                )}
+
+                {question.type === 'sms_verification' && (
+                  <div className="space-y-2">
+                    <input type="tel" placeholder="Phone number" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <div className="flex gap-2">
+                      <input type="text" placeholder="Verification code" className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <button type="button" className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg">Send code</button>
+                    </div>
+                  </div>
+                )}
+
+                {question.type === 'email_validation' && (
+                  <div className="flex gap-2">
+                    <input type="email" placeholder={question.placeholder || 'you@example.com'} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <button type="button" className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg">Verify</button>
+                  </div>
+                )}
+
+                {question.type === 'math_calculation' && (
+                  <input type="text" readOnly placeholder={question.formula ? `= ${question.formula}` : 'Computed value'} className="w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-500" />
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div className="flex justify-between mt-8">
