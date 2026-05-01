@@ -81,12 +81,13 @@ async function checkRateLimit(
   limit: number,
 ): Promise<boolean> {
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  // ip_address is stored inside the attribution jsonb column, not as a top-level column
   const { count, error } = await supabase
     .from("form_submissions")
     .select("id", { count: "exact", head: true })
     .eq("form_id", formId)
-    .eq("ip_address", ip)
-    .gte("created_at", oneHourAgo);
+    .eq("attribution->>ip_address", ip)
+    .gte("submitted_at", oneHourAgo);
 
   if (error) {
     console.error("Rate limit check error:", error);
