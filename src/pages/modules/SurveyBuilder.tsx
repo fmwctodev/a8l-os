@@ -63,7 +63,8 @@ import {
 } from '../../constants/formFieldOptions';
 import { EditableText } from '../../components/EditableText';
 import { ThemePicker } from '../../components/ThemePicker';
-import { Monitor } from 'lucide-react';
+import { Monitor, LayoutTemplate, Sparkles } from 'lucide-react';
+import { SURVEY_TEMPLATES, type SurveyTemplate } from '../../constants/surveyTemplates';
 
 interface QuestionTypeConfig {
   type: SurveyQuestionType;
@@ -155,6 +156,7 @@ export function SurveyBuilder() {
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [showEmbedModal, setShowEmbedModal] = useState(false);
   const [showBranchingPanel, setShowBranchingPanel] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
 
   useEffect(() => {
     if (id) loadSurvey();
@@ -709,7 +711,14 @@ export function SurveyBuilder() {
                     {currentStep.questions.length === 0 ? (
                       <div className="text-center py-12 text-gray-500">
                         <Plus className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                        <p>Add questions from the left panel</p>
+                        <p className="mb-4">Add questions from the left panel</p>
+                        <button
+                          onClick={() => setShowTemplateModal(true)}
+                          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                        >
+                          <LayoutTemplate className="w-4 h-4" />
+                          Start from a template
+                        </button>
                       </div>
                     ) : (
                       <div className="space-y-4">
@@ -759,6 +768,96 @@ export function SurveyBuilder() {
       {showEmbedModal && survey.public_slug && (
         <SurveyEmbedModal survey={survey} onClose={() => setShowEmbedModal(false)} />
       )}
+
+      {showTemplateModal && (
+        <SurveyTemplateModal
+          onClose={() => setShowTemplateModal(false)}
+          onApply={(template) => {
+            const steps: SurveyStep[] = template.steps.map((ts) => ({
+              id: generateId(),
+              title: ts.title,
+              description: ts.description,
+              questions: ts.questions.map((tq) => ({
+                id: generateId(),
+                type: tq.type,
+                label: tq.label,
+                description: tq.description,
+                required: tq.required ?? false,
+                placeholder: tq.placeholder,
+                minValue: tq.minValue,
+                maxValue: tq.maxValue,
+                minLabel: tq.minLabel,
+                maxLabel: tq.maxLabel,
+                options: tq.options?.map((o) => ({ ...o, id: generateId() })),
+              })),
+              branchRules: [],
+            }));
+            setSurvey({
+              ...survey,
+              definition: { ...survey.definition, steps },
+              settings: {
+                ...survey.settings,
+                oneQuestionPerStep: template.oneQuestionPerStep ?? survey.settings.oneQuestionPerStep,
+                showProgressBar: true,
+              },
+            });
+            setActiveStepIndex(0);
+            setShowTemplateModal(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function SurveyTemplateModal({
+  onClose,
+  onApply,
+}: {
+  onClose: () => void;
+  onApply: (template: SurveyTemplate) => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-blue-600" />
+            <h2 className="text-lg font-semibold text-gray-900">Start from a template</h2>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        <div className="p-6 grid sm:grid-cols-2 gap-4 overflow-y-auto">
+          {SURVEY_TEMPLATES.map((template) => {
+            const totalQuestions = template.steps.reduce((n, s) => n + s.questions.length, 0);
+            return (
+              <button
+                key={template.id}
+                onClick={() => onApply(template)}
+                className="text-left p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <LayoutTemplate className="w-4 h-4 text-blue-600" />
+                  <span className="font-semibold text-gray-900">{template.name}</span>
+                </div>
+                <p className="text-sm text-gray-600 mb-3">{template.description}</p>
+                <div className="text-xs text-gray-500">
+                  {template.steps.length} step{template.steps.length === 1 ? '' : 's'} ·
+                  {' '}{totalQuestions} question{totalQuestions === 1 ? '' : 's'}
+                  {template.oneQuestionPerStep && ' · one-at-a-time'}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <div className="p-4 border-t border-gray-200 bg-gray-50">
+          <p className="text-xs text-gray-500">
+            Applying a template replaces all current steps and questions. You can still edit, add, and remove after.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1234,11 +1333,23 @@ function SurveySettingsPanel({
             <input
               type="checkbox"
               checked={settings.showBackButton ?? true}
-              onChange={(e) => onUpdate({ showBackButton: e.target.checked })}
+              onChange={(e) => onUpdate({ showBackButton: e.target.checked, allowBackNavigation: e.target.checked })}
               className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
             <span className="text-sm text-gray-700">Show back button</span>
           </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.oneQuestionPerStep || false}
+              onChange={(e) => onUpdate({ oneQuestionPerStep: e.target.checked })}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700">One question at a time</span>
+          </label>
+          {settings.oneQuestionPerStep && (
+            <p className="text-xs text-gray-500 ml-6">Each question on its own screen — better for paid-ad funnels and mobile</p>
+          )}
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"

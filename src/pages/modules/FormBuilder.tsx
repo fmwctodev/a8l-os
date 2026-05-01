@@ -56,7 +56,8 @@ import {
 } from '../../constants/formFieldOptions';
 import { EditableText } from '../../components/EditableText';
 import { ThemePicker } from '../../components/ThemePicker';
-import { Monitor } from 'lucide-react';
+import { Monitor, LayoutTemplate, Sparkles } from 'lucide-react';
+import { FORM_TEMPLATES, type FormTemplate } from '../../constants/formTemplates';
 
 interface FieldTypeConfig {
   type: FormFieldType;
@@ -137,6 +138,7 @@ export function FormBuilder() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'fields' | 'settings'>('fields');
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
@@ -539,7 +541,14 @@ export function FormBuilder() {
                 {form.definition.fields.length === 0 ? (
                   <div className="text-center py-12 text-gray-500">
                     <Plus className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                    <p>Add fields from the left panel</p>
+                    <p className="mb-4">Add fields from the left panel</p>
+                    <button
+                      onClick={() => setShowTemplateModal(true)}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                    >
+                      <LayoutTemplate className="w-4 h-4" />
+                      Start from a template
+                    </button>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -586,6 +595,76 @@ export function FormBuilder() {
           onClose={() => setShowEmbedModal(false)}
         />
       )}
+
+      {showTemplateModal && (
+        <FormTemplateModal
+          onClose={() => setShowTemplateModal(false)}
+          onApply={(template) => {
+            const fields: FormField[] = template.fields.map((tf) => ({
+              id: generateFieldId(),
+              type: tf.type,
+              label: tf.label,
+              required: tf.required ?? false,
+              placeholder: tf.placeholder,
+              helpText: tf.helpText,
+              options: tf.options,
+              width: 'full',
+            }));
+            setForm({
+              ...form,
+              definition: { ...form.definition, fields },
+            });
+            setShowTemplateModal(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function FormTemplateModal({
+  onClose,
+  onApply,
+}: {
+  onClose: () => void;
+  onApply: (template: FormTemplate) => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-blue-600" />
+            <h2 className="text-lg font-semibold text-gray-900">Start from a template</h2>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+        <div className="p-6 grid sm:grid-cols-2 gap-4 overflow-y-auto">
+          {FORM_TEMPLATES.map((template) => (
+            <button
+              key={template.id}
+              onClick={() => onApply(template)}
+              className="text-left p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <LayoutTemplate className="w-4 h-4 text-blue-600" />
+                <span className="font-semibold text-gray-900">{template.name}</span>
+              </div>
+              <p className="text-sm text-gray-600 mb-3">{template.description}</p>
+              <div className="text-xs text-gray-500">
+                {template.fields.length} field{template.fields.length === 1 ? '' : 's'}
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="p-4 border-t border-gray-200 bg-gray-50">
+          <p className="text-xs text-gray-500">
+            Applying a template replaces all current fields. You can still edit, add, and remove fields after.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

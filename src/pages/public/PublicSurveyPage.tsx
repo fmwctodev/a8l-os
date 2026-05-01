@@ -20,6 +20,7 @@ export function PublicSurveyPage() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [currentQuestionInStep, setCurrentQuestionInStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
@@ -90,9 +91,13 @@ export function PublicSurveyPage() {
     if (!survey) return false;
 
     const currentStep = survey.definition.steps[currentStepIndex];
+    const oneAtATime = !!survey.settings.oneQuestionPerStep;
     const errors: Record<string, string> = {};
+    const questionsToValidate = oneAtATime
+      ? [currentStep.questions[currentQuestionInStep]].filter(Boolean)
+      : currentStep.questions;
 
-    for (const question of currentStep.questions) {
+    for (const question of questionsToValidate) {
       if (question.required) {
         const answer = answers[question.id];
         if (answer === undefined || answer === '' || (Array.isArray(answer) && answer.length === 0)) {
@@ -107,9 +112,20 @@ export function PublicSurveyPage() {
 
   function handleNext() {
     if (!survey || !validateCurrentStep()) return;
+    const oneAtATime = !!survey.settings.oneQuestionPerStep;
+    const currentStep = survey.definition.steps[currentStepIndex];
+    const isLastQuestionInStep = currentQuestionInStep >= currentStep.questions.length - 1;
+    const isLastStep = currentStepIndex >= survey.definition.steps.length - 1;
 
-    if (currentStepIndex < survey.definition.steps.length - 1) {
+    if (oneAtATime && !isLastQuestionInStep) {
+      setCurrentQuestionInStep(currentQuestionInStep + 1);
+      setValidationErrors({});
+      return;
+    }
+
+    if (!isLastStep) {
       setCurrentStepIndex(currentStepIndex + 1);
+      setCurrentQuestionInStep(0);
       setValidationErrors({});
     } else {
       handleSubmit();
@@ -117,8 +133,19 @@ export function PublicSurveyPage() {
   }
 
   function handleBack() {
-    if (!survey?.settings.allowBackNavigation || currentStepIndex === 0) return;
+    if (!survey?.settings.allowBackNavigation) return;
+    const oneAtATime = !!survey.settings.oneQuestionPerStep;
+
+    if (oneAtATime && currentQuestionInStep > 0) {
+      setCurrentQuestionInStep(currentQuestionInStep - 1);
+      setValidationErrors({});
+      return;
+    }
+
+    if (currentStepIndex === 0) return;
+    const prevStep = survey.definition.steps[currentStepIndex - 1];
     setCurrentStepIndex(currentStepIndex - 1);
+    setCurrentQuestionInStep(oneAtATime ? Math.max(0, prevStep.questions.length - 1) : 0);
     setValidationErrors({});
   }
 
@@ -879,8 +906,23 @@ export function PublicSurveyPage() {
 
   const currentStep = survey.definition.steps[currentStepIndex];
   const totalSteps = survey.definition.steps.length;
-  const progress = ((currentStepIndex + 1) / totalSteps) * 100;
+  const oneAtATime = !!survey.settings.oneQuestionPerStep;
+  const totalQuestions = survey.definition.steps.reduce((n, s) => n + s.questions.length, 0);
+  const completedQuestions = survey.definition.steps
+    .slice(0, currentStepIndex)
+    .reduce((n, s) => n + s.questions.length, 0) + (oneAtATime ? currentQuestionInStep : currentStep.questions.length);
+  const progress = oneAtATime
+    ? Math.min(100, ((completedQuestions + 1) / Math.max(1, totalQuestions)) * 100)
+    : ((currentStepIndex + 1) / totalSteps) * 100;
   const isLastStep = currentStepIndex === totalSteps - 1;
+  const isLastQuestionInStep = currentQuestionInStep >= currentStep.questions.length - 1;
+  const isLastQuestionOverall = oneAtATime ? (isLastStep && isLastQuestionInStep) : isLastStep;
+  const visibleQuestions = oneAtATime
+    ? [currentStep.questions[currentQuestionInStep]].filter(Boolean)
+    : currentStep.questions;
+  const isAtStart = oneAtATime
+    ? currentStepIndex === 0 && currentQuestionInStep === 0
+    : currentStepIndex === 0;
 
   return (
     <div className={rootClass} style={themeStyle}>
@@ -894,7 +936,11 @@ export function PublicSurveyPage() {
           {survey.settings.showProgressBar && (
             <div className="mb-8">
               <div className="flex justify-between text-sm text-[var(--form-text-muted)] mb-2">
-                <span>Step {currentStepIndex + 1} of {totalSteps}</span>
+                <span>
+                  {oneAtATime
+                    ? `Question ${completedQuestions + 1} of ${totalQuestions}`
+                    : `Step ${currentStepIndex + 1} of ${totalSteps}`}
+                </span>
                 <span>{Math.round(progress)}%</span>
               </div>
               <div className="h-2 bg-[var(--form-input-bg)] rounded-full overflow-hidden">
@@ -913,21 +959,25 @@ export function PublicSurveyPage() {
             </div>
           )}
 
-          <div className="mb-8">
-            <h2 className="text-lg font-medium text-[var(--form-text-primary)] mb-1">{currentStep.title}</h2>
-            {currentStep.description && (
-              <p className="text-sm text-[var(--form-text-muted)]">{currentStep.description}</p>
-            )}
-          </div>
+          {!oneAtATime && (
+            <div className="mb-8">
+              <h2 className="text-lg font-medium text-[var(--form-text-primary)] mb-1">{currentStep.title}</h2>
+              {currentStep.description && (
+                <p className="text-sm text-[var(--form-text-muted)]">{currentStep.description}</p>
+              )}
+            </div>
+          )}
 
           <div>
-            {currentStep.questions.map((question, idx) => renderQuestion(question, idx))}
+            {visibleQuestions.map((question, idx) =>
+              renderQuestion(question, oneAtATime ? completedQuestions : idx)
+            )}
           </div>
 
           <div className="flex justify-between mt-8 pt-6 border-t border-[var(--form-input-border)]">
             <button
               onClick={handleBack}
-              disabled={currentStepIndex === 0 || !survey.settings.allowBackNavigation}
+              disabled={isAtStart || !survey.settings.allowBackNavigation}
               className="flex items-center gap-2 px-4 py-2 text-[var(--form-text-secondary)] hover:bg-[var(--form-input-bg)]/40 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -944,7 +994,7 @@ export function PublicSurveyPage() {
                   <Loader2 className="w-5 h-5 animate-spin" />
                   Submitting...
                 </>
-              ) : isLastStep ? (
+              ) : isLastQuestionOverall ? (
                 'Submit'
               ) : (
                 <>
