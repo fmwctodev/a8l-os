@@ -1054,6 +1054,63 @@ function QuestionEditor({
           </div>
         )}
 
+        {question.type === 'math_calculation' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Formula</label>
+            <input
+              type="text"
+              value={question.formula || ''}
+              onChange={(e) => onUpdate({ formula: e.target.value })}
+              placeholder="e.g. {sqft} * 12 + 250"
+              className="w-full px-3 py-2 font-mono text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Reference other questions with {'{question-id}'}. Supported: + - * / ( ).
+            </p>
+          </div>
+        )}
+
+        {question.type === 'monetary' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+            <input
+              type="text"
+              value={question.currency || 'USD'}
+              onChange={(e) => onUpdate({ currency: e.target.value.toUpperCase() })}
+              maxLength={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        )}
+
+        {question.type === 'custom_html' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">HTML Content</label>
+            <textarea
+              value={question.htmlContent || ''}
+              onChange={(e) => onUpdate({ htmlContent: e.target.value })}
+              rows={6}
+              placeholder="<p>Custom HTML content</p>"
+              className="w-full px-3 py-2 font-mono text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        )}
+
+        {question.type === 'column' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Columns</label>
+            <select
+              value={question.columnCount || 2}
+              onChange={(e) => onUpdate({ columnCount: parseInt(e.target.value) as 2 | 3 | 4 })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value={2}>2 columns</option>
+              <option value={3}>3 columns</option>
+              <option value={4}>4 columns</option>
+            </select>
+          </div>
+        )}
+
         {question.type === 'image_choice' && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Image Options</label>

@@ -11,6 +11,7 @@ import {
 } from '../../constants/formFieldOptions';
 import { getTheme, themeStyleVars } from '../../constants/formThemes';
 import { evaluateRule } from '../../components/SubmitRulesEditor';
+import { evalFormula } from '../../utils/formulaEvaluator';
 
 interface UploadedFile {
   id: string;
@@ -289,6 +290,8 @@ export function PublicFormPage() {
             type: f.type,
             url: f.url,
           }));
+        } else if (field.type === 'math_calculation') {
+          submissionData[field.id] = evalFormula(field.formula, formData as Record<string, unknown>);
         } else {
           submissionData[field.id] = formData[field.id] ?? null;
         }
@@ -662,16 +665,24 @@ export function PublicFormPage() {
           </div>
         );
 
-      case 'math_calculation':
+      case 'math_calculation': {
+        const computed = evalFormula(field.formula, formData as Record<string, unknown>);
+        const display =
+          computed !== null
+            ? field.currency
+              ? `${currencySymbol(field.currency)}${computed.toFixed(2)}`
+              : String(computed)
+            : '';
         return (
           <input
             type="text"
             readOnly
-            value={String(formData[field.id] || '')}
-            placeholder={field.formula ? `= ${field.formula}` : 'Computed value'}
+            value={display}
+            placeholder={field.formula ? `= ${field.formula}` : 'Configure formula in field settings'}
             className="w-full px-4 py-3 bg-[var(--form-input-bg)]/60 border border-[var(--form-input-border)] rounded-lg text-[var(--form-text-muted)] placeholder:text-[var(--form-input-placeholder)]"
           />
         );
+      }
 
       case 'checkbox':
       case 'consent':

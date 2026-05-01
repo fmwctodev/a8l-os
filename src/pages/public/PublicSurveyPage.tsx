@@ -11,6 +11,7 @@ import {
 } from '../../constants/formFieldOptions';
 import { getTheme, themeStyleVars } from '../../constants/formThemes';
 import { evaluateRule } from '../../components/SubmitRulesEditor';
+import { evalFormula } from '../../utils/formulaEvaluator';
 
 export function PublicSurveyPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -204,6 +205,15 @@ export function PublicSurveyPage() {
     try {
       setSubmitting(true);
 
+      const enrichedAnswers: Record<string, unknown> = { ...answers };
+      for (const step of survey.definition.steps) {
+        for (const q of step.questions) {
+          if (q.type === 'math_calculation') {
+            enrichedAnswers[q.id] = evalFormula(q.formula, answers as Record<string, unknown>);
+          }
+        }
+      }
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/survey-submit`,
         {
@@ -214,7 +224,7 @@ export function PublicSurveyPage() {
           },
           body: JSON.stringify({
             surveyId: survey.id,
-            answers,
+            answers: enrichedAnswers,
           }),
         }
       );
@@ -746,15 +756,24 @@ export function PublicSurveyPage() {
           </div>
         )}
 
-        {question.type === 'math_calculation' && (
-          <input
-            type="text"
-            readOnly
-            value={String(answer || '')}
-            placeholder={question.formula ? `= ${question.formula}` : 'Computed value'}
-            className="w-full px-4 py-3 bg-[var(--form-input-bg)]/60 border border-[var(--form-input-border)] rounded-lg text-[var(--form-text-muted)]"
-          />
-        )}
+        {question.type === 'math_calculation' && (() => {
+          const computed = evalFormula(question.formula, answers as Record<string, unknown>);
+          const display =
+            computed !== null
+              ? question.currency
+                ? `${currencySymbol(question.currency)}${computed.toFixed(2)}`
+                : String(computed)
+              : '';
+          return (
+            <input
+              type="text"
+              readOnly
+              value={display}
+              placeholder={question.formula ? `= ${question.formula}` : 'Configure formula in question settings'}
+              className="w-full px-4 py-3 bg-[var(--form-input-bg)]/60 border border-[var(--form-input-border)] rounded-lg text-[var(--form-text-muted)]"
+            />
+          );
+        })()}
 
         {question.type === 'matrix' && question.matrixRows && question.matrixColumns && (
           <div className="overflow-x-auto">

@@ -935,6 +935,86 @@ function FieldEditor({
             <FileUploadSettings field={field} onUpdate={onUpdate} />
           )}
 
+          {field.type === 'math_calculation' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Formula</label>
+              <input
+                type="text"
+                value={field.formula || ''}
+                onChange={(e) => onUpdate({ formula: e.target.value })}
+                placeholder="e.g. {sqft} * 12 + 250"
+                className="w-full px-3 py-2 font-mono text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Reference other fields with {'{field-id}'}. Supported: + - * / ( ).
+              </p>
+              {allFields.filter((f) => f.id !== field.id && f.type !== 'divider' && f.type !== 'column' && f.type !== 'custom_html').length > 0 && (
+                <details className="mt-2 text-xs">
+                  <summary className="cursor-pointer text-blue-600 hover:text-blue-700">Available field IDs</summary>
+                  <div className="mt-1 space-y-0.5 max-h-32 overflow-y-auto bg-gray-50 rounded p-2">
+                    {allFields
+                      .filter((f) => f.id !== field.id && f.type !== 'divider' && f.type !== 'column' && f.type !== 'custom_html')
+                      .map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => onUpdate({ formula: (field.formula || '') + `{${f.id}}` })}
+                          className="block w-full text-left font-mono hover:bg-blue-50 px-1 py-0.5 rounded"
+                        >
+                          <span className="text-gray-500">{`{${f.id}}`}</span>
+                          <span className="text-gray-700 ml-2">{f.label}</span>
+                        </button>
+                      ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
+
+          {field.type === 'monetary' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+              <input
+                type="text"
+                value={field.currency || 'USD'}
+                onChange={(e) => onUpdate({ currency: e.target.value.toUpperCase() })}
+                maxLength={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+
+          {field.type === 'custom_html' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">HTML Content</label>
+              <textarea
+                value={field.htmlContent || ''}
+                onChange={(e) => onUpdate({ htmlContent: e.target.value })}
+                rows={6}
+                placeholder="<p>Custom HTML content</p>"
+                className="w-full px-3 py-2 font-mono text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Rendered as-is on the public page. Sanitize untrusted content.
+              </p>
+            </div>
+          )}
+
+          {field.type === 'column' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Columns</label>
+              <select
+                value={field.columnCount || 2}
+                onChange={(e) => onUpdate({ columnCount: parseInt(e.target.value) as 2 | 3 | 4 })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value={2}>2 columns</option>
+                <option value={3}>3 columns</option>
+                <option value={4}>4 columns</option>
+              </select>
+            </div>
+          )}
+
           {(field.type === 'text' || field.type === 'textarea') && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Character Limit</label>
