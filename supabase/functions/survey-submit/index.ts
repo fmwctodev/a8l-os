@@ -14,10 +14,26 @@ interface SurveyQuestionOption {
   score?: number;
 }
 
+interface FormValidationRule {
+  type:
+    | "min_length"
+    | "max_length"
+    | "pattern"
+    | "min"
+    | "max"
+    | "min_date"
+    | "max_date"
+    | "format";
+  value: string | number;
+  message?: string;
+}
+
 interface SurveyQuestion {
   id: string;
   type: string;
   label: string;
+  required?: boolean;
+  validationRules?: FormValidationRule[];
   options?: SurveyQuestionOption[];
   mapping?: {
     contactField?: string;
@@ -56,6 +72,9 @@ interface SurveySettings {
     tagId: string;
   }>;
   partialCompletionEnabled?: boolean;
+  captchaEnabled?: boolean;
+  captchaProvider?: "hcaptcha";
+  captchaSiteKey?: string;
 }
 
 interface Survey {
@@ -475,6 +494,107 @@ async function createTimelineEvent(
   });
 }
 
+function validateAnswers(
+  answers: Record<string, unknown>,
+  definition: SurveyDefinition,
+): string | null {
+  for (const step of definition.steps) {
+    for (const q of step.questions) {
+      const raw = answers[q.id];
+      const isEmpty =
+        raw === undefined ||
+        raw === null ||
+        raw === "" ||
+        (Array.isArray(raw) && raw.length === 0);
+
+      if (q.required && q.type !== "hidden" && q.type !== "divider") {
+        if (isEmpty) {
+          return `${q.label || q.id} is required`;
+        }
+      }
+
+      if (isEmpty || !q.validationRules) continue;
+
+      const value = String(raw ?? "");
+      const numValue = typeof raw === "number" ? raw : parseFloat(value);
+
+      for (const rule of q.validationRules) {
+        if (rule.type === "min_length" && value.length < Number(rule.value)) {
+          return rule.message || `${q.label}: minimum ${rule.value} characters`;
+        }
+        if (rule.type === "max_length" && value.length > Number(rule.value)) {
+          return rule.message || `${q.label}: maximum ${rule.value} characters`;
+        }
+        if (rule.type === "pattern") {
+          try {
+            if (!new RegExp(String(rule.value)).test(value)) {
+              return rule.message || `${q.label}: invalid format`;
+            }
+          } catch {
+            // bad pattern
+          }
+        }
+        if (rule.type === "min" && !isNaN(numValue) && numValue < Number(rule.value)) {
+          return rule.message || `${q.label}: must be at least ${rule.value}`;
+        }
+        if (rule.type === "max" && !isNaN(numValue) && numValue > Number(rule.value)) {
+          return rule.message || `${q.label}: must be at most ${rule.value}`;
+        }
+        if (rule.type === "min_date" && value && value < String(rule.value)) {
+          return rule.message || `${q.label}: must be on or after ${rule.value}`;
+        }
+        if (rule.type === "max_date" && value && value > String(rule.value)) {
+          return rule.message || `${q.label}: must be on or before ${rule.value}`;
+        }
+        if (rule.type === "format") {
+          if (q.type === "email") {
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+              return rule.message || `${q.label}: invalid email`;
+            }
+          } else if (q.type === "phone") {
+            const digits = value.replace(/\D+/g, "");
+            if (digits.length < 7 || digits.length > 15) {
+              return rule.message || `${q.label}: invalid phone number`;
+            }
+          } else if (q.type === "website") {
+            try {
+              const u = new URL(value.includes("://") ? value : `https://${value}`);
+              if (!u.hostname.includes(".")) throw new Error();
+            } catch {
+              return rule.message || `${q.label}: invalid URL`;
+            }
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+async function verifyHCaptcha(token: string, remoteIp?: string): Promise<boolean> {
+  const secret = Deno.env.get("HCAPTCHA_SECRET");
+  if (!secret) {
+    console.warn("HCAPTCHA_SECRET not set; skipping captcha verification");
+    return true;
+  }
+  try {
+    const params = new URLSearchParams();
+    params.set("secret", secret);
+    params.set("response", token);
+    if (remoteIp) params.set("remoteip", remoteIp);
+    const res = await fetch("https://api.hcaptcha.com/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    });
+    const json = await res.json();
+    return Boolean(json?.success);
+  } catch (e) {
+    console.error("hCaptcha verification error:", e);
+    return false;
+  }
+}
+
 async function emitOutboxEvent(
   supabase: ReturnType<typeof createClient>,
   organizationId: string,
@@ -607,6 +727,32 @@ Deno.serve(async (req: Request) => {
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+    }
+
+    if (settings.captchaEnabled && settings.captchaProvider === "hcaptcha") {
+      const token = body._captcha_token as string | undefined;
+      if (!token) {
+        return new Response(
+          JSON.stringify({ error: "Captcha required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      const remoteIp = req.headers.get("x-forwarded-for")?.split(",")[0] || undefined;
+      const ok = await verifyHCaptcha(token, remoteIp);
+      if (!ok) {
+        return new Response(
+          JSON.stringify({ error: "Captcha verification failed" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    const validationError = validateAnswers(answers, typedSurvey.definition);
+    if (validationError) {
+      return new Response(
+        JSON.stringify({ error: validationError }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const attribution = extractAttribution(req, body);

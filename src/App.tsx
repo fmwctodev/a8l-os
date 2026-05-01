@@ -56,8 +56,10 @@ const AIAgentsTemplates = lazy(() => import('./pages/modules/AIAgentsTemplates')
 const Marketing = lazy(() => import('./pages/modules/Marketing').then(m => ({ default: m.Marketing })));
 const MarketingForms = lazy(() => import('./pages/modules/MarketingForms').then(m => ({ default: m.MarketingForms })));
 const FormBuilder = lazy(() => import('./pages/modules/FormBuilder').then(m => ({ default: m.FormBuilder })));
+const FormSubmissions = lazy(() => import('./pages/modules/FormSubmissions').then(m => ({ default: m.FormSubmissions })));
 const MarketingSurveys = lazy(() => import('./pages/modules/MarketingSurveys').then(m => ({ default: m.MarketingSurveys })));
 const SurveyBuilder = lazy(() => import('./pages/modules/SurveyBuilder').then(m => ({ default: m.SurveyBuilder })));
+const SurveySubmissions = lazy(() => import('./pages/modules/SurveySubmissions').then(m => ({ default: m.SurveySubmissions })));
 const AISocialManagerLayout = lazy(() => import('./layouts/AISocialManagerLayout').then(m => ({ default: m.AISocialManagerLayout })));
 const PostComposer = lazy(() => import('./pages/modules/PostComposer').then(m => ({ default: m.PostComposer })));
 const SocialCalendar = lazy(() => import('./pages/modules/SocialCalendar').then(m => ({ default: m.SocialCalendar })));
@@ -97,6 +99,7 @@ const EmailServicesSettingsPage = lazy(() => import('./pages/settings/EmailServi
 const PhoneSystemSettingsPage = lazy(() => import('./pages/settings/PhoneSystemSettingsPage'));
 const CustomFieldsSettingsPage = lazy(() => import('./pages/settings/CustomFieldsSettingsPage').then(m => ({ default: m.CustomFieldsSettingsPage })));
 const CustomObjectsSettingsPage = lazy(() => import('./pages/settings/CustomObjectsSettingsPage').then(m => ({ default: m.CustomObjectsSettingsPage })));
+const CustomObjectRecords = lazy(() => import('./pages/modules/CustomObjectRecords').then(m => ({ default: m.CustomObjectRecords })));
 const CustomValuesSettingsPage = lazy(() => import('./pages/settings/CustomValuesSettingsPage').then(m => ({ default: m.CustomValuesSettingsPage })));
 const ScoringSettingsPage = lazy(() => import('./pages/settings/ScoringSettingsPage'));
 const IntegrationsSettingsPage = lazy(() => import('./pages/settings/IntegrationsSettingsPage').then(m => ({ default: m.IntegrationsSettingsPage })));
@@ -213,6 +216,14 @@ function App() {
                 element={
                   <ProtectedRoute permission="contacts.view" featureFlag="contacts">
                     <ContactDetail />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/custom-objects/:slug"
+                element={
+                  <ProtectedRoute>
+                    <CustomObjectRecords />
                   </ProtectedRoute>
                 }
               />
@@ -400,6 +411,14 @@ function App() {
                 }
               />
               <Route
+                path="/marketing/forms/:id/submissions"
+                element={
+                  <ProtectedRoute permission="marketing.forms.view" featureFlag="marketing">
+                    <FormSubmissions />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/marketing/surveys"
                 element={
                   <ProtectedRoute permission="marketing.surveys.view" featureFlag="marketing">
@@ -428,6 +447,14 @@ function App() {
                 element={
                   <ProtectedRoute permission="marketing.surveys.manage" featureFlag="marketing">
                     <SurveyBuilder />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/marketing/surveys/:id/submissions"
+                element={
+                  <ProtectedRoute permission="marketing.surveys.view" featureFlag="marketing">
+                    <SurveySubmissions />
                   </ProtectedRoute>
                 }
               />

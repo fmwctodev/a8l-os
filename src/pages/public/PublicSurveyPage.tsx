@@ -28,6 +28,7 @@ export function PublicSurveyPage() {
   const [currentQuestionInStep, setCurrentQuestionInStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const embed = useMemo(() => {
     const v = searchParams.get('embed');
@@ -37,6 +38,28 @@ export function PublicSurveyPage() {
   useEffect(() => {
     if (slug) loadSurvey();
   }, [slug]);
+
+  useEffect(() => {
+    if (!survey?.settings.captchaEnabled || !survey.settings.captchaSiteKey) return;
+    if (typeof window === 'undefined') return;
+    if (document.getElementById('hcaptcha-script')) return;
+    const s = document.createElement('script');
+    s.id = 'hcaptcha-script';
+    s.src = 'https://js.hcaptcha.com/1/api.js';
+    s.async = true;
+    s.defer = true;
+    document.head.appendChild(s);
+  }, [survey?.settings.captchaEnabled, survey?.settings.captchaSiteKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    interface CaptchaWindow extends Window {
+      __onHCaptcha?: (token: string) => void;
+      __onHCaptchaExpired?: () => void;
+    }
+    (window as CaptchaWindow).__onHCaptcha = (token: string) => setCaptchaToken(token);
+    (window as CaptchaWindow).__onHCaptchaExpired = () => setCaptchaToken(null);
+  }, []);
 
   useEffect(() => {
     if (!embed) return;
@@ -267,6 +290,11 @@ export function PublicSurveyPage() {
       return;
     }
 
+    if (survey.settings.captchaEnabled && survey.settings.captchaSiteKey && !captchaToken) {
+      setError('Please complete the captcha challenge.');
+      return;
+    }
+
     try {
       setSubmitting(true);
 
@@ -290,6 +318,7 @@ export function PublicSurveyPage() {
           body: JSON.stringify({
             surveyId: survey.id,
             answers: enrichedAnswers,
+            _captcha_token: captchaToken,
           }),
         }
       );
@@ -1144,6 +1173,18 @@ export function PublicSurveyPage() {
               renderQuestion(question, oneAtATime ? completedQuestions : idx)
             )}
           </div>
+
+          {survey.settings.captchaEnabled && survey.settings.captchaSiteKey && isLastQuestionOverall && (
+            <div className="mt-6 flex justify-center">
+              <div
+                className="h-captcha"
+                data-sitekey={survey.settings.captchaSiteKey}
+                data-callback="__onHCaptcha"
+                data-expired-callback="__onHCaptchaExpired"
+                data-theme="dark"
+              />
+            </div>
+          )}
 
           <div className="flex justify-between mt-8 pt-6 border-t border-[var(--form-input-border)]">
             <button

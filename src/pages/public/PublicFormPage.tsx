@@ -44,6 +44,7 @@ export function PublicFormPage() {
   const [formData, setFormData] = useState<Record<string, FormFieldValue>>({});
   const [fileData, setFileData] = useState<Record<string, UploadedFile[]>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const embed = useMemo(() => {
@@ -54,6 +55,28 @@ export function PublicFormPage() {
   useEffect(() => {
     if (slug) loadForm();
   }, [slug]);
+
+  useEffect(() => {
+    if (!form?.settings.captchaEnabled || !form.settings.captchaSiteKey) return;
+    if (typeof window === 'undefined') return;
+    if (document.getElementById('hcaptcha-script')) return;
+    const s = document.createElement('script');
+    s.id = 'hcaptcha-script';
+    s.src = 'https://js.hcaptcha.com/1/api.js';
+    s.async = true;
+    s.defer = true;
+    document.head.appendChild(s);
+  }, [form?.settings.captchaEnabled, form?.settings.captchaSiteKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    interface CaptchaWindow extends Window {
+      __onHCaptcha?: (token: string) => void;
+      __onHCaptchaExpired?: () => void;
+    }
+    (window as CaptchaWindow).__onHCaptcha = (token: string) => setCaptchaToken(token);
+    (window as CaptchaWindow).__onHCaptchaExpired = () => setCaptchaToken(null);
+  }, []);
 
   useEffect(() => {
     if (!embed) return;
@@ -349,6 +372,12 @@ export function PublicFormPage() {
         }
       }
 
+      if (form.settings.captchaEnabled && form.settings.captchaSiteKey && !captchaToken) {
+        setError('Please complete the captcha challenge.');
+        setSubmitting(false);
+        return;
+      }
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/form-submit`,
         {
@@ -360,6 +389,7 @@ export function PublicFormPage() {
           body: JSON.stringify({
             formId: form.id,
             data: submissionData,
+            _captcha_token: captchaToken,
           }),
         }
       );
@@ -993,6 +1023,18 @@ export function PublicFormPage() {
                 </div>
               );
             })}
+
+            {form.settings.captchaEnabled && form.settings.captchaSiteKey && (
+              <div className="flex justify-center">
+                <div
+                  className="h-captcha"
+                  data-sitekey={form.settings.captchaSiteKey}
+                  data-callback="__onHCaptcha"
+                  data-expired-callback="__onHCaptchaExpired"
+                  data-theme="dark"
+                />
+              </div>
+            )}
 
             <button
               type="submit"

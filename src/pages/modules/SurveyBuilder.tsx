@@ -1930,6 +1930,35 @@ function SurveySettingsPanel({
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          <div className="pt-3 border-t border-gray-200">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.captchaEnabled || false}
+                onChange={(e) => onUpdate({
+                  captchaEnabled: e.target.checked,
+                  captchaProvider: e.target.checked ? 'hcaptcha' : undefined,
+                })}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-sm text-gray-700">Require hCaptcha to submit</span>
+            </label>
+            {settings.captchaEnabled && (
+              <div className="mt-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">hCaptcha Site Key</label>
+                <input
+                  type="text"
+                  value={settings.captchaSiteKey || ''}
+                  onChange={(e) => onUpdate({ captchaSiteKey: e.target.value })}
+                  placeholder="10000000-ffff-ffff-ffff-000000000001"
+                  className="w-full px-3 py-2 text-sm font-mono border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Set <code>HCAPTCHA_SECRET</code> as a Supabase edge function secret to verify tokens.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

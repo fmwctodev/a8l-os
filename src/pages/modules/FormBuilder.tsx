@@ -1680,25 +1680,32 @@ function FormSettingsPanel({
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={settings.recaptchaEnabled || false}
-                onChange={(e) => onUpdate({ recaptchaEnabled: e.target.checked })}
+                checked={settings.captchaEnabled || false}
+                onChange={(e) =>
+                  onUpdate({
+                    captchaEnabled: e.target.checked,
+                    captchaProvider: e.target.checked ? 'hcaptcha' : undefined,
+                  })
+                }
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
-              <span className="text-sm text-gray-700">Enable reCAPTCHA</span>
+              <span className="text-sm text-gray-700">Enable hCaptcha</span>
             </label>
 
-            {settings.recaptchaEnabled && (
+            {settings.captchaEnabled && (
               <div className="mt-3 space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Version</label>
-                  <select
-                    value={settings.recaptchaVersion || 'v2'}
-                    onChange={(e) => onUpdate({ recaptchaVersion: e.target.value as 'v2' | 'v3' })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="v2">reCAPTCHA v2 (checkbox)</option>
-                    <option value="v3">reCAPTCHA v3 (invisible)</option>
-                  </select>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">hCaptcha Site Key</label>
+                  <input
+                    type="text"
+                    value={settings.captchaSiteKey || ''}
+                    onChange={(e) => onUpdate({ captchaSiteKey: e.target.value })}
+                    placeholder="10000000-ffff-ffff-ffff-000000000001"
+                    className="w-full px-3 py-2 text-sm font-mono border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    The matching <code>HCAPTCHA_SECRET</code> must be set as a Supabase edge function secret.
+                  </p>
                 </div>
               </div>
             )}

@@ -1868,6 +1868,9 @@ export interface FormSettings {
   recaptchaEnabled?: boolean;
   recaptchaVersion?: 'v2' | 'v3';
   recaptchaSiteKey?: string;
+  captchaEnabled?: boolean;
+  captchaProvider?: 'hcaptcha';
+  captchaSiteKey?: string;
   notificationEmails?: string[];
   webhookUrl?: string;
   customCss?: string;
@@ -2059,6 +2062,9 @@ export interface SurveySettings {
   theme?: string;
   submitRules?: FormSubmitRule[];
   partialCompletionEnabled?: boolean;
+  captchaEnabled?: boolean;
+  captchaProvider?: 'hcaptcha';
+  captchaSiteKey?: string;
 }
 
 export interface Survey {

@@ -19,13 +19,14 @@ import { ContactTasksTab } from '../../components/contacts/ContactTasksTab';
 import { ContactPaymentsTab } from '../../components/contacts/ContactPaymentsTab';
 import ContactFilesTab from '../../components/contacts/ContactFilesTab';
 import { ContactMeetingsTab } from '../../components/contacts/ContactMeetingsTab';
+import { ContactObjectsTab } from '../../components/contacts/ContactObjectsTab';
 import { ScoreWidget } from '../../components/scoring/ScoreWidget';
 import { VirtualizedTimeline } from '../../components/contacts/VirtualizedTimeline';
 import { LeadScoreBadge } from '../../components/contacts/LeadScoreBadge';
 import { getAttachmentCount } from '../../services/fileAttachments';
 import { usePaymentsAccess } from '../../hooks/usePaymentsAccess';
 
-type TabType = 'overview' | 'notes' | 'tasks' | 'timeline' | 'meetings' | 'payments' | 'files';
+type TabType = 'overview' | 'notes' | 'tasks' | 'timeline' | 'meetings' | 'payments' | 'files' | 'objects';
 
 export function ContactDetail() {
   const { id } = useParams<{ id: string }>();
@@ -283,6 +284,7 @@ export function ContactDetail() {
     { id: 'tasks', label: 'Tasks', count: tasks.filter((t) => t.status !== 'completed').length },
     { id: 'timeline', label: 'Timeline', count: aggregatedTimeline.length },
     { id: 'meetings', label: 'Meetings', count: meetings.filter((m) => m.recording_url).length },
+    { id: 'objects', label: 'Objects' },
     ...(paymentsEnabled && canViewPayments && canAccessPayments ? [{ id: 'payments' as const, label: 'Payments' }] : []),
     ...(mediaEnabled && canViewMedia ? [{ id: 'files' as const, label: 'Files', count: filesCount }] : []),
   ];
@@ -531,6 +533,9 @@ export function ContactDetail() {
               )}
               {activeTab === 'files' && (
                 <ContactFilesTab contact={contact} onUpdate={loadContact} />
+              )}
+              {activeTab === 'objects' && (
+                <ContactObjectsTab contactId={contact.id} />
               )}
             </div>
           </div>
