@@ -204,6 +204,27 @@ export function PublicFormPage() {
         }
       }
 
+      if (field.type === 'multi_select' || field.type === 'checkbox_group' || field.type === 'multi_dropdown') {
+        const selected = (formData[field.id] as string[]) || [];
+        if (field.minSelections && selected.length < field.minSelections) {
+          errors[field.id] = `Select at least ${field.minSelections} option${field.minSelections === 1 ? '' : 's'}`;
+        } else if (field.maxSelections && selected.length > field.maxSelections) {
+          errors[field.id] = `Select at most ${field.maxSelections} option${field.maxSelections === 1 ? '' : 's'}`;
+        }
+      }
+
+      if (field.allowOther && (field.type === 'radio' || field.type === 'dropdown')) {
+        if (formData[field.id] === '__other__' && !String(formData[`${field.id}__other`] || '').trim()) {
+          errors[field.id] = 'Please specify your "Other" answer';
+        }
+      }
+      if (field.allowOther && (field.type === 'multi_select' || field.type === 'checkbox_group')) {
+        const sel = (formData[field.id] as string[]) || [];
+        if (sel.includes('__other__') && !String(formData[`${field.id}__other`] || '').trim()) {
+          errors[field.id] = 'Please specify your "Other" answer';
+        }
+      }
+
       if (field.validationRules && formData[field.id] !== undefined && formData[field.id] !== '') {
         const rawValue = formData[field.id];
         const value = String(rawValue ?? '');
@@ -370,6 +391,19 @@ export function PublicFormPage() {
         } else {
           submissionData[field.id] = formData[field.id] ?? null;
         }
+
+        // Resolve "Other" free-text into the submitted value
+        if (field.allowOther) {
+          const otherText = String(formData[`${field.id}__other`] || '').trim();
+          const current = submissionData[field.id];
+          if (current === '__other__') {
+            submissionData[field.id] = otherText ? `__other:${otherText}` : '__other__';
+          } else if (Array.isArray(current) && current.includes('__other__')) {
+            submissionData[field.id] = current.map((v) =>
+              v === '__other__' ? (otherText ? `__other:${otherText}` : '__other__') : v
+            );
+          }
+        }
       }
 
       if (form.settings.captchaEnabled && form.settings.captchaSiteKey && !captchaToken) {
@@ -451,6 +485,21 @@ export function PublicFormPage() {
     }
   }
 
+  const phoneCountryCodes = [
+    { code: '+1', label: 'US/CA +1' },
+    { code: '+44', label: 'UK +44' },
+    { code: '+61', label: 'AU +61' },
+    { code: '+33', label: 'FR +33' },
+    { code: '+49', label: 'DE +49' },
+    { code: '+34', label: 'ES +34' },
+    { code: '+39', label: 'IT +39' },
+    { code: '+91', label: 'IN +91' },
+    { code: '+81', label: 'JP +81' },
+    { code: '+86', label: 'CN +86' },
+    { code: '+52', label: 'MX +52' },
+    { code: '+55', label: 'BR +55' },
+  ];
+
   function renderField(field: FormField) {
     const hasError = !!validationErrors[field.id];
 
@@ -496,74 +545,149 @@ export function PublicFormPage() {
           </div>
         );
 
-      case 'dropdown':
+      case 'dropdown': {
+        const currentValue = String(formData[field.id] || '');
+        const isOther = currentValue === '__other__';
         return (
-          <select
-            value={String(formData[field.id] || '')}
-            onChange={(e) => updateField(field.id, e.target.value)}
-            className={`w-full px-4 py-3 bg-[var(--form-input-bg)] text-[var(--form-input-text)] placeholder:text-[var(--form-input-placeholder)] border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
-              hasError
-                ? 'border-red-500/40 focus:ring-red-500'
-                : 'border-[var(--form-input-border)] focus:ring-[var(--form-accent-solid)]'
-            }`}
-          >
-            <option value="">{field.placeholder || 'Select an option'}</option>
-            {(field.options || []).map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        );
-
-      case 'radio':
-        return (
-          <div className={optionsLayoutClass(field)}>
-            {(field.options || []).map((opt) => (
-              <label
-                key={opt.value}
-                className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
-                  formData[field.id] === opt.value
-                    ? 'border-[var(--form-selected-border)] bg-[var(--form-selected-bg)]'
-                    : 'border-[var(--form-input-border)] hover:border-[var(--form-input-border)]'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name={field.id}
-                  checked={formData[field.id] === opt.value}
-                  onChange={() => updateField(field.id, opt.value)}
-                  className="text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
-                />
-                <span className="text-[var(--form-text-secondary)]">{opt.label}</span>
-              </label>
-            ))}
+          <div className="space-y-2">
+            <select
+              value={isOther ? '__other__' : currentValue}
+              onChange={(e) => updateField(field.id, e.target.value)}
+              className={`w-full px-4 py-3 bg-[var(--form-input-bg)] text-[var(--form-input-text)] placeholder:text-[var(--form-input-placeholder)] border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                hasError
+                  ? 'border-red-500/40 focus:ring-red-500'
+                  : 'border-[var(--form-input-border)] focus:ring-[var(--form-accent-solid)]'
+              }`}
+            >
+              <option value="">{field.placeholder || 'Select an option'}</option>
+              {(field.options || []).map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+              {field.allowOther && <option value="__other__">Other</option>}
+            </select>
+            {field.allowOther && isOther && (
+              <input
+                type="text"
+                value={String(formData[`${field.id}__other`] || '')}
+                onChange={(e) => updateField(`${field.id}__other`, e.target.value)}
+                placeholder="Please specify..."
+                className="w-full px-4 py-3 bg-[var(--form-input-bg)] text-[var(--form-input-text)] placeholder:text-[var(--form-input-placeholder)] border border-[var(--form-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--form-accent-solid)]"
+              />
+            )}
           </div>
         );
+      }
+
+      case 'radio': {
+        const isOther = formData[field.id] === '__other__';
+        return (
+          <div className="space-y-2">
+            <div className={optionsLayoutClass(field)}>
+              {(field.options || []).map((opt) => (
+                <label
+                  key={opt.value}
+                  className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                    formData[field.id] === opt.value
+                      ? 'border-[var(--form-selected-border)] bg-[var(--form-selected-bg)]'
+                      : 'border-[var(--form-input-border)] hover:border-[var(--form-input-border)]'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name={field.id}
+                    checked={formData[field.id] === opt.value}
+                    onChange={() => updateField(field.id, opt.value)}
+                    className="text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
+                  />
+                  <span className="text-[var(--form-text-secondary)]">{opt.label}</span>
+                </label>
+              ))}
+              {field.allowOther && (
+                <label
+                  className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
+                    isOther
+                      ? 'border-[var(--form-selected-border)] bg-[var(--form-selected-bg)]'
+                      : 'border-[var(--form-input-border)] hover:border-[var(--form-input-border)]'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name={field.id}
+                    checked={!!isOther}
+                    onChange={() => updateField(field.id, '__other__')}
+                    className="text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
+                  />
+                  <span className="text-[var(--form-text-secondary)]">Other</span>
+                </label>
+              )}
+            </div>
+            {field.allowOther && isOther && (
+              <input
+                type="text"
+                value={String(formData[`${field.id}__other`] || '')}
+                onChange={(e) => updateField(`${field.id}__other`, e.target.value)}
+                placeholder="Please specify..."
+                className="w-full px-4 py-3 bg-[var(--form-input-bg)] text-[var(--form-input-text)] placeholder:text-[var(--form-input-placeholder)] border border-[var(--form-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--form-accent-solid)]"
+              />
+            )}
+          </div>
+        );
+      }
 
       case 'multi_select':
-      case 'checkbox_group':
+      case 'checkbox_group': {
+        const selected = (formData[field.id] as string[]) || [];
+        const otherSelected = selected.includes('__other__');
         return (
-          <div className={optionsLayoutClass(field)}>
-            {(field.options || []).map((opt) => (
-              <label key={opt.value} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={((formData[field.id] as string[]) || []).includes(opt.value)}
-                  onChange={(e) => {
-                    const current = (formData[field.id] as string[]) || [];
-                    const newValue = e.target.checked
-                      ? [...current, opt.value]
-                      : current.filter((v) => v !== opt.value);
-                    updateField(field.id, newValue);
-                  }}
-                  className="rounded border-[var(--form-input-border)] text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
-                />
-                <span className="text-[var(--form-text-secondary)]">{opt.label}</span>
-              </label>
-            ))}
+          <div className="space-y-2">
+            <div className={optionsLayoutClass(field)}>
+              {(field.options || []).map((opt) => (
+                <label key={opt.value} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(opt.value)}
+                    onChange={(e) => {
+                      const newValue = e.target.checked
+                        ? [...selected, opt.value]
+                        : selected.filter((v) => v !== opt.value);
+                      updateField(field.id, newValue);
+                    }}
+                    className="rounded border-[var(--form-input-border)] text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
+                  />
+                  <span className="text-[var(--form-text-secondary)]">{opt.label}</span>
+                </label>
+              ))}
+              {field.allowOther && (
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={otherSelected}
+                    onChange={(e) => {
+                      const newValue = e.target.checked
+                        ? [...selected, '__other__']
+                        : selected.filter((v) => v !== '__other__');
+                      updateField(field.id, newValue);
+                    }}
+                    className="rounded border-[var(--form-input-border)] text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
+                  />
+                  <span className="text-[var(--form-text-secondary)]">Other</span>
+                </label>
+              )}
+            </div>
+            {field.allowOther && otherSelected && (
+              <input
+                type="text"
+                value={String(formData[`${field.id}__other`] || '')}
+                onChange={(e) => updateField(`${field.id}__other`, e.target.value)}
+                placeholder="Please specify..."
+                className="w-full px-4 py-3 bg-[var(--form-input-bg)] text-[var(--form-input-text)] placeholder:text-[var(--form-input-placeholder)] border border-[var(--form-input-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--form-accent-solid)]"
+              />
+            )}
           </div>
         );
+      }
 
       case 'multi_dropdown':
         return (
@@ -856,6 +980,108 @@ export function PublicFormPage() {
             )}
           </div>
         );
+
+      case 'phone': {
+        if (field.phoneFormat !== 'international') {
+          return (
+            <input
+              type="tel"
+              value={String(formData[field.id] || '')}
+              onChange={(e) => updateField(field.id, e.target.value)}
+              placeholder={field.placeholder}
+              className={`w-full px-4 py-3 bg-[var(--form-input-bg)] text-[var(--form-input-text)] placeholder:text-[var(--form-input-placeholder)] border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                hasError ? 'border-red-500/40 focus:ring-red-500' : 'border-[var(--form-input-border)] focus:ring-[var(--form-accent-solid)]'
+              }`}
+            />
+          );
+        }
+        const fullValue = String(formData[field.id] || '');
+        const match = fullValue.match(/^(\+\d{1,3})\s?(.*)$/);
+        const dialCode = match?.[1] || '+1';
+        const localNumber = match?.[2] ?? fullValue;
+        const setBoth = (code: string, num: string) => {
+          updateField(field.id, num.trim() ? `${code} ${num.trim()}` : code);
+        };
+        return (
+          <div className="flex gap-2">
+            <select
+              value={dialCode}
+              onChange={(e) => setBoth(e.target.value, localNumber)}
+              className={`px-3 py-3 bg-[var(--form-input-bg)] text-[var(--form-input-text)] border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                hasError ? 'border-red-500/40 focus:ring-red-500' : 'border-[var(--form-input-border)] focus:ring-[var(--form-accent-solid)]'
+              }`}
+            >
+              {phoneCountryCodes.map((c) => (
+                <option key={c.code} value={c.code}>{c.label}</option>
+              ))}
+            </select>
+            <input
+              type="tel"
+              value={localNumber}
+              onChange={(e) => setBoth(dialCode, e.target.value)}
+              placeholder={field.placeholder || 'Phone number'}
+              className={`flex-1 px-4 py-3 bg-[var(--form-input-bg)] text-[var(--form-input-text)] placeholder:text-[var(--form-input-placeholder)] border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+                hasError ? 'border-red-500/40 focus:ring-red-500' : 'border-[var(--form-input-border)] focus:ring-[var(--form-accent-solid)]'
+              }`}
+            />
+          </div>
+        );
+      }
+
+      case 'address': {
+        const addr = (formData[field.id] as Record<string, string> | undefined) || {};
+        const setSub = (key: string, value: string) => {
+          updateField(field.id, { ...addr, [key]: value });
+        };
+        const inputCls = `w-full px-4 py-3 bg-[var(--form-input-bg)] text-[var(--form-input-text)] placeholder:text-[var(--form-input-placeholder)] border rounded-lg focus:outline-none focus:ring-2 transition-colors ${
+          hasError ? 'border-red-500/40 focus:ring-red-500' : 'border-[var(--form-input-border)] focus:ring-[var(--form-accent-solid)]'
+        }`;
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input
+              type="text"
+              value={addr.street || ''}
+              onChange={(e) => setSub('street', e.target.value)}
+              placeholder="Street address"
+              className={`sm:col-span-2 ${inputCls}`}
+            />
+            <input
+              type="text"
+              value={addr.city || ''}
+              onChange={(e) => setSub('city', e.target.value)}
+              placeholder="City"
+              className={inputCls}
+            />
+            <select
+              value={addr.state || ''}
+              onChange={(e) => setSub('state', e.target.value)}
+              className={inputCls}
+            >
+              <option value="">State / Region</option>
+              {US_STATES.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={addr.postal_code || ''}
+              onChange={(e) => setSub('postal_code', e.target.value)}
+              placeholder="Postal / Zip code"
+              className={inputCls}
+            />
+            <select
+              value={addr.country || ''}
+              onChange={(e) => setSub('country', e.target.value)}
+              className={inputCls}
+            >
+              <option value="">Country</option>
+              {COUNTRIES.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+        );
+      }
 
       default:
         return (

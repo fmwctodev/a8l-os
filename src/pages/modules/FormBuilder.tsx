@@ -1082,6 +1082,106 @@ function FieldEditor({
               />
             </div>
           )}
+
+          {field.type === 'phone' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone Format</label>
+              <select
+                value={field.phoneFormat || 'us'}
+                onChange={(e) => onUpdate({ phoneFormat: e.target.value as 'us' | 'international' })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="us">US (xxx) xxx-xxxx</option>
+                <option value="international">International with country code</option>
+              </select>
+            </div>
+          )}
+
+          {field.type === 'email' && (
+            <label className="flex items-start gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={field.validateDeliverability || false}
+                onChange={(e) => onUpdate({ validateDeliverability: e.target.checked })}
+                className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span>
+                Validate email deliverability
+                <span className="block text-xs text-gray-500 mt-0.5">Performs an MX/SMTP check (requires email-validation provider).</span>
+              </span>
+            </label>
+          )}
+
+          {field.type === 'address' && (
+            <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
+              <div className="text-xs font-medium text-gray-700">Address Settings</div>
+              <label className="flex items-start gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={field.addressAutoComplete || false}
+                  onChange={(e) => onUpdate({ addressAutoComplete: e.target.checked })}
+                  className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>
+                  Enable address auto-complete
+                  <span className="block text-xs text-gray-500 mt-0.5">Wired to Google Places (coming soon)</span>
+                </span>
+              </label>
+              {field.addressAutoComplete && (
+                <label className="flex items-start gap-2 text-sm text-gray-700 ml-5">
+                  <input
+                    type="checkbox"
+                    checked={field.addressMandatorySelect || false}
+                    onChange={(e) => onUpdate({ addressMandatorySelect: e.target.checked })}
+                    className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>Require selecting an address from the dropdown</span>
+                </label>
+              )}
+            </div>
+          )}
+
+          {(field.type === 'dropdown' || field.type === 'radio' || field.type === 'multi_select' || field.type === 'multi_dropdown' || field.type === 'checkbox_group') && (
+            <label className="flex items-start gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={field.allowOther || false}
+                onChange={(e) => onUpdate({ allowOther: e.target.checked })}
+                className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span>
+                Allow "Other" option
+                <span className="block text-xs text-gray-500 mt-0.5">Adds an Other choice that reveals a free-text input.</span>
+              </span>
+            </label>
+          )}
+
+          {(field.type === 'multi_select' || field.type === 'multi_dropdown' || field.type === 'checkbox_group') && (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Min selections</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={field.minSelections ?? ''}
+                  onChange={(e) => onUpdate({ minSelections: e.target.value ? parseInt(e.target.value) : undefined })}
+                  placeholder="0"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Max selections</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={field.maxSelections ?? ''}
+                  onChange={(e) => onUpdate({ maxSelections: e.target.value ? parseInt(e.target.value) : undefined })}
+                  placeholder="No limit"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 

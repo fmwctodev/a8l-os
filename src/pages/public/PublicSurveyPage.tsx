@@ -151,6 +151,24 @@ export function PublicSurveyPage() {
         continue;
       }
 
+      if (question.type === 'multi_select' || question.type === 'checkbox_group') {
+        const selected = (answer as string[]) || [];
+        if (question.minSelections && selected.length < question.minSelections) {
+          errors[question.id] = `Select at least ${question.minSelections} option${question.minSelections === 1 ? '' : 's'}`;
+        } else if (question.maxSelections && selected.length > question.maxSelections) {
+          errors[question.id] = `Select at most ${question.maxSelections} option${question.maxSelections === 1 ? '' : 's'}`;
+        }
+      }
+
+      if (question.allowOther) {
+        const otherText = String(answers[`${question.id}__other`] || '').trim();
+        if ((question.type === 'multiple_choice' || question.type === 'dropdown') && answer === '__other__' && !otherText) {
+          errors[question.id] = 'Please specify your "Other" answer';
+        } else if ((question.type === 'multi_select' || question.type === 'checkbox_group') && Array.isArray(answer) && answer.includes('__other__') && !otherText) {
+          errors[question.id] = 'Please specify your "Other" answer';
+        }
+      }
+
       if (question.validationRules && !isEmpty) {
         const value = String(answer ?? '');
         const numValue = typeof answer === 'number' ? answer : parseFloat(value);
@@ -304,7 +322,22 @@ export function PublicSurveyPage() {
           if (q.type === 'math_calculation') {
             enrichedAnswers[q.id] = evalFormula(q.formula, answers as Record<string, unknown>);
           }
+          if (q.allowOther) {
+            const otherText = String(answers[`${q.id}__other`] || '').trim();
+            const current = enrichedAnswers[q.id];
+            if (current === '__other__') {
+              enrichedAnswers[q.id] = otherText ? `__other:${otherText}` : '__other__';
+            } else if (Array.isArray(current) && current.includes('__other__')) {
+              enrichedAnswers[q.id] = current.map((v) =>
+                v === '__other__' ? (otherText ? `__other:${otherText}` : '__other__') : v
+              );
+            }
+          }
         }
+      }
+      // strip the temp __other inputs
+      for (const k of Object.keys(enrichedAnswers)) {
+        if (k.endsWith('__other')) delete enrichedAnswers[k];
       }
 
       const response = await fetch(
@@ -504,7 +537,7 @@ export function PublicSurveyPage() {
           />
         )}
 
-        {question.type === 'phone' && (
+        {question.type === 'phone' && question.phoneFormat !== 'international' && (
           <input
             type="tel"
             value={String(answer || '')}
@@ -513,6 +546,40 @@ export function PublicSurveyPage() {
             className={inputClass}
           />
         )}
+
+        {question.type === 'phone' && question.phoneFormat === 'international' && (() => {
+          const fullValue = String(answer || '');
+          const match = fullValue.match(/^(\+\d{1,3})\s?(.*)$/);
+          const dialCode = match?.[1] || '+1';
+          const localNumber = match?.[2] ?? fullValue;
+          const setBoth = (code: string, num: string) => {
+            updateAnswer(question.id, num.trim() ? `${code} ${num.trim()}` : code);
+          };
+          return (
+            <div className="flex gap-2">
+              <select
+                value={dialCode}
+                onChange={(e) => setBoth(e.target.value, localNumber)}
+                className={`px-3 ${inputClass}`}
+              >
+                {[
+                  ['+1', 'US/CA +1'], ['+44', 'UK +44'], ['+61', 'AU +61'], ['+33', 'FR +33'],
+                  ['+49', 'DE +49'], ['+34', 'ES +34'], ['+39', 'IT +39'], ['+91', 'IN +91'],
+                  ['+81', 'JP +81'], ['+86', 'CN +86'], ['+52', 'MX +52'], ['+55', 'BR +55'],
+                ].map(([code, label]) => (
+                  <option key={code} value={code}>{label}</option>
+                ))}
+              </select>
+              <input
+                type="tel"
+                value={localNumber}
+                onChange={(e) => setBoth(dialCode, e.target.value)}
+                placeholder={question.placeholder || 'Phone number'}
+                className={`flex-1 ${inputClass}`}
+              />
+            </div>
+          );
+        })()}
 
         {question.type === 'website' && (
           <input
@@ -528,7 +595,6 @@ export function PublicSurveyPage() {
           question.type === 'last_name' ||
           question.type === 'full_name' ||
           question.type === 'company' ||
-          question.type === 'address' ||
           question.type === 'city' ||
           question.type === 'postal_code' ||
           question.type === 'source') && (
@@ -540,6 +606,58 @@ export function PublicSurveyPage() {
             className={inputClass}
           />
         )}
+
+        {question.type === 'address' && (() => {
+          const addr = (answer as Record<string, string> | undefined) || {};
+          const setSub = (key: string, value: string) => {
+            updateAnswer(question.id, { ...addr, [key]: value });
+          };
+          return (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <input
+                type="text"
+                value={addr.street || ''}
+                onChange={(e) => setSub('street', e.target.value)}
+                placeholder="Street address"
+                className={`sm:col-span-2 ${inputClass}`}
+              />
+              <input
+                type="text"
+                value={addr.city || ''}
+                onChange={(e) => setSub('city', e.target.value)}
+                placeholder="City"
+                className={inputClass}
+              />
+              <select
+                value={addr.state || ''}
+                onChange={(e) => setSub('state', e.target.value)}
+                className={inputClass}
+              >
+                <option value="">State / Region</option>
+                {US_STATES.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={addr.postal_code || ''}
+                onChange={(e) => setSub('postal_code', e.target.value)}
+                placeholder="Postal / Zip code"
+                className={inputClass}
+              />
+              <select
+                value={addr.country || ''}
+                onChange={(e) => setSub('country', e.target.value)}
+                className={inputClass}
+              >
+                <option value="">Country</option>
+                {COUNTRIES.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+          );
+        })()}
 
         {question.type === 'state' && (
           <select
@@ -581,40 +699,81 @@ export function PublicSurveyPage() {
         )}
 
         {(question.type === 'multiple_choice' || question.type === 'yes_no') && (
-          <div className={optionsLayoutClass(question)}>
-            {(question.options || []).map((option) => (
-              <label
-                key={option.id}
-                className={`flex items-center gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
-                  answer === option.value
-                    ? 'border-[var(--form-selected-border)] bg-[var(--form-selected-bg)]'
-                    : 'border-[var(--form-input-border)] hover:border-[var(--form-input-border)]'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name={question.id}
-                  checked={answer === option.value}
-                  onChange={() => updateAnswer(question.id, option.value)}
-                  className="text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
-                />
-                <span className="text-[var(--form-text-secondary)]">{option.label}</span>
-              </label>
-            ))}
+          <div className="space-y-2">
+            <div className={optionsLayoutClass(question)}>
+              {(question.options || []).map((option) => (
+                <label
+                  key={option.id}
+                  className={`flex items-center gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
+                    answer === option.value
+                      ? 'border-[var(--form-selected-border)] bg-[var(--form-selected-bg)]'
+                      : 'border-[var(--form-input-border)] hover:border-[var(--form-input-border)]'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name={question.id}
+                    checked={answer === option.value}
+                    onChange={() => updateAnswer(question.id, option.value)}
+                    className="text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
+                  />
+                  <span className="text-[var(--form-text-secondary)]">{option.label}</span>
+                </label>
+              ))}
+              {question.allowOther && (
+                <label
+                  className={`flex items-center gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
+                    answer === '__other__'
+                      ? 'border-[var(--form-selected-border)] bg-[var(--form-selected-bg)]'
+                      : 'border-[var(--form-input-border)] hover:border-[var(--form-input-border)]'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name={question.id}
+                    checked={answer === '__other__'}
+                    onChange={() => updateAnswer(question.id, '__other__')}
+                    className="text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
+                  />
+                  <span className="text-[var(--form-text-secondary)]">Other</span>
+                </label>
+              )}
+            </div>
+            {question.allowOther && answer === '__other__' && (
+              <input
+                type="text"
+                value={String(answers[`${question.id}__other`] || '')}
+                onChange={(e) => updateAnswer(`${question.id}__other`, e.target.value)}
+                placeholder="Please specify..."
+                className={inputClass}
+              />
+            )}
           </div>
         )}
 
         {(question.type === 'dropdown' || question.type === 'product_selection') && (
-          <select
-            value={String(answer || '')}
-            onChange={(e) => updateAnswer(question.id, e.target.value)}
-            className={inputClass}
-          >
-            <option value="">{question.placeholder || 'Select an option'}</option>
-            {(question.options || []).map((opt) => (
-              <option key={opt.id} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
+          <div className="space-y-2">
+            <select
+              value={String(answer || '')}
+              onChange={(e) => updateAnswer(question.id, e.target.value)}
+              className={inputClass}
+            >
+              <option value="">{question.placeholder || 'Select an option'}</option>
+              {(question.options || []).map((opt) => (
+                <option key={opt.id} value={opt.value}>{opt.label}</option>
+              ))}
+              {question.allowOther && question.type === 'dropdown' && <option value="__other__">Other</option>}
+            </select>
+            {question.allowOther && answer === '__other__' && (
+              <input
+                type="text"
+                value={String(answers[`${question.id}__other`] || '')}
+                onChange={(e) => updateAnswer(`${question.id}__other`, e.target.value)}
+                placeholder="Please specify..."
+                className={inputClass}
+              />
+            )}
+          </div>
         )}
 
         {question.type === 'multi_dropdown' && (
@@ -634,37 +793,73 @@ export function PublicSurveyPage() {
           </select>
         )}
 
-        {(question.type === 'multi_select' || question.type === 'checkbox_group') && (
-          <div className={optionsLayoutClass(question)}>
-            {(question.options || []).map((option) => {
-              const selected = Array.isArray(answer) && answer.includes(option.value);
-              return (
-                <label
-                  key={option.id}
-                  className={`flex items-center gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
-                    selected
-                      ? 'border-[var(--form-selected-border)] bg-[var(--form-selected-bg)]'
-                      : 'border-[var(--form-input-border)] hover:border-[var(--form-input-border)]'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected}
-                    onChange={(e) => {
-                      const current = Array.isArray(answer) ? answer : [];
-                      const newValue = e.target.checked
-                        ? [...current, option.value]
-                        : current.filter((v) => v !== option.value);
-                      updateAnswer(question.id, newValue);
-                    }}
-                    className="rounded text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
-                  />
-                  <span className="text-[var(--form-text-secondary)]">{option.label}</span>
-                </label>
-              );
-            })}
-          </div>
-        )}
+        {(question.type === 'multi_select' || question.type === 'checkbox_group') && (() => {
+          const selectedArr = Array.isArray(answer) ? (answer as string[]) : [];
+          const otherSelected = selectedArr.includes('__other__');
+          return (
+            <div className="space-y-2">
+              <div className={optionsLayoutClass(question)}>
+                {(question.options || []).map((option) => {
+                  const selected = selectedArr.includes(option.value);
+                  return (
+                    <label
+                      key={option.id}
+                      className={`flex items-center gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
+                        selected
+                          ? 'border-[var(--form-selected-border)] bg-[var(--form-selected-bg)]'
+                          : 'border-[var(--form-input-border)] hover:border-[var(--form-input-border)]'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={(e) => {
+                          const newValue = e.target.checked
+                            ? [...selectedArr, option.value]
+                            : selectedArr.filter((v) => v !== option.value);
+                          updateAnswer(question.id, newValue);
+                        }}
+                        className="rounded text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
+                      />
+                      <span className="text-[var(--form-text-secondary)]">{option.label}</span>
+                    </label>
+                  );
+                })}
+                {question.allowOther && (
+                  <label
+                    className={`flex items-center gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
+                      otherSelected
+                        ? 'border-[var(--form-selected-border)] bg-[var(--form-selected-bg)]'
+                        : 'border-[var(--form-input-border)] hover:border-[var(--form-input-border)]'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={otherSelected}
+                      onChange={(e) => {
+                        const newValue = e.target.checked
+                          ? [...selectedArr, '__other__']
+                          : selectedArr.filter((v) => v !== '__other__');
+                        updateAnswer(question.id, newValue);
+                      }}
+                      className="rounded text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
+                    />
+                    <span className="text-[var(--form-text-secondary)]">Other</span>
+                  </label>
+                )}
+              </div>
+              {question.allowOther && otherSelected && (
+                <input
+                  type="text"
+                  value={String(answers[`${question.id}__other`] || '')}
+                  onChange={(e) => updateAnswer(`${question.id}__other`, e.target.value)}
+                  placeholder="Please specify..."
+                  className={inputClass}
+                />
+              )}
+            </div>
+          );
+        })()}
 
         {isCheckboxType && (
           <label className="flex items-start gap-2">

@@ -1824,6 +1824,14 @@ export interface CustomObjectRecord {
   deleted_at?: string | null;
 }
 
+export interface AddressValue {
+  street?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  country?: string;
+}
+
 export interface FormField {
   id: string;
   type: FormFieldType;
@@ -1846,6 +1854,13 @@ export interface FormField {
   formula?: string;
   columnCount?: 2 | 3 | 4;
   productIds?: string[];
+  phoneFormat?: 'us' | 'international';
+  addressAutoComplete?: boolean;
+  addressMandatorySelect?: boolean;
+  validateDeliverability?: boolean;
+  allowOther?: boolean;
+  minSelections?: number;
+  maxSelections?: number;
 }
 
 export interface FormDefinition {
@@ -2010,6 +2025,13 @@ export interface SurveyQuestion {
   labelAlignment?: 'top' | 'left' | 'inline';
   optionsLayout?: 'vertical' | 'horizontal' | 'columns_2' | 'columns_3';
   validationRules?: FormValidationRule[];
+  phoneFormat?: 'us' | 'international';
+  addressAutoComplete?: boolean;
+  addressMandatorySelect?: boolean;
+  validateDeliverability?: boolean;
+  allowOther?: boolean;
+  minSelections?: number;
+  maxSelections?: number;
 }
 
 export interface SurveyStep {
