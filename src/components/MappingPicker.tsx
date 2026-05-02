@@ -65,6 +65,7 @@ export function MappingPicker({
   const [objectDefs, setObjectDefs] = useState<CustomObjectDefinition[]>([]);
   const [loading, setLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [createdNotice, setCreatedNotice] = useState<string | null>(null);
 
   const mode: Mode = value?.objectId
     ? 'object'
@@ -122,9 +123,20 @@ export function MappingPicker({
   };
 
   const handleCustomFieldCreated = (field: CustomField) => {
-    setCustomFields((prev) => [...prev, field]);
-    onChange({ customFieldId: field.id });
+    if (field.scope === scope) {
+      // Created in the picker's own scope — push to dropdown list and auto-map
+      setCustomFields((prev) => [...prev, field]);
+      onChange({ customFieldId: field.id });
+      setCreatedNotice(`Created "${field.name}" and mapped this field to it.`);
+    } else {
+      // Created in a different scope (e.g. opportunity from a contact picker)
+      // Don't auto-map (different scope can't bind here) — just confirm creation
+      setCreatedNotice(
+        `Created "${field.name}" as a ${field.scope} field. It's now reusable in Settings → Custom Fields and on every ${field.scope} detail card.`
+      );
+    }
     setShowCreate(false);
+    setTimeout(() => setCreatedNotice(null), 6000);
   };
 
   const selectedObjectDef = objectDefs.find((d) => d.id === value?.objectId);
@@ -132,7 +144,18 @@ export function MappingPicker({
   return (
     <div className="space-y-3">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Maps to</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className="block text-sm font-medium text-gray-700">Maps to</label>
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded"
+            title="Create a new contact or opportunity custom field"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New custom field
+          </button>
+        </div>
         <div className="grid grid-cols-2 gap-1 p-1 bg-gray-100 rounded-lg sm:grid-cols-4">
           {([
             { id: 'none', label: 'No mapping' },
@@ -153,6 +176,13 @@ export function MappingPicker({
           ))}
         </div>
       </div>
+
+      {createdNotice && (
+        <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg p-2 flex items-start gap-2">
+          <Check className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span>{createdNotice}</span>
+        </div>
+      )}
 
       {mode === 'contact' && (
         <select
@@ -250,7 +280,7 @@ export function MappingPicker({
         <CreateCustomFieldModal
           defaultName={fieldLabel || ''}
           defaultType={suggestCustomFieldType(fieldType)}
-          scope={scope}
+          defaultScope={scope}
           visibleInProperty={visibleInProperty}
           onClose={() => setShowCreate(false)}
           onCreated={handleCustomFieldCreated}
@@ -281,14 +311,14 @@ const CUSTOM_FIELD_TYPES: { value: CustomFieldType; label: string }[] = [
 function CreateCustomFieldModal({
   defaultName,
   defaultType,
-  scope,
+  defaultScope,
   visibleInProperty,
   onClose,
   onCreated,
 }: {
   defaultName: string;
   defaultType: CustomFieldType;
-  scope: CustomFieldScope;
+  defaultScope: CustomFieldScope;
   visibleInProperty: 'visible_in_forms' | 'visible_in_surveys';
   onClose: () => void;
   onCreated: (field: CustomField) => void;
@@ -296,6 +326,7 @@ function CreateCustomFieldModal({
   const { user } = useAuth();
   const [name, setName] = useState(defaultName);
   const [fieldType, setFieldType] = useState<CustomFieldType>(defaultType);
+  const [scope, setScope] = useState<CustomFieldScope>(defaultScope);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -348,6 +379,31 @@ function CreateCustomFieldModal({
         </div>
         <div className="p-4 space-y-3">
           <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Where will this field live?</label>
+            <div className="grid grid-cols-2 gap-1 p-1 bg-gray-100 rounded-lg">
+              {([
+                { id: 'contact' as const, label: 'Contact field' },
+                { id: 'opportunity' as const, label: 'Opportunity field' },
+              ]).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setScope(opt.id)}
+                  className={`px-2 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    scope === opt.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {scope === 'contact'
+                ? 'Field will appear on the contact detail card and can be auto-filled by this submission.'
+                : 'Field will appear on the opportunity detail card. Form/survey submissions don’t auto-write to opportunity fields, but the field becomes reusable everywhere.'}
+            </p>
+          </div>
+          <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
             <input
               type="text"
@@ -375,9 +431,6 @@ function CreateCustomFieldModal({
               ))}
             </select>
           </div>
-          <div className="text-xs text-gray-500">
-            Scope: <span className="font-medium text-gray-700 capitalize">{scope}</span>
-          </div>
           {error && (
             <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{error}</div>
           )}
@@ -396,7 +449,7 @@ function CreateCustomFieldModal({
             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            Create &amp; use
+            {scope === 'contact' ? 'Create & use' : 'Create field'}
           </button>
         </div>
       </div>
