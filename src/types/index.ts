@@ -1729,7 +1729,8 @@ export type FormFieldType =
   | 'file_upload' | 'divider' | 'column' | 'custom_html'
   | 'source' | 'payment' | 'product_selection'
   | 'sms_verification' | 'email_validation' | 'math_calculation'
-  | 'signature';
+  | 'signature'
+  | 'heading' | 'paragraph' | 'section';
 
 export interface FormFileUploadConfig {
   maxSizeBytes: number;
@@ -1739,8 +1740,12 @@ export interface FormFileUploadConfig {
 
 export interface FormConditionalRule {
   fieldId: string;
-  operator: 'equals' | 'not_equals' | 'contains' | 'is_empty' | 'is_not_empty';
+  operator:
+    | 'equals' | 'not_equals' | 'contains' | 'is_empty' | 'is_not_empty'
+    | 'greater_than' | 'less_than' | 'between'
+    | 'before' | 'after';
   value: string;
+  valueEnd?: string;
 }
 
 export interface FormSubmitRule {
@@ -1866,6 +1871,9 @@ export interface FormField {
   allowMultiple?: boolean;
   hiddenParamKey?: string;
   consentDescription?: string;
+  headingLevel?: 'h1' | 'h2' | 'h3' | 'h4';
+  customClassName?: string;
+  customWidthPercent?: number;
 }
 
 export interface FormDefinition {
@@ -1895,6 +1903,7 @@ export interface FormSettings {
   webhookUrl?: string;
   customCss?: string;
   theme?: string;
+  stickyContact?: boolean;
   submitRules?: FormSubmitRule[];
   embedOptions?: {
     width?: string;
@@ -1964,7 +1973,8 @@ export type SurveyQuestionType =
   | 'divider' | 'column' | 'custom_html' | 'consent' | 'file_upload'
   | 'source' | 'payment' | 'product_selection'
   | 'sms_verification' | 'email_validation' | 'math_calculation'
-  | 'signature';
+  | 'signature'
+  | 'heading' | 'paragraph' | 'section';
 
 export interface SurveyQuestionOption {
   id: string;
@@ -2047,6 +2057,9 @@ export interface SurveyQuestion {
   ratingIconColorUnselected?: string;
   ratingDataStorage?: 'absolute' | 'percentage' | 'fraction';
   scaleSteps?: number;
+  headingLevel?: 'h1' | 'h2' | 'h3' | 'h4';
+  customClassName?: string;
+  customWidthPercent?: number;
 }
 
 export interface SurveyStep {
@@ -2102,6 +2115,7 @@ export interface SurveySettings {
   captchaEnabled?: boolean;
   captchaProvider?: 'hcaptcha';
   captchaSiteKey?: string;
+  stickyContact?: boolean;
 }
 
 export interface Survey {

@@ -139,6 +139,11 @@ export function SubmitRulesEditor({ rules, onChange, availableFields }: SubmitRu
                     <option value="equals">equals</option>
                     <option value="not_equals">≠</option>
                     <option value="contains">contains</option>
+                    <option value="greater_than">&gt;</option>
+                    <option value="less_than">&lt;</option>
+                    <option value="between">between</option>
+                    <option value="before">before</option>
+                    <option value="after">after</option>
                     <option value="is_empty">is empty</option>
                     <option value="is_not_empty">is not empty</option>
                   </select>
@@ -148,6 +153,15 @@ export function SubmitRulesEditor({ rules, onChange, availableFields }: SubmitRu
                       value={cond.value}
                       onChange={(e) => updateCondition(rule.id, condIdx, { value: e.target.value })}
                       placeholder="value"
+                      className="w-20 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  )}
+                  {cond.operator === 'between' && (
+                    <input
+                      type="text"
+                      value={cond.valueEnd || ''}
+                      onChange={(e) => updateCondition(rule.id, condIdx, { valueEnd: e.target.value })}
+                      placeholder="end"
                       className="w-20 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
                   )}
@@ -233,13 +247,30 @@ export function evaluateRule(
   if (rule.conditions.length === 0) return true;
   return rule.conditions.every((cond) => {
     const fieldValue = values[cond.fieldId];
+    const stringValue = String(fieldValue ?? '');
+    const numericValue = typeof fieldValue === 'number' ? fieldValue : parseFloat(stringValue);
+    const ruleNum = parseFloat(cond.value);
+    const ruleEndNum = cond.valueEnd ? parseFloat(cond.valueEnd) : NaN;
     switch (cond.operator) {
       case 'equals':
-        return String(fieldValue ?? '') === cond.value;
+        return stringValue === cond.value;
       case 'not_equals':
-        return String(fieldValue ?? '') !== cond.value;
+        return stringValue !== cond.value;
       case 'contains':
-        return String(fieldValue ?? '').toLowerCase().includes(cond.value.toLowerCase());
+        return stringValue.toLowerCase().includes(cond.value.toLowerCase());
+      case 'greater_than':
+        return !isNaN(numericValue) && !isNaN(ruleNum) && numericValue > ruleNum;
+      case 'less_than':
+        return !isNaN(numericValue) && !isNaN(ruleNum) && numericValue < ruleNum;
+      case 'between':
+        if (!isNaN(numericValue) && !isNaN(ruleNum) && !isNaN(ruleEndNum)) {
+          return numericValue >= ruleNum && numericValue <= ruleEndNum;
+        }
+        return Boolean(cond.valueEnd) && stringValue >= cond.value && stringValue <= (cond.valueEnd as string);
+      case 'before':
+        return Boolean(stringValue) && stringValue < cond.value;
+      case 'after':
+        return Boolean(stringValue) && stringValue > cond.value;
       case 'is_empty':
         return (
           fieldValue === undefined ||

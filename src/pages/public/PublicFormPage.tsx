@@ -160,6 +160,20 @@ export function PublicFormPage() {
       if (Object.keys(defaults).length > 0) {
         setFormData((prev) => ({ ...defaults, ...prev }));
       }
+
+      // Sticky Contact prefill from localStorage
+      if (data.settings?.stickyContact && typeof window !== 'undefined') {
+        try {
+          const stickyKey = `sticky_form_${data.id}`;
+          const raw = window.localStorage.getItem(stickyKey);
+          if (raw) {
+            const sticky = JSON.parse(raw) as Record<string, unknown>;
+            setFormData((prev) => ({ ...sticky, ...prev } as Record<string, FormFieldValue>));
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
     } catch (err) {
       console.error('Failed to load form:', err);
       setError('Failed to load form');
@@ -175,13 +189,31 @@ export function PublicFormPage() {
 
     return field.conditionalRules.every(rule => {
       const fieldValue = formData[rule.fieldId];
+      const numericValue = typeof fieldValue === 'number' ? fieldValue : parseFloat(String(fieldValue ?? ''));
+      const stringValue = String(fieldValue ?? '');
+      const ruleNum = parseFloat(rule.value);
+      const ruleEndNum = rule.valueEnd ? parseFloat(rule.valueEnd) : NaN;
       switch (rule.operator) {
         case 'equals':
-          return String(fieldValue) === rule.value;
+          return stringValue === rule.value;
         case 'not_equals':
-          return String(fieldValue) !== rule.value;
+          return stringValue !== rule.value;
         case 'contains':
-          return String(fieldValue || '').includes(rule.value);
+          return stringValue.includes(rule.value);
+        case 'greater_than':
+          return !isNaN(numericValue) && !isNaN(ruleNum) && numericValue > ruleNum;
+        case 'less_than':
+          return !isNaN(numericValue) && !isNaN(ruleNum) && numericValue < ruleNum;
+        case 'between':
+          if (!isNaN(numericValue) && !isNaN(ruleNum) && !isNaN(ruleEndNum)) {
+            return numericValue >= ruleNum && numericValue <= ruleEndNum;
+          }
+          // date string fallback (YYYY-MM-DD lex compare)
+          return rule.valueEnd ? stringValue >= rule.value && stringValue <= rule.valueEnd : false;
+        case 'before':
+          return Boolean(stringValue) && stringValue < rule.value;
+        case 'after':
+          return Boolean(stringValue) && stringValue > rule.value;
         case 'is_empty':
           return fieldValue === undefined || fieldValue === '' || (Array.isArray(fieldValue) && fieldValue.length === 0);
         case 'is_not_empty':
@@ -465,6 +497,15 @@ export function PublicFormPage() {
 
       setSubmitted(true);
 
+      // Sticky Contact persist
+      if (form.settings.stickyContact && typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(`sticky_form_${form.id}`, JSON.stringify(formData));
+        } catch {
+          // ignore quota / privacy-mode errors
+        }
+      }
+
       if (!matchedRule && form.settings.redirectUrl) {
         setTimeout(() => {
           window.location.href = form.settings.redirectUrl!;
@@ -537,6 +578,34 @@ export function PublicFormPage() {
               <p className="text-sm text-[var(--form-text-muted)] mt-2">{field.label}</p>
             )}
           </div>
+        );
+
+      case 'section':
+        return (
+          <div className="py-2">
+            {field.label && (
+              <h3 className="text-base font-semibold text-[var(--form-text-primary)] mb-2">{field.label}</h3>
+            )}
+            <hr className="border-[var(--form-input-border)]" />
+          </div>
+        );
+
+      case 'heading': {
+        const level = field.headingLevel || 'h2';
+        const sizeCls =
+          level === 'h1' ? 'text-3xl' :
+          level === 'h2' ? 'text-2xl' :
+          level === 'h3' ? 'text-xl' :
+          'text-lg';
+        const Tag = level as 'h1' | 'h2' | 'h3' | 'h4';
+        return (
+          <Tag className={`${sizeCls} font-semibold text-[var(--form-text-primary)]`}>{field.label}</Tag>
+        );
+      }
+
+      case 'paragraph':
+        return (
+          <p className="text-sm text-[var(--form-text-secondary)] whitespace-pre-line">{field.label}</p>
         );
 
       case 'textarea':
@@ -1237,11 +1306,18 @@ export function PublicFormPage() {
               if (!shouldShowField(field)) return null;
 
               const widthCls = field.width === 'half' ? 'inline-block w-1/2 pr-2 align-top' : '';
+              const widthStyle = field.customWidthPercent
+                ? { width: `${field.customWidthPercent}%`, display: 'inline-block', verticalAlign: 'top', paddingRight: '0.5rem' }
+                : undefined;
+              const wrapperClass = `${widthCls} ${field.customClassName || ''}`.trim();
               const showLabel =
                 field.type !== 'hidden' &&
                 field.type !== 'checkbox' &&
                 field.type !== 'consent' &&
                 field.type !== 'divider' &&
+                field.type !== 'heading' &&
+                field.type !== 'paragraph' &&
+                field.type !== 'section' &&
                 field.labelAlignment !== 'inline';
               const isLeftAligned = field.labelAlignment === 'left' && showLabel;
 
@@ -1269,7 +1345,7 @@ export function PublicFormPage() {
               );
 
               return (
-                <div key={field.id} className={widthCls}>
+                <div key={field.id} className={wrapperClass} style={widthStyle}>
                   {isLeftAligned ? (
                     <div className="sm:flex sm:items-start">
                       {labelEl}

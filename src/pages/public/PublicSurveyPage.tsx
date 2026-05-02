@@ -134,6 +134,19 @@ export function PublicSurveyPage() {
       if (Object.keys(defaults).length > 0) {
         setAnswers((prev) => ({ ...defaults, ...prev }));
       }
+
+      // Sticky Contact prefill from localStorage
+      if (data.settings?.stickyContact && typeof window !== 'undefined') {
+        try {
+          const raw = window.localStorage.getItem(`sticky_survey_${data.id}`);
+          if (raw) {
+            const sticky = JSON.parse(raw) as Record<string, unknown>;
+            setAnswers((prev) => ({ ...sticky, ...prev }));
+          }
+        } catch {
+          // ignore
+        }
+      }
     } catch (err) {
       console.error('Failed to load survey:', err);
       setError('Failed to load survey');
@@ -386,6 +399,14 @@ export function PublicSurveyPage() {
 
       setSubmitted(true);
 
+      if (survey.settings.stickyContact && typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(`sticky_survey_${survey.id}`, JSON.stringify(answers));
+        } catch {
+          // ignore
+        }
+      }
+
       if (!matchedRule && survey.settings.redirectUrl) {
         setTimeout(() => {
           window.location.href = survey.settings.redirectUrl!;
@@ -443,6 +464,32 @@ export function PublicSurveyPage() {
       );
     }
 
+    if (question.type === 'section') {
+      return (
+        <div key={question.id} className="py-2">
+          {question.label && (
+            <h3 className="text-base font-semibold text-[var(--form-text-primary)] mb-2">{question.label}</h3>
+          )}
+          <hr className="border-[var(--form-input-border)]" />
+        </div>
+      );
+    }
+
+    if (question.type === 'heading') {
+      const level = question.headingLevel || 'h2';
+      const sizeCls =
+        level === 'h1' ? 'text-3xl' :
+        level === 'h2' ? 'text-2xl' :
+        level === 'h3' ? 'text-xl' :
+        'text-lg';
+      const Tag = level as 'h1' | 'h2' | 'h3' | 'h4';
+      return <Tag key={question.id} className={`${sizeCls} font-semibold text-[var(--form-text-primary)]`}>{question.label}</Tag>;
+    }
+
+    if (question.type === 'paragraph') {
+      return <p key={question.id} className="text-sm text-[var(--form-text-secondary)] whitespace-pre-line">{question.label}</p>;
+    }
+
     if (question.type === 'column') {
       return (
         <div
@@ -471,7 +518,7 @@ export function PublicSurveyPage() {
     const hideLabel = question.labelAlignment === 'inline';
 
     return (
-      <div key={question.id} className="mb-8">
+      <div key={question.id} className={`mb-8 ${question.customClassName || ''}`.trim()}>
         {!isCheckboxType && !hideLabel && (
           <label className="block text-base font-medium text-[var(--form-text-primary)] mb-2">
             {index + 1}. {question.label}

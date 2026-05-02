@@ -106,7 +106,10 @@ const FIELD_TYPES: FieldTypeConfig[] = [
   { type: 'email_validation', label: 'Email Validation', icon: BadgeCheck, category: 'advanced' },
   { type: 'math_calculation', label: 'Math Calculation', icon: Calculator, category: 'advanced' },
 
-  { type: 'divider', label: 'Section Divider', icon: Minus, category: 'layout' },
+  { type: 'heading', label: 'Heading', icon: Type, category: 'layout' },
+  { type: 'paragraph', label: 'Paragraph', icon: AlignLeft, category: 'layout' },
+  { type: 'section', label: 'Section Title', icon: Minus, category: 'layout' },
+  { type: 'divider', label: 'Divider', icon: Minus, category: 'layout' },
   { type: 'column', label: 'Column / Layout', icon: Columns, category: 'layout' },
   { type: 'custom_html', label: 'Custom HTML', icon: FileCode, category: 'layout' },
 
@@ -884,16 +887,46 @@ function FieldEditor({
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Width</label>
             <select
-              value={field.width || 'full'}
-              onChange={(e) => onUpdate({ width: e.target.value as FormField['width'] })}
+              value={field.customWidthPercent ? 'custom' : (field.width || 'full')}
+              onChange={(e) => {
+                if (e.target.value === 'custom') {
+                  onUpdate({ customWidthPercent: 50, width: undefined });
+                } else {
+                  onUpdate({ width: e.target.value as FormField['width'], customWidthPercent: undefined });
+                }
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="full">Full Width</option>
               <option value="two_thirds">2/3 Width</option>
               <option value="half">Half Width</option>
               <option value="third">1/3 Width</option>
+              <option value="custom">Custom %</option>
             </select>
+            {field.customWidthPercent !== undefined && (
+              <input
+                type="number"
+                min={5}
+                max={100}
+                value={field.customWidthPercent}
+                onChange={(e) => onUpdate({ customWidthPercent: Math.max(5, Math.min(100, parseInt(e.target.value) || 50)) })}
+                className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            )}
           </div>
+
+          {!isDivider && field.type !== 'column' && field.type !== 'custom_html' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Custom CSS Class</label>
+              <input
+                type="text"
+                value={field.customClassName || ''}
+                onChange={(e) => onUpdate({ customClassName: e.target.value })}
+                placeholder="e.g. my-special-field"
+                className="w-full px-3 py-2 font-mono text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
 
           {!isDivider && field.type !== 'column' && field.type !== 'custom_html' && field.type !== 'hidden' && field.type !== 'file_upload' && (
             <DefaultValueInput field={field} onUpdate={onUpdate} />
@@ -1072,6 +1105,35 @@ function FieldEditor({
                 <option value={4}>4 columns</option>
               </select>
             </div>
+          )}
+
+          {field.type === 'heading' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Heading Level</label>
+              <select
+                value={field.headingLevel || 'h2'}
+                onChange={(e) => onUpdate({ headingLevel: e.target.value as 'h1' | 'h2' | 'h3' | 'h4' })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="h1">H1 (largest)</option>
+                <option value="h2">H2</option>
+                <option value="h3">H3</option>
+                <option value="h4">H4 (smallest)</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">The Label above is the heading text. Inline-edit it on the canvas.</p>
+            </div>
+          )}
+
+          {field.type === 'paragraph' && (
+            <p className="text-xs text-gray-500 -mt-2">
+              The Label above is the paragraph body. Use line breaks for new lines. Inline-edit on the canvas.
+            </p>
+          )}
+
+          {field.type === 'section' && (
+            <p className="text-xs text-gray-500 -mt-2">
+              Section Title renders above an horizontal divider. Inline-edit the title via the Label above.
+            </p>
           )}
 
           {(field.type === 'text' || field.type === 'textarea') && (
@@ -1533,6 +1595,20 @@ function ConditionalLogicEditor({
                   <option value="equals">Equals</option>
                   <option value="not_equals">Does not equal</option>
                   <option value="contains">Contains</option>
+                  {(sourceField?.type === 'number' || sourceField?.type === 'monetary' || sourceField?.type === 'math_calculation') && (
+                    <>
+                      <option value="greater_than">Greater than</option>
+                      <option value="less_than">Less than</option>
+                      <option value="between">Between</option>
+                    </>
+                  )}
+                  {sourceField?.type === 'date' && (
+                    <>
+                      <option value="before">Before</option>
+                      <option value="after">After</option>
+                      <option value="between">Between</option>
+                    </>
+                  )}
                   <option value="is_empty">Is empty</option>
                   <option value="is_not_empty">Is not empty</option>
                 </select>
@@ -1552,10 +1628,19 @@ function ConditionalLogicEditor({
                       </select>
                     ) : (
                       <input
-                        type="text"
+                        type={sourceField?.type === 'date' ? 'date' : (sourceField?.type === 'number' || sourceField?.type === 'monetary') ? 'number' : 'text'}
                         value={rule.value}
                         onChange={(e) => updateRule(idx, { value: e.target.value })}
                         placeholder="Value"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    )}
+                    {rule.operator === 'between' && (
+                      <input
+                        type={sourceField?.type === 'date' ? 'date' : 'number'}
+                        value={rule.valueEnd || ''}
+                        onChange={(e) => updateRule(idx, { valueEnd: e.target.value })}
+                        placeholder="End value"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     )}
@@ -1832,6 +1917,19 @@ function FormSettingsPanel({
               <option value="only_if_empty">Only if empty</option>
             </select>
           </div>
+
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.stickyContact || false}
+              onChange={(e) => onUpdate({ stickyContact: e.target.checked })}
+              className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700">
+              Sticky contact (auto-prefill repeat visitors)
+              <span className="block text-xs text-gray-500 mt-0.5">Stores the last submission in the visitor's browser and prefills the form on return.</span>
+            </span>
+          </label>
 
           <div className="pt-2 border-t border-gray-200">
             <label className="flex items-center gap-2 cursor-pointer">

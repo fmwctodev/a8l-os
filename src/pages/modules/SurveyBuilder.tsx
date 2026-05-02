@@ -122,7 +122,10 @@ const QUESTION_TYPES: QuestionTypeConfig[] = [
   { type: 'email_validation', label: 'Email Validation', icon: BadgeCheck, category: 'advanced' },
   { type: 'math_calculation', label: 'Math Calculation', icon: Calculator, category: 'advanced' },
 
-  { type: 'divider', label: 'Section Divider', icon: Minus, category: 'layout' },
+  { type: 'heading', label: 'Heading', icon: Type, category: 'layout' },
+  { type: 'paragraph', label: 'Paragraph', icon: AlignLeft, category: 'layout' },
+  { type: 'section', label: 'Section Title', icon: Minus, category: 'layout' },
+  { type: 'divider', label: 'Divider', icon: Minus, category: 'layout' },
   { type: 'column', label: 'Column / Layout', icon: Columns, category: 'layout' },
   { type: 'custom_html', label: 'Custom HTML', icon: FileCode, category: 'layout' },
 
@@ -1009,7 +1012,7 @@ function QuestionEditor({
   onClose: () => void;
 }) {
   const [activeSection, setActiveSection] = useState<'general' | 'validation'>('general');
-  const isLayoutOnly = question.type === 'divider' || question.type === 'column' || question.type === 'custom_html';
+  const isLayoutOnly = question.type === 'divider' || question.type === 'column' || question.type === 'custom_html' || question.type === 'heading' || question.type === 'paragraph' || question.type === 'section';
   const supportsPlaceholder =
     question.type !== 'divider' &&
     question.type !== 'column' &&
@@ -1709,6 +1712,48 @@ function QuestionEditor({
             />
           </div>
         )}
+
+        {question.type === 'heading' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Heading Level</label>
+            <select
+              value={question.headingLevel || 'h2'}
+              onChange={(e) => onUpdate({ headingLevel: e.target.value as 'h1' | 'h2' | 'h3' | 'h4' })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="h1">H1 (largest)</option>
+              <option value="h2">H2</option>
+              <option value="h3">H3</option>
+              <option value="h4">H4 (smallest)</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">The Question Text above is the heading. Inline-edit on the canvas.</p>
+          </div>
+        )}
+
+        {question.type === 'paragraph' && (
+          <p className="text-xs text-gray-500 -mt-2">
+            The Question Text above is the paragraph body. Inline-edit on the canvas.
+          </p>
+        )}
+
+        {question.type === 'section' && (
+          <p className="text-xs text-gray-500 -mt-2">
+            Section Title renders above an horizontal divider. Edit it via Question Text above.
+          </p>
+        )}
+
+        {!isLayoutOnly && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Custom CSS Class</label>
+            <input
+              type="text"
+              value={question.customClassName || ''}
+              onChange={(e) => onUpdate({ customClassName: e.target.value })}
+              placeholder="e.g. my-special-question"
+              className="w-full px-3 py-2 font-mono text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        )}
       </div>
       )}
 
@@ -2088,6 +2133,18 @@ function SurveySettingsPanel({
           {settings.partialCompletionEnabled && (
             <p className="text-xs text-gray-500 ml-6">Capture leads as soon as email or phone is collected, even if they don't finish the survey</p>
           )}
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.stickyContact || false}
+              onChange={(e) => onUpdate({ stickyContact: e.target.checked })}
+              className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm text-gray-700">
+              Sticky contact (auto-prefill repeat visitors)
+              <span className="block text-xs text-gray-500 mt-0.5">Stores last responses in the visitor's browser to prefill on return.</span>
+            </span>
+          </label>
         </div>
       )}
 
