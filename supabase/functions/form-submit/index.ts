@@ -113,6 +113,157 @@ function extractAttribution(req: Request, body: Record<string, unknown>): Attrib
   };
 }
 
+// Columns on the public.contacts table that submissions may auto-populate.
+const CONTACT_COLUMNS = [
+  "first_name", "last_name", "email", "phone", "company", "job_title",
+  "address_line1", "address_line2", "city", "state", "postal_code", "country",
+  "source",
+] as const;
+
+function buildContactDataFromForm(
+  payload: Record<string, unknown>,
+  fields: FormField[],
+): Record<string, unknown> {
+  const contactData: Record<string, unknown> = {};
+  const setIfPresent = (key: string, value: unknown) => {
+    if (value === undefined || value === null) return;
+    if (typeof value === "string" && value.trim() === "") return;
+    contactData[key] = value;
+  };
+
+  for (const field of fields) {
+    const value = payload[field.id];
+    if (value === undefined || value === null) continue;
+
+    // Explicit contact-field mapping wins over auto-detect
+    if (field.mapping?.contactField) {
+      setIfPresent(field.mapping.contactField, value);
+      continue;
+    }
+    // Field is wired to a custom field or custom object — handled elsewhere
+    if (field.mapping?.customFieldId || field.mapping?.objectId) continue;
+
+    switch (field.type) {
+      case "email":
+        setIfPresent("email", value);
+        break;
+      case "phone":
+        setIfPresent("phone", value);
+        break;
+      case "first_name":
+        setIfPresent("first_name", value);
+        break;
+      case "last_name":
+        setIfPresent("last_name", value);
+        break;
+      case "full_name": {
+        const nameParts = String(value).trim().split(/\s+/);
+        if (nameParts[0]) setIfPresent("first_name", nameParts[0]);
+        if (nameParts.length > 1) setIfPresent("last_name", nameParts.slice(1).join(" "));
+        break;
+      }
+      case "company":
+        setIfPresent("company", value);
+        break;
+      case "city":
+        setIfPresent("city", value);
+        break;
+      case "state":
+        setIfPresent("state", value);
+        break;
+      case "postal_code":
+        setIfPresent("postal_code", value);
+        break;
+      case "country":
+        setIfPresent("country", value);
+        break;
+      case "source":
+        setIfPresent("source", value);
+        break;
+      case "address": {
+        // Composite { street, city, state, postal_code, country }
+        if (typeof value === "object") {
+          const a = value as Record<string, unknown>;
+          if (a.street) setIfPresent("address_line1", a.street);
+          if (a.city) setIfPresent("city", a.city);
+          if (a.state) setIfPresent("state", a.state);
+          if (a.postal_code) setIfPresent("postal_code", a.postal_code);
+          if (a.country) setIfPresent("country", a.country);
+        } else if (typeof value === "string") {
+          setIfPresent("address_line1", value);
+        }
+        break;
+      }
+    }
+  }
+
+  return contactData;
+}
+
+async function findExistingContact(
+  supabase: ReturnType<typeof createClient>,
+  organizationId: string,
+  email?: string,
+  phone?: string,
+): Promise<{ id: string } | null> {
+  // Always email-first, then phone — anti-duplicate guard regardless of form setting.
+  if (email) {
+    const { data } = await supabase
+      .from("contacts")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("email", email)
+      .eq("status", "active")
+      .maybeSingle();
+    if (data) return data;
+  }
+  if (phone) {
+    const { data } = await supabase
+      .from("contacts")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("phone", phone)
+      .eq("status", "active")
+      .maybeSingle();
+    if (data) return data;
+  }
+  return null;
+}
+
+async function applyContactUpdate(
+  supabase: ReturnType<typeof createClient>,
+  contactId: string,
+  contactData: Record<string, unknown>,
+  fieldOverwrite: "always" | "only_if_empty",
+): Promise<void> {
+  if (Object.keys(contactData).length === 0) return;
+
+  let updates: Record<string, unknown> = {};
+
+  if (fieldOverwrite === "always") {
+    updates = { ...contactData };
+  } else {
+    // only_if_empty: read current row and only fill in columns that are NULL or empty string
+    const { data: current } = await supabase
+      .from("contacts")
+      .select(CONTACT_COLUMNS.join(","))
+      .eq("id", contactId)
+      .maybeSingle();
+    if (!current) return;
+    const cur = current as Record<string, unknown>;
+    for (const [k, v] of Object.entries(contactData)) {
+      const existing = cur[k];
+      if (existing === null || existing === undefined || existing === "") {
+        updates[k] = v;
+      }
+    }
+  }
+
+  if (Object.keys(updates).length === 0) return;
+  const { error } = await supabase.from("contacts").update(updates).eq("id", contactId);
+  if (error) console.error("Error updating contact:", error);
+}
+
 async function findOrCreateContact(
   supabase: ReturnType<typeof createClient>,
   organizationId: string,
@@ -121,146 +272,40 @@ async function findOrCreateContact(
   fields: FormField[],
   settings: FormSettings
 ): Promise<string | null> {
-  const contactData: Record<string, unknown> = {};
-
-  for (const field of fields) {
-    const value = payload[field.id];
-    if (value === undefined || value === null || value === "") continue;
-
-    if (field.mapping?.contactField) {
-      contactData[field.mapping.contactField] = value;
-    } else {
-      switch (field.type) {
-        case "email":
-          contactData.email = value;
-          break;
-        case "phone":
-          contactData.phone = value;
-          break;
-        case "first_name":
-          contactData.first_name = value;
-          break;
-        case "last_name":
-          contactData.last_name = value;
-          break;
-        case "full_name": {
-          const nameParts = String(value).trim().split(/\s+/);
-          contactData.first_name = nameParts[0] || "";
-          contactData.last_name = nameParts.slice(1).join(" ") || "";
-          break;
-        }
-        case "company":
-          contactData.company = value;
-          break;
-      }
-    }
-  }
+  const contactData = buildContactDataFromForm(payload, fields);
 
   const email = contactData.email as string | undefined;
   const phone = contactData.phone as string | undefined;
 
-  if (settings.contactMatching === "create_new" || (!email && !phone)) {
-    const { data: newContact, error } = await supabase
-      .from("contacts")
-      .insert({
-        organization_id: organizationId,
-        department_id: departmentId,
-        owner_id: settings.ownerId || null,
-        first_name: contactData.first_name || "",
-        last_name: contactData.last_name || "",
-        email: email || null,
-        phone: phone || null,
-        company: contactData.company || null,
-        source: "form",
-        status: "active",
-      })
-      .select("id")
-      .single();
-
-    if (error) {
-      console.error("Error creating contact:", error);
-      return null;
+  // contactMatching === "create_new" is an explicit opt-out from de-dup.
+  // Default behavior: try email then phone; create only if no match.
+  if (settings.contactMatching !== "create_new") {
+    const existing = await findExistingContact(supabase, organizationId, email, phone);
+    if (existing) {
+      await applyContactUpdate(supabase, existing.id, contactData, settings.fieldOverwrite || "only_if_empty");
+      return existing.id;
     }
-
-    return newContact.id;
   }
 
-  let existingContact = null;
-
-  if (settings.contactMatching === "email_first" && email) {
-    const { data } = await supabase
-      .from("contacts")
-      .select("id")
-      .eq("organization_id", organizationId)
-      .eq("email", email)
-      .eq("status", "active")
-      .maybeSingle();
-    existingContact = data;
+  // No identifying fields and user did NOT explicitly choose create_new — skip orphan creation
+  if (!email && !phone && settings.contactMatching !== "create_new") {
+    return null;
   }
 
-  if (!existingContact && settings.contactMatching === "phone_first" && phone) {
-    const { data } = await supabase
-      .from("contacts")
-      .select("id")
-      .eq("organization_id", organizationId)
-      .eq("phone", phone)
-      .eq("status", "active")
-      .maybeSingle();
-    existingContact = data;
-  }
-
-  if (!existingContact && email) {
-    const { data } = await supabase
-      .from("contacts")
-      .select("id")
-      .eq("organization_id", organizationId)
-      .eq("email", email)
-      .eq("status", "active")
-      .maybeSingle();
-    existingContact = data;
-  }
-
-  if (!existingContact && phone) {
-    const { data } = await supabase
-      .from("contacts")
-      .select("id")
-      .eq("organization_id", organizationId)
-      .eq("phone", phone)
-      .eq("status", "active")
-      .maybeSingle();
-    existingContact = data;
-  }
-
-  if (existingContact) {
-    if (settings.fieldOverwrite === "always") {
-      await supabase
-        .from("contacts")
-        .update({
-          first_name: contactData.first_name || undefined,
-          last_name: contactData.last_name || undefined,
-          email: email || undefined,
-          phone: phone || undefined,
-          company: contactData.company || undefined,
-        })
-        .eq("id", existingContact.id);
-    }
-    return existingContact.id;
-  }
+  const insert: Record<string, unknown> = {
+    organization_id: organizationId,
+    department_id: departmentId,
+    owner_id: settings.ownerId || null,
+    status: "active",
+    first_name: "",
+    last_name: "",
+    source: "form",
+    ...contactData,
+  };
 
   const { data: newContact, error } = await supabase
     .from("contacts")
-    .insert({
-      organization_id: organizationId,
-      department_id: departmentId,
-      owner_id: settings.ownerId || null,
-      first_name: contactData.first_name || "",
-      last_name: contactData.last_name || "",
-      email: email || null,
-      phone: phone || null,
-      company: contactData.company || null,
-      source: "form",
-      status: "active",
-    })
+    .insert(insert)
     .select("id")
     .single();
 
