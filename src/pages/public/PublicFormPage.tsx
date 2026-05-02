@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckCircle, AlertCircle, Loader2, Upload, X, FileText, Plus, CreditCard } from 'lucide-react';
+import { SignaturePad } from '../../components/SignaturePad';
 import { supabase } from '../../lib/supabase';
 import type { Form, FormField } from '../../types';
 import {
@@ -128,6 +129,22 @@ export function PublicFormPage() {
       const defaults: Record<string, FormFieldValue> = {};
       const fields: FormField[] = data.definition?.fields || [];
       for (const f of fields) {
+        // URL-param overrides for source / hidden fields
+        if (f.type === 'source') {
+          const sourceParam = searchParams.get('source');
+          if (sourceParam) {
+            defaults[f.id] = sourceParam;
+            continue;
+          }
+        }
+        if (f.type === 'hidden') {
+          const key = f.hiddenParamKey || f.id;
+          const v = searchParams.get(key);
+          if (v) {
+            defaults[f.id] = v;
+            continue;
+          }
+        }
         if (f.defaultValue === undefined || f.defaultValue === null || f.defaultValue === '') continue;
         if (f.type === 'checkbox' || f.type === 'consent') {
           defaults[f.id] = f.defaultValue === 'true' || f.defaultValue === true;
@@ -906,15 +923,23 @@ export function PublicFormPage() {
       case 'checkbox':
       case 'consent':
         return (
-          <label className="flex items-start gap-2">
-            <input
-              type="checkbox"
-              checked={Boolean(formData[field.id])}
-              onChange={(e) => updateField(field.id, e.target.checked)}
-              className="mt-1 rounded border-[var(--form-input-border)] text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
-            />
-            <span className="text-[var(--form-text-secondary)]">{field.label}</span>
-          </label>
+          <div className="space-y-2">
+            <label className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(formData[field.id])}
+                onChange={(e) => updateField(field.id, e.target.checked)}
+                className="mt-1 rounded border-[var(--form-input-border)] text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
+              />
+              <span className="text-[var(--form-text-secondary)]">{field.label}</span>
+            </label>
+            {field.type === 'consent' && field.consentDescription && (
+              <div
+                className="text-xs text-[var(--form-text-muted)] pl-6 [&_a]:text-[var(--form-accent-solid)] [&_a]:underline"
+                dangerouslySetInnerHTML={{ __html: field.consentDescription }}
+              />
+            )}
+          </div>
         );
 
       case 'file_upload':
@@ -1082,6 +1107,16 @@ export function PublicFormPage() {
           </div>
         );
       }
+
+      case 'signature':
+        return (
+          <SignaturePad
+            value={String(formData[field.id] || '')}
+            onChange={(dataUrl) => updateField(field.id, dataUrl)}
+            height={field.signaturePadHeight ?? 120}
+            hasError={hasError}
+          />
+        );
 
       default:
         return (

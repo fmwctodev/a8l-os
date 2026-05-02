@@ -45,6 +45,7 @@ import {
   Tag,
   ListChecks,
   List,
+  PenTool,
 } from 'lucide-react';
 import { getFormById, updateForm, publishForm, unpublishForm } from '../../services/forms';
 import type { Form, FormField, FormFieldType, FormDefinition, FormSettings, FormConditionalRule, FormValidationRule } from '../../types';
@@ -110,6 +111,7 @@ const FIELD_TYPES: FieldTypeConfig[] = [
   { type: 'custom_html', label: 'Custom HTML', icon: FileCode, category: 'layout' },
 
   { type: 'file_upload', label: 'File Upload', icon: Upload, category: 'special' },
+  { type: 'signature', label: 'Signature', icon: PenTool, category: 'special' },
   { type: 'hidden', label: 'Hidden Field', icon: EyeOff, category: 'special' },
   { type: 'consent', label: 'Consent Checkbox', icon: ShieldCheck, category: 'special' },
 ];
@@ -1003,13 +1005,14 @@ function FieldEditor({
               <p className="text-xs text-gray-500 mt-1">
                 Reference other fields with {'{field-id}'}. Supported: + - * / ( ).
               </p>
-              {allFields.filter((f) => f.id !== field.id && f.type !== 'divider' && f.type !== 'column' && f.type !== 'custom_html').length > 0 && (
-                <details className="mt-2 text-xs">
-                  <summary className="cursor-pointer text-blue-600 hover:text-blue-700">Available field IDs</summary>
-                  <div className="mt-1 space-y-0.5 max-h-32 overflow-y-auto bg-gray-50 rounded p-2">
-                    {allFields
-                      .filter((f) => f.id !== field.id && f.type !== 'divider' && f.type !== 'column' && f.type !== 'custom_html')
-                      .map((f) => (
+              {(() => {
+                const numericFields = allFields.filter((f) => f.id !== field.id && (f.type === 'number' || f.type === 'monetary' || f.type === 'math_calculation'));
+                if (numericFields.length === 0) return null;
+                return (
+                  <details className="mt-2 text-xs">
+                    <summary className="cursor-pointer text-blue-600 hover:text-blue-700">Available field IDs (Number / Monetary only)</summary>
+                    <div className="mt-1 space-y-0.5 max-h-32 overflow-y-auto bg-gray-50 rounded p-2">
+                      {numericFields.map((f) => (
                         <button
                           key={f.id}
                           type="button"
@@ -1020,9 +1023,10 @@ function FieldEditor({
                           <span className="text-gray-700 ml-2">{f.label}</span>
                         </button>
                       ))}
-                  </div>
-                </details>
-              )}
+                    </div>
+                  </details>
+                );
+              })()}
             </div>
           )}
 
@@ -1182,6 +1186,58 @@ function FieldEditor({
               </div>
             </div>
           )}
+
+          {field.type === 'consent' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description (HTML allowed)</label>
+              <textarea
+                value={field.consentDescription || ''}
+                onChange={(e) => onUpdate({ consentDescription: e.target.value })}
+                rows={3}
+                placeholder='I agree to the &lt;a href="/terms"&gt;Terms of Service&lt;/a&gt;'
+                className="w-full px-3 py-2 text-xs font-mono border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Label stays plain text (matches GHL constraint). Description renders as HTML for links.
+              </p>
+            </div>
+          )}
+
+          {field.type === 'hidden' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">URL parameter key</label>
+              <input
+                type="text"
+                value={field.hiddenParamKey || ''}
+                onChange={(e) => onUpdate({ hiddenParamKey: e.target.value })}
+                placeholder="utm_campaign"
+                className="w-full px-3 py-2 font-mono text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Pre-filled from <code>?{field.hiddenParamKey || 'key'}=</code> on the form URL.
+              </p>
+            </div>
+          )}
+
+          {field.type === 'source' && (
+            <p className="text-xs text-gray-500 -mt-2">
+              The Default Value above is used unless the form URL includes <code>?source=</code>, which overrides it.
+            </p>
+          )}
+
+          {field.type === 'signature' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Signature pad height (px)</label>
+              <input
+                type="number"
+                min={80}
+                max={400}
+                value={field.signaturePadHeight ?? 120}
+                onChange={(e) => onUpdate({ signaturePadHeight: parseInt(e.target.value) || 120 })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -1284,6 +1340,23 @@ function DefaultValueInput({
   );
 }
 
+const FILE_TYPE_OPTIONS: { type: string; label: string }[] = [
+  { type: 'application/pdf', label: 'PDF' },
+  { type: '.doc,.docx', label: 'Word (.doc, .docx)' },
+  { type: '.xls,.xlsx', label: 'Excel (.xls, .xlsx)' },
+  { type: 'image/jpeg', label: 'JPG / JPEG' },
+  { type: 'image/png', label: 'PNG' },
+  { type: 'image/gif', label: 'GIF' },
+  { type: 'image/svg+xml', label: 'SVG' },
+  { type: 'video/mp4', label: 'MP4' },
+  { type: 'video/mpeg', label: 'MPEG' },
+  { type: 'audio/mpeg', label: 'MP3' },
+  { type: '.zip', label: 'ZIP' },
+  { type: '.rar', label: 'RAR' },
+  { type: 'text/csv', label: 'CSV' },
+  { type: 'text/plain', label: 'TXT' },
+];
+
 function FileUploadSettings({
   field,
   onUpdate,
@@ -1292,8 +1365,8 @@ function FileUploadSettings({
   onUpdate: (updates: Partial<FormField>) => void;
 }) {
   const config = field.fileUploadConfig || {
-    maxSizeBytes: 10485760,
-    allowedTypes: ['image/*', 'application/pdf'],
+    maxSizeBytes: 50 * 1048576,
+    allowedTypes: ['application/pdf', 'image/jpeg', 'image/png'],
     maxFiles: 1,
   };
 
@@ -1315,49 +1388,62 @@ function FileUploadSettings({
           <option value={5}>5 MB</option>
           <option value={10}>10 MB</option>
           <option value={25}>25 MB</option>
-          <option value={50}>50 MB</option>
+          <option value={50}>50 MB (default)</option>
           <option value={100}>100 MB</option>
         </select>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Max Files</label>
+      <label className="flex items-start gap-2 text-sm text-gray-700">
         <input
-          type="number"
-          min={1}
-          max={10}
-          value={config.maxFiles}
-          onChange={(e) =>
+          type="checkbox"
+          checked={field.allowMultiple || (config.maxFiles > 1)}
+          onChange={(e) => {
+            const allowMultiple = e.target.checked;
             onUpdate({
-              fileUploadConfig: { ...config, maxFiles: parseInt(e.target.value) || 1 },
-            })
-          }
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              allowMultiple,
+              fileUploadConfig: { ...config, maxFiles: allowMultiple ? Math.max(2, config.maxFiles) : 1 },
+            });
+          }}
+          className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
         />
-      </div>
+        <span>Allow multiple file uploads</span>
+      </label>
+
+      {(field.allowMultiple || config.maxFiles > 1) && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Max Files</label>
+          <input
+            type="number"
+            min={1}
+            max={10}
+            value={config.maxFiles}
+            onChange={(e) =>
+              onUpdate({
+                fileUploadConfig: { ...config, maxFiles: parseInt(e.target.value) || 1 },
+              })
+            }
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      )}
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Allowed File Types</label>
-        <div className="space-y-2">
-          {['image/*', 'application/pdf', '.doc,.docx', '.xls,.xlsx', 'video/*', 'audio/*'].map((type) => (
-            <label key={type} className="flex items-center gap-2 text-sm">
+        <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+          {FILE_TYPE_OPTIONS.map((opt) => (
+            <label key={opt.type} className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
-                checked={config.allowedTypes.includes(type)}
+                checked={config.allowedTypes.includes(opt.type)}
                 onChange={(e) => {
                   const newTypes = e.target.checked
-                    ? [...config.allowedTypes, type]
-                    : config.allowedTypes.filter((t) => t !== type);
+                    ? [...config.allowedTypes, opt.type]
+                    : config.allowedTypes.filter((t) => t !== opt.type);
                   onUpdate({ fileUploadConfig: { ...config, allowedTypes: newTypes } });
                 }}
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
-              {type === 'image/*' && 'Images'}
-              {type === 'application/pdf' && 'PDF'}
-              {type === '.doc,.docx' && 'Word Documents'}
-              {type === '.xls,.xlsx' && 'Excel Files'}
-              {type === 'video/*' && 'Videos'}
-              {type === 'audio/*' && 'Audio'}
+              {opt.label}
             </label>
           ))}
         </div>

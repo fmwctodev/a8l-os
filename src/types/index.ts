@@ -1728,7 +1728,8 @@ export type FormFieldType =
   | 'checkbox' | 'checkbox_group' | 'radio' | 'date' | 'hidden' | 'consent'
   | 'file_upload' | 'divider' | 'column' | 'custom_html'
   | 'source' | 'payment' | 'product_selection'
-  | 'sms_verification' | 'email_validation' | 'math_calculation';
+  | 'sms_verification' | 'email_validation' | 'math_calculation'
+  | 'signature';
 
 export interface FormFileUploadConfig {
   maxSizeBytes: number;
@@ -1861,6 +1862,10 @@ export interface FormField {
   allowOther?: boolean;
   minSelections?: number;
   maxSelections?: number;
+  signaturePadHeight?: number;
+  allowMultiple?: boolean;
+  hiddenParamKey?: string;
+  consentDescription?: string;
 }
 
 export interface FormDefinition {
@@ -1958,7 +1963,8 @@ export type SurveyQuestionType =
   | 'textbox_list' | 'monetary'
   | 'divider' | 'column' | 'custom_html' | 'consent' | 'file_upload'
   | 'source' | 'payment' | 'product_selection'
-  | 'sms_verification' | 'email_validation' | 'math_calculation';
+  | 'sms_verification' | 'email_validation' | 'math_calculation'
+  | 'signature';
 
 export interface SurveyQuestionOption {
   id: string;
@@ -2032,6 +2038,15 @@ export interface SurveyQuestion {
   allowOther?: boolean;
   minSelections?: number;
   maxSelections?: number;
+  signaturePadHeight?: number;
+  allowMultiple?: boolean;
+  hiddenParamKey?: string;
+  consentDescription?: string;
+  ratingIcon?: 'star' | 'heart' | 'thumb' | 'flag' | 'lightbulb';
+  ratingIconColor?: string;
+  ratingIconColorUnselected?: string;
+  ratingDataStorage?: 'absolute' | 'percentage' | 'fraction';
+  scaleSteps?: number;
 }
 
 export interface SurveyStep {

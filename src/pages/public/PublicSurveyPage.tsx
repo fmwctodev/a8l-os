@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { CheckCircle, AlertCircle, Loader2, ArrowLeft, ArrowRight, Star, GripVertical, Plus, X, Upload, CreditCard } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader2, ArrowLeft, ArrowRight, Star, Heart, ThumbsUp, Flag, Lightbulb, GripVertical, Plus, X, Upload, CreditCard } from 'lucide-react';
+import { SignaturePad } from '../../components/SignaturePad';
 import { supabase } from '../../lib/supabase';
 import type { Survey, SurveyQuestion } from '../../types';
 import {
@@ -111,6 +112,15 @@ export function PublicSurveyPage() {
       const defaults: Record<string, unknown> = {};
       const allQuestions: SurveyQuestion[] = (data.definition?.steps || []).flatMap((s: { questions?: SurveyQuestion[] }) => s.questions || []);
       for (const q of allQuestions) {
+        if (q.type === 'source') {
+          const sourceParam = searchParams.get('source');
+          if (sourceParam) { defaults[q.id] = sourceParam; continue; }
+        }
+        if (q.type === 'hidden') {
+          const key = q.hiddenParamKey || q.id;
+          const v = searchParams.get(key);
+          if (v) { defaults[q.id] = v; continue; }
+        }
         if (q.defaultValue === undefined || q.defaultValue === null || q.defaultValue === '') continue;
         if (q.type === 'checkbox' || q.type === 'consent') {
           defaults[q.id] = q.defaultValue === 'true' || q.defaultValue === true;
@@ -862,15 +872,32 @@ export function PublicSurveyPage() {
         })()}
 
         {isCheckboxType && (
-          <label className="flex items-start gap-2">
-            <input
-              type="checkbox"
-              checked={Boolean(answer)}
-              onChange={(e) => updateAnswer(question.id, e.target.checked)}
-              className="mt-1 rounded border-[var(--form-input-border)] text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
-            />
-            <span className="text-[var(--form-text-secondary)]">{question.label}</span>
-          </label>
+          <div className="space-y-2">
+            <label className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(answer)}
+                onChange={(e) => updateAnswer(question.id, e.target.checked)}
+                className="mt-1 rounded border-[var(--form-input-border)] text-[var(--form-accent-solid)] focus:ring-[var(--form-accent-solid)]"
+              />
+              <span className="text-[var(--form-text-secondary)]">{question.label}</span>
+            </label>
+            {question.type === 'consent' && question.consentDescription && (
+              <div
+                className="text-xs text-[var(--form-text-muted)] pl-6 [&_a]:text-[var(--form-accent-solid)] [&_a]:underline"
+                dangerouslySetInnerHTML={{ __html: question.consentDescription }}
+              />
+            )}
+          </div>
+        )}
+
+        {question.type === 'signature' && (
+          <SignaturePad
+            value={String(answer || '')}
+            onChange={(dataUrl) => updateAnswer(question.id, dataUrl)}
+            height={question.signaturePadHeight ?? 120}
+            hasError={hasError}
+          />
         )}
 
         {question.type === 'textbox_list' && (() => {
@@ -923,27 +950,49 @@ export function PublicSurveyPage() {
           </div>
         )}
 
-        {question.type === 'rating' && (
-          <div className="flex gap-2">
-            {Array.from(
-              { length: (question.maxValue || 5) - (question.minValue || 1) + 1 },
-              (_, i) => (question.minValue || 1) + i
-            ).map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => updateAnswer(question.id, n)}
-                className={`p-2 transition-colors ${
-                  answer !== undefined && n <= Number(answer)
-                    ? 'text-yellow-400'
-                    : 'text-[var(--form-text-muted)] opacity-50 hover:text-yellow-300'
-                }`}
-              >
-                <Star className="w-8 h-8 fill-current" />
-              </button>
-            ))}
-          </div>
-        )}
+        {question.type === 'rating' && (() => {
+          const max = question.maxValue || 5;
+          const min = 1;
+          const Icon =
+            question.ratingIcon === 'heart' ? Heart :
+            question.ratingIcon === 'thumb' ? ThumbsUp :
+            question.ratingIcon === 'flag' ? Flag :
+            question.ratingIcon === 'lightbulb' ? Lightbulb :
+            Star;
+          const selectedColor = question.ratingIconColor || '#fbbf24';
+          const unselectedColor = question.ratingIconColorUnselected || '#94a3b8';
+          const storage = question.ratingDataStorage || 'absolute';
+          const currentNum = (() => {
+            const a = answer;
+            if (typeof a === 'number') return a;
+            if (typeof a === 'string') {
+              if (storage === 'percentage') return Math.round((parseFloat(a) / 100) * max);
+              if (storage === 'fraction') return parseInt(a.split('/')[0]) || 0;
+              return parseInt(a) || 0;
+            }
+            return 0;
+          })();
+          const onPick = (n: number) => {
+            if (storage === 'percentage') updateAnswer(question.id, Math.round((n / max) * 100));
+            else if (storage === 'fraction') updateAnswer(question.id, `${n}/${max}`);
+            else updateAnswer(question.id, n);
+          };
+          return (
+            <div className="flex gap-2">
+              {Array.from({ length: max - min + 1 }, (_, i) => min + i).map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => onPick(n)}
+                  className="p-2 transition-colors"
+                  style={{ color: n <= currentNum ? selectedColor : unselectedColor }}
+                >
+                  <Icon className="w-8 h-8 fill-current" />
+                </button>
+              ))}
+            </div>
+          );
+        })()}
 
         {question.type === 'nps' && (
           <div className="flex flex-wrap gap-2">
@@ -968,33 +1017,37 @@ export function PublicSurveyPage() {
           </div>
         )}
 
-        {question.type === 'opinion_scale' && (
-          <div>
-            <div className="flex gap-2">
-              {Array.from(
-                { length: (question.maxValue || 5) - (question.minValue || 1) + 1 },
-                (_, i) => (question.minValue || 1) + i
-              ).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => updateAnswer(question.id, n)}
-                  className={`flex-1 py-3 border rounded-lg font-medium transition-colors ${
-                    answer === n
-                      ? 'bg-[var(--form-accent-solid)] border-[var(--form-accent-solid)] text-[var(--form-accent-text)]'
-                      : 'border-[var(--form-input-border)] text-[var(--form-text-secondary)] hover:border-[var(--form-accent-solid)] hover:bg-[var(--form-selected-bg)]'
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
+        {question.type === 'opinion_scale' && (() => {
+          const min = question.minValue ?? 1;
+          const max = question.maxValue ?? 5;
+          const explicitSteps = question.scaleSteps ?? (max - min + 1);
+          const steps = Math.min(10, Math.max(2, explicitSteps));
+          const stepValues = Array.from({ length: steps }, (_, i) => Math.round(min + i * ((max - min) / Math.max(1, steps - 1))));
+          return (
+            <div>
+              <div className="flex gap-2">
+                {stepValues.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => updateAnswer(question.id, n)}
+                    className={`flex-1 py-3 border rounded-lg font-medium transition-colors ${
+                      answer === n
+                        ? 'bg-[var(--form-accent-solid)] border-[var(--form-accent-solid)] text-[var(--form-accent-text)]'
+                        : 'border-[var(--form-input-border)] text-[var(--form-text-secondary)] hover:border-[var(--form-accent-solid)] hover:bg-[var(--form-selected-bg)]'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-between text-xs text-[var(--form-text-muted)] mt-2">
+                <span>{question.minLabel || 'Strongly Disagree'}</span>
+                <span>{question.maxLabel || 'Strongly Agree'}</span>
+              </div>
             </div>
-            <div className="flex justify-between text-xs text-[var(--form-text-muted)] mt-2">
-              <span>{question.minLabel || 'Strongly Disagree'}</span>
-              <span>{question.maxLabel || 'Strongly Agree'}</span>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {question.type === 'contact_capture' && (() => {
           const value = (answer as Record<string, string>) || {};

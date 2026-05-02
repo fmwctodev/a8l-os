@@ -52,6 +52,7 @@ import {
   Tag,
   SlidersHorizontal,
   UserCheck,
+  PenTool,
 } from 'lucide-react';
 import { getSurveyById, updateSurvey, publishSurvey, unpublishSurvey } from '../../services/surveys';
 import type { Survey, SurveyQuestion, SurveyQuestionType, SurveyStep, SurveySettings, SurveyBranchRule, FormValidationRule } from '../../types';
@@ -126,6 +127,7 @@ const QUESTION_TYPES: QuestionTypeConfig[] = [
   { type: 'custom_html', label: 'Custom HTML', icon: FileCode, category: 'layout' },
 
   { type: 'file_upload', label: 'File Upload', icon: Upload, category: 'special' },
+  { type: 'signature', label: 'Signature', icon: PenTool, category: 'special' },
   { type: 'hidden', label: 'Hidden Field', icon: EyeOff, category: 'special' },
   { type: 'consent', label: 'Consent Checkbox', icon: ShieldCheck, category: 'special' },
 ];
@@ -1498,15 +1500,128 @@ function QuestionEditor({
           </>
         )}
 
-        {(question.type === 'rating' || question.type === 'nps') && (
+        {question.type === 'rating' && (
+          <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
+            <div className="text-xs font-medium text-gray-700">Rating Settings</div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Icon Type</label>
+              <select
+                value={question.ratingIcon || 'star'}
+                onChange={(e) => onUpdate({ ratingIcon: e.target.value as SurveyQuestion['ratingIcon'] })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="star">Star</option>
+                <option value="heart">Heart</option>
+                <option value="thumb">Thumbs up</option>
+                <option value="flag">Flag</option>
+                <option value="lightbulb">Lightbulb</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Count (max value)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={question.maxValue || 5}
+                  onChange={(e) => onUpdate({ maxValue: parseInt(e.target.value) || 5, minValue: 1 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data Storage</label>
+                <select
+                  value={question.ratingDataStorage || 'absolute'}
+                  onChange={(e) => onUpdate({ ratingDataStorage: e.target.value as SurveyQuestion['ratingDataStorage'] })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="absolute">Absolute (3)</option>
+                  <option value="percentage">Percentage (60)</option>
+                  <option value="fraction">Fraction (3/5)</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Selected color</label>
+                <input
+                  type="color"
+                  value={question.ratingIconColor || '#fbbf24'}
+                  onChange={(e) => onUpdate({ ratingIconColor: e.target.value })}
+                  className="w-full h-10 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Unselected color</label>
+                <input
+                  type="color"
+                  value={question.ratingIconColorUnselected || '#cbd5e1'}
+                  onChange={(e) => onUpdate({ ratingIconColorUnselected: e.target.value })}
+                  className="w-full h-10 border border-gray-300 rounded-lg"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {question.type === 'nps' && (
           <>
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Min</label>
                 <input
                   type="number"
-                  value={question.minValue || 0}
-                  onChange={(e) => onUpdate({ minValue: parseInt(e.target.value) || 0 })}
+                  value={0}
+                  disabled
+                  className="w-full px-3 py-2 bg-gray-100 text-gray-500 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Max</label>
+                <input
+                  type="number"
+                  value={10}
+                  disabled
+                  className="w-full px-3 py-2 bg-gray-100 text-gray-500 border border-gray-300 rounded-lg"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 -mt-2">NPS uses the standard 0–10 scale.</p>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Min Label</label>
+                <input
+                  type="text"
+                  value={question.minLabel || ''}
+                  onChange={(e) => onUpdate({ minLabel: e.target.value })}
+                  placeholder="Not at all likely"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Max Label</label>
+                <input
+                  type="text"
+                  value={question.maxLabel || ''}
+                  onChange={(e) => onUpdate({ maxLabel: e.target.value })}
+                  placeholder="Extremely likely"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          </>
+        )}
+
+        {question.type === 'opinion_scale' && (
+          <>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Min</label>
+                <input
+                  type="number"
+                  value={question.minValue ?? 1}
+                  onChange={(e) => onUpdate({ minValue: parseInt(e.target.value) || 1 })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -1514,35 +1629,85 @@ function QuestionEditor({
                 <label className="block text-sm font-medium text-gray-700 mb-1">Max</label>
                 <input
                   type="number"
-                  value={question.maxValue || 10}
-                  onChange={(e) => onUpdate({ maxValue: parseInt(e.target.value) || 10 })}
+                  value={question.maxValue ?? 5}
+                  onChange={(e) => onUpdate({ maxValue: parseInt(e.target.value) || 5 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Steps</label>
+                <input
+                  type="number"
+                  min={2}
+                  max={10}
+                  value={question.scaleSteps ?? ((question.maxValue ?? 5) - (question.minValue ?? 1) + 1)}
+                  onChange={(e) => onUpdate({ scaleSteps: parseInt(e.target.value) || 5 })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
-            {question.type === 'nps' && (
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Min Label</label>
-                  <input
-                    type="text"
-                    value={question.minLabel || ''}
-                    onChange={(e) => onUpdate({ minLabel: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Max Label</label>
-                  <input
-                    type="text"
-                    value={question.maxLabel || ''}
-                    onChange={(e) => onUpdate({ maxLabel: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Low Label</label>
+                <input
+                  type="text"
+                  value={question.minLabel || ''}
+                  onChange={(e) => onUpdate({ minLabel: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
-            )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">High Label</label>
+                <input
+                  type="text"
+                  value={question.maxLabel || ''}
+                  onChange={(e) => onUpdate({ maxLabel: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
           </>
+        )}
+
+        {question.type === 'consent' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description (HTML allowed)</label>
+            <textarea
+              value={question.consentDescription || ''}
+              onChange={(e) => onUpdate({ consentDescription: e.target.value })}
+              rows={3}
+              placeholder='I agree to the &lt;a href="/terms"&gt;Terms of Service&lt;/a&gt;'
+              className="w-full px-3 py-2 text-xs font-mono border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">Description renders as HTML beneath the consent checkbox.</p>
+          </div>
+        )}
+
+        {question.type === 'hidden' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">URL parameter key</label>
+            <input
+              type="text"
+              value={question.hiddenParamKey || ''}
+              onChange={(e) => onUpdate({ hiddenParamKey: e.target.value })}
+              placeholder="utm_campaign"
+              className="w-full px-3 py-2 font-mono text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        )}
+
+        {question.type === 'signature' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Signature pad height (px)</label>
+            <input
+              type="number"
+              min={80}
+              max={400}
+              value={question.signaturePadHeight ?? 120}
+              onChange={(e) => onUpdate({ signaturePadHeight: parseInt(e.target.value) || 120 })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         )}
       </div>
       )}
