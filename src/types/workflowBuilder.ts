@@ -87,6 +87,12 @@ export interface WorkflowSettings {
   failureNotificationUserIds: string[];
   folder?: string;
   category?: string;
+  /** Auto-remove a contact from this workflow as soon as they reply on any channel after enrollment. */
+  stopOnResponse?: boolean;
+  /** Workflow-level drip throttle: cap how many contacts can pass through ANY node per window. */
+  dripBatchSize?: number;
+  /** Window length for the drip throttle, in minutes. */
+  dripIntervalMinutes?: number;
 }
 
 export const TRIGGER_CATEGORIES = [

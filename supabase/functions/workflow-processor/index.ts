@@ -286,6 +286,63 @@ Deno.serve(async (req: Request) => {
 
         const definition = (enrollment.version?.definition ||
           enrollment.workflow?.published_definition) as WorkflowDefinition;
+        const wfSettings = (definition as Record<string, unknown>).settings as Record<string, unknown> | undefined;
+
+        // Stop-on-Response: if the workflow has stopOnResponse on, check whether the contact
+        // has sent any inbound message since enrollment started. If so, abort this enrollment.
+        if (wfSettings?.stopOnResponse) {
+          const enrolledAt = (enrollment as Record<string, unknown>).started_at as string | undefined;
+          const contactId = (enrollment.contact as Record<string, unknown>)?.id as string | undefined;
+          if (enrolledAt && contactId) {
+            const { count } = await supabase
+              .from("conversation_messages")
+              .select("id", { count: "exact", head: true })
+              .eq("contact_id", contactId)
+              .eq("direction", "inbound")
+              .gte("created_at", enrolledAt);
+            if ((count ?? 0) > 0) {
+              await supabase
+                .from("workflow_enrollments")
+                .update({
+                  status: "stopped",
+                  stopped_reason: "Stop-on-Response: contact replied",
+                  completed_at: new Date().toISOString(),
+                  current_node_id: null,
+                })
+                .eq("id", enrollment.id);
+              await supabase
+                .from("workflow_jobs")
+                .update({ status: "done" })
+                .eq("id", job.id);
+              results.jobsProcessed++;
+              continue;
+            }
+          }
+        }
+
+        // Workflow-level drip throttle: if a batch size is set and we're already at the cap
+        // for the current window, defer this job to the start of the next window.
+        const dripBatch = wfSettings?.dripBatchSize as number | undefined;
+        const dripWindowMin = (wfSettings?.dripIntervalMinutes as number | undefined) ?? 60;
+        if (dripBatch && dripBatch > 0) {
+          const windowStart = new Date(Date.now() - dripWindowMin * 60 * 1000).toISOString();
+          const { count } = await supabase
+            .from("workflow_execution_logs")
+            .select("id", { count: "exact", head: true })
+            .eq("workflow_id", (enrollment as Record<string, unknown>).workflow_id)
+            .eq("event_type", "node_started")
+            .gte("created_at", windowStart);
+          if ((count ?? 0) >= dripBatch) {
+            const nextWindow = new Date(Date.now() + dripWindowMin * 60 * 1000);
+            await supabase
+              .from("workflow_jobs")
+              .update({ status: "pending", run_at: nextWindow.toISOString() })
+              .eq("id", job.id);
+            results.jobsProcessed++;
+            continue;
+          }
+        }
+
         const node = definition.nodes.find((n) => n.id === job.node_id);
 
         if (!node) {
@@ -346,7 +403,126 @@ Deno.serve(async (req: Request) => {
           }
 
           case "action": {
-            const actionResult = await executeAction(supabase, node.data, enrollment, job.org_id);
+            // Inject the node id so action handlers (drip_mode, wait_for_condition) can reference it
+            const actionData = { ...node.data, nodeId: node.id };
+            const actionResult = await executeAction(supabase, actionData, enrollment, job.org_id);
+
+            // Drip-mode action: defer the job to a future time
+            if (actionResult?.deferUntil) {
+              await supabase
+                .from("workflow_jobs")
+                .update({ status: "pending", run_at: actionResult.deferUntil as string })
+                .eq("id", job.id);
+              results.jobsProcessed++;
+              continue;
+            }
+
+            // remove_from_workflow_action / stop_workflow: end this enrollment
+            if (actionResult?.shouldStop) {
+              await supabase
+                .from("workflow_enrollments")
+                .update({
+                  status: "stopped",
+                  stopped_reason: (actionResult.stopReason as string) || "Stopped by action",
+                  completed_at: new Date().toISOString(),
+                  current_node_id: null,
+                })
+                .eq("id", enrollment.id);
+              await supabase
+                .from("workflow_jobs")
+                .update({ status: "done" })
+                .eq("id", job.id);
+              results.jobsProcessed++;
+              continue;
+            }
+
+            // wait_for_condition: park the job, polled separately by workflow-condition-checker
+            if (actionResult?.shouldWait) {
+              await supabase
+                .from("workflow_jobs")
+                .update({ status: "waiting" })
+                .eq("id", job.id);
+              await supabase
+                .from("workflow_enrollments")
+                .update({
+                  status: "waiting",
+                  context_data: {
+                    ...(enrollment.context_data as Record<string, unknown>),
+                    waiting_for_condition: true,
+                    waiting_node_id: node.id,
+                  },
+                })
+                .eq("id", enrollment.id);
+              results.jobsProcessed++;
+              continue;
+            }
+
+            // go_to: jump to a different node in this workflow
+            if (actionResult?.redirectNode) {
+              nextNodeId = actionResult.redirectNode as string;
+              break;
+            }
+
+            // go_to: jump to an entirely different workflow
+            if (actionResult?.redirectWorkflow) {
+              const targetWorkflowId = actionResult.redirectWorkflow as string;
+              const contactId = (enrollment.contact as Record<string, unknown>)?.id;
+
+              // Stop current
+              await supabase
+                .from("workflow_enrollments")
+                .update({
+                  status: "completed",
+                  completed_at: new Date().toISOString(),
+                  current_node_id: null,
+                })
+                .eq("id", enrollment.id);
+
+              // Find the trigger node of the target workflow as the entry point
+              const { data: targetWf } = await supabase
+                .from("workflows")
+                .select("published_definition")
+                .eq("id", targetWorkflowId)
+                .maybeSingle();
+              const targetDef = targetWf?.published_definition as WorkflowDefinition | undefined;
+              const entryNode = targetDef?.nodes?.find((n) => n.type === "trigger");
+              const firstAfterTrigger = entryNode
+                ? targetDef?.edges?.find((e) => e.source === entryNode.id)
+                : undefined;
+              const startId = firstAfterTrigger?.target || entryNode?.id;
+
+              if (contactId && startId) {
+                const { data: newEnr } = await supabase
+                  .from("workflow_enrollments")
+                  .insert({
+                    org_id: job.org_id,
+                    workflow_id: targetWorkflowId,
+                    contact_id: contactId,
+                    status: "active",
+                    started_at: new Date().toISOString(),
+                    current_node_id: startId,
+                    context_data: enrollment.context_data,
+                  })
+                  .select("id")
+                  .single();
+                if (newEnr) {
+                  await supabase.from("workflow_jobs").insert({
+                    org_id: job.org_id,
+                    enrollment_id: newEnr.id,
+                    node_id: startId,
+                    run_at: new Date().toISOString(),
+                    status: "pending",
+                  });
+                }
+              }
+
+              await supabase
+                .from("workflow_jobs")
+                .update({ status: "done" })
+                .eq("id", job.id);
+              results.jobsProcessed++;
+              continue;
+            }
 
             if (actionResult && actionResult.branch) {
               const branchEdge = definition.edges.find(
@@ -396,6 +572,31 @@ Deno.serve(async (req: Request) => {
                 results.jobsProcessed++;
                 continue;
               }
+            } else {
+              const edge = definition.edges.find((e) => e.source === node.id);
+              nextNodeId = edge?.target || null;
+            }
+            break;
+          }
+
+          case "goal": {
+            // Goal nodes evaluate a condition; if met, jump to skipAheadTargetNodeId.
+            // Otherwise, follow the default forward edge.
+            const goalData = node.data as Record<string, unknown>;
+            const goalCondition = goalData.goalCondition as Record<string, unknown> | undefined;
+            const skipTo = goalData.skipAheadTargetNodeId as string | undefined;
+
+            let goalMet = false;
+            if (goalCondition) {
+              try {
+                goalMet = evaluateCondition({ conditions: goalCondition }, enrollment.contact, enrollment.context_data);
+              } catch (e) {
+                console.error("Goal evaluation failed:", e);
+              }
+            }
+
+            if (goalMet && skipTo) {
+              nextNodeId = skipTo;
             } else {
               const edge = definition.edges.find((e) => e.source === node.id);
               nextNodeId = edge?.target || null;
@@ -1857,16 +2058,98 @@ async function executeAction(
       break;
     }
 
-    case "split_test":
-    case "drip_mode":
-    case "array_operation":
+    case "split_test": {
+      // Pick a variant by weight; return its ID as the branch so the action node's
+      // matching outgoing edge (sourceHandle === variantId) is followed.
+      const variants = (config.variants as Array<{ id: string; weight?: number; label?: string }>) || [];
+      if (variants.length === 0) break;
+      const totalWeight = variants.reduce((s, v) => s + (v.weight ?? 1), 0);
+      const r = Math.random() * totalWeight;
+      let cumulative = 0;
+      let chosen = variants[variants.length - 1].id;
+      for (const v of variants) {
+        cumulative += v.weight ?? 1;
+        if (r <= cumulative) {
+          chosen = v.id;
+          break;
+        }
+      }
+      return { branch: chosen };
+    }
+
+    case "drip_mode": {
+      // Per-action drip throttle: cap how many enrollments pass through THIS node per window.
+      const batchSize = (config.batchSize as number) || 10;
+      const intervalUnit = (config.intervalUnit as string) || "minutes";
+      const intervalValue = (config.intervalValue as number) || 60;
+      const windowMs =
+        intervalUnit === "hours"
+          ? intervalValue * 60 * 60 * 1000
+          : intervalUnit === "days"
+          ? intervalValue * 24 * 60 * 60 * 1000
+          : intervalValue * 60 * 1000;
+
+      const windowStart = new Date(Date.now() - windowMs).toISOString();
+      const nodeId = (data.nodeId as string) || "";
+      const { count } = await supabase
+        .from("workflow_execution_logs")
+        .select("id", { count: "exact", head: true })
+        .eq("node_id", nodeId)
+        .eq("event_type", "node_started")
+        .gte("created_at", windowStart);
+
+      if ((count ?? 0) >= batchSize) {
+        const nextSlot = new Date(Date.now() + windowMs);
+        return { deferUntil: nextSlot.toISOString() };
+      }
+      break;
+    }
+
+    case "array_operation": {
+      const op = (config.operation as string) || "push";
+      const targetVar = (config.variableName as string) || "items";
+      const ctx = ((enrollment.context_data as Record<string, unknown>) || {});
+      const current = (ctx[targetVar] as unknown[]) || [];
+      const arr = Array.isArray(current) ? [...current] : [];
+      let resultValue: unknown = arr;
+      switch (op) {
+        case "push": arr.push(config.value); resultValue = arr; break;
+        case "pop": arr.pop(); resultValue = arr; break;
+        case "shift": arr.shift(); resultValue = arr; break;
+        case "unshift": arr.unshift(config.value); resultValue = arr; break;
+        case "clear": arr.length = 0; resultValue = arr; break;
+        case "count": resultValue = arr.length; break;
+        case "join": resultValue = arr.join((config.separator as string) ?? ", "); break;
+      }
+      await supabase
+        .from("workflow_enrollments")
+        .update({ context_data: { ...ctx, [targetVar]: resultValue } })
+        .eq("id", enrollment.id);
+      break;
+    }
+
+    case "copy_contact": {
+      const fieldsToCopy = (config.fieldsToCopy as string[]) || [
+        "first_name", "last_name", "email", "phone", "company", "address_line1", "city", "state", "postal_code", "country",
+      ];
+      const newData: Record<string, unknown> = { org_id: orgId, source: "workflow_copy", status: "active" };
+      for (const field of fieldsToCopy) {
+        const v = (contact as Record<string, unknown>)[field];
+        if (v !== undefined && v !== null) newData[field] = v;
+      }
+      // Avoid email/phone uniqueness collisions
+      if (newData.email) newData.email = `copy-${Date.now()}-${newData.email}`;
+      if (newData.phone) newData.phone = null;
+      await supabase.from("contacts").insert(newData);
+      break;
+    }
+
     case "send_messenger":
     case "send_gmb_message":
     case "facebook_interactive_messenger":
     case "instagram_interactive_messenger":
     case "reply_in_comments":
-    case "send_live_chat_message":
-    case "copy_contact": {
+    case "send_live_chat_message": {
       await supabase.from("workflow_action_logs").insert({
         org_id: orgId,
         enrollment_id: enrollment.id,
