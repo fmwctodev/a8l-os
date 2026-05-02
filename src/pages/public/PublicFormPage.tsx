@@ -894,16 +894,9 @@ export function PublicFormPage() {
         );
 
       case 'column':
-        return (
-          <div
-            className="grid gap-3"
-            style={{ gridTemplateColumns: `repeat(${field.columnCount || 2}, minmax(0, 1fr))` }}
-          >
-            {Array.from({ length: field.columnCount || 2 }).map((_, i) => (
-              <div key={i} />
-            ))}
-          </div>
-        );
+        // Column / Layout fields are rendered as group containers by the parent loop
+        // (see the form body below). Returning null here means the marker itself is invisible.
+        return null;
 
       case 'payment':
         return (
@@ -1302,64 +1295,158 @@ export function PublicFormPage() {
               />
             )}
 
-            {form.definition.fields.map((field) => {
-              if (!shouldShowField(field)) return null;
+            {(() => {
+              const allFields = form.definition.fields.filter(shouldShowField);
+              const isLayoutOrFullRow = (f: FormField) =>
+                f.type === 'heading' ||
+                f.type === 'section' ||
+                f.type === 'divider' ||
+                f.type === 'paragraph' ||
+                f.type === 'custom_html' ||
+                f.type === 'hidden' ||
+                f.type === 'consent' ||
+                f.type === 'checkbox' ||
+                f.type === 'file_upload' ||
+                f.type === 'signature';
 
-              const widthCls = field.width === 'half' ? 'inline-block w-1/2 pr-2 align-top' : '';
-              const widthStyle = field.customWidthPercent
-                ? { width: `${field.customWidthPercent}%`, display: 'inline-block', verticalAlign: 'top', paddingRight: '0.5rem' }
-                : undefined;
-              const wrapperClass = `${widthCls} ${field.customClassName || ''}`.trim();
-              const showLabel =
-                field.type !== 'hidden' &&
-                field.type !== 'checkbox' &&
-                field.type !== 'consent' &&
-                field.type !== 'divider' &&
-                field.type !== 'heading' &&
-                field.type !== 'paragraph' &&
-                field.type !== 'section' &&
-                field.labelAlignment !== 'inline';
-              const isLeftAligned = field.labelAlignment === 'left' && showLabel;
+              const widthToPct = (f: FormField): number => {
+                if (f.customWidthPercent) return Math.max(5, Math.min(100, f.customWidthPercent));
+                switch (f.width) {
+                  case 'two_thirds': return 66.66;
+                  case 'half': return 50;
+                  case 'third': return 33.33;
+                  case 'full':
+                  default: return 100;
+                }
+              };
 
-              const labelEl = showLabel ? (
-                <label
-                  className={`block text-sm font-medium text-[var(--form-text-secondary)] ${
-                    isLeftAligned ? 'sm:mb-0 sm:pt-3 sm:w-1/3 sm:pr-3' : 'mb-2'
-                  }`}
-                >
-                  {field.label}
-                  {field.required && <span className="text-[var(--form-error-text)] ml-1">*</span>}
-                </label>
-              ) : null;
+              type Group = { fields: FormField[]; equalSplit: boolean };
+              const groups: Group[] = [];
 
-              const inputBlock = (
-                <div className={isLeftAligned ? 'sm:flex-1' : ''}>
-                  {field.helpText && field.type !== 'divider' && (
-                    <p className="text-sm text-[var(--form-text-muted)] mb-2">{field.helpText}</p>
-                  )}
-                  {renderField(field)}
-                  {validationErrors[field.id] && (
-                    <p className="mt-1 text-sm text-[var(--form-error-text)]">{validationErrors[field.id]}</p>
-                  )}
-                </div>
-              );
+              let i = 0;
+              while (i < allFields.length) {
+                const f = allFields[i];
+                if (f.type === 'column') {
+                  const n = f.columnCount || 2;
+                  const taken: FormField[] = [];
+                  let j = i + 1;
+                  while (j < allFields.length && taken.length < n) {
+                    const candidate = allFields[j];
+                    if (candidate.type === 'column') break;
+                    taken.push(candidate);
+                    j++;
+                  }
+                  if (taken.length > 0) {
+                    groups.push({ fields: taken, equalSplit: true });
+                    i = j;
+                    continue;
+                  }
+                  // Empty column marker — render nothing, advance past it
+                  i++;
+                  continue;
+                }
+                if (isLayoutOrFullRow(f)) {
+                  groups.push({ fields: [f], equalSplit: false });
+                  i++;
+                  continue;
+                }
+                // Pack consecutive sized fields into a single row whose widths sum ≤ 100
+                const row: FormField[] = [f];
+                let total = widthToPct(f);
+                i++;
+                while (i < allFields.length) {
+                  const next = allFields[i];
+                  if (next.type === 'column' || isLayoutOrFullRow(next)) break;
+                  const nextW = widthToPct(next);
+                  if (total + nextW > 100.5) break;
+                  row.push(next);
+                  total += nextW;
+                  i++;
+                }
+                groups.push({ fields: row, equalSplit: false });
+              }
 
-              return (
-                <div key={field.id} className={wrapperClass} style={widthStyle}>
-                  {isLeftAligned ? (
-                    <div className="sm:flex sm:items-start">
-                      {labelEl}
-                      {inputBlock}
+              const renderBlock = (field: FormField, widthPercent: number) => {
+                const showLabel =
+                  field.type !== 'hidden' &&
+                  field.type !== 'checkbox' &&
+                  field.type !== 'consent' &&
+                  field.type !== 'divider' &&
+                  field.type !== 'heading' &&
+                  field.type !== 'paragraph' &&
+                  field.type !== 'section' &&
+                  field.labelAlignment !== 'inline';
+                const isLeftAligned = field.labelAlignment === 'left' && showLabel;
+
+                const labelEl = showLabel ? (
+                  <label
+                    className={`block text-sm font-medium text-[var(--form-text-secondary)] ${
+                      isLeftAligned ? 'sm:mb-0 sm:pt-3 sm:w-1/3 sm:pr-3' : 'mb-2'
+                    }`}
+                  >
+                    {field.label}
+                    {field.required && <span className="text-[var(--form-error-text)] ml-1">*</span>}
+                  </label>
+                ) : null;
+
+                const inputBlock = (
+                  <div className={isLeftAligned ? 'sm:flex-1' : ''}>
+                    {field.helpText && field.type !== 'divider' && (
+                      <p className="text-sm text-[var(--form-text-muted)] mb-2">{field.helpText}</p>
+                    )}
+                    {renderField(field)}
+                    {validationErrors[field.id] && (
+                      <p className="mt-1 text-sm text-[var(--form-error-text)]">{validationErrors[field.id]}</p>
+                    )}
+                  </div>
+                );
+
+                const wrapperStyle: React.CSSProperties = field.type === 'hidden'
+                  ? { display: 'none' }
+                  : { flex: `1 1 calc(${widthPercent}% - 0.75rem)`, minWidth: 0 };
+
+                return (
+                  <div
+                    key={field.id}
+                    className={field.customClassName || ''}
+                    style={wrapperStyle}
+                  >
+                    {isLeftAligned ? (
+                      <div className="sm:flex sm:items-start">
+                        {labelEl}
+                        {inputBlock}
+                      </div>
+                    ) : (
+                      <>
+                        {labelEl}
+                        {inputBlock}
+                      </>
+                    )}
+                  </div>
+                );
+              };
+
+              return groups.map((group, gi) => {
+                const onlyFullRow = group.fields.length === 1 && (
+                  isLayoutOrFullRow(group.fields[0]) || widthToPct(group.fields[0]) >= 100
+                );
+                if (onlyFullRow) {
+                  return (
+                    <div key={`g${gi}`}>
+                      {renderBlock(group.fields[0], 100)}
                     </div>
-                  ) : (
-                    <>
-                      {labelEl}
-                      {inputBlock}
-                    </>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                }
+                return (
+                  <div key={`g${gi}`} className="flex flex-wrap gap-3">
+                    {group.fields.map((f) => {
+                      const pct = group.equalSplit ? 100 / group.fields.length : widthToPct(f);
+                      return renderBlock(f, pct);
+                    })}
+                  </div>
+                );
+              });
+            })()}
 
             {form.settings.captchaEnabled && form.settings.captchaSiteKey && (
               <div className="flex justify-center">

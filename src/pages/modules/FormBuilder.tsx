@@ -738,6 +738,11 @@ function FieldCard({
           )}
         </div>
         <div className="text-sm text-gray-500">{fieldType?.label}</div>
+        {field.type === 'column' && (
+          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+            ↓ The next {field.columnCount || 2} field{(field.columnCount || 2) === 1 ? '' : 's'} below will share this row side-by-side.
+          </div>
+        )}
         {!isLayoutOnly && field.type !== 'checkbox' && field.type !== 'consent' && field.type !== 'file_upload' && field.type !== 'hidden' && (
           <EditableText
             value={field.placeholder || ''}

@@ -491,17 +491,8 @@ export function PublicSurveyPage() {
     }
 
     if (question.type === 'column') {
-      return (
-        <div
-          key={question.id}
-          className="grid gap-3"
-          style={{ gridTemplateColumns: `repeat(${question.columnCount || 2}, minmax(0, 1fr))` }}
-        >
-          {Array.from({ length: question.columnCount || 2 }).map((_, i) => (
-            <div key={i} />
-          ))}
-        </div>
-      );
+      // Column / Layout markers are grouped at the parent loop; the marker itself is invisible.
+      return null;
     }
 
     if (question.type === 'custom_html') {
@@ -1464,9 +1455,106 @@ export function PublicSurveyPage() {
           )}
 
           <div>
-            {visibleQuestions.map((question, idx) =>
-              renderQuestion(question, oneAtATime ? completedQuestions : idx)
-            )}
+            {(() => {
+              const isLayoutOrFullRow = (q: SurveyQuestion) =>
+                q.type === 'heading' ||
+                q.type === 'section' ||
+                q.type === 'divider' ||
+                q.type === 'paragraph' ||
+                q.type === 'custom_html' ||
+                q.type === 'hidden' ||
+                q.type === 'consent' ||
+                q.type === 'checkbox' ||
+                q.type === 'file_upload' ||
+                q.type === 'signature' ||
+                q.type === 'matrix' ||
+                q.type === 'image_choice' ||
+                q.type === 'rating' ||
+                q.type === 'nps' ||
+                q.type === 'opinion_scale' ||
+                q.type === 'contact_capture' ||
+                q.type === 'ranking';
+
+              const widthToPct = (q: SurveyQuestion): number => {
+                if (q.customWidthPercent) return Math.max(5, Math.min(100, q.customWidthPercent));
+                return 100;
+              };
+
+              type Group = { questions: SurveyQuestion[]; equalSplit: boolean };
+              const groups: Group[] = [];
+              let i = 0;
+              while (i < visibleQuestions.length) {
+                const q = visibleQuestions[i];
+                if (q.type === 'column') {
+                  const n = q.columnCount || 2;
+                  const taken: SurveyQuestion[] = [];
+                  let j = i + 1;
+                  while (j < visibleQuestions.length && taken.length < n) {
+                    const c = visibleQuestions[j];
+                    if (c.type === 'column') break;
+                    taken.push(c);
+                    j++;
+                  }
+                  if (taken.length > 0) {
+                    groups.push({ questions: taken, equalSplit: true });
+                    i = j;
+                    continue;
+                  }
+                  i++;
+                  continue;
+                }
+                if (isLayoutOrFullRow(q)) {
+                  groups.push({ questions: [q], equalSplit: false });
+                  i++;
+                  continue;
+                }
+                const row: SurveyQuestion[] = [q];
+                let total = widthToPct(q);
+                i++;
+                while (i < visibleQuestions.length) {
+                  const next = visibleQuestions[i];
+                  if (next.type === 'column' || isLayoutOrFullRow(next)) break;
+                  const nextW = widthToPct(next);
+                  if (total + nextW > 100.5) break;
+                  row.push(next);
+                  total += nextW;
+                  i++;
+                }
+                groups.push({ questions: row, equalSplit: false });
+              }
+
+              let renderedIdx = 0;
+              return groups.map((group, gi) => {
+                const onlyFullRow = group.questions.length === 1 && (
+                  isLayoutOrFullRow(group.questions[0]) || widthToPct(group.questions[0]) >= 100
+                );
+                if (onlyFullRow) {
+                  const q = group.questions[0];
+                  const node = renderQuestion(q, oneAtATime ? completedQuestions : renderedIdx);
+                  if (q.type !== 'hidden' && q.type !== 'divider' && q.type !== 'heading' && q.type !== 'paragraph' && q.type !== 'section' && q.type !== 'custom_html') {
+                    renderedIdx++;
+                  }
+                  return <div key={`g${gi}`}>{node}</div>;
+                }
+                return (
+                  <div key={`g${gi}`} className="flex flex-wrap gap-3">
+                    {group.questions.map((q) => {
+                      const pct = group.equalSplit ? 100 / group.questions.length : widthToPct(q);
+                      const node = renderQuestion(q, oneAtATime ? completedQuestions : renderedIdx);
+                      renderedIdx++;
+                      return (
+                        <div
+                          key={q.id}
+                          style={{ flex: `1 1 calc(${pct}% - 0.75rem)`, minWidth: 0 }}
+                        >
+                          {node}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              });
+            })()}
           </div>
 
           {survey.settings.captchaEnabled && survey.settings.captchaSiteKey && isLastQuestionOverall && (

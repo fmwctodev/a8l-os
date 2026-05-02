@@ -951,6 +951,11 @@ function QuestionCard({
           />
         )}
         <div className="text-sm text-gray-500 mt-1">{qType?.label}</div>
+        {question.type === 'column' && (
+          <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+            ↓ The next {question.columnCount || 2} question{(question.columnCount || 2) === 1 ? '' : 's'} below will share this row side-by-side.
+          </div>
+        )}
         {!isLayoutOnly &&
           question.type !== 'rating' &&
           question.type !== 'nps' &&
