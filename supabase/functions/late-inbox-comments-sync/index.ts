@@ -247,7 +247,16 @@ Deno.serve(async (req: Request) => {
             const lateCommentId = comment.id || comment.commentId || "";
             if (!lateCommentId) continue;
 
-            const { error: commentError } = await supabase
+            // Detect new vs existing for workflow emission
+            const { data: priorComment } = await supabase
+              .from("social_post_comments")
+              .select("id")
+              .eq("organization_id", orgId)
+              .eq("late_comment_id", lateCommentId)
+              .maybeSingle();
+            const isNew = !priorComment;
+
+            const { data: upsertedComment, error: commentError } = await supabase
               .from("social_post_comments")
               .upsert(
                 {
@@ -273,12 +282,44 @@ Deno.serve(async (req: Request) => {
                   updated_at: new Date().toISOString(),
                 },
                 { onConflict: "organization_id,late_comment_id" }
-              );
+              )
+              .select("id")
+              .maybeSingle();
 
             if (commentError) {
               console.error(`[late-inbox-comments-sync] Comment upsert error:`, commentError);
             } else {
               totalComments++;
+
+              // Emit `social_inbox_comment` only for newly-arrived comments
+              if (isNew) {
+                try {
+                  await supabase.from("event_outbox").insert({
+                    org_id: orgId,
+                    event_type: "social_inbox_comment",
+                    contact_id: null,
+                    entity_type: "social_comment",
+                    entity_id: upsertedComment?.id || lateCommentId,
+                    payload: {
+                      comment_id: upsertedComment?.id || null,
+                      late_comment_id: lateCommentId,
+                      late_post_id: latePostId,
+                      late_account_id: conn.late_account_id,
+                      platform: comment.platform || platform,
+                      author_id: comment.authorId || null,
+                      author_name: comment.authorName || null,
+                      author_handle: comment.authorHandle || null,
+                      text: comment.text || comment.body || null,
+                      is_reply: comment.isReply || false,
+                      parent_comment_id: comment.parentCommentId || null,
+                      created_at: comment.createdAt || null,
+                    },
+                    processed_at: null,
+                  });
+                } catch (e) {
+                  console.error(`[late-inbox-comments-sync] event_outbox emit failed:`, e);
+                }
+              }
             }
           }
         }

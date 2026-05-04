@@ -299,31 +299,63 @@ Deno.serve(async (req: Request) => {
             const body = msg.text || msg.body || "";
             const sentAt = msg.createdAt || msg.sentAt || new Date().toISOString();
 
-            const { error: msgError } = await supabase.from("messages").insert({
-              organization_id: orgId,
-              conversation_id: conversationId,
-              contact_id: contactId,
-              channel: "social_dm",
-              direction,
-              body,
-              status: "delivered",
-              external_id: `late_${lateMsgId}`,
-              sent_at: sentAt,
-              media_urls: msg.mediaUrls || null,
-              metadata: {
-                platform,
-                late_conversation_id: lateConvId,
-                late_account_id: conn.late_account_id,
-                sender_name: msg.senderName || null,
-                participant_name: participantName,
-                participant_avatar: conv.participantAvatarUrl || null,
-              },
-            });
+            const { data: insertedMsg, error: msgError } = await supabase
+              .from("messages")
+              .insert({
+                organization_id: orgId,
+                conversation_id: conversationId,
+                contact_id: contactId,
+                channel: "social_dm",
+                direction,
+                body,
+                status: "delivered",
+                external_id: `late_${lateMsgId}`,
+                sent_at: sentAt,
+                media_urls: msg.mediaUrls || null,
+                metadata: {
+                  platform,
+                  late_conversation_id: lateConvId,
+                  late_account_id: conn.late_account_id,
+                  sender_name: msg.senderName || null,
+                  participant_name: participantName,
+                  participant_avatar: conv.participantAvatarUrl || null,
+                },
+              })
+              .select("id")
+              .maybeSingle();
 
             if (msgError) {
               console.error(`[late-inbox-messages-sync] Message insert error:`, msgError);
             } else {
               totalMessages++;
+
+              // Emit `social_inbox_message` workflow event for inbound DMs
+              if (direction === "inbound") {
+                try {
+                  await supabase.from("event_outbox").insert({
+                    org_id: orgId,
+                    event_type: "social_inbox_message",
+                    contact_id: contactId,
+                    entity_type: "message",
+                    entity_id: insertedMsg?.id || `late_${lateMsgId}`,
+                    payload: {
+                      message_id: insertedMsg?.id || null,
+                      external_id: `late_${lateMsgId}`,
+                      platform,
+                      conversation_id: conversationId,
+                      late_conversation_id: lateConvId,
+                      late_account_id: conn.late_account_id,
+                      body,
+                      sender_name: msg.senderName || null,
+                      participant_name: participantName,
+                      sent_at: sentAt,
+                    },
+                    processed_at: null,
+                  });
+                } catch (e) {
+                  console.error(`[late-inbox-messages-sync] event_outbox emit failed:`, e);
+                }
+              }
             }
           }
 
