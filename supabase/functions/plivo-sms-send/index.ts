@@ -58,6 +58,10 @@ Deno.serve(async (req: Request) => {
     const contactId = (body.contactId as string) || null;
     const conversationId = (body.conversationId as string) || null;
     const metadata = (body.metadata as Record<string, unknown>) || {};
+    // When passed, we update this existing messages row in place rather than
+    // inserting a new one. Used by the frontend SMS composer where the row is
+    // created optimistically before the send.
+    const existingMessageId = (body.existingMessageId as string) || null;
 
     if (!orgId || !toNumber || !text) {
       return jsonResponse({ error: "orgId, toNumber, body required" }, 400);
@@ -105,26 +109,50 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ error: "No available SMS-capable Plivo number" }, 400);
     }
 
-    // Insert pending message row first so we have an id to update with the
-    // Plivo MessageUUID once the send completes.
-    const { data: msgRow, error: msgErr } = await supabase
-      .from("messages")
-      .insert({
-        organization_id: orgId,
-        conversation_id: conversationId,
-        contact_id: contactId,
-        channel: mediaUrls.length > 0 ? "mms" : "sms",
-        direction: "outbound",
-        body: text,
-        media_urls: mediaUrls.length > 0 ? mediaUrls : null,
-        status: "queued",
-        delivery_status: "queued",
-        metadata: { ...metadata, from_number: fromNumber, to_number: toNumber, provider: "plivo" },
-        sent_at: new Date().toISOString(),
-      })
-      .select("id")
-      .single();
-    if (msgErr) return jsonResponse({ error: msgErr.message }, 500);
+    // Either reuse an existing message row (frontend optimistic insert path)
+    // or create a new one (workflow / clara service-to-service path).
+    let msgRow: { id: string } | null = null;
+    if (existingMessageId) {
+      const { data: existing } = await supabase
+        .from("messages")
+        .select("id")
+        .eq("id", existingMessageId)
+        .eq("organization_id", orgId)
+        .maybeSingle();
+      if (!existing) {
+        return jsonResponse({ error: "existingMessageId not found" }, 404);
+      }
+      await supabase
+        .from("messages")
+        .update({
+          status: "queued",
+          delivery_status: "queued",
+          metadata: { ...metadata, from_number: fromNumber, to_number: toNumber, provider: "plivo" },
+        })
+        .eq("id", existing.id);
+      msgRow = existing;
+    } else {
+      const { data: inserted, error: msgErr } = await supabase
+        .from("messages")
+        .insert({
+          organization_id: orgId,
+          conversation_id: conversationId,
+          contact_id: contactId,
+          channel: mediaUrls.length > 0 ? "mms" : "sms",
+          direction: "outbound",
+          body: text,
+          media_urls: mediaUrls.length > 0 ? mediaUrls : null,
+          status: "queued",
+          delivery_status: "queued",
+          metadata: { ...metadata, from_number: fromNumber, to_number: toNumber, provider: "plivo" },
+          sent_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
+      if (msgErr) return jsonResponse({ error: msgErr.message }, 500);
+      msgRow = inserted;
+    }
+    if (!msgRow) return jsonResponse({ error: "Could not resolve message row" }, 500);
 
     const authToken = await decrypt(conn.auth_token_encrypted);
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

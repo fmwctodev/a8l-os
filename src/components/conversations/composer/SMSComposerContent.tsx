@@ -4,7 +4,7 @@ import { calculateSMSSegments } from '../../../lib/phoneUtils';
 import { ComposerToolbar } from './ComposerToolbar';
 import { FormSurveyPicker, type PickerItem } from './FormSurveyPicker';
 import { MMS_MAX_FILES, MMS_MAX_FILE_SIZE } from '../../../services/sendSms';
-import type { TwilioNumber } from '../../../services/phoneNumbers';
+import type { PlivoNumber } from '../../../services/plivoNumbers';
 
 interface SMSComposerContentProps {
   body: string;
@@ -14,7 +14,7 @@ interface SMSComposerContentProps {
   sending: boolean;
   sendDisabled: boolean;
   expanded: boolean;
-  fromNumbers: TwilioNumber[];
+  fromNumbers: PlivoNumber[];
   selectedFromNumber: string;
   onFromNumberChange: (number: string) => void;
   toNumber: string;

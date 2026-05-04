@@ -10,12 +10,12 @@ import { getRecentMessages, createMessage, getInternalComments } from '../../ser
 import { getInboxEvents } from '../../services/inboxEvents';
 import { getContactChannels } from '../../services/contactLinking';
 import { sendGmailEmail, replyToGmailThread } from '../../services/gmailApi';
-import { getNumbers } from '../../services/phoneNumbers';
+import { getNumbers } from '../../services/plivoNumbers';
 import { sendSms } from '../../services/sendSms';
 import { supabase } from '../../lib/supabase';
 import { getGoogleErrorMessage } from '../../utils/googleAuthErrors';
 import type { Conversation, Message, InboxEvent, MessageChannel, Contact } from '../../types';
-import type { TwilioNumber } from '../../services/phoneNumbers';
+import type { PlivoNumber } from '../../services/plivoNumbers';
 
 interface MessageThreadProps {
   conversation: Conversation;
@@ -46,7 +46,7 @@ export function MessageThread({
   const [sending, setSending] = useState(false);
   const [availableChannels, setAvailableChannels] = useState<{ channel: MessageChannel; identifier: string }[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<MessageChannel>('sms');
-  const [fromNumbers, setFromNumbers] = useState<TwilioNumber[]>([]);
+  const [fromNumbers, setFromNumbers] = useState<PlivoNumber[]>([]);
   const [emailThread, setEmailThread] = useState<{ threadId: string; subject: string } | null>(null);
 
   const loadThread = useCallback(async () => {

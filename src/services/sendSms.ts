@@ -1,4 +1,3 @@
-import { callEdgeFunction } from '../lib/edgeFunction';
 import { supabase } from '../lib/supabase';
 
 export const MMS_MAX_FILES = 10;
@@ -18,11 +17,45 @@ export async function uploadMessageMedia(file: File, orgId: string): Promise<str
   return data.publicUrl;
 }
 
+/**
+ * Send a previously-inserted outbound SMS row via Plivo. Looks up the row,
+ * resolves to/from/body/media from it, then invokes plivo-sms-send with
+ * existingMessageId so that function updates this row in place rather than
+ * inserting a duplicate.
+ */
 export async function sendSms(messageId: string): Promise<{ sid: string; status: string }> {
-  const response = await callEdgeFunction('send-sms', { messageId });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || 'Failed to send SMS');
-  return result;
+  const { data: msg, error: fetchErr } = await supabase
+    .from('messages')
+    .select('id, organization_id, body, media_urls, metadata, contact_id, conversation_id')
+    .eq('id', messageId)
+    .single();
+
+  if (fetchErr || !msg) throw new Error(fetchErr?.message || 'Message not found');
+
+  const meta = (msg.metadata || {}) as Record<string, unknown>;
+  const toNumber = (meta.to_number as string) || '';
+  const fromNumber = meta.from_number as string | undefined;
+
+  if (!toNumber) throw new Error('Message has no to_number in metadata');
+
+  const { data, error } = await supabase.functions.invoke('plivo-sms-send', {
+    body: {
+      orgId: msg.organization_id,
+      toNumber,
+      fromNumber,
+      body: msg.body,
+      mediaUrls: (msg.media_urls as string[]) || [],
+      contactId: msg.contact_id,
+      conversationId: msg.conversation_id,
+      existingMessageId: msg.id,
+      metadata: { source: 'composer' },
+    },
+  });
+
+  if (error) throw new Error(error.message || 'Failed to send SMS');
+  if (!data?.success) throw new Error(data?.error || 'Failed to send SMS');
+
+  return { sid: data.plivoMessageUuid || '', status: 'sent' };
 }
 
 export async function retrySms(messageId: string): Promise<{ sid: string; status: string }> {

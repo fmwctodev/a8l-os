@@ -9,7 +9,7 @@ import { EmailComposerContent } from './composer/EmailComposerContent';
 import { InternalCommentContent } from './composer/InternalCommentContent';
 import type { ComposerTab } from './composer/ComposerTabBar';
 import type { MessageChannel, Contact, Conversation } from '../../types';
-import type { TwilioNumber } from '../../services/phoneNumbers';
+import type { PlivoNumber } from '../../services/plivoNumbers';
 
 interface EmailRecipient {
   email: string;
@@ -29,7 +29,7 @@ interface MessageComposerProps {
   contact?: Contact;
   conversation?: Conversation;
   gmailConnected?: boolean;
-  fromNumbers?: TwilioNumber[];
+  fromNumbers?: PlivoNumber[];
 }
 
 export function MessageComposer({
