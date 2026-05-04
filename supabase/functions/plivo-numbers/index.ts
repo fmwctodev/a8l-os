@@ -8,7 +8,7 @@ const corsHeaders = {
 };
 
 const ENCRYPTION_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!.slice(0, 32);
-const PLIVO_APP_NAME = "Autom8ion Lab — Webhooks";
+const PLIVO_APP_NAME = "Autom8ion Lab Webhooks";
 
 async function decrypt(encryptedText: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -104,21 +104,29 @@ async function ensurePlivoApplication(
         return { appId: knownAppId, error: null };
       }
       const text = await updateRes.text();
-      return { appId: knownAppId, error: `Update failed: ${updateRes.status} ${text.slice(0, 200)}` };
+      console.error(`ensurePlivoApplication update failed: status=${updateRes.status} body=${text.slice(0, 500)}`);
+      return { appId: knownAppId, error: `Update failed: Plivo ${updateRes.status}: ${text.slice(0, 300)}` };
     }
     // Fall through and create a new one if the cached id no longer exists
+    console.warn(`ensurePlivoApplication: cached app ${knownAppId} not found (${verifyRes.status}), creating new`);
   }
 
   const createRes = await fetch(
     `https://api.plivo.com/v1/Account/${authId}/Application/`,
     { method: "POST", headers, body: JSON.stringify(urls) }
   );
-  const created = await createRes.json().catch(() => ({}));
+  const createText = await createRes.text();
+  let created: Record<string, unknown> = {};
+  try { created = JSON.parse(createText); } catch { /* not json */ }
   if (!createRes.ok && createRes.status !== 201 && createRes.status !== 202) {
-    return { appId: null, error: `Create failed: ${createRes.status} ${JSON.stringify(created).slice(0, 200)}` };
+    console.error(`ensurePlivoApplication create failed: status=${createRes.status} body=${createText.slice(0, 500)}`);
+    return { appId: null, error: `Create failed: Plivo ${createRes.status}: ${createText.slice(0, 300)}` };
   }
-  const appId = created.app_id || created.id || (created.api_id && created.app_id) || null;
-  if (!appId) return { appId: null, error: "Plivo created the app but returned no app_id" };
+  const appId = (created.app_id as string) || (created.id as string) || null;
+  if (!appId) {
+    console.error(`ensurePlivoApplication: no app_id in response: ${createText.slice(0, 500)}`);
+    return { appId: null, error: "Plivo created the app but returned no app_id" };
+  }
   return { appId, error: null };
 }
 
@@ -126,6 +134,8 @@ async function ensurePlivoApplication(
  * Assign a Plivo Application to a phone number so inbound SMS / voice route
  * to our edge functions. Plivo's number-update endpoint accepts an `app_id`
  * field that re-points the number's webhook configuration in one shot.
+ *
+ * Plivo expects bare digits in the URL path (no leading +, no formatting).
  */
 async function assignAppToNumber(
   authId: string,
@@ -133,17 +143,17 @@ async function assignAppToNumber(
   e164: string,
   appId: string
 ): Promise<{ ok: boolean; error: string | null }> {
-  const res = await fetch(
-    `https://api.plivo.com/v1/Account/${authId}/Number/${encodeURIComponent(e164)}/`,
-    {
-      method: "POST",
-      headers: { Authorization: basicAuth(authId, authToken), "Content-Type": "application/json" },
-      body: JSON.stringify({ app_id: appId }),
-    }
-  );
+  const bare = e164.replace(/\D/g, "");
+  const url = `https://api.plivo.com/v1/Account/${authId}/Number/${bare}/`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: basicAuth(authId, authToken), "Content-Type": "application/json" },
+    body: JSON.stringify({ app_id: appId }),
+  });
   if (res.ok || res.status === 202) return { ok: true, error: null };
   const text = await res.text().catch(() => "");
-  return { ok: false, error: `${res.status} ${text.slice(0, 200)}` };
+  console.error(`assignAppToNumber failed: POST ${url} status=${res.status} body=${text.slice(0, 500)}`);
+  return { ok: false, error: `Plivo ${res.status}: ${text.slice(0, 300)}` };
 }
 
 Deno.serve(async (req: Request) => {

@@ -18,6 +18,28 @@ import {
 interface UserOption { id: string; name: string; email: string; }
 interface VapiAssistantOption { id: string; name: string; slug: string; }
 
+const inputClass =
+  'w-full px-3 py-2 text-sm rounded-lg bg-slate-800 border border-slate-700 text-white ' +
+  'placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent';
+const selectClass =
+  'w-full px-2 py-1.5 text-xs rounded bg-slate-800 border border-slate-700 text-white ' +
+  'focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent ' +
+  'disabled:opacity-50 disabled:bg-slate-900 disabled:text-slate-500';
+const cardClass = 'bg-slate-900 rounded-xl border border-slate-800';
+const labelClass = 'block text-xs font-medium text-slate-300 mb-1';
+const primaryBtn =
+  'inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg ' +
+  'bg-gradient-to-r from-cyan-500 to-teal-600 text-white ' +
+  'hover:from-cyan-600 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors';
+const subtleBtn =
+  'inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg ' +
+  'bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700 ' +
+  'disabled:opacity-50 disabled:cursor-not-allowed transition-colors';
+const dangerBtn =
+  'inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg ' +
+  'bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 ' +
+  'disabled:opacity-50 transition-colors';
+
 export function PlivoConfig() {
   const { user } = useAuth();
   const orgId = user?.organization_id;
@@ -204,167 +226,166 @@ export function PlivoConfig() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+        <Loader2 className="w-8 h-8 animate-spin text-slate-500" />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium text-gray-900">Plivo Configuration</h3>
-        <p className="text-sm text-gray-500">
-          Connect your Plivo account, sync numbers, then route SMS to Clara or to a user inbox,
-          and bind voice numbers 1:1 to Vapi assistants.
-        </p>
-      </div>
-
       {error && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
-          <AlertCircle size={16} /> {error}
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+          <AlertCircle size={16} className="flex-shrink-0" /> {error}
         </div>
       )}
       {success && (
-        <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700 text-sm">
-          <Check size={16} /> {success}
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm">
+          <Check size={16} className="flex-shrink-0" /> {success}
         </div>
       )}
 
       {/* Connection */}
-      <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-        <h4 className="text-sm font-medium text-gray-900">Connection</h4>
-        {connection?.status === 'connected' ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full text-xs font-medium">
-                <Check size={12} /> Connected
-              </span>
-              <span className="text-gray-700">{connection.friendlyName || connection.authId}</span>
-              {connection.connectedAt && (
-                <span className="text-xs text-gray-400">
-                  · since {new Date(connection.connectedAt).toLocaleDateString()}
+      <div className={cardClass}>
+        <div className="p-4 border-b border-slate-800">
+          <h3 className="text-lg font-semibold text-white">Connection</h3>
+        </div>
+        <div className="p-4 space-y-3">
+          {connection?.status === 'connected' ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm flex-wrap">
+                <span className="inline-flex items-center gap-1 text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full text-xs font-medium">
+                  <Check size={12} /> Connected
                 </span>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={handleTest} disabled={submitting} className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50">
-                Test
-              </button>
-              <button onClick={handleDisconnect} disabled={submitting} className="px-3 py-1.5 text-sm bg-red-50 text-red-700 rounded-lg hover:bg-red-100 disabled:opacity-50">
-                Disconnect
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Auth ID</label>
-              <input type="text" value={authId} onChange={e => setAuthId(e.target.value)}
-                placeholder="MAxxxxxxxxxxxxxxxxxx"
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Auth Token</label>
-              <div className="relative">
-                <input type={showToken ? 'text' : 'password'} value={authToken} onChange={e => setAuthToken(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                <button type="button" onClick={() => setShowToken(!showToken)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
+                <span className="text-slate-200">{connection.friendlyName || connection.authId}</span>
+                {connection.connectedAt && (
+                  <span className="text-xs text-slate-500">
+                    · since {new Date(connection.connectedAt).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={handleTest} disabled={submitting} className={subtleBtn}>
+                  Test
+                </button>
+                <button onClick={handleDisconnect} disabled={submitting} className={dangerBtn}>
+                  Disconnect
                 </button>
               </div>
             </div>
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Friendly Name (optional)</label>
-              <input type="text" value={friendlyName} onChange={e => setFriendlyName(e.target.value)}
-                placeholder="My Plivo Account"
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>Auth ID</label>
+                <input type="text" value={authId} onChange={e => setAuthId(e.target.value)}
+                  placeholder="MAxxxxxxxxxxxxxxxxxx" className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Auth Token</label>
+                <div className="relative">
+                  <input type={showToken ? 'text' : 'password'} value={authToken} onChange={e => setAuthToken(e.target.value)}
+                    className={`${inputClass} pr-10`} />
+                  <button type="button" onClick={() => setShowToken(!showToken)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200">
+                    {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+              <div className="sm:col-span-2">
+                <label className={labelClass}>Friendly Name (optional)</label>
+                <input type="text" value={friendlyName} onChange={e => setFriendlyName(e.target.value)}
+                  placeholder="My Plivo Account" className={inputClass} />
+              </div>
+              <div className="sm:col-span-2">
+                <button onClick={handleConnect} disabled={submitting || !authId.trim() || !authToken.trim()}
+                  className={primaryBtn}>
+                  {submitting && <Loader2 size={16} className="animate-spin" />}
+                  Connect Plivo
+                </button>
+              </div>
             </div>
-            <div className="sm:col-span-2">
-              <button onClick={handleConnect} disabled={submitting || !authId.trim() || !authToken.trim()}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-2">
-                {submitting && <Loader2 size={16} className="animate-spin" />}
-                Connect Plivo
-              </button>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Vapi SIP credentials */}
       {connection?.status === 'connected' && (
-        <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-          <div>
-            <h4 className="text-sm font-medium text-gray-900">Vapi SIP Trunk Credentials</h4>
-            <p className="text-xs text-gray-500 mt-1">
+        <div className={cardClass}>
+          <div className="p-4 border-b border-slate-800">
+            <h3 className="text-lg font-semibold text-white">Vapi SIP Trunk Credentials</h3>
+            <p className="text-xs text-slate-400 mt-1">
               These let Vapi place outbound calls through Plivo. Create a SIP endpoint in Plivo
               (Voice → SIP Endpoints) and paste the username + password here.
             </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">SIP Username</label>
-              <input type="text" value={sipUsername} onChange={e => setSipUsername(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">SIP Password</label>
-              <div className="relative">
-                <input type={showSipPassword ? 'text' : 'password'} value={sipPassword} onChange={e => setSipPassword(e.target.value)}
-                  placeholder={connection.vapiSipUsername ? 'Re-enter to update' : ''}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                <button type="button" onClick={() => setShowSipPassword(!showSipPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  {showSipPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+          <div className="p-4 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>SIP Username</label>
+                <input type="text" value={sipUsername} onChange={e => setSipUsername(e.target.value)}
+                  className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>SIP Password</label>
+                <div className="relative">
+                  <input type={showSipPassword ? 'text' : 'password'} value={sipPassword} onChange={e => setSipPassword(e.target.value)}
+                    placeholder={connection.vapiSipUsername ? 'Re-enter to update' : ''}
+                    className={`${inputClass} pr-10`} />
+                  <button type="button" onClick={() => setShowSipPassword(!showSipPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200">
+                    {showSipPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
             </div>
+            <button onClick={handleSaveSip} disabled={submitting || !sipUsername.trim() || !sipPassword.trim()}
+              className={subtleBtn}>
+              Save SIP Credentials
+            </button>
           </div>
-          <button onClick={handleSaveSip} disabled={submitting || !sipUsername.trim() || !sipPassword.trim()}
-            className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50">
-            Save SIP Credentials
-          </button>
         </div>
       )}
 
       {/* Numbers + assignments */}
       {connection?.status === 'connected' && (
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+        <div className={`${cardClass} overflow-hidden`}>
+          <div className="p-4 border-b border-slate-800 flex items-center justify-between">
             <div>
-              <h4 className="text-sm font-medium text-gray-900">Phone Numbers</h4>
-              <p className="text-xs text-gray-500 mt-0.5">{numbers.length} synced from Plivo</p>
+              <h3 className="text-lg font-semibold text-white">Phone Numbers</h3>
+              <p className="text-xs text-slate-400 mt-0.5">{numbers.length} synced from Plivo</p>
             </div>
-            <button onClick={handleSync} disabled={submitting}
-              className="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 disabled:opacity-50 inline-flex items-center gap-2">
+            <button onClick={handleSync} disabled={submitting} className={primaryBtn}>
               {submitting ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               Sync from Plivo
             </button>
           </div>
 
           {numbers.length === 0 ? (
-            <div className="p-8 text-center text-sm text-gray-500">
-              No numbers yet. Click <strong>Sync from Plivo</strong> to import your rented numbers.
+            <div className="p-8 text-center text-sm text-slate-400">
+              No numbers yet. Click <strong className="text-slate-200">Sync from Plivo</strong> to import your rented numbers.
             </div>
           ) : (
-            <div className="divide-y divide-gray-200">
+            <div className="divide-y divide-slate-800">
               {numbers.map(num => (
                 <div key={num.id} className="p-4">
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{num.phone_number}</div>
-                      <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-3 flex-wrap">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-white">{num.phone_number}</div>
+                      <div className="text-xs text-slate-400 mt-1 flex items-center gap-3 flex-wrap">
                         {num.capabilities.sms && <span className="inline-flex items-center gap-1"><MessageSquare size={11} /> SMS</span>}
                         {num.capabilities.mms && <span className="inline-flex items-center gap-1"><MessageSquare size={11} /> MMS</span>}
                         {num.capabilities.voice && <span className="inline-flex items-center gap-1"><Phone size={11} /> Voice</span>}
                         {num.country_code && <span>· {num.country_code}</span>}
-                        <span className={`px-1.5 py-0.5 rounded ${num.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wide font-medium ${
+                          num.status === 'active'
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                            : 'bg-slate-800 text-slate-500 border border-slate-700'
+                        }`}>
                           {num.status}
                         </span>
                         {num.webhook_configured ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700" title="Webhooks point at our edge functions">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30" title="Webhooks point at our edge functions">
                             <Wifi size={11} /> Webhooks configured
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-2 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700" title="Webhook URLs are not yet configured on this number">
+                          <span className="inline-flex items-center gap-2 px-1.5 py-0.5 rounded text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/30" title="Webhook URLs are not yet configured on this number">
                             <WifiOff size={11} /> Webhooks pending
                             <button
                               onClick={() => handleReconfigureWebhooks(num)}
@@ -378,27 +399,27 @@ export function PlivoConfig() {
                       </div>
                     </div>
                     <button onClick={() => handleDelete(num)} disabled={submitting}
-                      className="p-1.5 text-gray-400 hover:text-red-600 rounded">
+                      className="p-1.5 text-slate-500 hover:text-red-400 rounded transition-colors">
                       <Trash2 size={14} />
                     </button>
                   </div>
 
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {/* SMS routing */}
-                    <div className="border border-gray-100 rounded-lg p-3">
-                      <div className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-2">
+                    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300 mb-2">
                         <MessageSquare size={12} /> SMS routing
                       </div>
                       <select value={num.sms_route} disabled={submitting}
                         onChange={e => handleAssignmentChange(num, { smsRoute: e.target.value as PlivoSmsRoute })}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded">
+                        className={selectClass}>
                         <option value="clara">Clara (auto-reply)</option>
                         <option value="user">User inbox</option>
                       </select>
                       {num.sms_route === 'user' && (
                         <select value={num.assigned_user_id || ''} disabled={submitting}
                           onChange={e => handleAssignmentChange(num, { smsRoute: 'user', assignedUserId: e.target.value || null })}
-                          className="mt-2 w-full px-2 py-1.5 text-xs border border-gray-200 rounded">
+                          className={`${selectClass} mt-2`}>
                           <option value="">Choose a user…</option>
                           {users.map(u => (
                             <option key={u.id} value={u.id}>{u.name || u.email}</option>
@@ -406,32 +427,32 @@ export function PlivoConfig() {
                         </select>
                       )}
                       {num.sms_route === 'user' && num.assigned_user && (
-                        <div className="text-[10px] text-gray-500 mt-1 inline-flex items-center gap-1">
+                        <div className="text-[10px] text-slate-500 mt-1.5 inline-flex items-center gap-1">
                           <UserIcon size={10} /> Owned by {num.assigned_user.name}
                         </div>
                       )}
                     </div>
 
                     {/* Voice routing */}
-                    <div className="border border-gray-100 rounded-lg p-3">
-                      <div className="flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-2">
+                    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300 mb-2">
                         <Phone size={12} /> Voice routing (Vapi)
                       </div>
                       <select value={num.vapi_assistant_id || ''} disabled={submitting || !num.capabilities.voice}
                         onChange={e => handleAssignmentChange(num, { vapiAssistantId: e.target.value || null })}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded disabled:bg-gray-50 disabled:text-gray-400">
+                        className={selectClass}>
                         <option value="">No assistant (caller hears voicemail message)</option>
                         {assistants.map(a => (
                           <option key={a.id} value={a.id}>{a.name}</option>
                         ))}
                       </select>
                       {num.vapi_assistant && (
-                        <div className="text-[10px] text-gray-500 mt-1 inline-flex items-center gap-1">
+                        <div className="text-[10px] text-slate-500 mt-1.5 inline-flex items-center gap-1">
                           <Bot size={10} /> Calls forward to {num.vapi_assistant.name}
                         </div>
                       )}
                       {!num.capabilities.voice && (
-                        <div className="text-[10px] text-amber-600 mt-1">This number is not voice-capable in Plivo.</div>
+                        <div className="text-[10px] text-amber-400 mt-1.5">This number is not voice-capable in Plivo.</div>
                       )}
                     </div>
                   </div>
@@ -444,48 +465,51 @@ export function PlivoConfig() {
 
       {/* Webhook URLs — auto-configured on sync; collapsed by default */}
       {connection?.status === 'connected' && (
-        <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-          <div className="flex items-start gap-2">
-            <Check size={16} className="text-emerald-500 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <h4 className="text-sm font-medium text-gray-900">Webhooks auto-configured on sync</h4>
-              <p className="text-xs text-gray-500 mt-1">
-                When you click <strong>Sync from Plivo</strong>, each number is automatically pointed at our
-                edge functions via a Plivo Application named <code className="px-1 bg-gray-100 rounded">Autom8ion Lab — Webhooks</code>.
-                You don't need to set anything in the Plivo console.
-              </p>
+        <div className={cardClass}>
+          <div className="p-4 space-y-3">
+            <div className="flex items-start gap-2">
+              <Check size={16} className="text-emerald-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-white">Webhooks auto-configured on sync</h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  When you click <strong className="text-slate-200">Sync from Plivo</strong>, each number is automatically
+                  pointed at our edge functions via a Plivo Application named{' '}
+                  <code className="px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-slate-300">Autom8ion Lab Webhooks</code>.
+                  You don't need to set anything in the Plivo console.
+                </p>
+              </div>
             </div>
-          </div>
-          <button
-            onClick={() => setShowWebhookUrls(!showWebhookUrls)}
-            className="text-xs text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
-          >
-            {showWebhookUrls ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            {showWebhookUrls ? 'Hide URLs' : 'Show URLs (advanced / fallback)'}
-          </button>
-          {showWebhookUrls && (
-            <div className="space-y-2 pt-2 border-t border-gray-100">
-              {[
-                { label: 'Inbound SMS', path: '/plivo-sms-inbound', key: 'sms' },
-                { label: 'SMS Status Callback', path: '/plivo-sms-status', key: 'sms-status' },
-                { label: 'Inbound Voice (Answer URL)', path: '/plivo-voice-answer', key: 'voice' },
-                { label: 'Voice Status / Hangup Callback', path: '/plivo-voice-status', key: 'voice-status' },
-              ].map(w => (
-                <div key={w.key}>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">{w.label}</label>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600 overflow-x-auto">
-                      {webhookBaseUrl}{w.path}
-                    </code>
-                    <button onClick={() => copy(`${webhookBaseUrl}${w.path}`, w.key)}
-                      className="p-2 text-gray-400 hover:text-gray-600">
-                      {copied === w.key ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
-                    </button>
+            <button
+              onClick={() => setShowWebhookUrls(!showWebhookUrls)}
+              className="text-xs text-cyan-400 hover:text-cyan-300 inline-flex items-center gap-1"
+            >
+              {showWebhookUrls ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              {showWebhookUrls ? 'Hide URLs' : 'Show URLs (advanced / fallback)'}
+            </button>
+            {showWebhookUrls && (
+              <div className="space-y-2 pt-2 border-t border-slate-800">
+                {[
+                  { label: 'Inbound SMS', path: '/plivo-sms-inbound', key: 'sms' },
+                  { label: 'SMS Status Callback', path: '/plivo-sms-status', key: 'sms-status' },
+                  { label: 'Inbound Voice (Answer URL)', path: '/plivo-voice-answer', key: 'voice' },
+                  { label: 'Voice Status / Hangup Callback', path: '/plivo-voice-status', key: 'voice-status' },
+                ].map(w => (
+                  <div key={w.key}>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">{w.label}</label>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded text-xs text-slate-300 overflow-x-auto">
+                        {webhookBaseUrl}{w.path}
+                      </code>
+                      <button onClick={() => copy(`${webhookBaseUrl}${w.path}`, w.key)}
+                        className="p-2 text-slate-400 hover:text-slate-200 rounded transition-colors">
+                        {copied === w.key ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
