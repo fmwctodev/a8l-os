@@ -238,11 +238,116 @@ export function getNodeById(
   return definition.nodes.find(n => n.id === nodeId) || null;
 }
 
+export interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+  /** Per-node error messages, keyed by node.id, for inline canvas rendering. */
+  nodeErrors: Record<string, string[]>;
+}
+
+/**
+ * Action types whose configuration should be validated for non-empty
+ * required fields. Map of actionType → list of required keys inside
+ * node.data.config (or top-level node.data).
+ */
+const REQUIRED_ACTION_CONFIG: Record<string, string[]> = {
+  send_email: ['subject', 'body'],
+  send_internal_email: ['subject', 'body'],
+  send_sms: ['body'],
+  send_internal_sms: ['body'],
+  send_slack_message: ['channelId', 'message'],
+  send_messenger: ['body'],
+  send_gmb_message: ['body'],
+  send_proposal: ['proposalTemplateId'],
+  create_proposal: ['proposalTemplateId'],
+  add_tag: ['tagId'],
+  remove_tag: ['tagId'],
+  update_contact_field: ['fieldName'],
+  update_custom_field: ['fieldKey'],
+  assign_contact_owner: ['ownerId'],
+  create_task: ['title'],
+  assign_task: ['taskId', 'assigneeId'],
+  create_opportunity: ['pipelineId'],
+  move_opportunity_stage: ['stageId'],
+  create_invoice: ['lineItems'],
+  send_invoice: ['invoiceId'],
+  webhook: ['url'],
+  webhook_post: ['url'],
+  notify_user: ['userId'],
+  send_internal_notification: ['userIds'],
+  ai_prompt: ['prompt'],
+  ai_email_draft: ['prompt'],
+  ai_lead_qualification: ['prompt'],
+  ai_decision_step: ['prompt'],
+  generate_meeting_follow_up: ['meetingId'],
+  add_to_workflow: ['workflowId'],
+  trigger_another_workflow: ['workflowId'],
+  remove_from_workflow_action: ['workflowId'],
+  go_to: ['targetNodeId'],
+  split_test: ['variants'],
+  drip_mode: ['batchSize', 'intervalMinutes'],
+  update_lead_score: ['delta'],
+  update_custom_value: ['fieldKey'],
+  array_operation: ['operation'],
+  text_formatter: ['operation', 'sourceField'],
+  modify_engagement_score: ['delta'],
+  modify_followers: ['userIds'],
+  add_note: ['body'],
+  send_review_request: [],
+  copy_contact: [],
+  delete_contact: [],
+  set_dnd: [],
+  log_custom_event: ['eventName'],
+  send_facebook_dm: ['body'],
+  send_instagram_dm: ['body'],
+  manual_action: ['title'],
+};
+
+/**
+ * Trigger types whose configuration must include a specific field.
+ */
+const REQUIRED_TRIGGER_CONFIG: Record<string, string[]> = {
+  scheduled: ['cadence'],
+  webhook_received: ['token'],
+  birthday_reminder: [],
+  custom_date_reminder: ['customDateField'],
+  contact_custom_date_reminder: ['customDateField'],
+  contact_tag_changed: [],
+  trigger_link_clicked: [],
+};
+
+function isEmpty(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'string') return value.trim() === '';
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === 'object') return Object.keys(value as object).length === 0;
+  return false;
+}
+
+function getConfigField(data: Record<string, unknown>, key: string): unknown {
+  // Try top-level, then config sub-object, then triggerConfig sub-object
+  const top = data[key];
+  if (!isEmpty(top)) return top;
+  const cfg = data.config as Record<string, unknown> | undefined;
+  if (cfg && !isEmpty(cfg[key])) return cfg[key];
+  const trCfg = data.triggerConfig as Record<string, unknown> | undefined;
+  if (trCfg && !isEmpty(trCfg[key])) return trCfg[key];
+  return undefined;
+}
+
 export function validateWorkflowDefinition(
   definition: WorkflowDefinition
-): { valid: boolean; errors: string[] } {
+): ValidationResult {
   const errors: string[] = [];
+  const nodeErrors: Record<string, string[]> = {};
 
+  const pushNodeError = (nodeId: string, msg: string) => {
+    if (!nodeErrors[nodeId]) nodeErrors[nodeId] = [];
+    nodeErrors[nodeId].push(msg);
+    errors.push(msg);
+  };
+
+  // 1. Structural — must have at least one trigger and at least one end
   const triggerNodes = definition.nodes.filter(n => n.type === 'trigger');
   if (triggerNodes.length === 0) {
     errors.push('Workflow must have at least one trigger');
@@ -253,21 +358,20 @@ export function validateWorkflowDefinition(
     errors.push('Workflow must have at least one end node');
   }
 
+  // 2. Per-node connectivity
   for (const node of definition.nodes) {
-    if (node.type === 'trigger') continue;
-
-    const hasIncoming = definition.edges.some(e => e.target === node.id);
-    if (!hasIncoming) {
-      errors.push(`Node "${node.id}" has no incoming connection`);
+    if (node.type !== 'trigger') {
+      const hasIncoming = definition.edges.some(e => e.target === node.id);
+      if (!hasIncoming) {
+        pushNodeError(node.id, `Node has no incoming connection`);
+      }
     }
-  }
 
-  for (const node of definition.nodes) {
-    if (node.type === 'end') continue;
-
-    const hasOutgoing = definition.edges.some(e => e.source === node.id);
-    if (!hasOutgoing) {
-      errors.push(`Node "${node.id}" has no outgoing connection`);
+    if (node.type !== 'end') {
+      const hasOutgoing = definition.edges.some(e => e.source === node.id);
+      if (!hasOutgoing) {
+        pushNodeError(node.id, `Node has no outgoing connection`);
+      }
     }
 
     if (node.type === 'condition') {
@@ -279,23 +383,145 @@ export function validateWorkflowDefinition(
       );
 
       if (!trueEdge || !falseEdge) {
-        errors.push(`Condition node "${node.id}" must have both true and false paths`);
+        pushNodeError(node.id, `Condition needs both true and false paths`);
+      }
+
+      // Condition data must have at least one rule
+      const data = node.data as { rules?: Array<{ field?: string; operator?: string; value?: unknown }> };
+      if (!data.rules || data.rules.length === 0) {
+        pushNodeError(node.id, `Condition needs at least one rule`);
+      } else {
+        for (const rule of data.rules) {
+          if (!rule.field || !rule.operator) {
+            pushNodeError(node.id, `Rule is missing field or operator`);
+            break;
+          }
+          // value can be empty for is_empty / is_not_empty operators
+          const noValueOps = new Set(['is_empty', 'is_not_empty']);
+          if (!noValueOps.has(rule.operator) && isEmpty(rule.value)) {
+            pushNodeError(node.id, `Rule "${rule.field}" needs a value`);
+            break;
+          }
+        }
       }
     }
   }
 
-  for (const node of definition.nodes) {
-    if (node.type === 'action') {
-      const data = node.data as ActionNodeData;
-      if (!data.actionType) {
-        errors.push(`Action node "${node.id}" must have an action type`);
+  // 3. Trigger config completeness
+  for (const node of triggerNodes) {
+    const data = (node.data || {}) as Record<string, unknown>;
+    const triggerType = (data.triggerType as string) || '';
+    if (!triggerType) {
+      pushNodeError(node.id, `Trigger has no type set`);
+      continue;
+    }
+    const required = REQUIRED_TRIGGER_CONFIG[triggerType];
+    if (required) {
+      for (const key of required) {
+        if (isEmpty(getConfigField(data, key))) {
+          pushNodeError(node.id, `Trigger needs "${key}" configured`);
+        }
       }
     }
+  }
+
+  // 4. Action config completeness
+  for (const node of definition.nodes) {
+    if (node.type !== 'action') continue;
+    const data = (node.data || {}) as ActionNodeData & Record<string, unknown>;
+    if (!data.actionType) {
+      pushNodeError(node.id, `Action has no type set`);
+      continue;
+    }
+    const required = REQUIRED_ACTION_CONFIG[data.actionType as string];
+    if (required && required.length > 0) {
+      for (const key of required) {
+        if (isEmpty(getConfigField(data as Record<string, unknown>, key))) {
+          pushNodeError(node.id, `Action "${data.actionType}" needs "${key}"`);
+        }
+      }
+    }
+  }
+
+  // 5. Reachability — BFS from each trigger; flag nodes not reached
+  const reachable = new Set<string>();
+  const queue: string[] = triggerNodes.map(n => n.id);
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    if (reachable.has(cur)) continue;
+    reachable.add(cur);
+    for (const edge of definition.edges) {
+      if (edge.source === cur && !reachable.has(edge.target)) {
+        queue.push(edge.target);
+      }
+    }
+  }
+  for (const node of definition.nodes) {
+    if (!reachable.has(node.id) && node.type !== 'trigger') {
+      pushNodeError(node.id, `Node is unreachable from any trigger`);
+    }
+  }
+
+  // 6. Cycle detection — DFS detecting back-edges. Goal/Go-To loops are
+  //    intentional but the engine bounds them via maxJumps; here we only
+  //    flag cycles that DON'T pass through a goal or go_to action node, so
+  //    intentional jump-back patterns are still allowed.
+  const adj = new Map<string, string[]>();
+  for (const e of definition.edges) {
+    const list = adj.get(e.source) || [];
+    list.push(e.target);
+    adj.set(e.source, list);
+  }
+  const flagsCycleAllowed = (nodeId: string): boolean => {
+    const node = definition.nodes.find(n => n.id === nodeId);
+    if (!node) return false;
+    if (node.type === 'goal') return true;
+    if (node.type === 'action') {
+      const at = (node.data as { actionType?: string })?.actionType;
+      if (at === 'go_to' || at === 'goal_check') return true;
+    }
+    return false;
+  };
+
+  const visited = new Set<string>();
+  const stack = new Set<string>();
+  const stackPath: string[] = [];
+
+  function dfs(nodeId: string): void {
+    if (stack.has(nodeId)) {
+      // Cycle detected back to nodeId — extract path
+      const startIdx = stackPath.indexOf(nodeId);
+      const cycle = stackPath.slice(startIdx).concat(nodeId);
+      const hasAllowed = cycle.some(flagsCycleAllowed);
+      if (!hasAllowed) {
+        for (const id of cycle) {
+          pushNodeError(id, `Node is part of an infinite loop (no goal/go-to break)`);
+        }
+      }
+      return;
+    }
+    if (visited.has(nodeId)) return;
+
+    visited.add(nodeId);
+    stack.add(nodeId);
+    stackPath.push(nodeId);
+
+    for (const next of adj.get(nodeId) || []) {
+      dfs(next);
+    }
+
+    stack.delete(nodeId);
+    stackPath.pop();
+  }
+
+  for (const trigger of triggerNodes) {
+    dfs(trigger.id);
   }
 
   return {
     valid: errors.length === 0,
-    errors
+    errors,
+    nodeErrors,
   };
 }
 

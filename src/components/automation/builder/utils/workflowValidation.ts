@@ -23,7 +23,8 @@ export function validateWorkflow(nodes: BuilderNode[], edges: BuilderEdge[]): Va
           if (td.triggerType === 'event_custom' && !cfg.eventName) {
             issues.push({ nodeId: node.id, nodeLabel: label, severity: 'error', message: 'Custom trigger requires an event name' });
           }
-          if (td.triggerType === 'event_scheduler' && !cfg.cronExpression && !cfg.scheduleDate) {
+          if ((td.triggerType === 'event_scheduler' || td.triggerType === 'scheduled')
+              && !cfg.cronExpression && !cfg.scheduleDate && !cfg.cadence) {
             issues.push({ nodeId: node.id, nodeLabel: label, severity: 'warning', message: 'Scheduler trigger has no schedule configured' });
           }
           if (td.triggerType === 'opportunity_stale') {
@@ -34,6 +35,13 @@ export function validateWorkflow(nodes: BuilderNode[], edges: BuilderEdge[]): Va
           }
           if (td.triggerType === 'contact_engagement_score' && !cfg.scoreValue && cfg.scoreValue !== 0) {
             issues.push({ nodeId: node.id, nodeLabel: label, severity: 'warning', message: 'Engagement score trigger has no score threshold set' });
+          }
+          if (td.triggerType === 'webhook_received' && !((td as unknown as { webhookConfig?: { token?: string } }).webhookConfig?.token)) {
+            issues.push({ nodeId: node.id, nodeLabel: label, severity: 'error', message: 'Webhook trigger has no token (open the trigger to generate a URL)' });
+          }
+          if ((td.triggerType === 'custom_date_reminder' || td.triggerType === 'contact_custom_date_reminder')
+              && !cfg.customDateField) {
+            issues.push({ nodeId: node.id, nodeLabel: label, severity: 'error', message: 'Custom date reminder needs a field to watch' });
           }
         }
         break;
@@ -81,6 +89,86 @@ export function validateWorkflow(nodes: BuilderNode[], edges: BuilderEdge[]): Va
   if (nodes.length > 50) {
     issues.push({ nodeId: '', nodeLabel: 'Workflow', severity: 'warning', message: 'Workflow has more than 50 nodes and may be difficult to manage' });
   }
+
+  // Reachability: BFS from each trigger
+  const reachable = new Set<string>();
+  const queue: string[] = triggers.map(t => t.id);
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    if (reachable.has(cur)) continue;
+    reachable.add(cur);
+    for (const e of edges) {
+      if (e.source === cur && !reachable.has(e.target)) queue.push(e.target);
+    }
+  }
+  for (const node of nodes) {
+    if (node.data.nodeType === 'trigger') continue;
+    if (!reachable.has(node.id)) {
+      const label = node.data.label || node.id;
+      issues.push({
+        nodeId: node.id,
+        nodeLabel: label,
+        severity: 'error',
+        message: 'Node is unreachable from any trigger',
+      });
+    }
+  }
+
+  // Cycle detection — flag cycles that don't pass through a goal/go_to node
+  // (which intentionally jump back). DFS with a stack tracks back-edges.
+  const adj = new Map<string, string[]>();
+  for (const e of edges) {
+    const list = adj.get(e.source) || [];
+    list.push(e.target);
+    adj.set(e.source, list);
+  }
+  const isJumpBreaker = (nodeId: string): boolean => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return false;
+    if (node.data.nodeType === 'goal') return true;
+    if (node.data.nodeType === 'action') {
+      const at = (node.data.nodeData as { actionType?: string })?.actionType;
+      if (at === 'go_to' || at === 'goal_check') return true;
+    }
+    return false;
+  };
+
+  const visited = new Set<string>();
+  const onStack = new Set<string>();
+  const path: string[] = [];
+  const flaggedCycles = new Set<string>();
+
+  function dfs(nodeId: string): void {
+    if (onStack.has(nodeId)) {
+      const startIdx = path.indexOf(nodeId);
+      const cycle = path.slice(startIdx).concat(nodeId);
+      const cycleKey = [...cycle].sort().join('|');
+      if (flaggedCycles.has(cycleKey)) return;
+      flaggedCycles.add(cycleKey);
+      const hasBreaker = cycle.some(isJumpBreaker);
+      if (!hasBreaker) {
+        for (const id of cycle) {
+          const n = nodes.find(x => x.id === id);
+          const label = n?.data.label || id;
+          issues.push({
+            nodeId: id,
+            nodeLabel: label,
+            severity: 'error',
+            message: 'Node is part of an infinite loop (no goal or Go To breaks it)',
+          });
+        }
+      }
+      return;
+    }
+    if (visited.has(nodeId)) return;
+    visited.add(nodeId);
+    onStack.add(nodeId);
+    path.push(nodeId);
+    for (const next of adj.get(nodeId) || []) dfs(next);
+    onStack.delete(nodeId);
+    path.pop();
+  }
+  for (const t of triggers) dfs(t.id);
 
   return issues;
 }

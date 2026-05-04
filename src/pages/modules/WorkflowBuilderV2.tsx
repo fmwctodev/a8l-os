@@ -22,6 +22,7 @@ import { VersionHistoryPanel } from '../../components/automation/builder/panels/
 import { WorkflowSettingsPanel } from '../../components/automation/builder/panels/WorkflowSettingsPanel';
 import { StatsOverlay } from '../../components/automation/builder/overlays/StatsOverlay';
 import { CanvasNodeStatsOverlay } from '../../components/automation/builder/overlays/CanvasNodeStatsOverlay';
+import { ValidationOverlay } from '../../components/automation/builder/overlays/ValidationOverlay';
 import { TestWorkflowModal } from '../../components/automation/builder/modals/TestWorkflowModal';
 import { PublishWorkflowModal } from '../../components/automation/builder/modals/PublishWorkflowModal';
 
@@ -348,6 +349,8 @@ function WorkflowBuilderInner() {
               <CanvasNodeStatsOverlay workflowId={workflow.id} />
             </>
           )}
+
+          <ValidationOverlay issues={builder.validationIssues} />
 
           {builder.nodes.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
