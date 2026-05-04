@@ -1,5 +1,8 @@
-import { X, Settings, Info } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { X, Settings, Info, FolderPlus } from 'lucide-react';
 import type { WorkflowSettings } from '../../../../types/workflowBuilder';
+import { useAuth } from '../../../../contexts/AuthContext';
+import { getWorkflowFolders } from '../../../../services/workflows';
 
 interface WorkflowSettingsPanelProps {
   settings: WorkflowSettings;
@@ -20,6 +23,24 @@ export function WorkflowSettingsPanel({
   onDescriptionChange,
   onClose,
 }: WorkflowSettingsPanelProps) {
+  const { user } = useAuth();
+  const [folderOptions, setFolderOptions] = useState<string[]>([]);
+  const [isCreatingNewFolder, setIsCreatingNewFolder] = useState(false);
+
+  useEffect(() => {
+    if (!user?.organization_id) return;
+    getWorkflowFolders(user.organization_id)
+      .then((folders) => {
+        setFolderOptions(folders);
+        // If the current folder isn't in the existing list, default to free-text
+        if (settings.folder && !folders.includes(settings.folder)) {
+          setIsCreatingNewFolder(true);
+        }
+      })
+      .catch(() => setFolderOptions([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.organization_id]);
+
   const update = (partial: Partial<WorkflowSettings>) => {
     onChange({ ...settings, ...partial });
   };
@@ -73,13 +94,51 @@ export function WorkflowSettingsPanel({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Folder</label>
-              <input
-                type="text"
-                value={settings.folder ?? ''}
-                onChange={e => update({ folder: e.target.value })}
-                placeholder="Optional"
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
+              {isCreatingNewFolder || folderOptions.length === 0 ? (
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={settings.folder ?? ''}
+                    onChange={e => update({ folder: e.target.value })}
+                    placeholder="New folder name"
+                    className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                  {folderOptions.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCreatingNewFolder(false)}
+                      className="px-2 py-1 text-[10px] text-gray-500 hover:bg-gray-100 rounded"
+                      title="Pick existing"
+                    >
+                      Pick
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="flex gap-1">
+                  <select
+                    value={settings.folder ?? ''}
+                    onChange={e => update({ folder: e.target.value || undefined })}
+                    className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value="">No folder</option>
+                    {folderOptions.map((f) => (
+                      <option key={f} value={f}>{f}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreatingNewFolder(true);
+                      update({ folder: '' });
+                    }}
+                    className="inline-flex items-center px-2 py-1 text-blue-600 hover:bg-blue-50 rounded"
+                    title="New folder"
+                  >
+                    <FolderPlus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>

@@ -92,8 +92,19 @@ export async function createWorkflow(
   orgId: string,
   name: string,
   description: string | null,
-  userId: string
+  userId: string,
+  folder?: string | null
 ): Promise<Workflow> {
+  // Seed the draft definition with a settings.folder so getWorkflowFolders
+  // (and the Automation page filter) pick it up immediately, before the user
+  // ever opens the builder.
+  const draft = folder?.trim()
+    ? {
+        ...DEFAULT_DEFINITION,
+        settings: { folder: folder.trim() } as Record<string, unknown>,
+      }
+    : DEFAULT_DEFINITION;
+
   const { data, error } = await supabase
     .from('workflows')
     .insert({
@@ -101,7 +112,7 @@ export async function createWorkflow(
       name,
       description,
       status: 'draft',
-      draft_definition: DEFAULT_DEFINITION,
+      draft_definition: draft,
       created_by_user_id: userId
     })
     .select()
@@ -109,6 +120,33 @@ export async function createWorkflow(
 
   if (error) throw error;
   return data as Workflow;
+}
+
+/**
+ * Returns the unique set of folder names assigned to any workflow in the org,
+ * pulled from settings.folder inside draft_definition / published_definition.
+ * Used to power the folder combobox in the builder and the folder filter on
+ * the Automation page.
+ */
+export async function getWorkflowFolders(orgId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('workflows')
+    .select('draft_definition, published_definition')
+    .eq('org_id', orgId)
+    .neq('status', 'archived');
+
+  if (error) throw error;
+
+  const seen = new Set<string>();
+  for (const row of data || []) {
+    const def = (row.published_definition || row.draft_definition) as
+      | { settings?: { folder?: string } }
+      | null;
+    const folder = def?.settings?.folder?.trim();
+    if (folder) seen.add(folder);
+  }
+
+  return Array.from(seen).sort((a, b) => a.localeCompare(b));
 }
 
 export async function updateWorkflow(
