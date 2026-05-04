@@ -31,6 +31,7 @@ import OpportunityChangedConfig from './OpportunityChangedConfig';
 import OpportunityStageChangedConfig from './OpportunityStageChangedConfig';
 import OpportunityCreatedConfig from './OpportunityCreatedConfig';
 import OpportunityStaleConfig from './OpportunityStaleConfig';
+import WebhookTriggerConfig from './WebhookTriggerConfig';
 
 type ConfigEntry = {
   component: ComponentType<TriggerConfigProps>;
@@ -66,4 +67,6 @@ export const TRIGGER_CONFIG_MAP: Record<string, ConfigEntry> = {
   opportunity_changed: { component: OpportunityChangedConfig },
   opportunity_stage_changed: { component: OpportunityStageChangedConfig },
   opportunity_stale: { component: OpportunityStaleConfig },
+  scheduled: { component: SchedulerConfig },
+  webhook_received: { component: WebhookTriggerConfig },
 };
