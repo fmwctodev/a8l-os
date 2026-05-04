@@ -295,7 +295,7 @@ Deno.serve(async (req: Request) => {
           const contactId = (enrollment.contact as Record<string, unknown>)?.id as string | undefined;
           if (enrolledAt && contactId) {
             const { count } = await supabase
-              .from("conversation_messages")
+              .from("messages")
               .select("id", { count: "exact", head: true })
               .eq("contact_id", contactId)
               .eq("direction", "inbound")
@@ -1826,7 +1826,16 @@ async function executeAction(
       break;
     }
 
-    case "manual_action": {
+    case "manual_action":
+    case "manual_call":
+    case "manual_sms":
+    case "manual_email": {
+      const channelLabel: Record<string, string> = {
+        manual_call: "Manual call",
+        manual_sms: "Manual SMS",
+        manual_email: "Manual email",
+        manual_action: "Manual action",
+      };
       const assigneeType = (config.assigneeType as string) || "contact_owner";
       let assigneeId: string | null = null;
 
@@ -1842,16 +1851,81 @@ async function executeAction(
       await supabase.from("contact_tasks").insert({
         org_id: orgId,
         contact_id: contactId,
-        title: (config.instructionText as string) || "Manual action required",
-        description: `Workflow manual action: ${config.instructionText}`,
+        title: (config.instructionText as string) || `${channelLabel[actionType]} required`,
+        description: (config.instructionText as string) || `Workflow ${channelLabel[actionType].toLowerCase()} task`,
         assigned_to: assigneeId,
         due_date: dueAt.toISOString(),
         status: "pending",
         source: "workflow",
-        metadata: { enrollment_id: enrollment.id, manual_action: true },
+        metadata: {
+          enrollment_id: enrollment.id,
+          manual_action: true,
+          channel: actionType.replace("manual_", ""),
+          draft_subject: config.subject ?? null,
+          draft_body: config.body ?? null,
+        },
       });
 
       return { shouldWait: true };
+    }
+
+    case "grant_course_access":
+    case "revoke_course_access": {
+      const courseId = config.courseId as string | undefined;
+      if (!courseId) break;
+      if (actionType === "grant_course_access") {
+        await supabase.from("course_enrollments").upsert(
+          { org_id: orgId, course_id: courseId, contact_id: contactId, granted_via: "workflow", granted_at: new Date().toISOString(), revoked_at: null },
+          { onConflict: "course_id,contact_id" }
+        );
+      } else {
+        await supabase
+          .from("course_enrollments")
+          .update({ revoked_at: new Date().toISOString() })
+          .eq("course_id", courseId)
+          .eq("contact_id", contactId);
+      }
+      break;
+    }
+
+    case "grant_community_access":
+    case "revoke_community_access": {
+      const groupId = config.communityId as string | undefined;
+      if (!groupId) break;
+      if (actionType === "grant_community_access") {
+        await supabase.from("community_members").upsert(
+          { org_id: orgId, community_id: groupId, contact_id: contactId, joined_via: "workflow", joined_at: new Date().toISOString(), removed_at: null },
+          { onConflict: "community_id,contact_id" }
+        );
+      } else {
+        await supabase
+          .from("community_members")
+          .update({ removed_at: new Date().toISOString() })
+          .eq("community_id", groupId)
+          .eq("contact_id", contactId);
+      }
+      break;
+    }
+
+    case "add_to_facebook_audience":
+    case "remove_from_facebook_audience":
+    case "send_facebook_conversion":
+    case "send_google_ads_event":
+    case "send_google_analytics_event": {
+      // Log the marketing event for the integration outbox; an external worker reads
+      // marketing_event_outbox and forwards to FB CAPI / Google Ads / GA4.
+      await supabase.from("marketing_event_outbox").insert({
+        org_id: orgId,
+        action_type: actionType,
+        contact_id: contactId,
+        audience_id: (config.audienceId as string) || null,
+        event_name: (config.eventName as string) || null,
+        event_value: (config.eventValue as number) || null,
+        currency: (config.currency as string) || null,
+        custom_data: config,
+        status: "pending",
+      });
+      break;
     }
 
     case "update_custom_value": {

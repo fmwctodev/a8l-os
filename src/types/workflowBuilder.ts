@@ -204,6 +204,51 @@ export const TRIGGER_OPTIONS: TriggerOption[] = [
   { type: 'webhook_received', label: 'Webhook Received', description: 'When an external webhook fires', category: 'custom' },
   { type: 'scheduled', label: 'Scheduled Trigger', description: 'Run on a time-based schedule', category: 'custom' },
   { type: 'manual_trigger', label: 'Manual Trigger', description: 'Manually enroll contacts', category: 'custom' },
+
+  // Tier 2 — call / IVR
+  { type: 'missed_call', label: 'Missed Call', description: 'When an inbound call is missed (text-back trigger)', category: 'communication' },
+  { type: 'inbound_call', label: 'Inbound Call', description: 'When an inbound call is received', category: 'communication' },
+  { type: 'call_completed', label: 'Call Completed', description: 'When a call ends (status = completed)', category: 'communication' },
+
+  // Tier 2 — date reminders
+  { type: 'birthday_reminder', label: 'Birthday Reminder', description: "Fires on the contact's birthday (or N days before/after)", category: 'contact' },
+  { type: 'custom_date_reminder', label: 'Custom Date Reminder', description: 'Fires before, on, or after any custom date field', category: 'contact' },
+
+  // Tier 2 — ecommerce
+  { type: 'abandoned_cart', label: 'Abandoned Cart', description: 'When a cart sits inactive past the threshold', category: 'payments' },
+  { type: 'abandoned_checkout', label: 'Abandoned Checkout', description: 'When a checkout is started but not completed', category: 'payments' },
+  { type: 'ecom_order_placed', label: 'Order Placed', description: 'When an ecommerce order is placed', category: 'payments' },
+  { type: 'ecom_order_fulfilled', label: 'Order Fulfilled', description: 'When an order is fulfilled', category: 'payments' },
+  { type: 'subscription_started', label: 'Subscription Started', description: 'When a recurring subscription starts', category: 'payments' },
+  { type: 'subscription_cancelled', label: 'Subscription Cancelled', description: 'When a subscription is cancelled', category: 'payments' },
+  { type: 'subscription_payment_failed', label: 'Subscription Payment Failed', description: 'When a recurring charge fails', category: 'payments' },
+  { type: 'refund_issued', label: 'Refund Issued', description: 'When a refund is processed', category: 'payments' },
+  { type: 'estimate_sent', label: 'Estimate Sent', description: 'When an estimate is sent to a contact', category: 'payments' },
+  { type: 'estimate_accepted', label: 'Estimate Accepted', description: 'When an estimate is accepted', category: 'payments' },
+  { type: 'contract_signed', label: 'Contract Signed', description: 'When a contract is signed', category: 'payments' },
+  { type: 'coupon_redeemed', label: 'Coupon Redeemed', description: 'When a coupon is used at checkout', category: 'payments' },
+  { type: 'product_review_submitted', label: 'Product Review Submitted', description: 'When a buyer submits a product review', category: 'reputation' },
+
+  // Tier 2 — social / ads
+  { type: 'social_facebook_lead', label: 'Facebook Lead Form', description: 'When a Facebook Lead Ad form is submitted', category: 'marketing' },
+  { type: 'social_google_lead', label: 'Google Lead Form', description: 'When a Google Lead Form is submitted', category: 'marketing' },
+  { type: 'social_linkedin_lead', label: 'LinkedIn Lead Form', description: 'When a LinkedIn Lead Gen form is submitted', category: 'marketing' },
+  { type: 'social_tiktok_lead', label: 'TikTok Lead Form', description: 'When a TikTok Lead Generation form is submitted', category: 'marketing' },
+  { type: 'social_facebook_comment', label: 'Facebook Comment', description: 'When a comment is posted on your Facebook page', category: 'marketing' },
+  { type: 'social_instagram_comment', label: 'Instagram Comment', description: 'When a comment is posted on your Instagram', category: 'marketing' },
+  { type: 'social_tiktok_comment', label: 'TikTok Comment', description: 'When a comment is posted on your TikTok', category: 'marketing' },
+  { type: 'click_to_whatsapp', label: 'Click-to-WhatsApp Ad', description: 'When a click-to-WhatsApp ad starts a conversation', category: 'marketing' },
+  { type: 'fb_conversion_event', label: 'Facebook Conversion Event', description: 'When a Facebook Conversion API event fires', category: 'marketing' },
+
+  // Tier 2 — tracking
+  { type: 'trigger_link_clicked', label: 'Trigger Link Clicked', description: 'When a contact clicks a tracked trigger link', category: 'events' },
+  { type: 'funnel_page_visited', label: 'Funnel Page Visited', description: 'When a tracked funnel page is visited', category: 'events' },
+  { type: 'website_page_visited', label: 'Website Page Visited', description: 'When a tracked website page is visited', category: 'events' },
+  { type: 'video_tracking_event', label: 'Video Tracking', description: 'When a tracked video reaches a milestone', category: 'events' },
+  { type: 'external_tracking_event', label: 'External Tracking', description: 'When an external tracking pixel fires', category: 'events' },
+
+  // Tier 2 — error / messaging
+  { type: 'messaging_error', label: 'Messaging Error', description: 'When an SMS or email fails to deliver', category: 'communication' },
 ];
 
 export const ACTION_CATEGORIES = [
@@ -338,6 +383,24 @@ export const ACTION_OPTIONS: ActionOption[] = [
 
   // Extended Payment Actions
   { type: 'send_documents_and_contracts', label: 'Send Documents & Contracts', description: 'Send a document or contract for signing', category: 'payments' },
+
+  // Tier 3 — Manual queue actions (assigned to a user; appear in their task queue)
+  { type: 'manual_call', label: 'Manual Call', description: 'Add a call task to the assigned user’s queue', category: 'communication' },
+  { type: 'manual_sms', label: 'Manual SMS', description: 'Queue an SMS for a user to send manually', category: 'communication' },
+  { type: 'manual_email', label: 'Manual Email', description: 'Queue an email for a user to send manually', category: 'communication' },
+
+  // Tier 3 — Course / Community access
+  { type: 'grant_course_access', label: 'Grant Course Access', description: 'Grant a contact access to a course offer', category: 'system' },
+  { type: 'revoke_course_access', label: 'Revoke Course Access', description: 'Remove a contact’s course access', category: 'system' },
+  { type: 'grant_community_access', label: 'Grant Community Access', description: 'Add a contact to a paid community / group', category: 'system' },
+  { type: 'revoke_community_access', label: 'Revoke Community Access', description: 'Remove a contact from a community / group', category: 'system' },
+
+  // Tier 3 — Marketing audiences
+  { type: 'add_to_facebook_audience', label: 'Add to Facebook Audience', description: 'Add to a Facebook Custom Audience', category: 'marketing' },
+  { type: 'remove_from_facebook_audience', label: 'Remove from Facebook Audience', description: 'Remove from a Facebook Custom Audience', category: 'marketing' },
+  { type: 'send_facebook_conversion', label: 'Facebook Conversion API', description: 'Send a conversion event to Facebook CAPI', category: 'marketing' },
+  { type: 'send_google_ads_event', label: 'Google Ads Event', description: 'Send a conversion event to Google Ads', category: 'marketing' },
+  { type: 'send_google_analytics_event', label: 'Google Analytics Event', description: 'Send an event to Google Analytics', category: 'marketing' },
 ];
 
 export function getNodeTypeForAction(actionType: string): WorkflowNodeType {

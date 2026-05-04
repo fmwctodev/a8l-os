@@ -1154,7 +1154,41 @@ export type WorkflowTriggerType =
   | 'event_prospect_generated'
   | 'scheduled'
   | 'webhook_received'
-  | 'manual_trigger';
+  | 'manual_trigger'
+  // Tier 2 expansion — GHL parity
+  | 'missed_call'
+  | 'inbound_call'
+  | 'call_completed'
+  | 'birthday_reminder'
+  | 'custom_date_reminder'
+  | 'abandoned_cart'
+  | 'abandoned_checkout'
+  | 'ecom_order_placed'
+  | 'ecom_order_fulfilled'
+  | 'subscription_started'
+  | 'subscription_cancelled'
+  | 'subscription_payment_failed'
+  | 'refund_issued'
+  | 'estimate_sent'
+  | 'estimate_accepted'
+  | 'contract_signed'
+  | 'coupon_redeemed'
+  | 'product_review_submitted'
+  | 'social_facebook_lead'
+  | 'social_google_lead'
+  | 'social_linkedin_lead'
+  | 'social_tiktok_lead'
+  | 'social_facebook_comment'
+  | 'social_instagram_comment'
+  | 'social_tiktok_comment'
+  | 'click_to_whatsapp'
+  | 'fb_conversion_event'
+  | 'trigger_link_clicked'
+  | 'funnel_page_visited'
+  | 'website_page_visited'
+  | 'video_tracking_event'
+  | 'external_tracking_event'
+  | 'messaging_error';
 
 export type TriggerCategory = 'event' | 'scheduled' | 'webhook';
 
@@ -1510,6 +1544,7 @@ export interface EventOutbox {
 export interface WorkflowFilters {
   status?: WorkflowStatus[];
   search?: string;
+  folder?: string;
 }
 
 export interface EnrollmentFilters {

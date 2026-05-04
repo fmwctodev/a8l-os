@@ -31,8 +31,29 @@ export function Automation() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<WorkflowStatus | 'all'>('all');
+  const [folderFilter, setFolderFilter] = useState<string>('all');
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showFolderDropdown, setShowFolderDropdown] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+
+  // Build folder list from workflows' settings.folder (read from definition jsonb)
+  const folders = Array.from(
+    new Set(
+      workflows
+        .map((wf) => {
+          const def = (wf.published_definition || wf.draft_definition) as { settings?: { folder?: string } } | null;
+          return def?.settings?.folder?.trim();
+        })
+        .filter((f): f is string => !!f)
+    )
+  ).sort();
+
+  const visibleWorkflows = folderFilter === 'all'
+    ? workflows
+    : workflows.filter((wf) => {
+        const def = (wf.published_definition || wf.draft_definition) as { settings?: { folder?: string } } | null;
+        return (def?.settings?.folder || '') === folderFilter;
+      });
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
