@@ -214,41 +214,23 @@ export const TRIGGER_OPTIONS: TriggerOption[] = [
   { type: 'birthday_reminder', label: 'Birthday Reminder', description: "Fires on the contact's birthday (or N days before/after)", category: 'contact' },
   { type: 'custom_date_reminder', label: 'Custom Date Reminder', description: 'Fires before, on, or after any custom date field', category: 'contact' },
 
-  // Tier 2 — ecommerce
-  { type: 'abandoned_cart', label: 'Abandoned Cart', description: 'When a cart sits inactive past the threshold', category: 'payments' },
-  { type: 'abandoned_checkout', label: 'Abandoned Checkout', description: 'When a checkout is started but not completed', category: 'payments' },
-  { type: 'ecom_order_placed', label: 'Order Placed', description: 'When an ecommerce order is placed', category: 'payments' },
-  { type: 'ecom_order_fulfilled', label: 'Order Fulfilled', description: 'When an order is fulfilled', category: 'payments' },
-  { type: 'subscription_started', label: 'Subscription Started', description: 'When a recurring subscription starts', category: 'payments' },
-  { type: 'subscription_cancelled', label: 'Subscription Cancelled', description: 'When a subscription is cancelled', category: 'payments' },
-  { type: 'subscription_payment_failed', label: 'Subscription Payment Failed', description: 'When a recurring charge fails', category: 'payments' },
-  { type: 'refund_issued', label: 'Refund Issued', description: 'When a refund is processed', category: 'payments' },
-  { type: 'estimate_sent', label: 'Estimate Sent', description: 'When an estimate is sent to a contact', category: 'payments' },
-  { type: 'estimate_accepted', label: 'Estimate Accepted', description: 'When an estimate is accepted', category: 'payments' },
-  { type: 'contract_signed', label: 'Contract Signed', description: 'When a contract is signed', category: 'payments' },
-  { type: 'coupon_redeemed', label: 'Coupon Redeemed', description: 'When a coupon is used at checkout', category: 'payments' },
-  { type: 'product_review_submitted', label: 'Product Review Submitted', description: 'When a buyer submits a product review', category: 'reputation' },
-
-  // Tier 2 — social / ads
-  { type: 'social_facebook_lead', label: 'Facebook Lead Form', description: 'When a Facebook Lead Ad form is submitted', category: 'marketing' },
-  { type: 'social_google_lead', label: 'Google Lead Form', description: 'When a Google Lead Form is submitted', category: 'marketing' },
-  { type: 'social_linkedin_lead', label: 'LinkedIn Lead Form', description: 'When a LinkedIn Lead Gen form is submitted', category: 'marketing' },
-  { type: 'social_tiktok_lead', label: 'TikTok Lead Form', description: 'When a TikTok Lead Generation form is submitted', category: 'marketing' },
-  { type: 'social_facebook_comment', label: 'Facebook Comment', description: 'When a comment is posted on your Facebook page', category: 'marketing' },
-  { type: 'social_instagram_comment', label: 'Instagram Comment', description: 'When a comment is posted on your Instagram', category: 'marketing' },
-  { type: 'social_tiktok_comment', label: 'TikTok Comment', description: 'When a comment is posted on your TikTok', category: 'marketing' },
-  { type: 'click_to_whatsapp', label: 'Click-to-WhatsApp Ad', description: 'When a click-to-WhatsApp ad starts a conversation', category: 'marketing' },
-  { type: 'fb_conversion_event', label: 'Facebook Conversion Event', description: 'When a Facebook Conversion API event fires', category: 'marketing' },
-
-  // Tier 2 — tracking
+  // Tier 2 — tracking (only the one we can actually wire)
   { type: 'trigger_link_clicked', label: 'Trigger Link Clicked', description: 'When a contact clicks a tracked trigger link', category: 'events' },
-  { type: 'funnel_page_visited', label: 'Funnel Page Visited', description: 'When a tracked funnel page is visited', category: 'events' },
-  { type: 'website_page_visited', label: 'Website Page Visited', description: 'When a tracked website page is visited', category: 'events' },
-  { type: 'video_tracking_event', label: 'Video Tracking', description: 'When a tracked video reaches a milestone', category: 'events' },
-  { type: 'external_tracking_event', label: 'External Tracking', description: 'When an external tracking pixel fires', category: 'events' },
 
   // Tier 2 — error / messaging
   { type: 'messaging_error', label: 'Messaging Error', description: 'When an SMS or email fails to deliver', category: 'communication' },
+
+  // Tier 2 — social inbox (via Late.app + Unipile, real integrations we have)
+  { type: 'social_inbox_message', label: 'Social Inbox Message', description: 'When a new inbound DM arrives via LinkedIn / Instagram / WhatsApp / Facebook', category: 'conversations' },
+  { type: 'social_inbox_comment', label: 'Social Comment Received', description: 'When a comment is posted on one of your social accounts', category: 'conversations' },
+  { type: 'social_post_engagement', label: 'Social Post Engagement', description: 'When one of your published posts gets a like / share / reply', category: 'conversations' },
+
+  // Tier 2 — QuickBooks pipeline (we have qbo-* functions)
+  { type: 'qbo_invoice_paid', label: 'QBO Invoice Paid', description: 'When QuickBooks reports an invoice as paid', category: 'payments' },
+  { type: 'qbo_sync_completed', label: 'QBO Sync Completed', description: 'When a QuickBooks sync run finishes', category: 'payments' },
+
+  // Tier 2 — proposal/contract pipeline (we have proposals + contract-ai-generate)
+  { type: 'contract_signed', label: 'Contract Signed', description: 'When a contract is signed by the contact', category: 'proposals' },
 ];
 
 export const ACTION_CATEGORIES = [
@@ -389,18 +371,21 @@ export const ACTION_OPTIONS: ActionOption[] = [
   { type: 'manual_sms', label: 'Manual SMS', description: 'Queue an SMS for a user to send manually', category: 'communication' },
   { type: 'manual_email', label: 'Manual Email', description: 'Queue an email for a user to send manually', category: 'communication' },
 
-  // Tier 3 — Course / Community access
-  { type: 'grant_course_access', label: 'Grant Course Access', description: 'Grant a contact access to a course offer', category: 'system' },
-  { type: 'revoke_course_access', label: 'Revoke Course Access', description: 'Remove a contact’s course access', category: 'system' },
-  { type: 'grant_community_access', label: 'Grant Community Access', description: 'Add a contact to a paid community / group', category: 'system' },
-  { type: 'revoke_community_access', label: 'Revoke Community Access', description: 'Remove a contact from a community / group', category: 'system' },
+  // Tier 3 — Multi-channel DMs (via Unipile — LinkedIn, Instagram, WhatsApp)
+  { type: 'send_linkedin_message', label: 'Send LinkedIn Message', description: 'Send a direct message to a LinkedIn-connected contact (via Unipile)', category: 'communication' },
+  { type: 'send_whatsapp_message', label: 'Send WhatsApp Message', description: 'Send a WhatsApp message (via Unipile)', category: 'communication' },
 
-  // Tier 3 — Marketing audiences
-  { type: 'add_to_facebook_audience', label: 'Add to Facebook Audience', description: 'Add to a Facebook Custom Audience', category: 'marketing' },
-  { type: 'remove_from_facebook_audience', label: 'Remove from Facebook Audience', description: 'Remove from a Facebook Custom Audience', category: 'marketing' },
-  { type: 'send_facebook_conversion', label: 'Facebook Conversion API', description: 'Send a conversion event to Facebook CAPI', category: 'marketing' },
-  { type: 'send_google_ads_event', label: 'Google Ads Event', description: 'Send a conversion event to Google Ads', category: 'marketing' },
-  { type: 'send_google_analytics_event', label: 'Google Analytics Event', description: 'Send an event to Google Analytics', category: 'marketing' },
+  // Tier 3 — Social posting (via Late.app)
+  { type: 'post_social_update', label: 'Post Social Update', description: 'Schedule a post on connected social accounts (via Late)', category: 'marketing' },
+
+  // Tier 3 — QuickBooks pipeline (we have qbo-* functions)
+  { type: 'qbo_create_invoice', label: 'QBO: Create Invoice', description: 'Create a QuickBooks invoice from workflow context', category: 'payments' },
+  { type: 'qbo_create_customer', label: 'QBO: Create Customer', description: 'Sync the contact to QuickBooks as a customer', category: 'payments' },
+
+  // Tier 3 — Extra AI actions (we have ai-* functions + workflowAIActions service)
+  { type: 'ai_summarize_thread', label: 'AI: Summarize Conversation', description: 'Summarize the contact’s recent conversation thread', category: 'ai' },
+  { type: 'ai_classify_intent', label: 'AI: Classify Intent', description: 'Use AI to classify a message’s intent for branching', category: 'ai' },
+  { type: 'ai_score_lead', label: 'AI: Score Lead', description: 'Score lead quality with AI; writes to engagement_score', category: 'ai' },
 ];
 
 export function getNodeTypeForAction(actionType: string): WorkflowNodeType {
