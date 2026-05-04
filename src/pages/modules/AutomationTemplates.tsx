@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getAutomationTemplates } from '../../services/automationTemplates';
+import { getAutomationTemplates, getAutomationTemplateById } from '../../services/automationTemplates';
 import type { AutomationTemplate, TemplateCategory, TemplateComplexity, TemplateFilters } from '../../types';
 import {
   Search,
@@ -24,7 +24,9 @@ import {
   Send,
   Settings,
   TrendingUp,
+  Play,
 } from 'lucide-react';
+import { UseTemplateModal } from '../../components/automation/UseTemplateModal';
 
 const CATEGORY_CONFIG: Record<TemplateCategory, { label: string; icon: typeof Zap; color: string; bg: string }> = {
   sales: { label: 'Sales', icon: TrendingUp, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
@@ -58,8 +60,24 @@ export default function AutomationTemplates() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'all'>('all');
   const [selectedComplexity, setSelectedComplexity] = useState<TemplateComplexity | 'all'>('all');
+  const [useTemplate, setUseTemplate] = useState<AutomationTemplate | null>(null);
+  const [hydratingUse, setHydratingUse] = useState(false);
 
   const canManage = hasPermission('automation.manage');
+
+  async function handleUse(template: AutomationTemplate) {
+    // The list query doesn't load latest_version. Fetch the full template
+    // before opening the modal so the review step shows real steps.
+    try {
+      setHydratingUse(true);
+      const full = await getAutomationTemplateById(template.id);
+      if (full) setUseTemplate(full);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load template');
+    } finally {
+      setHydratingUse(false);
+    }
+  }
 
   const loadTemplates = useCallback(async () => {
     if (!currentUser?.organization_id) return;
@@ -191,6 +209,8 @@ export default function AutomationTemplates() {
               subtitle="Pre-built by the platform"
               templates={systemTemplates}
               navigate={navigate}
+              onUse={handleUse}
+              hydratingUse={hydratingUse}
             />
           )}
 
@@ -200,6 +220,8 @@ export default function AutomationTemplates() {
               subtitle="Custom templates created by your team"
               templates={orgTemplates}
               navigate={navigate}
+              onUse={handleUse}
+              hydratingUse={hydratingUse}
             />
           )}
 
@@ -216,6 +238,17 @@ export default function AutomationTemplates() {
           )}
         </div>
       )}
+
+      {useTemplate && (
+        <UseTemplateModal
+          template={useTemplate}
+          onClose={() => setUseTemplate(null)}
+          onSuccess={(workflowId) => {
+            setUseTemplate(null);
+            navigate(`/automation/${workflowId}`);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -225,11 +258,15 @@ function TemplateSection({
   subtitle,
   templates,
   navigate,
+  onUse,
+  hydratingUse,
 }: {
   title: string;
   subtitle: string;
   templates: AutomationTemplate[];
   navigate: ReturnType<typeof useNavigate>;
+  onUse: (t: AutomationTemplate) => void;
+  hydratingUse: boolean;
 }) {
   return (
     <div>
@@ -239,7 +276,13 @@ function TemplateSection({
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {templates.map(template => (
-          <TemplateCard key={template.id} template={template} navigate={navigate} />
+          <TemplateCard
+            key={template.id}
+            template={template}
+            navigate={navigate}
+            onUse={onUse}
+            hydratingUse={hydratingUse}
+          />
         ))}
       </div>
     </div>
@@ -249,9 +292,13 @@ function TemplateSection({
 function TemplateCard({
   template,
   navigate,
+  onUse,
+  hydratingUse,
 }: {
   template: AutomationTemplate;
   navigate: ReturnType<typeof useNavigate>;
+  onUse: (t: AutomationTemplate) => void;
+  hydratingUse: boolean;
 }) {
   const catConfig = CATEGORY_CONFIG[template.category];
   const complexityConfig = COMPLEXITY_CONFIG[template.complexity];
@@ -326,7 +373,17 @@ function TemplateCard({
             </span>
           )}
         </div>
-        <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 transition-colors" />
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onUse(template);
+          }}
+          disabled={hydratingUse}
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium text-cyan-400 hover:bg-cyan-500/10 transition-colors disabled:opacity-50"
+        >
+          <Play className="w-3 h-3" />
+          Use
+        </button>
       </div>
     </div>
   );

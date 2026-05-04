@@ -132,12 +132,16 @@ export default function AutomationTemplateEditor() {
     }
   };
 
+  const validation = validateWorkflowDefinition(definition);
+
   const handlePublish = async () => {
     if (!template || !currentUser || !canManage) return;
 
-    const validation = validateWorkflowDefinition(definition);
     if (!validation.valid) {
-      setError(`Cannot publish: ${validation.errors.join(', ')}`);
+      // Show the first 3 distinct errors so the toast doesn't blow up
+      const summary = validation.errors.slice(0, 3).join(', ');
+      const more = validation.errors.length > 3 ? ` (+${validation.errors.length - 3} more)` : '';
+      setError(`Cannot publish: ${summary}${more}`);
       return;
     }
 
@@ -437,17 +441,30 @@ export default function AutomationTemplateEditor() {
             const Icon = NODE_ICONS[node.type];
             const colors = NODE_COLORS[node.type];
             const isSelected = selectedNodeId === node.id;
+            const nodeIssues = validation.nodeErrors[node.id] || [];
+            const hasErrors = nodeIssues.length > 0;
 
             return (
               <div
                 key={node.id}
                 className={`absolute w-60 rounded-lg border-2 ${colors.bg} ${
-                  isSelected ? 'border-cyan-500' : colors.border
+                  isSelected
+                    ? 'border-cyan-500'
+                    : hasErrors
+                      ? 'border-red-500/70'
+                      : colors.border
                 } cursor-move transition-shadow hover:shadow-lg`}
                 style={{ left: node.position.x, top: node.position.y, zIndex: isSelected ? 10 : 1 }}
                 onMouseDown={(e) => handleMouseDown(e, node.id)}
                 onClick={(e) => { e.stopPropagation(); if (!dragNode) setSelectedNodeId(node.id); }}
+                title={hasErrors ? nodeIssues.join('\n') : undefined}
               >
+                {hasErrors && (
+                  <div className="absolute -top-2 -left-2 z-10 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold shadow ring-2 ring-slate-900">
+                    <AlertCircle className="w-2.5 h-2.5" />
+                    {nodeIssues.length > 1 ? nodeIssues.length : ''}
+                  </div>
+                )}
                 <div className="p-3">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">

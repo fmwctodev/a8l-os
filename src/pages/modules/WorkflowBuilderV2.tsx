@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ReactFlowProvider, type ReactFlowInstance } from '@xyflow/react';
-import { ArrowLeft, Save, Upload, Play, History, Settings, BarChart3, Loader2, AlertCircle, LayoutGrid as Layout, Zap, Plus } from 'lucide-react';
+import { ArrowLeft, Save, Upload, Play, History, Settings, BarChart3, Loader2, AlertCircle, LayoutGrid as Layout, Zap, Plus, BookmarkPlus } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import {
@@ -23,6 +23,7 @@ import { WorkflowSettingsPanel } from '../../components/automation/builder/panel
 import { StatsOverlay } from '../../components/automation/builder/overlays/StatsOverlay';
 import { CanvasNodeStatsOverlay } from '../../components/automation/builder/overlays/CanvasNodeStatsOverlay';
 import { ValidationOverlay } from '../../components/automation/builder/overlays/ValidationOverlay';
+import { SaveAsTemplateModal } from '../../components/automation/SaveAsTemplateModal';
 import { TestWorkflowModal } from '../../components/automation/builder/modals/TestWorkflowModal';
 import { PublishWorkflowModal } from '../../components/automation/builder/modals/PublishWorkflowModal';
 
@@ -58,6 +59,7 @@ function WorkflowBuilderInner() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [showTestModal, setShowTestModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
+  const [showSaveAsTemplate, setShowSaveAsTemplate] = useState(false);
   const [workflowSettings, setWorkflowSettings] = useState<WorkflowSettings>(DEFAULT_SETTINGS);
 
   const rfInstanceRef = useRef<ReactFlowInstance | null>(null);
@@ -301,6 +303,15 @@ function WorkflowBuilderInner() {
             <Settings className="w-4 h-4 text-gray-500" />
           </button>
 
+          <button
+            onClick={() => setShowSaveAsTemplate(true)}
+            disabled={!canManage || builder.nodes.length === 0}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Save as Template"
+          >
+            <BookmarkPlus className="w-4 h-4 text-gray-500" />
+          </button>
+
           <div className="h-5 w-px bg-gray-200 mx-1" />
 
           <button
@@ -432,6 +443,20 @@ function WorkflowBuilderInner() {
           isPublishing={isPublishing}
           onPublish={handlePublish}
           onClose={() => setShowPublishModal(false)}
+        />
+      )}
+
+      {showSaveAsTemplate && workflow && (
+        <SaveAsTemplateModal
+          workflowId={workflow.id}
+          defaultName={workflow.name}
+          defaultDescription={workflow.description}
+          onClose={() => setShowSaveAsTemplate(false)}
+          onSuccess={(templateId) => {
+            showToast('success', 'Saved as template');
+            setShowSaveAsTemplate(false);
+            navigate(`/automation/templates/${templateId}`);
+          }}
         />
       )}
     </div>

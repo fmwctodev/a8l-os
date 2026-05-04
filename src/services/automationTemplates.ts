@@ -385,3 +385,74 @@ export async function updateTemplateMetadata(
   if (error) throw error;
   return data as AutomationTemplate;
 }
+
+/**
+ * Save the current state of a workflow as a brand-new org-private template.
+ *
+ * Pulls the workflow's published_definition (or draft_definition fallback)
+ * and seeds a new automation_template + version_1 from it. The template is
+ * created in 'published' status so it shows up in the Use Template flow
+ * immediately — the source workflow itself is unaffected.
+ */
+export async function saveWorkflowAsTemplate(args: {
+  orgId: string;
+  userId: string;
+  workflowId: string;
+  templateName: string;
+  templateDescription?: string | null;
+  category: string;
+  complexity?: 'simple' | 'moderate' | 'advanced';
+  channelTags?: string[];
+  estimatedTime?: string | null;
+}): Promise<AutomationTemplate> {
+  const { data: workflow, error: wfErr } = await supabase
+    .from('workflows')
+    .select('published_definition, draft_definition, name')
+    .eq('id', args.workflowId)
+    .maybeSingle();
+
+  if (wfErr) throw wfErr;
+  if (!workflow) throw new Error('Workflow not found');
+
+  const definition = (workflow.published_definition || workflow.draft_definition) as
+    | WorkflowDefinition
+    | null;
+
+  if (!definition || !definition.nodes || definition.nodes.length === 0) {
+    throw new Error('Workflow has no definition to save as a template');
+  }
+
+  const { data: template, error: tplErr } = await supabase
+    .from('automation_templates')
+    .insert({
+      org_id: args.orgId,
+      name: args.templateName,
+      description: args.templateDescription || null,
+      category: args.category,
+      complexity: args.complexity || 'simple',
+      channel_tags: args.channelTags || [],
+      estimated_time: args.estimatedTime || null,
+      is_system: false,
+      status: 'published',
+      published_at: new Date().toISOString(),
+      created_by_user_id: args.userId,
+    })
+    .select()
+    .single();
+
+  if (tplErr) throw tplErr;
+
+  const { error: verErr } = await supabase
+    .from('automation_template_versions')
+    .insert({
+      template_id: template.id,
+      version_number: 1,
+      definition_snapshot: definition,
+      change_summary: `Saved from workflow "${workflow.name}"`,
+      created_by_user_id: args.userId,
+    });
+
+  if (verErr) throw verErr;
+
+  return template as AutomationTemplate;
+}
