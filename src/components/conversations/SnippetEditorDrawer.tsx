@@ -8,7 +8,7 @@ import {
   resolveSnippetVariables,
 } from '../../services/snippets';
 import { getDepartments } from '../../services/departments';
-import { calculateSMSSegments } from '../../services/channels/twilio';
+import { calculateSMSSegments } from '../../lib/phoneUtils';
 import type { Snippet, SnippetScope, MessageChannel, Department, CustomField } from '../../types';
 
 interface SnippetEditorDrawerProps {

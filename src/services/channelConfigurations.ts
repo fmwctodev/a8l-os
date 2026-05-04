@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
-import type { ChannelConfiguration, TwilioConfig, GmailConfig, WebchatConfig } from '../types';
+import type { ChannelConfiguration, GmailConfig, WebchatConfig } from '../types';
 
-type ChannelType = 'twilio' | 'gmail' | 'webchat';
+type ChannelType = 'gmail' | 'webchat';
 
 export async function getChannelConfiguration(
   orgId: string,
@@ -33,7 +33,7 @@ export async function getAllChannelConfigurations(
 export async function saveChannelConfiguration(
   orgId: string,
   channelType: ChannelType,
-  config: TwilioConfig | GmailConfig | WebchatConfig,
+  config: GmailConfig | WebchatConfig,
   isActive: boolean
 ): Promise<ChannelConfiguration> {
   const { data, error } = await supabase

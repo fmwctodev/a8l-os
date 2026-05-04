@@ -3275,25 +3275,9 @@ async function sendSms(
 ): Promise<void> {
   if (!toPhone) return;
 
-  const { data: config } = await supabase
-    .from("channel_configurations")
-    .select("config")
-    .eq("organization_id", orgId)
-    .eq("channel_type", "twilio")
-    .eq("is_active", true)
-    .maybeSingle();
-
-  if (!config?.config) return;
-
-  const twilioConfig = config.config as {
-    account_sid: string;
-    auth_token: string;
-    phone_numbers: string[];
-  };
-
-  const fromNumber = twilioConfig.phone_numbers[0];
-  if (!fromNumber) return;
-
+  // Find or create the open conversation so the outbound message gets
+  // attached to it. plivo-sms-send doesn't auto-resolve this when called
+  // service-to-service, so we resolve it here and pass the id explicitly.
   const { data: existingConv } = await supabase
     .from("conversations")
     .select("id")
@@ -3304,7 +3288,7 @@ async function sendSms(
     .limit(1)
     .maybeSingle();
 
-  let conversationId = existingConv?.id;
+  let conversationId = existingConv?.id as string | undefined;
 
   if (!conversationId) {
     const { data: contact } = await supabase
@@ -3328,51 +3312,24 @@ async function sendSms(
     conversationId = newConv?.id;
   }
 
-  const { data: message } = await supabase
-    .from("messages")
-    .insert({
-      organization_id: orgId,
-      conversation_id: conversationId,
-      contact_id: contactId,
-      channel: "sms",
-      direction: "outbound",
-      body,
-      metadata: { from_number: fromNumber, to_number: toPhone, source: "workflow" },
-      status: "pending",
-      sent_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioConfig.account_sid}/Messages.json`;
-  const auth = btoa(`${twilioConfig.account_sid}:${twilioConfig.auth_token}`);
-
-  const response = await fetch(twilioUrl, {
+  await fetch(`${supabaseUrl}/functions/v1/plivo-sms-send`, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${serviceKey}`,
     },
-    body: new URLSearchParams({
-      From: fromNumber,
-      To: toPhone,
-      Body: body,
+    body: JSON.stringify({
+      orgId,
+      contactId,
+      conversationId,
+      toNumber: toPhone,
+      body,
+      metadata: { source: "workflow" },
     }),
   });
-
-  const result = await response.json();
-
-  if (response.ok) {
-    await supabase
-      .from("messages")
-      .update({ status: "sent", external_id: result.sid })
-      .eq("id", message.id);
-  } else {
-    await supabase
-      .from("messages")
-      .update({ status: "failed", metadata: { ...message.metadata, error: result.message } })
-      .eq("id", message.id);
-  }
 
   await supabase
     .from("conversations")

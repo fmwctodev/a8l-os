@@ -143,21 +143,23 @@ Deno.serve(async (req: Request) => {
           }
 
           try {
-            await fetch(`${supabaseUrl}/functions/v1/phone-twilio-messaging`, {
+            await fetch(`${supabaseUrl}/functions/v1/plivo-sms-send`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${supabaseServiceKey}`,
               },
               body: JSON.stringify({
-                org_id: followUp.org_id,
-                to: contact.phone,
+                orgId: followUp.org_id,
+                toNumber: contact.phone,
                 body: followUp.ai_draft_content,
-                message_id: msg?.id,
+                contactId: contact.id,
+                conversationId,
+                metadata: { source: "meeting-follow-up", message_id: msg?.id },
               }),
             });
-          } catch (twilioErr) {
-            console.warn(`[MeetFollowUpSender] Twilio send error:`, (twilioErr as Error).message);
+          } catch (plivoErr) {
+            console.warn(`[MeetFollowUpSender] Plivo send error:`, (plivoErr as Error).message);
           }
         } else {
           if (!contact.email) {

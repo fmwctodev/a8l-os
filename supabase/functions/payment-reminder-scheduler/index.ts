@@ -158,23 +158,24 @@ async function sendSmsReminder(
   const message = replaceTemplateVariables(settings.sms_template, variables);
 
   try {
-    const smsResponse = await fetch(`${supabaseUrl}/functions/v1/phone-twilio-messaging`, {
+    const smsResponse = await fetch(`${supabaseUrl}/functions/v1/plivo-sms-send`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${supabaseServiceKey}`,
       },
       body: JSON.stringify({
-        org_id: reminder.org_id,
-        to: contact.phone,
+        orgId: reminder.org_id,
+        toNumber: contact.phone,
         body: message,
-        contact_id: contact.id,
+        contactId: contact.id,
+        metadata: { source: 'payment-reminder' },
       }),
     });
 
     if (!smsResponse.ok) {
       const errorData = await smsResponse.json();
-      return { success: false, error: errorData.error?.message || 'SMS send failed' };
+      return { success: false, error: errorData.error || 'SMS send failed' };
     }
 
     return { success: true };

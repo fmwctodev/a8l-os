@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import type { Contact, MessageChannel } from '../types';
-import { normalizePhoneNumber } from './channels/twilio';
+import { normalizePhoneNumber } from '../lib/phoneUtils';
 
 export interface ContactMatch {
   contact: Contact;

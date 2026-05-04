@@ -171,16 +171,47 @@ Deno.serve(async (req: Request) => {
         return errorResponse("VAPI_ERROR", "Failed to create phone number", result.status, result.data as Record<string, unknown>);
       }
 
-      case "import_twilio_number": {
+      case "import_plivo_number": {
+        // Imports a Plivo-owned number into Vapi as a BYO SIP number.
+        // The caller must pass: { number, sipUsername, sipPassword,
+        // assistantId? }. Vapi's BYO SIP provider expects a SIP URI it can
+        // dial via Plivo, plus credentials for outbound calls.
         const config = payload.config as Record<string, unknown>;
+        const number = config.number as string | undefined;
+        const sipUsername = config.sipUsername as string | undefined;
+        const sipPassword = config.sipPassword as string | undefined;
+        const assistantId = config.assistantId as string | undefined;
+        if (!number || !sipUsername || !sipPassword) {
+          return errorResponse(
+            "MISSING_PARAMS",
+            "number, sipUsername, sipPassword required for Plivo import"
+          );
+        }
         const result = await vapiRequest(apiKey, "/phone-number", "POST", {
-          provider: "twilio",
-          ...config,
+          provider: "byo-phone-number",
+          name: (config.name as string) || number,
+          number,
+          numberE164CheckEnabled: true,
+          // BYO SIP credentials Vapi needs to place outbound calls via Plivo.
+          credential: {
+            provider: "byo-sip-trunk",
+            gateways: [{ ip: "phone.plivo.com" }],
+            outboundAuthenticationPlan: {
+              authUsername: sipUsername,
+              authPassword: sipPassword,
+            },
+          },
+          assistantId: assistantId || undefined,
         });
         if (result.status >= 200 && result.status < 300) {
           return successResponse(result.data);
         }
-        return errorResponse("VAPI_ERROR", "Failed to import Twilio number", result.status, result.data as Record<string, unknown>);
+        return errorResponse(
+          "VAPI_ERROR",
+          "Failed to import Plivo number",
+          result.status,
+          result.data as Record<string, unknown>
+        );
       }
 
       case "update_phone_number": {

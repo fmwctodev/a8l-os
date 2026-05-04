@@ -7,19 +7,19 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing authorization header" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!authHeader) return jsonResponse({ error: "Missing authorization header" }, 401);
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -28,25 +28,14 @@ Deno.serve(async (req: Request) => {
     );
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (authError || !user) return jsonResponse({ error: "Unauthorized" }, 401);
 
     const { data: userData } = await supabase
       .from("users")
       .select("organization_id")
       .eq("id", user.id)
       .maybeSingle();
-
-    if (!userData?.organization_id) {
-      return new Response(JSON.stringify({ error: "User not associated with organization" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!userData?.organization_id) return jsonResponse({ error: "No org" }, 403);
 
     const orgId = userData.organization_id;
     const { action, ...payload } = await req.json();
@@ -57,22 +46,21 @@ Deno.serve(async (req: Request) => {
           .from("phone_settings")
           .select(`
             *,
-            default_sms_number:twilio_numbers!phone_settings_default_sms_number_id_fkey(id, phone_number, friendly_name),
-            default_voice_number:twilio_numbers!phone_settings_default_voice_number_id_fkey(id, phone_number, friendly_name),
-            default_messaging_service:twilio_messaging_services(id, name, service_sid),
+            default_sms_number:plivo_numbers!phone_settings_default_sms_number_id_fkey(id, phone_number, friendly_name),
+            default_voice_number:plivo_numbers!phone_settings_default_voice_number_id_fkey(id, phone_number, friendly_name),
             default_routing_group:voice_routing_groups(id, name)
           `)
           .eq("org_id", orgId)
           .maybeSingle();
 
         const { data: connection } = await supabase
-          .from("twilio_connection")
-          .select("id, account_sid, status, connected_at, friendly_name")
+          .from("plivo_connection")
+          .select("id, auth_id, status, connected_at, friendly_name")
           .eq("org_id", orgId)
           .maybeSingle();
 
         const { count: numberCount } = await supabase
-          .from("twilio_numbers")
+          .from("plivo_numbers")
           .select("*", { count: "exact", head: true })
           .eq("org_id", orgId)
           .eq("status", "active");
@@ -82,39 +70,34 @@ Deno.serve(async (req: Request) => {
           .select("*")
           .eq("org_id", orgId);
 
-        const blockingReasons = [];
-        if (!connection || connection.status !== "connected") {
-          blockingReasons.push("Twilio not connected");
-        }
-        if (!numberCount || numberCount === 0) {
-          blockingReasons.push("No phone numbers configured");
-        }
+        const blockingReasons: string[] = [];
+        if (!connection || connection.status !== "connected") blockingReasons.push("Plivo not connected");
+        if (!numberCount || numberCount === 0) blockingReasons.push("No phone numbers configured");
 
-        return new Response(JSON.stringify({
+        return jsonResponse({
           settings,
-          connection: connection ? {
-            id: connection.id,
-            accountSid: connection.account_sid,
-            status: connection.status,
-            connectedAt: connection.connected_at,
-            friendlyName: connection.friendly_name,
-          } : null,
+          connection: connection
+            ? {
+                id: connection.id,
+                authId: connection.auth_id,
+                status: connection.status,
+                connectedAt: connection.connected_at,
+                friendlyName: connection.friendly_name,
+              }
+            : null,
           numberCount: numberCount || 0,
           webhookHealth,
           isConfigured: blockingReasons.length === 0,
           blockingReasons,
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       case "update": {
         const {
-          defaultSmsMode,
           defaultSmsNumberId,
-          defaultMessagingServiceId,
           defaultVoiceNumberId,
           defaultRoutingGroupId,
+          inboundSmsRoute,
           callTimeout,
           voicemailFallbackNumber,
           recordInboundCalls,
@@ -130,13 +113,11 @@ Deno.serve(async (req: Request) => {
           autoAppendOptOut,
         } = payload;
 
-        const updateData: any = {};
-
-        if (defaultSmsMode !== undefined) updateData.default_sms_mode = defaultSmsMode;
+        const updateData: Record<string, unknown> = {};
         if (defaultSmsNumberId !== undefined) updateData.default_sms_number_id = defaultSmsNumberId || null;
-        if (defaultMessagingServiceId !== undefined) updateData.default_messaging_service_id = defaultMessagingServiceId || null;
         if (defaultVoiceNumberId !== undefined) updateData.default_voice_number_id = defaultVoiceNumberId || null;
         if (defaultRoutingGroupId !== undefined) updateData.default_routing_group_id = defaultRoutingGroupId || null;
+        if (inboundSmsRoute !== undefined) updateData.inbound_sms_route = inboundSmsRoute;
         if (callTimeout !== undefined) updateData.call_timeout = callTimeout;
         if (voicemailFallbackNumber !== undefined) updateData.voicemail_fallback_number = voicemailFallbackNumber || null;
         if (recordInboundCalls !== undefined) updateData.record_inbound_calls = recordInboundCalls;
@@ -158,34 +139,26 @@ Deno.serve(async (req: Request) => {
           .select()
           .single();
 
-        if (error) {
-          return new Response(JSON.stringify({ error: error.message }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-
-        return new Response(JSON.stringify({ success: true, settings: data }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        if (error) return jsonResponse({ error: error.message }, 500);
+        return jsonResponse({ success: true, settings: data });
       }
 
       case "get-status": {
         const { data: connection } = await supabase
-          .from("twilio_connection")
+          .from("plivo_connection")
           .select("status")
           .eq("org_id", orgId)
           .maybeSingle();
 
         const { count: activeNumbers } = await supabase
-          .from("twilio_numbers")
+          .from("plivo_numbers")
           .select("*", { count: "exact", head: true })
           .eq("org_id", orgId)
           .eq("status", "active");
 
         const { data: settings } = await supabase
           .from("phone_settings")
-          .select("default_sms_mode, default_sms_number_id, default_messaging_service_id, default_voice_number_id")
+          .select("default_sms_number_id, default_voice_number_id, inbound_sms_route")
           .eq("org_id", orgId)
           .maybeSingle();
 
@@ -196,38 +169,29 @@ Deno.serve(async (req: Request) => {
 
         const isConnected = connection?.status === "connected";
         const hasNumbers = (activeNumbers || 0) > 0;
-        const hasDefaultSms = settings?.default_sms_mode === "messaging_service"
-          ? !!settings?.default_messaging_service_id
-          : !!settings?.default_sms_number_id;
+        const hasDefaultSms = !!settings?.default_sms_number_id;
 
-        const blockingReasons = [];
-        if (!isConnected) blockingReasons.push("Twilio not connected");
+        const blockingReasons: string[] = [];
+        if (!isConnected) blockingReasons.push("Plivo not connected");
         if (!hasNumbers) blockingReasons.push("No active phone numbers");
         if (!hasDefaultSms) blockingReasons.push("No default SMS sender configured");
 
-        return new Response(JSON.stringify({
+        return jsonResponse({
           isConfigured: blockingReasons.length === 0,
           isConnected,
           activeNumbers: activeNumbers || 0,
           hasDefaultSms,
           hasDefaultVoice: !!settings?.default_voice_number_id,
+          inboundSmsRoute: settings?.inbound_sms_route || "clara",
           webhookHealth,
           blockingReasons,
-        }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       default:
-        return new Response(JSON.stringify({ error: "Invalid action" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonResponse({ error: "Invalid action" }, 400);
     }
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: (error as Error).message }, 500);
   }
 });

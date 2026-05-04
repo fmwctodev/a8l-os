@@ -1,31 +1,37 @@
 import { fetchEdge } from '../lib/edgeFunction';
 
-export interface TwilioConnection {
+export interface PlivoConnection {
   id: string;
-  accountSid: string;
-  subaccountSid?: string;
+  authId: string;
+  subaccountAuthId?: string;
   friendlyName?: string;
   status: 'connected' | 'disconnected';
   connectedAt?: string;
+  vapiSipUsername?: string;
 }
 
-export interface ConnectTwilioParams {
-  accountSid: string;
+export interface ConnectPlivoParams {
+  authId: string;
   authToken: string;
-  subaccountSid?: string;
+  subaccountAuthId?: string;
   friendlyName?: string;
 }
 
-const SLUG = 'phone-twilio-connection';
+export interface SetVapiSipParams {
+  sipUsername: string;
+  sipPassword: string;
+}
 
-export async function getConnection(): Promise<TwilioConnection | null> {
+const SLUG = 'plivo-connection';
+
+export async function getConnection(): Promise<PlivoConnection | null> {
   const response = await fetchEdge(SLUG, { body: { action: 'get' } });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error);
   return result.connection;
 }
 
-export async function connectTwilio(params: ConnectTwilioParams): Promise<TwilioConnection> {
+export async function connectPlivo(params: ConnectPlivoParams): Promise<PlivoConnection> {
   const response = await fetchEdge(SLUG, { body: { action: 'connect', ...params } });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error);
@@ -39,8 +45,14 @@ export async function testConnection(): Promise<{ success: boolean; status: stri
   return result;
 }
 
-export async function disconnectTwilio(): Promise<void> {
+export async function disconnectPlivo(): Promise<void> {
   const response = await fetchEdge(SLUG, { body: { action: 'disconnect' } });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error);
+}
+
+export async function setVapiSipCredentials(params: SetVapiSipParams): Promise<void> {
+  const response = await fetchEdge(SLUG, { body: { action: 'set_vapi_sip', ...params } });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error);
 }

@@ -180,75 +180,32 @@ async function sendSmsNotification(
   review: Review,
   contact: Contact | null,
   orgName: string,
-  supabase: ReturnType<typeof createClient>
+  _supabase: ReturnType<typeof createClient>
 ): Promise<void> {
-  const { data: connection } = await supabase
-    .from("twilio_connection")
-    .select("account_sid, auth_token_encrypted, status")
-    .eq("org_id", review.organization_id)
-    .maybeSingle();
-
-  if (!connection || connection.status !== "connected") {
-    console.log("Twilio not connected for org, skipping SMS notification");
-    return;
-  }
-
-  let authToken: string;
-  try {
-    authToken = await decrypt(connection.auth_token_encrypted);
-  } catch {
-    console.error("Failed to decrypt Twilio auth token");
-    return;
-  }
-
-  const accountSid = connection.account_sid;
-
-  const { data: defaultNum } = await supabase
-    .from("twilio_numbers")
-    .select("phone_number")
-    .eq("org_id", review.organization_id)
-    .eq("is_default_sms", true)
-    .eq("status", "active")
-    .maybeSingle();
-
-  let fromNumber = defaultNum?.phone_number;
-  if (!fromNumber) {
-    const { data: anyNum } = await supabase
-      .from("twilio_numbers")
-      .select("phone_number")
-      .eq("org_id", review.organization_id)
-      .eq("status", "active")
-      .limit(1)
-      .maybeSingle();
-    fromNumber = anyNum?.phone_number;
-  }
-
-  if (!fromNumber) {
-    console.log("No active Twilio number found for org, skipping SMS notification");
-    return;
-  }
-
   const customerName = contact
     ? `${contact.first_name} ${contact.last_name}`
     : review.reviewer_name;
 
   const message = `[${orgName}] ALERT: ${review.rating}-star review from ${customerName}. "${(review.comment || "No comment").substring(0, 100)}${(review.comment?.length || 0) > 100 ? "..." : ""}" Please follow up ASAP.`;
 
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
   for (const recipient of recipients) {
     if (!recipient.phone) continue;
-
     try {
-      const auth = btoa(`${accountSid}:${authToken}`);
-      await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+      // plivo-sms-send resolves the org's default sms number itself.
+      await fetch(`${supabaseUrl}/functions/v1/plivo-sms-send`, {
         method: "POST",
         headers: {
-          Authorization: `Basic ${auth}`,
-          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${serviceKey}`,
         },
-        body: new URLSearchParams({
-          To: recipient.phone,
-          From: fromNumber,
-          Body: message,
+        body: JSON.stringify({
+          orgId: review.organization_id,
+          toNumber: recipient.phone,
+          body: message,
+          metadata: { source: "review-alert", review_id: review.id },
         }),
       });
     } catch (error) {

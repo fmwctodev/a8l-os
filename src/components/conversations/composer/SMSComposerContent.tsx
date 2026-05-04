@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronDown, FileText, Paperclip, X, Image, File, AlertCircle, ClipboardList } from 'lucide-react';
-import { calculateSMSSegments } from '../../../services/channels/twilio';
+import { calculateSMSSegments } from '../../../lib/phoneUtils';
 import { ComposerToolbar } from './ComposerToolbar';
 import { FormSurveyPicker, type PickerItem } from './FormSurveyPicker';
 import { MMS_MAX_FILES, MMS_MAX_FILE_SIZE } from '../../../services/sendSms';

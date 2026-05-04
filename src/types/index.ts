@@ -492,18 +492,11 @@ export interface InboxEvent {
 export interface ChannelConfiguration {
   id: string;
   organization_id: string;
-  channel_type: 'twilio' | 'gmail' | 'webchat';
-  config: TwilioConfig | GmailConfig | WebchatConfig;
+  channel_type: 'gmail' | 'webchat';
+  config: GmailConfig | WebchatConfig;
   is_active: boolean;
   created_at: string;
   updated_at: string;
-}
-
-export interface TwilioConfig {
-  account_sid: string;
-  auth_token: string;
-  phone_numbers: string[];
-  webhook_url?: string;
 }
 
 export interface GmailConfig {

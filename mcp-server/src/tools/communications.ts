@@ -245,15 +245,15 @@ export function registerCommunicationsTools(server: McpServer): void {
   );
 
   server.tool(
-    'phone_twilio_numbers',
-    'List and manage Twilio phone numbers. Actions: list, buy, release',
+    'plivo_numbers',
+    'List, sync, assign, or disable Plivo phone numbers. Actions: list, sync, update_assignment, delete',
     {
       action: z.string(),
       payload: z.record(z.unknown()).optional(),
     },
     async ({ action, payload }) => {
       try {
-        const data = await callEdgeFunction('phone-twilio-numbers', { action, ...payload });
+        const data = await callEdgeFunction('plivo-numbers', { action, ...payload });
         return toolResult(data);
       } catch (e) {
         return toolError(e);
@@ -263,7 +263,7 @@ export function registerCommunicationsTools(server: McpServer): void {
 
   server.tool(
     'phone_settings',
-    'Manage phone system settings. Actions: get, update',
+    'Manage phone system settings. Actions: get, update, get-status',
     {
       action: z.string(),
       payload: z.record(z.unknown()).optional(),
@@ -279,12 +279,12 @@ export function registerCommunicationsTools(server: McpServer): void {
   );
 
   server.tool(
-    'phone_twilio_connection',
-    'Manage Twilio account connection and configuration',
+    'plivo_connection',
+    'Manage Plivo account connection. Actions: connect, test, disconnect, get, set_vapi_sip',
     { action: z.string(), payload: z.record(z.unknown()).optional() },
     async ({ action, payload }) => {
       try {
-        const data = await callEdgeFunction('phone-twilio-connection', { action, ...payload });
+        const data = await callEdgeFunction('plivo-connection', { action, ...payload });
         return toolResult(data);
       } catch (e) {
         return toolError(e);
@@ -293,12 +293,20 @@ export function registerCommunicationsTools(server: McpServer): void {
   );
 
   server.tool(
-    'phone_twilio_messaging',
-    'Manage Twilio messaging configuration (SMS/MMS)',
-    { action: z.string(), payload: z.record(z.unknown()).optional() },
-    async ({ action, payload }) => {
+    'plivo_sms_send',
+    'Send an outbound SMS or MMS via Plivo',
+    {
+      orgId: z.string(),
+      toNumber: z.string(),
+      body: z.string(),
+      fromNumber: z.string().optional(),
+      contactId: z.string().optional(),
+      conversationId: z.string().optional(),
+      mediaUrls: z.array(z.string()).optional(),
+    },
+    async (params) => {
       try {
-        const data = await callEdgeFunction('phone-twilio-messaging', { action, ...payload });
+        const data = await callEdgeFunction('plivo-sms-send', params);
         return toolResult(data);
       } catch (e) {
         return toolError(e);
@@ -351,19 +359,6 @@ export function registerCommunicationsTools(server: McpServer): void {
     },
   );
 
-  server.tool(
-    'twilio_connection_health',
-    'Check health and status of the Twilio connection',
-    {},
-    async () => {
-      try {
-        const data = await callEdgeFunction('twilio-connection-health', {});
-        return toolResult(data);
-      } catch (e) {
-        return toolError(e);
-      }
-    },
-  );
 
   server.tool(
     'google_chat_api',
