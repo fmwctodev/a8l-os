@@ -54,6 +54,10 @@ export interface SyncResult {
   added: number;
   synced: number;
   total: number;
+  webhooks_configured: number;
+  webhooks_failed: number;
+  app_id?: string | null;
+  errors?: string[];
 }
 
 export async function syncNumbers(): Promise<SyncResult> {
@@ -74,4 +78,14 @@ export async function updateAssignment(params: UpdateAssignmentParams): Promise<
 
 export async function deleteNumber(numberId: string): Promise<void> {
   await callEdge('delete', { numberId });
+}
+
+/**
+ * Force-PATCH this number's Plivo Application assignment so its inbound
+ * SMS / voice webhooks point at our edge functions. Use this when the
+ * number's `webhook_configured` is false (sync-time failure or someone
+ * changed the Application in the Plivo console).
+ */
+export async function configureWebhooksForNumber(numberId: string): Promise<void> {
+  await callEdge('configure_webhooks_for_number', { numberId });
 }

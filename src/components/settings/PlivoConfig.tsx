@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Eye, EyeOff, Copy, Check, AlertCircle, Loader2,
   Phone, MessageSquare, RefreshCw, User as UserIcon, Bot, Trash2,
+  ChevronDown, ChevronRight, Wifi, WifiOff,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
@@ -10,7 +11,7 @@ import {
   setVapiSipCredentials, type PlivoConnection,
 } from '../../services/plivoConnection';
 import {
-  getNumbers, syncNumbers, updateAssignment, deleteNumber,
+  getNumbers, syncNumbers, updateAssignment, deleteNumber, configureWebhooksForNumber,
   type PlivoNumber, type PlivoSmsRoute,
 } from '../../services/plivoNumbers';
 
@@ -40,6 +41,8 @@ export function PlivoConfig() {
   const [sipUsername, setSipUsername] = useState('');
   const [sipPassword, setSipPassword] = useState('');
   const [showSipPassword, setShowSipPassword] = useState(false);
+  const [showWebhookUrls, setShowWebhookUrls] = useState(false);
+  const [reconfiguringId, setReconfiguringId] = useState<string | null>(null);
 
   const webhookBaseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
 
@@ -126,12 +129,29 @@ export function PlivoConfig() {
     setSubmitting(true);
     try {
       const r = await syncNumbers();
-      flash(`Synced ${r.added} new + ${r.synced} existing (${r.total} total)`);
+      const webhookSummary = r.webhooks_failed > 0
+        ? ` · ${r.webhooks_configured} webhook(s) configured, ${r.webhooks_failed} failed`
+        : ` · ${r.webhooks_configured} webhook(s) configured`;
+      flash(`Synced ${r.added} new + ${r.synced} existing (${r.total} total)${webhookSummary}`,
+        r.webhooks_failed > 0 ? 'error' : 'success');
       await load();
     } catch (e) {
       flash(e instanceof Error ? e.message : 'Sync failed', 'error');
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleReconfigureWebhooks(num: PlivoNumber) {
+    setReconfiguringId(num.id);
+    try {
+      await configureWebhooksForNumber(num.id);
+      flash(`Webhooks reconfigured for ${num.phone_number}`);
+      await load();
+    } catch (e) {
+      flash(e instanceof Error ? e.message : 'Reconfigure failed', 'error');
+    } finally {
+      setReconfiguringId(null);
     }
   }
 
@@ -331,7 +351,7 @@ export function PlivoConfig() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-medium text-gray-900">{num.phone_number}</div>
-                      <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-3">
+                      <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-3 flex-wrap">
                         {num.capabilities.sms && <span className="inline-flex items-center gap-1"><MessageSquare size={11} /> SMS</span>}
                         {num.capabilities.mms && <span className="inline-flex items-center gap-1"><MessageSquare size={11} /> MMS</span>}
                         {num.capabilities.voice && <span className="inline-flex items-center gap-1"><Phone size={11} /> Voice</span>}
@@ -339,6 +359,22 @@ export function PlivoConfig() {
                         <span className={`px-1.5 py-0.5 rounded ${num.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
                           {num.status}
                         </span>
+                        {num.webhook_configured ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700" title="Webhooks point at our edge functions">
+                            <Wifi size={11} /> Webhooks configured
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-2 px-1.5 py-0.5 rounded bg-amber-50 text-amber-700" title="Webhook URLs are not yet configured on this number">
+                            <WifiOff size={11} /> Webhooks pending
+                            <button
+                              onClick={() => handleReconfigureWebhooks(num)}
+                              disabled={reconfiguringId === num.id}
+                              className="underline hover:no-underline disabled:opacity-50"
+                            >
+                              {reconfiguringId === num.id ? 'Configuring…' : 'Configure now'}
+                            </button>
+                          </span>
+                        )}
                       </div>
                     </div>
                     <button onClick={() => handleDelete(num)} disabled={submitting}
@@ -406,35 +442,50 @@ export function PlivoConfig() {
         </div>
       )}
 
-      {/* Webhook URLs */}
+      {/* Webhook URLs — auto-configured on sync; collapsed by default */}
       {connection?.status === 'connected' && (
         <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-          <div>
-            <h4 className="text-sm font-medium text-gray-900">Webhook URLs</h4>
-            <p className="text-xs text-gray-500 mt-1">
-              Paste these into your Plivo applications and SIP endpoint config.
-            </p>
-          </div>
-
-          {[
-            { label: 'Inbound SMS', path: '/plivo-sms-inbound', key: 'sms' },
-            { label: 'SMS Status Callback', path: '/plivo-sms-status', key: 'sms-status' },
-            { label: 'Inbound Voice (Answer URL)', path: '/plivo-voice-answer', key: 'voice' },
-            { label: 'Voice Status / Hangup Callback', path: '/plivo-voice-status', key: 'voice-status' },
-          ].map(w => (
-            <div key={w.key}>
-              <label className="block text-xs font-medium text-gray-500 mb-1">{w.label}</label>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600 overflow-x-auto">
-                  {webhookBaseUrl}{w.path}
-                </code>
-                <button onClick={() => copy(`${webhookBaseUrl}${w.path}`, w.key)}
-                  className="p-2 text-gray-400 hover:text-gray-600">
-                  {copied === w.key ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
-                </button>
-              </div>
+          <div className="flex items-start gap-2">
+            <Check size={16} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-gray-900">Webhooks auto-configured on sync</h4>
+              <p className="text-xs text-gray-500 mt-1">
+                When you click <strong>Sync from Plivo</strong>, each number is automatically pointed at our
+                edge functions via a Plivo Application named <code className="px-1 bg-gray-100 rounded">Autom8ion Lab — Webhooks</code>.
+                You don't need to set anything in the Plivo console.
+              </p>
             </div>
-          ))}
+          </div>
+          <button
+            onClick={() => setShowWebhookUrls(!showWebhookUrls)}
+            className="text-xs text-blue-600 hover:text-blue-800 inline-flex items-center gap-1"
+          >
+            {showWebhookUrls ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            {showWebhookUrls ? 'Hide URLs' : 'Show URLs (advanced / fallback)'}
+          </button>
+          {showWebhookUrls && (
+            <div className="space-y-2 pt-2 border-t border-gray-100">
+              {[
+                { label: 'Inbound SMS', path: '/plivo-sms-inbound', key: 'sms' },
+                { label: 'SMS Status Callback', path: '/plivo-sms-status', key: 'sms-status' },
+                { label: 'Inbound Voice (Answer URL)', path: '/plivo-voice-answer', key: 'voice' },
+                { label: 'Voice Status / Hangup Callback', path: '/plivo-voice-status', key: 'voice-status' },
+              ].map(w => (
+                <div key={w.key}>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{w.label}</label>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded text-xs text-gray-600 overflow-x-auto">
+                      {webhookBaseUrl}{w.path}
+                    </code>
+                    <button onClick={() => copy(`${webhookBaseUrl}${w.path}`, w.key)}
+                      className="p-2 text-gray-400 hover:text-gray-600">
+                      {copied === w.key ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

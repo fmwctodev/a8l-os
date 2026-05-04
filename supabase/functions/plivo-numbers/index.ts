@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 const ENCRYPTION_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!.slice(0, 32);
+const PLIVO_APP_NAME = "Autom8ion Lab — Webhooks";
 
 async function decrypt(encryptedText: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -32,15 +33,32 @@ interface PlivoNumber {
   resource_uri?: string;
 }
 
+function basicAuth(authId: string, authToken: string): string {
+  return `Basic ${btoa(`${authId}:${authToken}`)}`;
+}
+
+function buildAppUrls() {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!.replace(/\/$/, "");
+  return {
+    answer_url: `${supabaseUrl}/functions/v1/plivo-voice-answer`,
+    answer_method: "POST",
+    hangup_url: `${supabaseUrl}/functions/v1/plivo-voice-status`,
+    hangup_method: "POST",
+    message_url: `${supabaseUrl}/functions/v1/plivo-sms-inbound`,
+    message_method: "POST",
+    fallback_answer_url: `${supabaseUrl}/functions/v1/plivo-voice-answer`,
+    default_number_app: true,
+    app_name: PLIVO_APP_NAME,
+  };
+}
+
 async function fetchPlivoNumbers(authId: string, authToken: string): Promise<PlivoNumber[]> {
   const all: PlivoNumber[] = [];
   let offset = 0;
   const limit = 100;
   for (;;) {
     const url = `https://api.plivo.com/v1/Account/${authId}/Number/?limit=${limit}&offset=${offset}`;
-    const res = await fetch(url, {
-      headers: { Authorization: `Basic ${btoa(`${authId}:${authToken}`)}` },
-    });
+    const res = await fetch(url, { headers: { Authorization: basicAuth(authId, authToken) } });
     if (!res.ok) break;
     const data = await res.json();
     const objects = (data.objects || []) as PlivoNumber[];
@@ -50,6 +68,82 @@ async function fetchPlivoNumbers(authId: string, authToken: string): Promise<Pli
     if (offset > 1000) break;
   }
   return all;
+}
+
+/**
+ * Ensure a single Plivo Application exists for this org with our 4 webhook
+ * URLs. If knownAppId is supplied, PATCH the existing app with the latest
+ * URLs (handles env URL drift). Otherwise POST a new one and return its id.
+ *
+ * Plivo Application API docs:
+ *   POST   /v1/Account/{auth_id}/Application/         — create
+ *   POST   /v1/Account/{auth_id}/Application/{app}/   — update
+ *
+ * Returns the resolved app_id or null on hard failure.
+ */
+async function ensurePlivoApplication(
+  authId: string,
+  authToken: string,
+  knownAppId: string | null
+): Promise<{ appId: string | null; error: string | null }> {
+  const urls = buildAppUrls();
+  const headers = { Authorization: basicAuth(authId, authToken), "Content-Type": "application/json" };
+
+  if (knownAppId) {
+    // Verify the app still exists, then PATCH the URLs in case they drifted.
+    const verifyRes = await fetch(
+      `https://api.plivo.com/v1/Account/${authId}/Application/${knownAppId}/`,
+      { headers: { Authorization: basicAuth(authId, authToken) } }
+    );
+    if (verifyRes.ok) {
+      const updateRes = await fetch(
+        `https://api.plivo.com/v1/Account/${authId}/Application/${knownAppId}/`,
+        { method: "POST", headers, body: JSON.stringify(urls) }
+      );
+      if (updateRes.ok || updateRes.status === 202) {
+        return { appId: knownAppId, error: null };
+      }
+      const text = await updateRes.text();
+      return { appId: knownAppId, error: `Update failed: ${updateRes.status} ${text.slice(0, 200)}` };
+    }
+    // Fall through and create a new one if the cached id no longer exists
+  }
+
+  const createRes = await fetch(
+    `https://api.plivo.com/v1/Account/${authId}/Application/`,
+    { method: "POST", headers, body: JSON.stringify(urls) }
+  );
+  const created = await createRes.json().catch(() => ({}));
+  if (!createRes.ok && createRes.status !== 201 && createRes.status !== 202) {
+    return { appId: null, error: `Create failed: ${createRes.status} ${JSON.stringify(created).slice(0, 200)}` };
+  }
+  const appId = created.app_id || created.id || (created.api_id && created.app_id) || null;
+  if (!appId) return { appId: null, error: "Plivo created the app but returned no app_id" };
+  return { appId, error: null };
+}
+
+/**
+ * Assign a Plivo Application to a phone number so inbound SMS / voice route
+ * to our edge functions. Plivo's number-update endpoint accepts an `app_id`
+ * field that re-points the number's webhook configuration in one shot.
+ */
+async function assignAppToNumber(
+  authId: string,
+  authToken: string,
+  e164: string,
+  appId: string
+): Promise<{ ok: boolean; error: string | null }> {
+  const res = await fetch(
+    `https://api.plivo.com/v1/Account/${authId}/Number/${encodeURIComponent(e164)}/`,
+    {
+      method: "POST",
+      headers: { Authorization: basicAuth(authId, authToken), "Content-Type": "application/json" },
+      body: JSON.stringify({ app_id: appId }),
+    }
+  );
+  if (res.ok || res.status === 202) return { ok: true, error: null };
+  const text = await res.text().catch(() => "");
+  return { ok: false, error: `${res.status} ${text.slice(0, 200)}` };
 }
 
 Deno.serve(async (req: Request) => {
@@ -96,7 +190,7 @@ Deno.serve(async (req: Request) => {
       case "sync": {
         const { data: conn } = await supabase
           .from("plivo_connection")
-          .select("auth_id, auth_token_encrypted, status")
+          .select("auth_id, auth_token_encrypted, status, plivo_app_id")
           .eq("org_id", orgId)
           .maybeSingle();
         if (!conn || conn.status !== "connected") {
@@ -105,8 +199,27 @@ Deno.serve(async (req: Request) => {
         const authToken = await decrypt(conn.auth_token_encrypted);
         const remote = await fetchPlivoNumbers(conn.auth_id, authToken);
 
+        // 1) Ensure the org's webhook Application exists / is up-to-date
+        const { appId, error: appErr } = await ensurePlivoApplication(
+          conn.auth_id,
+          authToken,
+          conn.plivo_app_id
+        );
+        if (appErr) console.warn(`plivo-numbers sync: app ensure warning: ${appErr}`);
+        if (appId && appId !== conn.plivo_app_id) {
+          await supabase
+            .from("plivo_connection")
+            .update({ plivo_app_id: appId })
+            .eq("org_id", orgId);
+        }
+
+        // 2) Upsert + assign the app to each number
         let synced = 0;
         let added = 0;
+        let webhooksConfigured = 0;
+        let webhooksFailed = 0;
+        const errors: string[] = [];
+
         for (const n of remote) {
           const { data: existing } = await supabase
             .from("plivo_numbers")
@@ -114,6 +227,18 @@ Deno.serve(async (req: Request) => {
             .eq("org_id", orgId)
             .eq("phone_number", n.number)
             .maybeSingle();
+
+          let webhookOk = false;
+          if (appId) {
+            const r = await assignAppToNumber(conn.auth_id, authToken, n.number, appId);
+            webhookOk = r.ok;
+            if (!r.ok) {
+              webhooksFailed++;
+              errors.push(`${n.number}: ${r.error}`);
+            } else {
+              webhooksConfigured++;
+            }
+          }
 
           const row = {
             org_id: orgId,
@@ -127,6 +252,7 @@ Deno.serve(async (req: Request) => {
             },
             country_code: n.region || null,
             status: "active" as const,
+            webhook_configured: webhookOk,
             updated_at: new Date().toISOString(),
           };
 
@@ -138,7 +264,58 @@ Deno.serve(async (req: Request) => {
             added++;
           }
         }
-        return jsonResponse({ success: true, synced, added, total: remote.length });
+        return jsonResponse({
+          success: true,
+          synced,
+          added,
+          total: remote.length,
+          webhooks_configured: webhooksConfigured,
+          webhooks_failed: webhooksFailed,
+          app_id: appId,
+          errors: errors.length > 0 ? errors.slice(0, 5) : undefined,
+        });
+      }
+
+      case "configure_webhooks_for_number": {
+        const { numberId } = body;
+        if (!numberId) return jsonResponse({ error: "numberId required" }, 400);
+
+        const { data: conn } = await supabase
+          .from("plivo_connection")
+          .select("auth_id, auth_token_encrypted, status, plivo_app_id")
+          .eq("org_id", orgId)
+          .maybeSingle();
+        if (!conn || conn.status !== "connected") {
+          return jsonResponse({ error: "Plivo not connected" }, 400);
+        }
+        const authToken = await decrypt(conn.auth_token_encrypted);
+
+        const { data: num } = await supabase
+          .from("plivo_numbers")
+          .select("phone_number")
+          .eq("id", numberId)
+          .eq("org_id", orgId)
+          .maybeSingle();
+        if (!num) return jsonResponse({ error: "Number not found" }, 404);
+
+        const { appId, error: appErr } = await ensurePlivoApplication(
+          conn.auth_id,
+          authToken,
+          conn.plivo_app_id
+        );
+        if (!appId) return jsonResponse({ error: appErr || "Could not ensure Plivo app" }, 500);
+        if (appId !== conn.plivo_app_id) {
+          await supabase.from("plivo_connection").update({ plivo_app_id: appId }).eq("org_id", orgId);
+        }
+
+        const r = await assignAppToNumber(conn.auth_id, authToken, num.phone_number, appId);
+        await supabase
+          .from("plivo_numbers")
+          .update({ webhook_configured: r.ok, updated_at: new Date().toISOString() })
+          .eq("id", numberId);
+
+        if (!r.ok) return jsonResponse({ error: r.error || "Plivo update failed" }, 500);
+        return jsonResponse({ success: true });
       }
 
       case "update_assignment": {
