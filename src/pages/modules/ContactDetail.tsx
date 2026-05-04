@@ -11,7 +11,8 @@ import { getDepartments } from '../../services/departments';
 import { getUsers } from '../../services/users';
 import { getMeetingTranscriptionsByContact } from '../../services/meetingTranscriptions';
 import type { Contact, ContactNote, ContactTask, Tag, CustomField, ContactCustomFieldValue, Department, User, MeetingTranscription } from '../../types';
-import { ArrowLeft, Loader2, AlertCircle, Mail, Phone, Building2, MapPin, Calendar, User as UserIcon, CreditCard as Edit2, Trash2, Archive, RotateCcw, MoreVertical, Clock } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertCircle, Mail, Phone, Building2, MapPin, Calendar, User as UserIcon, CreditCard as Edit2, Trash2, Archive, RotateCcw, MoreVertical, Clock, Workflow as WorkflowIcon } from 'lucide-react';
+import { AddToWorkflowModal } from '../../components/automation/AddToWorkflowModal';
 import { ContactModal } from '../../components/contacts/ContactModal';
 import { ContactOverviewTab } from '../../components/contacts/ContactOverviewTab';
 import { ContactNotesTab } from '../../components/contacts/ContactNotesTab';
@@ -50,6 +51,7 @@ export function ContactDetail() {
   const [error, setError] = useState<string | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const [showAddToWorkflow, setShowAddToWorkflow] = useState(false);
   const [filesCount, setFilesCount] = useState(0);
   const timelineAbortRef = useRef(false);
 
@@ -320,13 +322,22 @@ export function ContactDetail() {
         </div>
         <div className="flex items-center gap-2">
           {canEdit && contact.status === 'active' && (
-            <button
-              onClick={() => setIsEditModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
-            >
-              <Edit2 className="w-4 h-4" />
-              Edit
-            </button>
+            <>
+              <button
+                onClick={() => setShowAddToWorkflow(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
+              >
+                <WorkflowIcon className="w-4 h-4" />
+                Add to Workflow
+              </button>
+              <button
+                onClick={() => setIsEditModalOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 transition-colors"
+              >
+                <Edit2 className="w-4 h-4" />
+                Edit
+              </button>
+            </>
           )}
           <div className="relative">
             <button
@@ -541,6 +552,14 @@ export function ContactDetail() {
           </div>
         </div>
       </div>
+
+      {showAddToWorkflow && (
+        <AddToWorkflowModal
+          contactIds={[contact.id]}
+          contactNameHint={`${contact.first_name} ${contact.last_name || ''}`.trim()}
+          onClose={() => setShowAddToWorkflow(false)}
+        />
+      )}
 
       {isEditModalOpen && (
         <ContactModal
