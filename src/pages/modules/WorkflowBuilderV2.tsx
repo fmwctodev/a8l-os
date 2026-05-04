@@ -21,6 +21,7 @@ import { NodeConfigDrawer } from '../../components/automation/builder/drawers/No
 import { VersionHistoryPanel } from '../../components/automation/builder/panels/VersionHistoryPanel';
 import { WorkflowSettingsPanel } from '../../components/automation/builder/panels/WorkflowSettingsPanel';
 import { StatsOverlay } from '../../components/automation/builder/overlays/StatsOverlay';
+import { CanvasNodeStatsOverlay } from '../../components/automation/builder/overlays/CanvasNodeStatsOverlay';
 import { TestWorkflowModal } from '../../components/automation/builder/modals/TestWorkflowModal';
 import { PublishWorkflowModal } from '../../components/automation/builder/modals/PublishWorkflowModal';
 
@@ -339,10 +340,13 @@ function WorkflowBuilderInner() {
           />
 
           {builder.statsMode && workflow && (
-            <StatsOverlay
-              workflowId={workflow.id}
-              nodes={builder.nodes}
-            />
+            <>
+              <StatsOverlay
+                workflowId={workflow.id}
+                nodes={builder.nodes}
+              />
+              <CanvasNodeStatsOverlay workflowId={workflow.id} />
+            </>
           )}
 
           {builder.nodes.length === 0 && (

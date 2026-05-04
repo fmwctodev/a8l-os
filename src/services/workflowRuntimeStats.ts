@@ -173,6 +173,126 @@ export async function getWorkflowHealthRows(orgId: string): Promise<WorkflowHeal
   });
 }
 
+export interface WorkflowNodeStats {
+  /** Number of distinct enrollments that have entered this node. */
+  entered: number;
+  /** Number of distinct enrollments that fully completed this node (node_completed). */
+  completed: number;
+  /** Number of node_started events without a matching node_completed (errored or in-progress). */
+  inProgress: number;
+  /** Number of times an action errored at this node. */
+  errored: number;
+  /** Average duration in milliseconds across completed runs of this node. */
+  avgDurationMs: number | null;
+  /** Most recent execution_log timestamp for this node. */
+  lastExecutedAt: string | null;
+}
+
+/**
+ * Aggregates workflow_execution_logs by node_id for a single workflow.
+ *
+ * Returns a map of node_id → stats, suitable for the canvas overlay badge.
+ * The map only contains nodes that have at least one log entry — nodes that
+ * have never run won't appear (the overlay component should treat missing
+ * keys as zero across the board).
+ */
+export async function getWorkflowNodeStats(
+  workflowId: string,
+  options: { sinceHours?: number } = {}
+): Promise<Record<string, WorkflowNodeStats>> {
+  const sinceIso = options.sinceHours
+    ? new Date(Date.now() - options.sinceHours * 3600000).toISOString()
+    : null;
+
+  const { data: enrollments } = await supabase
+    .from('workflow_enrollments')
+    .select('id')
+    .eq('workflow_id', workflowId);
+
+  const enrollmentIds = (enrollments || []).map((e) => e.id);
+  if (enrollmentIds.length === 0) return {};
+
+  let logsQuery = supabase
+    .from('workflow_execution_logs')
+    .select('enrollment_id, node_id, event_type, duration_ms, created_at')
+    .in('enrollment_id', enrollmentIds);
+
+  if (sinceIso) {
+    logsQuery = logsQuery.gte('created_at', sinceIso);
+  }
+
+  const { data: logs } = await logsQuery;
+
+  const byNode = new Map<
+    string,
+    {
+      enteredEnrollments: Set<string>;
+      completedEnrollments: Set<string>;
+      erroredCount: number;
+      durations: number[];
+      lastAt: string | null;
+    }
+  >();
+
+  for (const log of logs || []) {
+    if (!log.node_id) continue;
+
+    const entry =
+      byNode.get(log.node_id) ||
+      {
+        enteredEnrollments: new Set<string>(),
+        completedEnrollments: new Set<string>(),
+        erroredCount: 0,
+        durations: [] as number[],
+        lastAt: null as string | null,
+      };
+
+    if (log.event_type === 'node_started' || log.event_type === 'trigger_fired') {
+      entry.enteredEnrollments.add(log.enrollment_id);
+    }
+    if (log.event_type === 'node_completed') {
+      entry.completedEnrollments.add(log.enrollment_id);
+      if (typeof log.duration_ms === 'number') {
+        entry.durations.push(log.duration_ms);
+      }
+    }
+    if (
+      log.event_type === 'node_failed' ||
+      log.event_type === 'node_errored' ||
+      log.event_type === 'action_failed'
+    ) {
+      entry.erroredCount += 1;
+    }
+
+    if (!entry.lastAt || log.created_at > entry.lastAt) {
+      entry.lastAt = log.created_at;
+    }
+
+    byNode.set(log.node_id, entry);
+  }
+
+  const out: Record<string, WorkflowNodeStats> = {};
+  for (const [nodeId, entry] of byNode.entries()) {
+    const entered = entry.enteredEnrollments.size;
+    const completed = entry.completedEnrollments.size;
+    const avgDurationMs =
+      entry.durations.length > 0
+        ? Math.round(entry.durations.reduce((a, b) => a + b, 0) / entry.durations.length)
+        : null;
+
+    out[nodeId] = {
+      entered,
+      completed,
+      inProgress: Math.max(0, entered - completed - entry.erroredCount),
+      errored: entry.erroredCount,
+      avgDurationMs,
+      lastExecutedAt: entry.lastAt,
+    };
+  }
+
+  return out;
+}
+
 export async function getEventProcessingTimeline(
   orgId: string,
   hours = 24
