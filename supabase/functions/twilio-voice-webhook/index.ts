@@ -126,6 +126,37 @@ Deno.serve(async (req: Request) => {
             updated_at: new Date().toISOString(),
           })
           .eq("id", existingCallLog.conversation_id);
+
+        // Emit `call_completed` event for workflow triggers
+        await emitCallEvent(supabase, {
+          orgId,
+          eventType: "call_completed",
+          contactId: existingCallLog.contact_id,
+          callSid,
+          direction: isInbound ? "inbound" : "outbound",
+          callStatus,
+          fromNumber: from,
+          toNumber: to,
+          durationSeconds: parseInt(duration, 10),
+          recordingUrl: recordingUrl || null,
+        });
+      } else if (
+        isInbound &&
+        ["no-answer", "busy", "failed", "canceled"].includes(callStatus)
+      ) {
+        // Inbound call that we did not pick up → missed_call
+        await emitCallEvent(supabase, {
+          orgId,
+          eventType: "missed_call",
+          contactId: existingCallLog.contact_id,
+          callSid,
+          direction: "inbound",
+          callStatus,
+          fromNumber: from,
+          toNumber: to,
+          durationSeconds: duration ? parseInt(duration, 10) : 0,
+          recordingUrl: null,
+        });
       }
 
       return new Response(
@@ -235,6 +266,22 @@ Deno.serve(async (req: Request) => {
       },
     });
 
+    // Emit `inbound_call` for workflow triggers (initial ring of an inbound call)
+    if (isInbound) {
+      await emitCallEvent(supabase, {
+        orgId,
+        eventType: "inbound_call",
+        contactId: contact.id,
+        callSid,
+        direction: "inbound",
+        callStatus,
+        fromNumber: from,
+        toNumber: to,
+        durationSeconds: 0,
+        recordingUrl: null,
+      });
+    }
+
     return new Response(
       '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
       {
@@ -253,3 +300,58 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+/**
+ * Emit a workflow event into event_outbox so any workflow whose trigger
+ * matches `eventType` (missed_call, inbound_call, call_completed) fires.
+ *
+ * Idempotent per event_type+entity_id (call_sid).
+ */
+async function emitCallEvent(
+  supabase: ReturnType<typeof createClient>,
+  args: {
+    orgId: string;
+    eventType: "missed_call" | "inbound_call" | "call_completed";
+    contactId: string | null;
+    callSid: string;
+    direction: "inbound" | "outbound";
+    callStatus: string;
+    fromNumber: string;
+    toNumber: string;
+    durationSeconds: number;
+    recordingUrl: string | null;
+  }
+): Promise<void> {
+  try {
+    const { data: existing } = await supabase
+      .from("event_outbox")
+      .select("id")
+      .eq("org_id", args.orgId)
+      .eq("event_type", args.eventType)
+      .eq("entity_id", args.callSid)
+      .maybeSingle();
+
+    if (existing) return;
+
+    await supabase.from("event_outbox").insert({
+      org_id: args.orgId,
+      event_type: args.eventType,
+      contact_id: args.contactId,
+      entity_type: "call",
+      entity_id: args.callSid,
+      payload: {
+        call_sid: args.callSid,
+        direction: args.direction,
+        call_status: args.callStatus,
+        from_number: args.fromNumber,
+        to_number: args.toNumber,
+        duration_seconds: args.durationSeconds,
+        recording_url: args.recordingUrl,
+        emitted_at: new Date().toISOString(),
+      },
+      processed_at: null,
+    });
+  } catch (err) {
+    console.error(`emitCallEvent (${args.eventType}) failed:`, err);
+  }
+}
