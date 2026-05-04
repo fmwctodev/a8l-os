@@ -175,11 +175,16 @@ async function handleInvoiceEvent(
 
     await supabase.from("event_outbox").insert({
       org_id: orgId,
-      event_type: "invoice.voided",
+      event_type: "invoice_voided",
       contact_id: invoice.contact_id,
       entity_type: "invoice",
       entity_id: invoice.id,
-      payload: { invoice_id: invoice.id, qbo_invoice_id: entity.id },
+      payload: {
+        invoice_id: invoice.id,
+        qbo_invoice_id: entity.id,
+        operation: entity.operation,
+      },
+      processed_at: null,
     });
   }
 }
@@ -327,6 +332,7 @@ async function handlePaymentEvent(
           is_fully_paid: isPaid,
           qbo_payment_id: qboPayment.Id,
         },
+        processed_at: null,
       });
 
       console.log(`Payment ${newPayment.id} created for invoice ${invoice.id}, fully paid: ${isPaid}`);

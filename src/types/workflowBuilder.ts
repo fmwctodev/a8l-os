@@ -225,9 +225,9 @@ export const TRIGGER_OPTIONS: TriggerOption[] = [
   { type: 'social_inbox_comment', label: 'Social Comment Received', description: 'When a comment is posted on one of your social accounts', category: 'conversations' },
   { type: 'social_post_engagement', label: 'Social Post Engagement', description: 'When one of your published posts gets a like / share / reply', category: 'conversations' },
 
-  // Tier 2 — QuickBooks pipeline (we have qbo-* functions)
-  { type: 'qbo_invoice_paid', label: 'QBO Invoice Paid', description: 'When QuickBooks reports an invoice as paid', category: 'payments' },
-  { type: 'qbo_sync_completed', label: 'QBO Sync Completed', description: 'When a QuickBooks sync run finishes', category: 'payments' },
+  // Tier 2 — payment pipeline supplements (qbo-webhook already emits invoice_paid above)
+  { type: 'invoice_voided', label: 'Invoice Voided', description: 'When an invoice is voided or deleted (QuickBooks)', category: 'payments' },
+  { type: 'invoice_partial_payment', label: 'Invoice Partial Payment', description: 'When a partial payment lands on an invoice', category: 'payments' },
 
   // Tier 2 — proposal/contract pipeline (we have proposals + contract-ai-generate)
   { type: 'contract_signed', label: 'Contract Signed', description: 'When a contract is signed by the contact', category: 'proposals' },
