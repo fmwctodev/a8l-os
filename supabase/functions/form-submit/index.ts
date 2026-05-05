@@ -52,6 +52,12 @@ interface FormSettings {
   captchaEnabled?: boolean;
   captchaProvider?: "hcaptcha";
   captchaSiteKey?: string;
+  // Auto-create an Opportunity when both are present. Both nullish ⇒ no opp.
+  defaultPipelineId?: string;
+  defaultStageId?: string;
+  // Optional override for opportunity.created_by; falls back to form.created_by,
+  // then to the first active user in the org.
+  defaultOpportunityCreatedByUserId?: string;
 }
 
 interface Form {
@@ -60,6 +66,7 @@ interface Form {
   definition: FormDefinition;
   settings: FormSettings;
   status: string;
+  created_by: string | null;
 }
 
 interface AttributionData {
@@ -570,6 +577,140 @@ async function emitOutboxEvent(
   });
 }
 
+// Best-effort extract of a numeric deal value from a free-form budget string.
+// Returns the LOW end of the range so forecasting stays conservative.
+function parseBudgetToValueAmount(budget: unknown): number {
+  if (typeof budget !== "string") return 0;
+  const lowered = budget.toLowerCase().replace(/[\s,$]/g, "");
+  // Tokens like "25_75k", "75_250k", "250k_plus" produced by the seeded form.
+  const rangeMatch = lowered.match(/^(\d+)_\d+k$/);
+  if (rangeMatch) return Number(rangeMatch[1]) * 1000;
+  const plusMatch = lowered.match(/^(\d+)k_plus$/);
+  if (plusMatch) return Number(plusMatch[1]) * 1000;
+  // Fallback: extract any leading integer (e.g. "25k", "100000")
+  const num = parseFloat(lowered.replace(/k.*$/, ""));
+  if (!isNaN(num)) return lowered.includes("k") ? num * 1000 : num;
+  return 0;
+}
+
+async function resolveOpportunityCreatedBy(
+  supabase: ReturnType<typeof createClient>,
+  organizationId: string,
+  formCreatedBy: string | null,
+  settingsOverride?: string
+): Promise<string | null> {
+  // Priority: explicit settings override → form.created_by → first active user in org.
+  // Each candidate is verified to still exist + be active before use, so a deleted
+  // form-creator doesn't 23502 the opportunity insert.
+  const candidates: (string | null | undefined)[] = [settingsOverride, formCreatedBy];
+  for (const id of candidates) {
+    if (!id) continue;
+    const { data } = await supabase
+      .from("users")
+      .select("id")
+      .eq("id", id)
+      .eq("status", "active")
+      .maybeSingle();
+    if (data) return data.id as string;
+  }
+  const { data: fallback } = await supabase
+    .from("users")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("status", "active")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return (fallback?.id as string | undefined) ?? null;
+}
+
+async function createOpportunityFromForm(
+  supabase: ReturnType<typeof createClient>,
+  form: Form,
+  contactId: string,
+  departmentId: string,
+  payload: Record<string, unknown>
+): Promise<string | null> {
+  const settings = form.settings;
+  if (!settings.defaultPipelineId || !settings.defaultStageId) return null;
+
+  const createdBy = await resolveOpportunityCreatedBy(
+    supabase,
+    form.organization_id,
+    form.created_by,
+    settings.defaultOpportunityCreatedByUserId
+  );
+  if (!createdBy) {
+    console.warn(
+      "createOpportunityFromForm: no eligible user found for created_by, skipping opportunity creation",
+      { form_id: form.id, organization_id: form.organization_id }
+    );
+    return null;
+  }
+
+  // Look up the form's slug for the source field. Fall back to "web_form" if absent.
+  const { data: formMeta } = await supabase
+    .from("forms")
+    .select("public_slug")
+    .eq("id", form.id)
+    .maybeSingle();
+  const source = formMeta?.public_slug
+    ? `web_form_${formMeta.public_slug}`
+    : "web_form";
+
+  const valueAmount = parseBudgetToValueAmount(payload["budget_range"]);
+
+  const { data: opp, error: oppError } = await supabase
+    .from("opportunities")
+    .insert({
+      org_id: form.organization_id,
+      contact_id: contactId,
+      pipeline_id: settings.defaultPipelineId,
+      stage_id: settings.defaultStageId,
+      assigned_user_id: settings.ownerId || null,
+      department_id: departmentId,
+      value_amount: valueAmount,
+      currency: "USD",
+      status: "open",
+      source,
+      created_by: createdBy,
+    })
+    .select("id")
+    .single();
+
+  if (oppError) {
+    console.error("Error creating opportunity from form:", oppError);
+    return null;
+  }
+
+  // Audit trail: opportunity timeline event + outbox emission so workflows can react.
+  await supabase.from("opportunity_timeline_events").insert({
+    org_id: form.organization_id,
+    opportunity_id: opp.id,
+    contact_id: contactId,
+    event_type: "created_from_form",
+    summary: `Auto-created from form submission (${source})`,
+    payload: { form_id: form.id, form_source: source },
+    actor_user_id: createdBy,
+  });
+
+  await supabase.from("event_outbox").insert({
+    org_id: form.organization_id,
+    event_type: "opportunity_created",
+    contact_id: contactId,
+    entity_type: "opportunity",
+    entity_id: opp.id,
+    payload: {
+      opportunity_id: opp.id,
+      contact_id: contactId,
+      form_id: form.id,
+      source,
+    },
+  });
+
+  return opp.id as string;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -731,6 +872,20 @@ Deno.serve(async (req: Request) => {
       typedForm.definition.fields,
     );
 
+    // Auto-create an Opportunity if the form is wired for it (defaultPipelineId
+    // + defaultStageId on settings). Skipped silently for forms that don't
+    // declare those — careers application, newsletter, etc.
+    let opportunityId: string | null = null;
+    if (contactId) {
+      opportunityId = await createOpportunityFromForm(
+        supabase,
+        typedForm,
+        contactId,
+        departmentId,
+        body
+      );
+    }
+
     const { data: submission, error: submitError } = await supabase
       .from("form_submissions")
       .insert({
@@ -784,6 +939,7 @@ Deno.serve(async (req: Request) => {
         message: settings.thankYouMessage || "Thank you for your submission!",
         submission_id: submission.id,
         contact_id: contactId,
+        opportunity_id: opportunityId,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
