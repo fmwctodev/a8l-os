@@ -60,6 +60,8 @@ const FormSubmissions = lazy(() => import('./pages/modules/FormSubmissions').the
 const MarketingSurveys = lazy(() => import('./pages/modules/MarketingSurveys').then(m => ({ default: m.MarketingSurveys })));
 const SurveyBuilder = lazy(() => import('./pages/modules/SurveyBuilder').then(m => ({ default: m.SurveyBuilder })));
 const SurveySubmissions = lazy(() => import('./pages/modules/SurveySubmissions').then(m => ({ default: m.SurveySubmissions })));
+const EmailTemplates = lazy(() => import('./pages/modules/EmailTemplates'));
+const EmailTemplateEditor = lazy(() => import('./pages/modules/EmailTemplateEditor'));
 const AISocialManagerLayout = lazy(() => import('./layouts/AISocialManagerLayout').then(m => ({ default: m.AISocialManagerLayout })));
 const PostComposer = lazy(() => import('./pages/modules/PostComposer').then(m => ({ default: m.PostComposer })));
 const SocialCalendar = lazy(() => import('./pages/modules/SocialCalendar').then(m => ({ default: m.SocialCalendar })));
@@ -383,6 +385,22 @@ function App() {
                 element={
                   <ProtectedRoute permission="marketing.forms.view" featureFlag="marketing">
                     <MarketingForms />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/email-templates"
+                element={
+                  <ProtectedRoute permission="marketing.forms.view" featureFlag="marketing">
+                    <EmailTemplates />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/email-templates/:id"
+                element={
+                  <ProtectedRoute permission="marketing.forms.view" featureFlag="marketing">
+                    <EmailTemplateEditor />
                   </ProtectedRoute>
                 }
               />
