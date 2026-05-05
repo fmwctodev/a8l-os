@@ -846,6 +846,56 @@ async function handleSubmitBooking(
     });
   }
 
+  // Emit appointment_booked to event_outbox so the workflow engine can fire
+  // its trigger_type='appointment_booked' workflows. Pre-compute helpers like
+  // start_at_minus_24h so workflows that need "send 24h before the appt" can
+  // reference {{appointment.start_at_minus_24h}} directly without doing date
+  // math in the workflow definition.
+  if (contactId) {
+    const startAtMs = new Date(startUtc).getTime();
+    const startAtMinus24h = new Date(startAtMs - 24 * 60 * 60 * 1000).toISOString();
+    const startAtMinus1h = new Date(startAtMs - 60 * 60 * 1000).toISOString();
+    const visitorTz = visitorTimezone || "America/New_York";
+    // Friendly date/time strings for SMS body merge fields. Visitor-timezone-aware.
+    const fmtDate = new Intl.DateTimeFormat("en-US", {
+      timeZone: visitorTz,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    }).format(new Date(startUtc));
+    const fmtTime = new Intl.DateTimeFormat("en-US", {
+      timeZone: visitorTz,
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(new Date(startUtc));
+
+    await supabase.from("event_outbox").insert({
+      org_id: calendar.org_id,
+      event_type: "appointment_booked",
+      contact_id: contactId,
+      entity_type: "appointment",
+      entity_id: appointment.id,
+      payload: {
+        appointment_id: appointment.id,
+        contact_id: contactId,
+        calendar_id: calendarId,
+        appointment_type_id: appointmentTypeId,
+        appointment_type: appointmentType.name,
+        assigned_user_id: assignedUserId,
+        start_at_utc: startUtc,
+        end_at_utc: endUtc,
+        visitor_timezone: visitorTz,
+        // Pre-computed deltas for delay nodes
+        start_at_minus_24h: startAtMinus24h,
+        start_at_minus_1h: startAtMinus1h,
+        // Friendly strings for SMS / email bodies
+        date: fmtDate,
+        time: fmtTime,
+      },
+    });
+  }
+
   const syncResult = await syncAppointmentToGoogle(appointment.id, "create");
   const googleMeetLink = syncResult?.meetLink || null;
 

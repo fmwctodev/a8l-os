@@ -184,6 +184,18 @@ Deno.serve(async (req: Request) => {
             : null;
           const firstNodeId = firstEdge?.target || null;
 
+          // Expose the trigger payload under a friendly top-level key matching
+          // the event domain, so workflow merge fields like {{appointment.start_at_minus_24h}}
+          // resolve directly without authors having to write {{trigger_event.start_at_minus_24h}}.
+          const contextData: Record<string, unknown> = { trigger_event: event.payload };
+          if (event.event_type === "appointment_booked" || event.event_type === "appointment_rescheduled" || event.event_type === "appointment_canceled") {
+            contextData.appointment = event.payload;
+          } else if (event.event_type === "form_submitted") {
+            contextData.form = event.payload;
+          } else if (event.event_type === "opportunity_created" || event.event_type === "opportunity_stage_changed") {
+            contextData.opportunity = event.payload;
+          }
+
           const { data: enrollment } = await supabase
             .from("workflow_enrollments")
             .insert({
@@ -193,7 +205,7 @@ Deno.serve(async (req: Request) => {
               contact_id: contactId,
               status: "active",
               current_node_id: firstNodeId,
-              context_data: { trigger_event: event.payload },
+              context_data: contextData,
             })
             .select()
             .single();
@@ -376,7 +388,11 @@ Deno.serve(async (req: Request) => {
           }
 
           case "delay": {
-            const runAt = calculateDelayRunAt(node.data);
+            const runAt = calculateDelayRunAt(
+              node.data,
+              enrollment.contact as Record<string, unknown>,
+              enrollment.context_data as Record<string, unknown>
+            );
             if (runAt > new Date()) {
               await supabase.from("delayed_action_queue").insert({
                 org_id: job.org_id,
@@ -960,7 +976,11 @@ function evaluateCondition(
   return conditions.logic === "or" ? results.some((r) => r) : results.every((r) => r);
 }
 
-function calculateDelayRunAt(data: Record<string, unknown>): Date {
+function calculateDelayRunAt(
+  data: Record<string, unknown>,
+  contact?: Record<string, unknown>,
+  contextData?: Record<string, unknown>
+): Date {
   const now = new Date();
 
   switch (data.delayType) {
@@ -982,9 +1002,18 @@ function calculateDelayRunAt(data: Record<string, unknown>): Date {
     }
 
     case "wait_until_datetime": {
-      const datetime = data.datetime as string | undefined;
+      let datetime = data.datetime as string | undefined;
       if (!datetime) return now;
-      return new Date(datetime);
+      // Resolve merge fields like {{appointment.start_at_minus_24h}} so the
+      // delay can target a runtime-computed datetime from the trigger event.
+      if (datetime.includes("{{") && (contact || contextData)) {
+        datetime = resolveMergeFields(datetime, contact || {}, contextData);
+      }
+      const parsed = new Date(datetime);
+      // Fall through to "now" for unparseable / already-past datetimes — safer
+      // than hanging the workflow on an Invalid Date comparison forever.
+      if (isNaN(parsed.getTime())) return now;
+      return parsed;
     }
 
     case "wait_until_weekday_time": {
@@ -1092,14 +1121,16 @@ async function executeAction(
     }
 
     case "send_sms": {
-      const body = resolveMergeFields(config.body as string, contact);
+      const ctx = enrollment.context_data as Record<string, unknown> | undefined;
+      const body = resolveMergeFields(config.body as string, contact, ctx);
       await sendSms(supabase, orgId, contactId, contact.phone as string, body);
       break;
     }
 
     case "send_email": {
-      const subject = resolveMergeFields(config.subject as string, contact);
-      const emailBody = resolveMergeFields(config.body as string, contact);
+      const ctx = enrollment.context_data as Record<string, unknown> | undefined;
+      const subject = resolveMergeFields(config.subject as string, contact, ctx);
+      const emailBody = resolveMergeFields(config.body as string, contact, ctx);
       await sendEmail(supabase, orgId, contactId, contact.email as string, subject, emailBody);
       break;
     }
@@ -3249,21 +3280,44 @@ async function executeReviewAction(
   }
 }
 
-function resolveMergeFields(template: string, contact: Record<string, unknown>): string {
-  const replacements: Record<string, string> = {
-    "{{contact.first_name}}": (contact.first_name as string) || "",
-    "{{contact.last_name}}": (contact.last_name as string) || "",
-    "{{contact.email}}": (contact.email as string) || "",
-    "{{contact.phone}}": (contact.phone as string) || "",
-    "{{contact.company}}": (contact.company as string) || "",
-    "{{contact.full_name}}": `${contact.first_name || ""} ${contact.last_name || ""}`.trim(),
+function resolveMergeFields(
+  template: string,
+  contact: Record<string, unknown>,
+  contextData?: Record<string, unknown>
+): string {
+  if (!template || typeof template !== "string") return template;
+
+  // Walk a dotted path like "appointment.start_at_minus_24h" against a root object,
+  // returning the leaf value as a string (or empty string if not found).
+  const lookup = (root: Record<string, unknown> | undefined, path: string): string => {
+    if (!root) return "";
+    const parts = path.split(".");
+    let v: unknown = root;
+    for (const p of parts) {
+      if (v && typeof v === "object" && p in (v as Record<string, unknown>)) {
+        v = (v as Record<string, unknown>)[p];
+      } else {
+        return "";
+      }
+    }
+    if (v === null || v === undefined) return "";
+    return String(v);
   };
 
-  let result = template;
-  for (const [key, value] of Object.entries(replacements)) {
-    result = result.replaceAll(key, value);
-  }
-  return result;
+  return template.replace(/\{\{([a-zA-Z_][a-zA-Z0-9_.]*)\}\}/g, (_match, expr: string) => {
+    // Special case: {{contact.full_name}} composed from first + last
+    if (expr === "contact.full_name") {
+      return `${contact.first_name || ""} ${contact.last_name || ""}`.trim();
+    }
+    if (expr.startsWith("contact.")) {
+      return lookup(contact, expr.slice("contact.".length));
+    }
+    if (expr.startsWith("context.")) {
+      return lookup(contextData, expr.slice("context.".length));
+    }
+    // Bare top-level keys (e.g. {{appointment.start_at}}) read from contextData
+    return lookup(contextData, expr);
+  });
 }
 
 async function sendSms(
