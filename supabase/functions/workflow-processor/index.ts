@@ -1128,6 +1128,31 @@ async function executeAction(
   const contact = enrollment.contact as Record<string, unknown>;
   const contactId = contact.id as string;
 
+  // P8 — test mode short-circuit. If the enrollment is marked test_mode,
+  // log what would happen and return early WITHOUT making any external
+  // API calls (no SMS, no email, no Vapi calls, no Slack pings, etc).
+  // Internal CRM mutations (add_tag, update_field, etc.) are also skipped
+  // to keep test runs idempotent and side-effect-free.
+  const testMode = (enrollment as { test_mode?: boolean }).test_mode === true
+    || ((enrollment.context_data as Record<string, unknown>)?._test_mode === true);
+  if (testMode) {
+    await supabase.from("workflow_action_logs").insert({
+      enrollment_id: enrollment.id,
+      action_type: actionType,
+      status: "test_mode_skipped",
+      detail: `[TEST MODE] Would have executed ${actionType}`,
+      metadata: {
+        test_mode: true,
+        action_config: config,
+        is_destructive: [
+          "delete_contact", "mark_opportunity_lost", "remove_opportunity",
+          "void_invoice", "set_dnd", "remove_from_workflow_action",
+        ].includes(actionType),
+      },
+    }).catch(() => {});
+    return;
+  }
+
   switch (actionType) {
     case "add_tag": {
       const tagId = config.tagId as string;
