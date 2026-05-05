@@ -184,16 +184,28 @@ Deno.serve(async (req: Request) => {
             : null;
           const firstNodeId = firstEdge?.target || null;
 
-          // Expose the trigger payload under a friendly top-level key matching
-          // the event domain, so workflow merge fields like {{appointment.start_at_minus_24h}}
-          // resolve directly without authors having to write {{trigger_event.start_at_minus_24h}}.
-          const contextData: Record<string, unknown> = { trigger_event: event.payload };
+          // Expose the trigger payload to workflows in three ways:
+          //  1. trigger_event.X — original payload, preserved for backwards compat
+          //  2. domain-key.X (appointment.X, form.X, opportunity.X, message.X) —
+          //     friendly merge fields like {{appointment.start_at_minus_24h}}
+          //  3. flat top-level — so condition rules of the form context.message_body_upper
+          //     resolve to contextData['message_body_upper'] directly (the engine's
+          //     evaluateCondition reads contextData[field] for context.* paths).
+          const payloadObj = (event.payload as Record<string, unknown>) ?? {};
+          const contextData: Record<string, unknown> = { trigger_event: event.payload, ...payloadObj };
           if (event.event_type === "appointment_booked" || event.event_type === "appointment_rescheduled" || event.event_type === "appointment_canceled") {
             contextData.appointment = event.payload;
           } else if (event.event_type === "form_submitted") {
             contextData.form = event.payload;
-          } else if (event.event_type === "opportunity_created" || event.event_type === "opportunity_stage_changed") {
+          } else if (event.event_type === "opportunity_created" || event.event_type === "opportunity_stage_changed" || event.event_type === "opportunity_status_changed") {
             contextData.opportunity = event.payload;
+          } else if (event.event_type === "conversation_message_received") {
+            contextData.message = event.payload;
+          } else if (event.event_type === "contact_created" || event.event_type === "contact_updated" || event.event_type === "contact_tag_added" || event.event_type === "contact_tag_removed") {
+            // Already mostly contact-related; expose 'tag' alias for tag events
+            if (event.event_type === "contact_tag_added" || event.event_type === "contact_tag_removed") {
+              contextData.tag = event.payload;
+            }
           }
 
           const { data: enrollment } = await supabase

@@ -194,23 +194,29 @@ Deno.serve(async (req: Request) => {
       })
       .eq("id", conversationId);
 
-    // Emit message_received event for workflows
+    // Emit conversation_message_received event for workflows
+    // Includes message_body_upper for STOP/HELP/START condition rules.
     try {
+      const bodyUpper = (text || "").trim().toUpperCase();
       await supabase.from("event_outbox").insert({
         org_id: orgId,
-        event_type: "message_received",
+        event_type: "conversation_message_received",
         contact_id: contactId,
         entity_type: "message",
         entity_id: insertedMsg?.id || messageUuid,
         payload: {
           message_id: insertedMsg?.id,
           channel,
+          direction: "inbound",
           conversation_id: conversationId,
           from_number: fromNumber,
           to_number: toNumber,
           body: text,
+          message_body: text,
+          message_body_upper: bodyUpper,
           media_urls: mediaUrls,
           plivo_message_uuid: messageUuid,
+          received_at: new Date().toISOString(),
         },
         processed_at: null,
       });
