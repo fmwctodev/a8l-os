@@ -276,6 +276,38 @@ async function applyContactUpdate(
   if (error) console.error("Error updating contact:", error);
 }
 
+// TCPA server-side gate: when a form has both a phone field and an
+// sms_consent boolean field, refuse to persist the phone unless consent
+// is explicitly true. Frontend already enforces this via UI logic, but
+// a direct API hit could bypass the checkbox — this defense-in-depth
+// keeps the contacts.phone column clean of unconsented numbers and
+// ensures no SMS workflow can ever fire for a non-consenting recipient.
+function applyTCPAGate(
+  contactData: Record<string, unknown>,
+  payload: Record<string, unknown>,
+  fields: FormField[]
+): Record<string, unknown> {
+  const hasSmsConsentField = fields.some((f) => {
+    if (f.id === "sms_consent") return true;
+    // Also detect by custom-field key in case the form maps differently
+    return f.label?.toLowerCase().includes("sms") && f.type === "boolean";
+  });
+  if (!hasSmsConsentField) return contactData;
+
+  const consentValue = payload["sms_consent"];
+  const consented = consentValue === true || consentValue === "true";
+  if (consented) return contactData;
+
+  // Strip phone — keep email, name, etc. The contact still gets created,
+  // but without a phone number that could trigger SMS.
+  if ("phone" in contactData) {
+    const stripped = { ...contactData };
+    delete stripped.phone;
+    return stripped;
+  }
+  return contactData;
+}
+
 async function findOrCreateContact(
   supabase: ReturnType<typeof createClient>,
   organizationId: string,
@@ -284,7 +316,8 @@ async function findOrCreateContact(
   fields: FormField[],
   settings: FormSettings
 ): Promise<string | null> {
-  const contactData = buildContactDataFromForm(payload, fields);
+  const rawContactData = buildContactDataFromForm(payload, fields);
+  const contactData = applyTCPAGate(rawContactData, payload, fields);
 
   const email = contactData.email as string | undefined;
   const phone = contactData.phone as string | undefined;
