@@ -1200,6 +1200,15 @@ async function executeAction(
 
     case "send_sms": {
       const ctx = enrollment.context_data as Record<string, unknown> | undefined;
+      const allowed = await canSendOnChannel(supabase, contact, "sms", {
+        orgId,
+        enrollmentId: enrollment.id as string,
+        workflowId: (enrollment as Record<string, unknown>).workflow_id as string,
+        nodeId: data.nodeId as string,
+        actionType: "send_sms",
+        payload: { body_preview: ((config.body as string) ?? "").slice(0, 80) },
+      });
+      if (!allowed) break;
       const body = resolveMergeFields(config.body as string, contact, ctx);
       await sendSms(supabase, orgId, contactId, contact.phone as string, body);
       break;
@@ -1209,6 +1218,15 @@ async function executeAction(
       // Legacy action — Gmail OAuth path. New workflows should use
       // send_email_org or send_email_personal. Kept for backwards compat.
       const ctx = enrollment.context_data as Record<string, unknown> | undefined;
+      const allowed = await canSendOnChannel(supabase, contact, "email", {
+        orgId,
+        enrollmentId: enrollment.id as string,
+        workflowId: (enrollment as Record<string, unknown>).workflow_id as string,
+        nodeId: data.nodeId as string,
+        actionType: "send_email",
+        payload: { subject_preview: ((config.subject as string) ?? "").slice(0, 80) },
+      });
+      if (!allowed) break;
       const subject = resolveMergeFields(config.subject as string, contact, ctx);
       const emailBody = resolveMergeFields(config.body as string, contact, ctx);
       await sendEmail(supabase, orgId, contactId, contact.email as string, subject, emailBody);
@@ -1219,6 +1237,15 @@ async function executeAction(
       // Sends as the organization via SendGrid. Optionally resolves a
       // marketing-module email template by ID.
       const ctx = enrollment.context_data as Record<string, unknown> | undefined;
+      const allowed = await canSendOnChannel(supabase, contact, "email", {
+        orgId,
+        enrollmentId: enrollment.id as string,
+        workflowId: (enrollment as Record<string, unknown>).workflow_id as string,
+        nodeId: data.nodeId as string,
+        actionType: "send_email_org",
+        payload: { template_id: config.template_id, recipient_override: config.recipient_override },
+      });
+      if (!allowed) break;
       const recipient =
         (config.recipient_override as string) ||
         (resolveMergeFields(((config.recipient_override as string) ?? "{{contact.email}}"), contact, ctx)) ||
@@ -1258,6 +1285,15 @@ async function executeAction(
       // Sends from a user's Gmail OAuth account. Optionally resolves a
       // marketing-module email template by ID.
       const ctx = enrollment.context_data as Record<string, unknown> | undefined;
+      const allowed = await canSendOnChannel(supabase, contact, "email", {
+        orgId,
+        enrollmentId: enrollment.id as string,
+        workflowId: (enrollment as Record<string, unknown>).workflow_id as string,
+        nodeId: data.nodeId as string,
+        actionType: "send_email_personal",
+        payload: { template_id: config.template_id, from_user_id: config.from_user_id },
+      });
+      if (!allowed) break;
       const recipient =
         (config.recipient_override as string) ||
         (contact.email as string);
@@ -3168,12 +3204,128 @@ interface VapiActionResult {
 }
 
 function isVoiceDndActive(contact: Record<string, unknown>): boolean {
-  const dnd = contact.dnd_status as { enabled?: boolean; channels?: string[]; end_date?: string | null } | null | undefined;
-  if (!dnd?.enabled) return false;
-  // If DND has expired, treat as inactive.
-  if (dnd.end_date && new Date(dnd.end_date) < new Date()) return false;
-  const channels = Array.isArray(dnd.channels) ? dnd.channels : [];
-  return channels.includes("voice") || channels.includes("call") || channels.includes("all");
+  return !canSendOnChannelSync(contact, "voice");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P7 — Centralized DND / consent gating
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Every send_* action MUST gate through canSendOnChannel before dispatching.
+// When DND blocks a send, we log a row to workflow_dnd_suppressions for audit.
+// This is also the single place the consent gate lives — TCPA enforcement
+// already happens upstream at form-submit, but we re-check at workflow time
+// so a contact who later opts out is respected immediately.
+//
+// channel: 'sms' | 'email' | 'voice'
+// returns: true if the send is permitted, false if it should be suppressed
+//
+// Decision sources (ordered by priority):
+//   1. contact.dnd_status.enabled + channels[] (explicit per-channel DND)
+//   2. contact.unsubscribed_email_at (for email)
+//   3. contact.sms_consent (for SMS — must be true to send)
+
+interface DndCheckResult {
+  allowed: boolean;
+  reason?: string;
+}
+
+function canSendOnChannelSync(
+  contact: Record<string, unknown>,
+  channel: "sms" | "email" | "voice"
+): boolean {
+  return canSendOnChannelDetailed(contact, channel).allowed;
+}
+
+function canSendOnChannelDetailed(
+  contact: Record<string, unknown>,
+  channel: "sms" | "email" | "voice"
+): DndCheckResult {
+  // 1. Explicit DND object set by set_dnd action / API.
+  const dnd = contact.dnd_status as
+    | { enabled?: boolean; channels?: string[]; end_date?: string | null }
+    | null
+    | undefined;
+  if (dnd?.enabled) {
+    const expired = dnd.end_date && new Date(dnd.end_date) < new Date();
+    if (!expired) {
+      const channels = Array.isArray(dnd.channels) ? dnd.channels : [];
+      const channelAliases = channel === "voice" ? ["voice", "call"] : [channel];
+      if (channels.includes("all") || channelAliases.some((c) => channels.includes(c))) {
+        return { allowed: false, reason: `DND active for channel ${channel}` };
+      }
+    }
+  }
+
+  // 2. Per-channel hard checks.
+  if (channel === "email") {
+    if (contact.unsubscribed_email_at) {
+      return { allowed: false, reason: "Contact unsubscribed from email" };
+    }
+    if (!contact.email) {
+      return { allowed: false, reason: "Contact has no email address" };
+    }
+  }
+  if (channel === "sms") {
+    // TCPA: require explicit consent OR the contact replied to us first
+    // (which is treated as implicit consent for transactional follow-up).
+    const explicitConsent = contact.sms_consent === true;
+    const customField = (contact.custom_fields as Record<string, unknown>) || {};
+    const customConsent = customField.sms_consent === true || customField.tcpa_consent === true;
+    if (!explicitConsent && !customConsent) {
+      return { allowed: false, reason: "SMS consent not on record (TCPA gate)" };
+    }
+    if (!contact.phone) {
+      return { allowed: false, reason: "Contact has no phone number" };
+    }
+  }
+  if (channel === "voice") {
+    if (!contact.phone) {
+      return { allowed: false, reason: "Contact has no phone number" };
+    }
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * canSendOnChannel — entry point for action handlers. Logs a suppression row
+ * when the send is blocked so the audit trail is complete.
+ */
+async function canSendOnChannel(
+  supabase: ReturnType<typeof createClient>,
+  contact: Record<string, unknown>,
+  channel: "sms" | "email" | "voice",
+  context: {
+    orgId: string;
+    enrollmentId?: string;
+    workflowId?: string;
+    nodeId?: string;
+    actionType: string;
+    payload?: Record<string, unknown>;
+  }
+): Promise<boolean> {
+  const result = canSendOnChannelDetailed(contact, channel);
+  if (result.allowed) return true;
+
+  // Log the suppression for audit. Use catch so a logging failure never
+  // blocks the (already-suppressed) action.
+  try {
+    await supabase.from("workflow_dnd_suppressions").insert({
+      org_id: context.orgId,
+      enrollment_id: context.enrollmentId ?? null,
+      workflow_id: context.workflowId ?? null,
+      node_id: context.nodeId ?? null,
+      action_type: context.actionType,
+      channel,
+      contact_id: (contact.id as string) ?? null,
+      reason: result.reason ?? "blocked",
+      payload: context.payload ?? {},
+    });
+  } catch (err) {
+    console.warn("[workflow-processor] failed to log dnd suppression:", err);
+  }
+  return false;
 }
 
 async function getVapiCredentialsForOrg(
@@ -3235,16 +3387,19 @@ async function executeVapiAction(
   orgId: string,
   contactId: string
 ): Promise<VapiActionResult> {
-  // 1. Voice DND gate (centralized here until P7 lands canSendOnChannel).
-  if (isVoiceDndActive(contact)) {
-    await supabase.from("workflow_action_logs").insert({
-      enrollment_id: enrollment.id,
-      action_type: actionType,
-      status: "skipped",
-      detail: "Voice DND active — call/voicemail suppressed",
-      metadata: { reason: "dnd_voice", action_config: config },
-    }).catch(() => {});
-    return { success: true, suppressed: true, detail: "Voice DND active" };
+  // 1. Voice DND gate via centralized canSendOnChannel.
+  const allowed = await canSendOnChannel(supabase, contact, "voice", {
+    orgId,
+    enrollmentId: enrollment.id as string,
+    workflowId: (enrollment as Record<string, unknown>).workflow_id as string,
+    actionType,
+    payload: {
+      assistant_id: config.assistant_id || config.target_assistant_id,
+      call_goal: config.call_goal || config.handoff_context,
+    },
+  });
+  if (!allowed) {
+    return { success: true, suppressed: true, detail: "Voice DND active or no phone number" };
   }
 
   // 2. Need a phone number to call.
