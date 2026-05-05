@@ -76,5 +76,5 @@ BEGIN
       {"label": "Top Secret", "value": "top_secret"},
       {"label": "TS/SCI", "value": "ts_sci"}
     ]'::jsonb, false, 260)
-  ON CONFLICT (organization_id, field_key) DO NOTHING;
+  ON CONFLICT (organization_id, scope, field_key) DO NOTHING;
 END $$;
