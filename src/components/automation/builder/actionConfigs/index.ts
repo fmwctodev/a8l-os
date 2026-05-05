@@ -7,6 +7,8 @@ export interface ActionConfigProps {
 }
 
 import SendSmsConfig from './SendSmsConfig';
+import SendEmailOrgConfig from './SendEmailOrgConfig';
+import SendEmailPersonalConfig from './SendEmailPersonalConfig';
 import CreateContactConfig from './CreateContactConfig';
 import FindContactConfig from './FindContactConfig';
 import CopyContactConfig from './CopyContactConfig';
@@ -46,6 +48,8 @@ type ConfigEntry = {
 
 export const ACTION_CONFIG_MAP: Record<string, ConfigEntry> = {
   send_sms: { component: SendSmsConfig },
+  send_email_org: { component: SendEmailOrgConfig },
+  send_email_personal: { component: SendEmailPersonalConfig },
   create_contact: { component: CreateContactConfig },
   find_contact: { component: FindContactConfig },
   copy_contact: { component: CopyContactConfig },
