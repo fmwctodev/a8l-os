@@ -115,7 +115,7 @@ export function AIWorkflowGeneratorDrawer({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-y-0 right-0 z-40 w-[440px] bg-white shadow-2xl border-l border-gray-200 flex flex-col">
+    <div className="fixed inset-0 sm:inset-y-0 sm:right-0 sm:left-auto z-40 w-full sm:w-[440px] bg-white shadow-2xl sm:border-l border-gray-200 flex flex-col">
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-md bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
