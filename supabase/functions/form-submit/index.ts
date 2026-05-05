@@ -30,6 +30,11 @@ interface FormField {
   mapping?: {
     contactField?: string;
     customFieldId?: string;
+    // When present and the form auto-creates an Opportunity, also write
+    // this field's value to opportunity_custom_field_values so the data
+    // surfaces on the Opportunity detail card without drilling into
+    // the Contact.
+    opportunityCustomFieldId?: string;
     objectId?: string;
     objectFieldKey?: string;
   };
@@ -624,6 +629,84 @@ async function resolveOpportunityCreatedBy(
   return (fallback?.id as string | undefined) ?? null;
 }
 
+async function writeOpportunityCustomFieldValues(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+  opportunityId: string,
+  payload: Record<string, unknown>,
+  fields: FormField[]
+): Promise<void> {
+  // Collect form fields that map to a pipeline_custom_field
+  const mapped: { fieldId: string; pcfId: string; value: unknown }[] = [];
+  for (const f of fields) {
+    const pcfId = f.mapping?.opportunityCustomFieldId;
+    if (!pcfId) continue;
+    const v = payload[f.id];
+    if (v === undefined || v === null || v === "") continue;
+    mapped.push({ fieldId: f.id, pcfId, value: v });
+  }
+  if (mapped.length === 0) return;
+
+  // Look up field_type for each pipeline_custom_field so we know which
+  // typed column to populate. One round-trip for all fields.
+  const pcfIds = Array.from(new Set(mapped.map((m) => m.pcfId)));
+  const { data: pcfs, error: pcfError } = await supabase
+    .from("pipeline_custom_fields")
+    .select("id, field_type")
+    .in("id", pcfIds);
+  if (pcfError || !pcfs) {
+    console.error("Error loading pipeline_custom_fields:", pcfError);
+    return;
+  }
+  const typeById = new Map(
+    (pcfs as { id: string; field_type: string }[]).map((p) => [p.id, p.field_type])
+  );
+
+  const inserts: Record<string, unknown>[] = [];
+  for (const m of mapped) {
+    const ftype = typeById.get(m.pcfId);
+    if (!ftype) continue; // pipeline_custom_field not found — skip silently
+    const row: Record<string, unknown> = {
+      org_id: orgId,
+      opportunity_id: opportunityId,
+      pipeline_custom_field_id: m.pcfId,
+      value_text: null,
+      value_number: null,
+      value_date: null,
+      value_boolean: null,
+      value_json: null,
+    };
+    switch (ftype) {
+      case "text":
+      case "dropdown":
+        row.value_text = String(m.value);
+        break;
+      case "number": {
+        const n = typeof m.value === "number" ? m.value : parseFloat(String(m.value));
+        if (!isNaN(n)) row.value_number = n;
+        break;
+      }
+      case "date":
+        row.value_date = String(m.value);
+        break;
+      case "boolean":
+        row.value_boolean = Boolean(m.value);
+        break;
+      case "multi_select":
+        row.value_json = Array.isArray(m.value) ? m.value : [m.value];
+        break;
+      default:
+        row.value_json = m.value;
+    }
+    inserts.push(row);
+  }
+  if (inserts.length === 0) return;
+  const { error } = await supabase
+    .from("opportunity_custom_field_values")
+    .upsert(inserts, { onConflict: "opportunity_id,pipeline_custom_field_id" });
+  if (error) console.error("Error writing opportunity custom field values:", error);
+}
+
 async function createOpportunityFromForm(
   supabase: ReturnType<typeof createClient>,
   form: Form,
@@ -682,6 +765,16 @@ async function createOpportunityFromForm(
     console.error("Error creating opportunity from form:", oppError);
     return null;
   }
+
+  // Mirror qualifying form data onto the Opportunity so the opportunity
+  // detail card surfaces it inline (no need to drill into the contact).
+  await writeOpportunityCustomFieldValues(
+    supabase,
+    form.organization_id,
+    opp.id as string,
+    payload,
+    form.definition.fields
+  );
 
   // Audit trail: opportunity timeline event + outbox emission so workflows can react.
   await supabase.from("opportunity_timeline_events").insert({
