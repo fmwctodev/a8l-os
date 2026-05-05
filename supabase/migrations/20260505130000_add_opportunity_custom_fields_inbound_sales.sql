@@ -1,13 +1,13 @@
 /*
-  # Add pipeline_custom_fields for Inbound Sales + wire form to opportunity custom fields
+  # Add pipeline_custom_fields for Inbound + wire form to opportunity custom fields
 
-  When the get-in-touch form creates an Opportunity in Inbound Sales / New Lead,
+  When the get-in-touch form creates an Opportunity in Inbound / New Lead,
   the same qualifying data captured on the Contact (budget_range, urgency, etc.)
   should also surface on the Opportunity detail card so the sales rep doesn't
   have to drill into the Contact to see it.
 
   This migration:
-  1. Adds 6 pipeline_custom_fields scoped to the Inbound Sales pipeline:
+  1. Adds 6 pipeline_custom_fields scoped to the Inbound pipeline:
      industry, project_type, urgency, budget_range, ideal_start, project_description
   2. Re-UPSERTs the get-in-touch form definition with new field.mapping.opportunityCustomFieldId
      entries so form-submit can write opportunity_custom_field_values when an
@@ -52,9 +52,9 @@ BEGIN
     WHERE organization_id = v_org_id AND status = 'active'
     ORDER BY created_at LIMIT 1;
 
-  SELECT id INTO v_pipeline_id FROM pipelines WHERE org_id = v_org_id AND name = 'Inbound Sales';
+  SELECT id INTO v_pipeline_id FROM pipelines WHERE org_id = v_org_id AND name = 'Inbound';
   IF v_pipeline_id IS NULL THEN
-    RAISE EXCEPTION 'Inbound Sales pipeline not found — apply 20260505120000_seed_inbound_sales_pipeline.sql first';
+    RAISE EXCEPTION 'Inbound pipeline not found — apply 20260316013214_replace_sales_pipeline_with_inbound_outbound.sql first';
   END IF;
   SELECT id INTO v_stage_id FROM pipeline_stages WHERE pipeline_id = v_pipeline_id AND name = 'New Lead';
 
@@ -161,7 +161,7 @@ BEGIN
   VALUES (
     v_org_id,
     'Get In Touch (autom8ionlab.com)',
-    'Public contact form on the marketing site. Auto-creates contact + Inbound Sales / New Lead opportunity on submission, mirroring qualifying data to opportunity custom fields.',
+    'Public contact form on the marketing site. Auto-creates contact + Inbound / New Lead opportunity on submission, mirroring qualifying data to opportunity custom fields.',
     'get-in-touch',
     v_definition,
     v_settings,

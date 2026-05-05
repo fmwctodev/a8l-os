@@ -7,7 +7,7 @@
   needs to know the slug, not a UUID.
 
   Settings include defaultPipelineId + defaultStageId, which the Edge Function
-  reads to auto-create an Opportunity in "Inbound Sales / New Lead" alongside
+  reads to auto-create an Opportunity in "Inbound / New Lead" alongside
   the contact.
 
   Idempotent: re-runs UPDATE the existing form (so iterating field schema is
@@ -43,14 +43,14 @@ BEGIN
   ORDER BY created_at
   LIMIT 1;
 
-  SELECT id INTO v_pipeline_id FROM pipelines WHERE org_id = v_org_id AND name = 'Inbound Sales';
+  SELECT id INTO v_pipeline_id FROM pipelines WHERE org_id = v_org_id AND name = 'Inbound';
   IF v_pipeline_id IS NULL THEN
-    RAISE EXCEPTION 'Inbound Sales pipeline not found — apply 20260505120000_seed_inbound_sales_pipeline.sql first';
+    RAISE EXCEPTION 'Inbound pipeline not found — apply 20260316013214_replace_sales_pipeline_with_inbound_outbound.sql first';
   END IF;
 
   SELECT id INTO v_stage_id FROM pipeline_stages WHERE pipeline_id = v_pipeline_id AND name = 'New Lead';
   IF v_stage_id IS NULL THEN
-    RAISE EXCEPTION 'New Lead stage not found in Inbound Sales pipeline';
+    RAISE EXCEPTION 'New Lead stage not found in Inbound pipeline';
   END IF;
 
   SELECT id INTO v_field_industry FROM custom_fields WHERE organization_id = v_org_id AND field_key = 'industry';
@@ -107,7 +107,7 @@ BEGIN
   VALUES (
     v_org_id,
     'Get In Touch (autom8ionlab.com)',
-    'Public contact form on the marketing site. Auto-creates contact + Inbound Sales / New Lead opportunity on submission.',
+    'Public contact form on the marketing site. Auto-creates contact + Inbound / New Lead opportunity on submission.',
     'get-in-touch',
     v_definition,
     v_settings,
