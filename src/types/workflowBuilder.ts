@@ -201,6 +201,12 @@ export const TRIGGER_OPTIONS: TriggerOption[] = [
   { type: 'ai_agent_failed', label: 'AI Agent Failed', description: 'When an AI agent task fails', category: 'ai' },
   { type: 'meeting_processed', label: 'Meeting Processed', description: 'When a meeting transcription is ready', category: 'ai' },
 
+  // Vapi voice AI triggers (emitted by vapi-webhook)
+  { type: 'ai_call_started', label: 'AI Voice Call Started', description: 'When a Vapi outbound call connects to the contact', category: 'ai' },
+  { type: 'ai_call_completed', label: 'AI Voice Call Completed', description: 'When a Vapi voice call ends — branch on outcome (qualified, transferred, voicemail, no-answer)', category: 'ai' },
+  { type: 'ai_voicemail_received', label: 'AI Voicemail Received', description: 'When a Vapi inbound call routed to voicemail', category: 'ai' },
+  { type: 'ai_agent_handoff_requested', label: 'AI Handoff Requested', description: 'When a Vapi assistant escalates a call to a human agent', category: 'ai' },
+
   { type: 'webhook_received', label: 'Webhook Received', description: 'When an external webhook fires', category: 'custom' },
   { type: 'scheduled', label: 'Scheduled Trigger', description: 'Run on a time-based schedule', category: 'custom' },
   { type: 'manual_trigger', label: 'Manual Trigger', description: 'Manually enroll contacts', category: 'custom' },
@@ -389,6 +395,11 @@ export const ACTION_OPTIONS: ActionOption[] = [
   { type: 'ai_summarize_thread', label: 'AI: Summarize Conversation', description: 'Summarize the contact’s recent conversation thread', category: 'ai' },
   { type: 'ai_classify_intent', label: 'AI: Classify Intent', description: 'Use AI to classify a message’s intent for branching', category: 'ai' },
   { type: 'ai_score_lead', label: 'AI: Score Lead', description: 'Score lead quality with AI; writes to engagement_score', category: 'ai' },
+
+  // Vapi voice AI actions (P6) — call vapi-tool-gateway, gated by voice DND
+  { type: 'start_ai_call', label: 'Start AI Voice Call', description: 'Place an outbound voice call from a Vapi assistant to the contact', category: 'ai' },
+  { type: 'transfer_to_ai_agent', label: 'Transfer to AI Agent', description: 'Hand an active conversation or call off to a Vapi assistant', category: 'ai' },
+  { type: 'send_ai_voicemail', label: 'AI Voicemail Drop', description: 'Drop a Vapi-rendered voicemail to the contact', category: 'ai' },
 ];
 
 export function getNodeTypeForAction(actionType: string): WorkflowNodeType {

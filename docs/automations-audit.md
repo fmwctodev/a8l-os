@@ -36,9 +36,10 @@ Goal: every row green. As of 2026-05-05 (post-Phase-1), many engine handlers hav
 | `opportunity_stage_changed` | ✅ DB trigger | ✅ `opportunity_stage_changed` | ✅ `OpportunityStageChangedConfig` | ❌ |
 | `opportunity_status_changed` | ✅ DB trigger | ✅ `opportunity_status_changed` | ✅ `OpportunityStatusChangedConfig` | ❌ |
 | `sms_send_requested` | 🚫 reserved future use | ❌ | ❌ | ❌ |
-| `ai_call_completed` (P6) | ❌ — Phase 6 | ❌ | ❌ | ❌ |
-| `ai_voicemail_received` (P6) | ❌ — Phase 6 | ❌ | ❌ | ❌ |
-| `ai_agent_handoff_requested` (P6) | ❌ — Phase 6 | ❌ | ❌ | ❌ |
+| `ai_call_started` (P6) | ✅ vapi-webhook | ✅ allow-all | ❌ (no specific UI yet — fires on every call) | ✅ TRIGGER_OPTIONS |
+| `ai_call_completed` (P6) | ✅ vapi-webhook | ✅ outcome/duration/qualified/assistant filter | ✅ `AICallCompletedConfig` | ✅ TRIGGER_OPTIONS |
+| `ai_voicemail_received` (P6) | ✅ vapi-webhook | ✅ keyword/duration/sentiment filter | ✅ `AIVoicemailReceivedConfig` | ✅ TRIGGER_OPTIONS |
+| `ai_agent_handoff_requested` (P6) | ✅ vapi-webhook | ✅ reason/channel filter | ✅ `AIAgentHandoffConfig` | ✅ TRIGGER_OPTIONS |
 
 **Trigger-side gap summary:**
 - Picker entries are entirely missing (TriggerPickerDrawer needs to enumerate every trigger type)
@@ -147,9 +148,9 @@ Goal: every row green. As of 2026-05-05 (post-Phase-1), many engine handlers hav
 | `ai_booking_assist` | ✅ | ❌ | ❌ |
 | `ai_decision_step` | ✅ | ❌ | ❌ |
 | `ai_prompt` | ✅ | ✅ | ❌ |
-| `start_ai_call` (P6) | ❌ — Phase 6 | ❌ | ❌ |
-| `transfer_to_ai_agent` (P6) | ❌ — Phase 6 | ❌ | ❌ |
-| `send_ai_voicemail` (P6) | ❌ — Phase 6 | ❌ | ❌ |
+| `start_ai_call` (P6) | ✅ executeVapiAction → Vapi /call | ✅ `StartAiCallConfig` | ✅ ACTION_OPTIONS |
+| `transfer_to_ai_agent` (P6) | ✅ executeVapiAction → Vapi /call | ✅ `TransferToAiAgentConfig` | ✅ ACTION_OPTIONS |
+| `send_ai_voicemail` (P6) | ✅ executeVapiAction → Vapi /call (voicemail mode) | ✅ `SendAiVoicemailConfig` | ✅ ACTION_OPTIONS |
 
 ### Flow control
 
