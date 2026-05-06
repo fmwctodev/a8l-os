@@ -32,6 +32,9 @@ import OpportunityStageChangedConfig from './OpportunityStageChangedConfig';
 import OpportunityCreatedConfig from './OpportunityCreatedConfig';
 import OpportunityStaleConfig from './OpportunityStaleConfig';
 import WebhookTriggerConfig from './WebhookTriggerConfig';
+import AICallCompletedConfig from './AICallCompletedConfig';
+import AIVoicemailReceivedConfig from './AIVoicemailReceivedConfig';
+import AIAgentHandoffConfig from './AIAgentHandoffConfig';
 
 type ConfigEntry = {
   component: ComponentType<TriggerConfigProps>;
@@ -69,4 +72,8 @@ export const TRIGGER_CONFIG_MAP: Record<string, ConfigEntry> = {
   opportunity_stale: { component: OpportunityStaleConfig },
   scheduled: { component: SchedulerConfig },
   webhook_received: { component: WebhookTriggerConfig },
+  // P6 — Vapi voice AI triggers
+  ai_call_completed: { component: AICallCompletedConfig },
+  ai_voicemail_received: { component: AIVoicemailReceivedConfig },
+  ai_agent_handoff_requested: { component: AIAgentHandoffConfig },
 };

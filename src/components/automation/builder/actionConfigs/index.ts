@@ -40,6 +40,9 @@ import GenerateBookingLinkConfig from './GenerateBookingLinkConfig';
 import CreateOrUpdateOpportunityConfig from './CreateOrUpdateOpportunityConfig';
 import RemoveOpportunityConfig from './RemoveOpportunityConfig';
 import SendDocumentsAndContractsConfig from './SendDocumentsAndContractsConfig';
+import StartAiCallConfig from './StartAiCallConfig';
+import TransferToAiAgentConfig from './TransferToAiAgentConfig';
+import SendAiVoicemailConfig from './SendAiVoicemailConfig';
 
 type ConfigEntry = {
   component: ComponentType<ActionConfigProps>;
@@ -81,4 +84,8 @@ export const ACTION_CONFIG_MAP: Record<string, ConfigEntry> = {
   create_or_update_opportunity: { component: CreateOrUpdateOpportunityConfig },
   remove_opportunity: { component: RemoveOpportunityConfig },
   send_documents_and_contracts: { component: SendDocumentsAndContractsConfig },
+  // P6 — Vapi voice AI actions
+  start_ai_call: { component: StartAiCallConfig },
+  transfer_to_ai_agent: { component: TransferToAiAgentConfig },
+  send_ai_voicemail: { component: SendAiVoicemailConfig },
 };

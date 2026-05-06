@@ -433,6 +433,72 @@ async function normalizeCallEnd(
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// P6 — Workflow event emission helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Maps a Vapi `endedReason` string to the canonical workflow outcome enum used
+ * by the AICallCompletedConfig trigger filter.
+ */
+function mapEndedReasonToOutcome(endedReason: string): string {
+  const r = (endedReason || "").toLowerCase();
+  if (!r) return "completed";
+  if (r.includes("voicemail") || r.includes("answer-machine")) return "voicemail_left";
+  if (r.includes("transfer")) return "transferred";
+  if (r.includes("no-answer") || r.includes("noanswer")) return "no_answer";
+  if (r.includes("busy")) return "no_answer";
+  if (r.includes("hung-up") || r.includes("customer-ended")) return "hung_up";
+  if (r.includes("failed") || r.includes("error")) return "no_answer";
+  return "completed";
+}
+
+/**
+ * Pulls a small set of high-signal keywords from a transcript so the
+ * AIVoicemailReceivedConfig keyword filter can match against them
+ * without scanning the whole transcript.
+ */
+function extractKeywordsFromTranscript(transcript: string | null): string[] {
+  if (!transcript) return [];
+  const lower = transcript.toLowerCase();
+  const matches: string[] = [];
+  const candidates = [
+    "interested", "callback", "call back", "urgent", "asap", "schedule",
+    "appointment", "pricing", "quote", "demo", "cancel", "refund", "angry",
+    "frustrated", "qualified", "decision maker", "budget", "timeline",
+  ];
+  for (const w of candidates) {
+    if (lower.includes(w)) matches.push(w);
+  }
+  return matches;
+}
+
+/**
+ * Writes a workflow trigger event to event_outbox so workflow-processor
+ * picks it up and dispatches matching enrollments. We use the same event_outbox
+ * pattern as plivo-sms-inbound, form-submit, etc.
+ */
+async function emitWorkflowEvent(
+  supabase: ReturnType<typeof getSupabase>,
+  orgId: string,
+  eventType: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  try {
+    await supabase.from("event_outbox").insert({
+      org_id: orgId,
+      event_type: eventType,
+      aggregate_type: "vapi_call",
+      aggregate_id: (payload.vapi_call_id as string) || null,
+      payload,
+      status: "pending",
+      created_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error(`[vapi-webhook] Failed to emit ${eventType}:`, err);
+  }
+}
+
 Deno.serve(async (req: Request) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -505,6 +571,19 @@ Deno.serve(async (req: Request) => {
             })
             .eq("vapi_call_id", vapiCallId);
         }
+
+        // P6 — emit ai_call_started workflow trigger event.
+        await emitWorkflowEvent(supabase, orgId, "ai_call_started", {
+          vapi_call_id: vapiCallId,
+          vapi_assistant_id: vapiAssistantId,
+          assistant_id: internalAssistantId,
+          assistant_name: assistantName,
+          assistantIds: internalAssistantId ? [internalAssistantId] : [],
+          phone: message.call?.customer?.number || null,
+          direction: message.call?.type === "outboundPhoneCall" ? "outbound" : "inbound",
+          started_at: message.call?.startedAt || new Date().toISOString(),
+          metadata: message.call?.metadata || null,
+        });
         break;
       }
 
@@ -562,6 +641,56 @@ Deno.serve(async (req: Request) => {
                 recordingUrl: message.artifact?.recordingUrl || message.recordingUrl || null,
               }).catch((err) => console.error("[vapi-webhook] Email notification error:", err))
             );
+          }
+
+          // ─────────────────────────────────────────────────────────────
+          // P6 — emit AI voice trigger events to event_outbox so workflows
+          // can branch on call outcome, voicemails, and handoff requests.
+          // ─────────────────────────────────────────────────────────────
+          const endedReason = (message.endedReason || "").toString().toLowerCase();
+          const structuredOutput = (message.analysis?.structuredData as Record<string, unknown>) || {};
+          const outcome = (structuredOutput.outcome as string) || mapEndedReasonToOutcome(endedReason);
+          const wentToVoicemail = endedReason.includes("voicemail")
+            || endedReason.includes("answer-machine")
+            || outcome === "voicemail_left";
+          const handoffRequested = endedReason.includes("transfer")
+            || (structuredOutput.handoff_requested as boolean) === true;
+
+          const baseDetail = {
+            vapi_call_id: vapiCallId,
+            vapi_assistant_id: vapiAssistantId,
+            assistant_id: internalAssistantId,
+            assistant_name: assistantName,
+            assistantIds: internalAssistantId ? [internalAssistantId] : [],
+            phone: message.call?.customer?.number || null,
+            direction: isInbound ? "inbound" : "outbound",
+            channel: "voice",
+            duration_seconds: durationSeconds,
+            minDurationSeconds: durationSeconds,
+            outcome,
+            outcomes: [outcome],
+            ended_reason: endedReason,
+            transcript,
+            summary,
+            qualified: !!structuredOutput.qualified,
+            requireQualified: !!structuredOutput.qualified,
+            sentiment: (structuredOutput.sentiment as string) || "neutral",
+            keywords: extractKeywordsFromTranscript(transcript),
+            recording_url: message.artifact?.recordingUrl || message.recordingUrl || null,
+            structured_output: structuredOutput,
+          };
+
+          await emitWorkflowEvent(supabase, orgId, "ai_call_completed", baseDetail);
+
+          if (wentToVoicemail) {
+            await emitWorkflowEvent(supabase, orgId, "ai_voicemail_received", baseDetail);
+          }
+          if (handoffRequested) {
+            await emitWorkflowEvent(supabase, orgId, "ai_agent_handoff_requested", {
+              ...baseDetail,
+              reason: (structuredOutput.handoff_reason as string) || "transferred",
+              reasons: [(structuredOutput.handoff_reason as string) || "transferred"],
+            });
           }
         }
 

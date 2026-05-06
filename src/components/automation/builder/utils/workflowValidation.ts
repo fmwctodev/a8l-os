@@ -257,11 +257,50 @@ export function validateActionConfig(actionType: string, cfg: Record<string, unk
       if (!cfg.templateId) errors.push('Document template ID is required');
       break;
     case 'manual_action':
-      if (!cfg.instructionText) errors.push('Instruction text is required for manual actions');
+      // P7: support either legacy `instructionText` or new `description` field.
+      if (!cfg.instructionText && !cfg.description) {
+        errors.push('Instruction text or description is required for manual actions');
+      }
+      if (cfg.approverType === 'specific_users') {
+        const ids = Array.isArray(cfg.approverUserIds) ? (cfg.approverUserIds as unknown[]) : [];
+        if (ids.length === 0) errors.push('At least one approver user must be picked');
+      }
+      if (cfg.expiresInHours !== undefined) {
+        const hrs = Number(cfg.expiresInHours);
+        if (Number.isNaN(hrs) || hrs < 1) errors.push('Expires in hours must be at least 1');
+      }
       break;
     case 'drip_mode':
       if (!cfg.batchSize || (cfg.batchSize as number) < 1) errors.push('Batch size must be at least 1');
       if (!cfg.intervalValue || (cfg.intervalValue as number) < 1) errors.push('Interval value must be at least 1');
+      break;
+
+    // P4 — dual-rail email
+    case 'send_email_org':
+    case 'send_email_personal': {
+      const useTemplate = cfg.useTemplate !== false; // default true
+      if (useTemplate) {
+        if (!cfg.template_id) errors.push('Pick an email template, or switch to raw email mode');
+      } else {
+        if (!cfg.raw_subject) errors.push('Email subject is required (raw mode)');
+        if (!cfg.raw_body_html) errors.push('Email body HTML is required (raw mode)');
+      }
+      break;
+    }
+
+    // P6 — Vapi voice AI actions
+    case 'start_ai_call':
+      if (!cfg.assistant_id) errors.push('Pick a Vapi assistant');
+      if (cfg.max_duration_seconds && Number(cfg.max_duration_seconds) < 30) {
+        errors.push('Max duration must be at least 30 seconds');
+      }
+      break;
+    case 'transfer_to_ai_agent':
+      if (!cfg.target_assistant_id) errors.push('Pick a target Vapi assistant');
+      break;
+    case 'send_ai_voicemail':
+      if (!cfg.assistant_id) errors.push('Pick a Vapi assistant for the voicemail voice');
+      if (!cfg.voicemail_text) errors.push('Voicemail script is required');
       break;
   }
 

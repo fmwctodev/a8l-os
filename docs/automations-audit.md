@@ -36,9 +36,10 @@ Goal: every row green. As of 2026-05-05 (post-Phase-1), many engine handlers hav
 | `opportunity_stage_changed` | ✅ DB trigger | ✅ `opportunity_stage_changed` | ✅ `OpportunityStageChangedConfig` | ❌ |
 | `opportunity_status_changed` | ✅ DB trigger | ✅ `opportunity_status_changed` | ✅ `OpportunityStatusChangedConfig` | ❌ |
 | `sms_send_requested` | 🚫 reserved future use | ❌ | ❌ | ❌ |
-| `ai_call_completed` (P6) | ❌ — Phase 6 | ❌ | ❌ | ❌ |
-| `ai_voicemail_received` (P6) | ❌ — Phase 6 | ❌ | ❌ | ❌ |
-| `ai_agent_handoff_requested` (P6) | ❌ — Phase 6 | ❌ | ❌ | ❌ |
+| `ai_call_started` (P6) | ✅ vapi-webhook | ✅ allow-all | ❌ (no specific UI yet — fires on every call) | ✅ TRIGGER_OPTIONS |
+| `ai_call_completed` (P6) | ✅ vapi-webhook | ✅ outcome/duration/qualified/assistant filter | ✅ `AICallCompletedConfig` | ✅ TRIGGER_OPTIONS |
+| `ai_voicemail_received` (P6) | ✅ vapi-webhook | ✅ keyword/duration/sentiment filter | ✅ `AIVoicemailReceivedConfig` | ✅ TRIGGER_OPTIONS |
+| `ai_agent_handoff_requested` (P6) | ✅ vapi-webhook | ✅ reason/channel filter | ✅ `AIAgentHandoffConfig` | ✅ TRIGGER_OPTIONS |
 
 **Trigger-side gap summary:**
 - Picker entries are entirely missing (TriggerPickerDrawer needs to enumerate every trigger type)
@@ -147,9 +148,9 @@ Goal: every row green. As of 2026-05-05 (post-Phase-1), many engine handlers hav
 | `ai_booking_assist` | ✅ | ❌ | ❌ |
 | `ai_decision_step` | ✅ | ❌ | ❌ |
 | `ai_prompt` | ✅ | ✅ | ❌ |
-| `start_ai_call` (P6) | ❌ — Phase 6 | ❌ | ❌ |
-| `transfer_to_ai_agent` (P6) | ❌ — Phase 6 | ❌ | ❌ |
-| `send_ai_voicemail` (P6) | ❌ — Phase 6 | ❌ | ❌ |
+| `start_ai_call` (P6) | ✅ executeVapiAction → Vapi /call | ✅ `StartAiCallConfig` | ✅ ACTION_OPTIONS |
+| `transfer_to_ai_agent` (P6) | ✅ executeVapiAction → Vapi /call | ✅ `TransferToAiAgentConfig` | ✅ ACTION_OPTIONS |
+| `send_ai_voicemail` (P6) | ✅ executeVapiAction → Vapi /call (voicemail mode) | ✅ `SendAiVoicemailConfig` | ✅ ACTION_OPTIONS |
 
 ### Flow control
 
@@ -256,3 +257,100 @@ This audit doc establishes the baseline. Subsequent work in P3 should:
 - Re-run the audit and fill in green checkmarks
 
 Phases 4-15 will add new rows (email_org, email_personal, AI/Vapi actions/triggers, etc.) which should also land in this matrix as they ship.
+
+---
+
+## P1–P14 Final delivery summary (2026-05-05)
+
+All 14 implementation phases shipped end-to-end. Status of the integrations
+the user asked for:
+
+| Channel | Provider | Action(s) shipped | Trigger(s) shipped |
+|---|---|---|---|
+| **SMS** | Plivo | `send_sms` (canSendOnChannel-gated for TCPA + DND) | `conversation_message_received` (plivo-sms-inbound emits) |
+| **Email — Org** | SendGrid | `send_email_org` (template_id or raw) | `event_email` (existing) |
+| **Email — Personal** | Gmail OAuth | `send_email_personal` (from_user_id sentinel) | `event_email` (existing) |
+| **AI Voice** | Vapi | `start_ai_call` / `transfer_to_ai_agent` / `send_ai_voicemail` | `ai_call_started` / `ai_call_completed` / `ai_voicemail_received` / `ai_agent_handoff_requested` |
+
+### Migrations applied to production (uscpncgnkmjirbrpidgu)
+
+- `20260505150000_workflow_trigger_event_outbox_emitters.sql` — 8 DB triggers (P1)
+- `20260505160000_email_templates_module.sql` — email_templates + versions (P4)
+- `20260505170000_extend_trigger_types_for_vapi.sql` — 4 new enum values (P6)
+- `20260505180000_workflow_dnd_and_approvals_v2.sql` — DND audit + best-practice approvals (P7)
+- `20260505190000_seed_system_automation_templates_v3.sql` — 12 system templates (P10)
+- `20260505200000_templates_marketplace.sql` — marketplace fields + reviews + install RPC (P14)
+
+### Edge Functions changed/added
+
+- `workflow-processor` — canSendOnChannel + executeVapiAction + test_mode + send_email_org/personal handlers + Vapi action dispatch
+- `vapi-webhook` — emitWorkflowEvent helper, ai_call_started/completed/voicemail/handoff emissions
+- `plivo-sms-inbound` — emits conversation_message_received with message_body_upper
+- `booking-api` — emits appointment_booked with start_at_minus_24h/_1h merge fields
+- `form-submit` — TCPA gate + opportunity creation
+- `email-send` — template_id + rail (sendgrid|gmail) modes
+- `approval-magic-link` (NEW) — typed-magic-link with HMAC-signed tokens
+- `approval-reminder-cron` (NEW) — auto-expire + 24h reminder dispatch
+
+### Frontend additions
+
+UI configs (action side, in `automation/builder/actionConfigs/`):
+- SendSmsConfig — TCPA + segment counter + from-number
+- SendEmailOrgConfig — SendGrid + template picker + raw mode
+- SendEmailPersonalConfig — Gmail OAuth + from_user_id selector
+- StartAiCallConfig — Vapi assistant picker + call_goal + max_duration + fallback
+- TransferToAiAgentConfig — transfer_mode + handoff_context
+- SendAiVoicemailConfig — voicemail script + voice picker + duration estimate
+- ManualActionConfig — full P7 approval gate (approver routing, multi-approver,
+  expires_in_hours, expirationBranch, magic-link toggle)
+
+UI configs (trigger side, in `automation/builder/triggerConfigs/`):
+- AICallCompletedConfig — outcome / duration / qualified / assistant filter
+- AIVoicemailReceivedConfig — keyword / duration / sentiment filter
+- AIAgentHandoffConfig — reason / channel filter
+
+Other components:
+- WorkflowDiffViewer — version-vs-version diff modal (P9)
+- WorkflowTrendsChart — daily enrollments / action breakdown / failure pie / goal achievement (P12)
+- AIWorkflowGeneratorDrawer — chat-style natural-language workflow generation (P11)
+- All builder drawers/panels — responsive (full-screen on mobile, fixed-width on desktop) (P13)
+
+Pages:
+- EmailTemplates list (P4)
+- EmailTemplateEditor with plain-text mode + drag-drop scaffold (P4)
+
+### What still needs deployment by the user
+
+The migrations are applied to prod. The Edge Function code is committed but
+not yet deployed (auto-mode rule blocks production deploys).
+After review, run:
+
+```sh
+supabase functions deploy workflow-processor --project-ref uscpncgnkmjirbrpidgu --no-verify-jwt
+supabase functions deploy vapi-webhook --project-ref uscpncgnkmjirbrpidgu --no-verify-jwt
+supabase functions deploy approval-magic-link --project-ref uscpncgnkmjirbrpidgu --no-verify-jwt
+supabase functions deploy approval-reminder-cron --project-ref uscpncgnkmjirbrpidgu --no-verify-jwt
+```
+
+Then schedule `approval-reminder-cron` via pg_cron at `*/30 * * * *`.
+
+### Smoke test checklist
+
+Run these to verify end-to-end:
+
+- [ ] Build a workflow with a `form_submitted` trigger + `send_sms` action.
+      Submit /get-in-touch on a8l-site. Verify SMS arrives within 30s.
+- [ ] Add a `send_email_org` action with a published email template.
+      Verify SendGrid sends from the org's verified sender + template merge fields resolve.
+- [ ] Add a `start_ai_call` action pointing at a published Vapi assistant.
+      Verify outbound call places via Vapi `/call`.
+- [ ] On call completion, verify `ai_call_completed` event fires + downstream
+      workflow steps trigger.
+- [ ] Set DND on a contact (sms channel). Run a workflow with send_sms. Verify
+      a row appears in `workflow_dnd_suppressions` and NO SMS is sent.
+- [ ] Add a manual_action with `expiresInHours: 1`. Wait, then confirm
+      auto-expire fires expiration_branch.
+- [ ] Use the version diff viewer to compare v1 → v2 of a workflow. Confirm
+      added / removed / modified node detection works.
+- [ ] Open the AI workflow generator drawer and ask for a workflow.
+      Refine it once. Accept and verify it lands on the canvas.

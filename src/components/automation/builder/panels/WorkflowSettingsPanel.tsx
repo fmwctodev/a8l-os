@@ -53,7 +53,7 @@ export function WorkflowSettingsPanel({
   };
 
   return (
-    <div className="w-[440px] h-full bg-white border-l border-gray-200 flex flex-col shadow-xl">
+    <div className="fixed inset-0 z-30 sm:static sm:z-auto w-full sm:w-[440px] h-full bg-white sm:border-l border-gray-200 flex flex-col shadow-xl">
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-md bg-gray-800 flex items-center justify-center">

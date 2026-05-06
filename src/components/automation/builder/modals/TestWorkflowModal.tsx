@@ -144,13 +144,14 @@ export function TestWorkflowModal({ nodes, edges, onClose }: TestWorkflowModalPr
         const actionType = (nextNode.data.nodeData as any)?.actionType;
         const cfg = (nextNode.data.nodeData as any)?.config ?? {};
         const opt = ACTION_OPTIONS.find(a => a.type === actionType);
+        const dangerPrefix = isDangerAction(actionType) ? '⚠️ DESTRUCTIVE — ' : '';
         steps.push({
           nodeId: nextNode.id,
           label: opt?.label ?? nextNode.data.label,
           type: 'action',
           status: nextNode.data.isValid ? 'executed' : 'failed',
           detail: nextNode.data.isValid
-            ? getActionSimulationDetail(actionType, cfg)
+            ? dangerPrefix + getActionSimulationDetail(actionType, cfg)
             : 'Node has incomplete configuration',
         });
       } else if (nextNode.data.nodeType === 'goal') {
@@ -214,8 +215,34 @@ export function TestWorkflowModal({ nodes, edges, onClose }: TestWorkflowModalPr
       case 'create_or_update_opportunity': return `Would ${cfg.mode ?? 'create'} opportunity "${cfg.titleTemplate ?? 'New Opportunity'}"`;
       case 'remove_opportunity': return `Would ${cfg.mode === 'delete' ? 'delete' : 'archive'} ${cfg.scope ?? 'current'} opportunity`;
       case 'send_documents_and_contracts': return `Would send document via ${cfg.deliveryChannel ?? 'email'}${cfg.requireSignature ? ', signature required' : ''}`;
+
+      // P4 — dual-rail email
+      case 'send_email_org': return cfg.template_id
+        ? `Would send SendGrid email using template ${cfg.template_id}`
+        : `Would send raw SendGrid email: "${(cfg.raw_subject as string) ?? '(no subject)'}"`;
+      case 'send_email_personal': return cfg.template_id
+        ? `Would send Gmail (personal) using template ${cfg.template_id}`
+        : `Would send raw Gmail email: "${(cfg.raw_subject as string) ?? '(no subject)'}"`;
+
+      // P6 — Vapi voice AI
+      case 'start_ai_call': return `Would start AI voice call (Vapi) — assistant ${cfg.assistant_id ?? '?'}, max ${cfg.max_duration_seconds ?? 600}s`;
+      case 'transfer_to_ai_agent': return `Would transfer to AI assistant ${cfg.target_assistant_id ?? '?'} (mode: ${cfg.transfer_mode ?? 'auto'})`;
+      case 'send_ai_voicemail': return `Would drop AI voicemail (Vapi) — assistant ${cfg.assistant_id ?? '?'}`;
+
       default: return `Would execute action: ${actionType}`;
     }
+  }
+
+  // Destructive actions get a red-highlighted "DANGER" badge in the trace.
+  function isDangerAction(actionType: string): boolean {
+    return [
+      'delete_contact',
+      'mark_opportunity_lost',
+      'remove_opportunity',
+      'void_invoice',
+      'set_dnd',
+      'remove_from_workflow_action',
+    ].includes(actionType);
   }
 
   return (

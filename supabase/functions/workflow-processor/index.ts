@@ -942,6 +942,72 @@ function evaluateTriggerSpecificConfig(
       if (stageFilter && payload.stage_id !== stageFilter) return false;
       return true;
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    // P6 — Vapi voice AI trigger filters
+    // ─────────────────────────────────────────────────────────────────
+    case "ai_call_completed": {
+      const outcomes = (config.outcomes as string[]) ?? [];
+      const minDuration = (config.minDurationSeconds as number) ?? 0;
+      const requireQualified = (config.requireQualified as boolean) ?? false;
+      const assistantIds = (config.assistantIds as string[]) ?? [];
+      const payloadOutcome = (payload.outcome as string) || "completed";
+      const payloadAssistantIds = (payload.assistantIds as string[]) ?? [];
+      const dur = (payload.duration_seconds as number) ?? 0;
+
+      if (outcomes.length > 0 && !outcomes.includes(payloadOutcome)) return false;
+      if (minDuration > 0 && dur < minDuration) return false;
+      if (requireQualified && !payload.qualified) return false;
+      if (assistantIds.length > 0) {
+        const hasMatch = assistantIds.some((id) => payloadAssistantIds.includes(id));
+        if (!hasMatch) return false;
+      }
+      return true;
+    }
+    case "ai_voicemail_received": {
+      const keywords = (config.keywords as string[]) ?? [];
+      const minDuration = (config.minDurationSeconds as number) ?? 0;
+      const sentiment = (config.sentiment as string) ?? "any";
+      const payloadKeywords = (payload.keywords as string[]) ?? [];
+      const transcript = ((payload.transcript as string) || "").toLowerCase();
+      const dur = (payload.duration_seconds as number) ?? 0;
+      const payloadSentiment = (payload.sentiment as string) ?? "neutral";
+
+      if (minDuration > 0 && dur < minDuration) return false;
+      if (keywords.length > 0) {
+        const lowerKeywords = keywords.map((k) => k.toLowerCase());
+        const matches = lowerKeywords.some((k) =>
+          payloadKeywords.includes(k) || transcript.includes(k)
+        );
+        if (!matches) return false;
+      }
+      if (sentiment !== "any") {
+        if (sentiment === "positive" && payloadSentiment !== "positive") return false;
+        if (sentiment === "neutral" && payloadSentiment === "negative") return false;
+        if (sentiment === "negative" && payloadSentiment !== "negative") return false;
+      }
+      return true;
+    }
+    case "ai_agent_handoff_requested": {
+      const reasons = (config.reasons as string[]) ?? [];
+      const channel = (config.channel as string) ?? "any";
+      const payloadReasons = (payload.reasons as string[]) ?? [
+        (payload.reason as string) || "",
+      ].filter(Boolean);
+      const payloadChannel = (payload.channel as string) ?? "voice";
+
+      if (reasons.length > 0) {
+        const matches = reasons.some((r) => payloadReasons.includes(r));
+        if (!matches) return false;
+      }
+      if (channel !== "any" && payloadChannel !== channel) return false;
+      return true;
+    }
+    case "ai_call_started": {
+      // No filter knobs in v1 — fires on every call.started.
+      return true;
+    }
+
     default:
       return true;
   }
@@ -1062,6 +1128,31 @@ async function executeAction(
   const contact = enrollment.contact as Record<string, unknown>;
   const contactId = contact.id as string;
 
+  // P8 — test mode short-circuit. If the enrollment is marked test_mode,
+  // log what would happen and return early WITHOUT making any external
+  // API calls (no SMS, no email, no Vapi calls, no Slack pings, etc).
+  // Internal CRM mutations (add_tag, update_field, etc.) are also skipped
+  // to keep test runs idempotent and side-effect-free.
+  const testMode = (enrollment as { test_mode?: boolean }).test_mode === true
+    || ((enrollment.context_data as Record<string, unknown>)?._test_mode === true);
+  if (testMode) {
+    await supabase.from("workflow_action_logs").insert({
+      enrollment_id: enrollment.id,
+      action_type: actionType,
+      status: "test_mode_skipped",
+      detail: `[TEST MODE] Would have executed ${actionType}`,
+      metadata: {
+        test_mode: true,
+        action_config: config,
+        is_destructive: [
+          "delete_contact", "mark_opportunity_lost", "remove_opportunity",
+          "void_invoice", "set_dnd", "remove_from_workflow_action",
+        ].includes(actionType),
+      },
+    }).catch(() => {});
+    return;
+  }
+
   switch (actionType) {
     case "add_tag": {
       const tagId = config.tagId as string;
@@ -1134,6 +1225,15 @@ async function executeAction(
 
     case "send_sms": {
       const ctx = enrollment.context_data as Record<string, unknown> | undefined;
+      const allowed = await canSendOnChannel(supabase, contact, "sms", {
+        orgId,
+        enrollmentId: enrollment.id as string,
+        workflowId: (enrollment as Record<string, unknown>).workflow_id as string,
+        nodeId: data.nodeId as string,
+        actionType: "send_sms",
+        payload: { body_preview: ((config.body as string) ?? "").slice(0, 80) },
+      });
+      if (!allowed) break;
       const body = resolveMergeFields(config.body as string, contact, ctx);
       await sendSms(supabase, orgId, contactId, contact.phone as string, body);
       break;
@@ -1143,6 +1243,15 @@ async function executeAction(
       // Legacy action — Gmail OAuth path. New workflows should use
       // send_email_org or send_email_personal. Kept for backwards compat.
       const ctx = enrollment.context_data as Record<string, unknown> | undefined;
+      const allowed = await canSendOnChannel(supabase, contact, "email", {
+        orgId,
+        enrollmentId: enrollment.id as string,
+        workflowId: (enrollment as Record<string, unknown>).workflow_id as string,
+        nodeId: data.nodeId as string,
+        actionType: "send_email",
+        payload: { subject_preview: ((config.subject as string) ?? "").slice(0, 80) },
+      });
+      if (!allowed) break;
       const subject = resolveMergeFields(config.subject as string, contact, ctx);
       const emailBody = resolveMergeFields(config.body as string, contact, ctx);
       await sendEmail(supabase, orgId, contactId, contact.email as string, subject, emailBody);
@@ -1153,6 +1262,15 @@ async function executeAction(
       // Sends as the organization via SendGrid. Optionally resolves a
       // marketing-module email template by ID.
       const ctx = enrollment.context_data as Record<string, unknown> | undefined;
+      const allowed = await canSendOnChannel(supabase, contact, "email", {
+        orgId,
+        enrollmentId: enrollment.id as string,
+        workflowId: (enrollment as Record<string, unknown>).workflow_id as string,
+        nodeId: data.nodeId as string,
+        actionType: "send_email_org",
+        payload: { template_id: config.template_id, recipient_override: config.recipient_override },
+      });
+      if (!allowed) break;
       const recipient =
         (config.recipient_override as string) ||
         (resolveMergeFields(((config.recipient_override as string) ?? "{{contact.email}}"), contact, ctx)) ||
@@ -1192,6 +1310,15 @@ async function executeAction(
       // Sends from a user's Gmail OAuth account. Optionally resolves a
       // marketing-module email template by ID.
       const ctx = enrollment.context_data as Record<string, unknown> | undefined;
+      const allowed = await canSendOnChannel(supabase, contact, "email", {
+        orgId,
+        enrollmentId: enrollment.id as string,
+        workflowId: (enrollment as Record<string, unknown>).workflow_id as string,
+        nodeId: data.nodeId as string,
+        actionType: "send_email_personal",
+        payload: { template_id: config.template_id, from_user_id: config.from_user_id },
+      });
+      if (!allowed) break;
       const recipient =
         (config.recipient_override as string) ||
         (contact.email as string);
@@ -1327,6 +1454,24 @@ async function executeAction(
         .update({ context_data: contextData })
         .eq("id", enrollment.id);
 
+      return result;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // P6 — Vapi voice AI actions
+    // ─────────────────────────────────────────────────────────────────
+    case "start_ai_call":
+    case "transfer_to_ai_agent":
+    case "send_ai_voicemail": {
+      const result = await executeVapiAction(
+        supabase,
+        actionType,
+        config,
+        contact,
+        enrollment,
+        orgId,
+        contactId
+      );
       return result;
     }
 
@@ -3060,6 +3205,340 @@ async function executeAIWorkflowAction(
     output_structured: result.output_structured,
     draft_id: result.draft_id,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P6 — Vapi voice AI actions
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// executeVapiAction handles three workflow actions that call out to Vapi:
+//   - start_ai_call: outbound voice call from a Vapi assistant to the contact
+//   - transfer_to_ai_agent: hand off active conversation/call to another assistant
+//   - send_ai_voicemail: drop a Vapi-rendered voicemail without ringing
+//
+// Voice DND is enforced here: if the contact's dnd_status disables voice or
+// 'all', we short-circuit, log a suppression, and return success: true with
+// a `suppressed: true` marker so the workflow continues without firing again.
+
+interface VapiActionResult {
+  success: boolean;
+  vapi_call_id?: string;
+  suppressed?: boolean;
+  error?: string;
+  detail?: string;
+}
+
+function isVoiceDndActive(contact: Record<string, unknown>): boolean {
+  return !canSendOnChannelSync(contact, "voice");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P7 — Centralized DND / consent gating
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Every send_* action MUST gate through canSendOnChannel before dispatching.
+// When DND blocks a send, we log a row to workflow_dnd_suppressions for audit.
+// This is also the single place the consent gate lives — TCPA enforcement
+// already happens upstream at form-submit, but we re-check at workflow time
+// so a contact who later opts out is respected immediately.
+//
+// channel: 'sms' | 'email' | 'voice'
+// returns: true if the send is permitted, false if it should be suppressed
+//
+// Decision sources (ordered by priority):
+//   1. contact.dnd_status.enabled + channels[] (explicit per-channel DND)
+//   2. contact.unsubscribed_email_at (for email)
+//   3. contact.sms_consent (for SMS — must be true to send)
+
+interface DndCheckResult {
+  allowed: boolean;
+  reason?: string;
+}
+
+function canSendOnChannelSync(
+  contact: Record<string, unknown>,
+  channel: "sms" | "email" | "voice"
+): boolean {
+  return canSendOnChannelDetailed(contact, channel).allowed;
+}
+
+function canSendOnChannelDetailed(
+  contact: Record<string, unknown>,
+  channel: "sms" | "email" | "voice"
+): DndCheckResult {
+  // 1. Explicit DND object set by set_dnd action / API.
+  const dnd = contact.dnd_status as
+    | { enabled?: boolean; channels?: string[]; end_date?: string | null }
+    | null
+    | undefined;
+  if (dnd?.enabled) {
+    const expired = dnd.end_date && new Date(dnd.end_date) < new Date();
+    if (!expired) {
+      const channels = Array.isArray(dnd.channels) ? dnd.channels : [];
+      const channelAliases = channel === "voice" ? ["voice", "call"] : [channel];
+      if (channels.includes("all") || channelAliases.some((c) => channels.includes(c))) {
+        return { allowed: false, reason: `DND active for channel ${channel}` };
+      }
+    }
+  }
+
+  // 2. Per-channel hard checks.
+  if (channel === "email") {
+    if (contact.unsubscribed_email_at) {
+      return { allowed: false, reason: "Contact unsubscribed from email" };
+    }
+    if (!contact.email) {
+      return { allowed: false, reason: "Contact has no email address" };
+    }
+  }
+  if (channel === "sms") {
+    // TCPA: require explicit consent OR the contact replied to us first
+    // (which is treated as implicit consent for transactional follow-up).
+    const explicitConsent = contact.sms_consent === true;
+    const customField = (contact.custom_fields as Record<string, unknown>) || {};
+    const customConsent = customField.sms_consent === true || customField.tcpa_consent === true;
+    if (!explicitConsent && !customConsent) {
+      return { allowed: false, reason: "SMS consent not on record (TCPA gate)" };
+    }
+    if (!contact.phone) {
+      return { allowed: false, reason: "Contact has no phone number" };
+    }
+  }
+  if (channel === "voice") {
+    if (!contact.phone) {
+      return { allowed: false, reason: "Contact has no phone number" };
+    }
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * canSendOnChannel — entry point for action handlers. Logs a suppression row
+ * when the send is blocked so the audit trail is complete.
+ */
+async function canSendOnChannel(
+  supabase: ReturnType<typeof createClient>,
+  contact: Record<string, unknown>,
+  channel: "sms" | "email" | "voice",
+  context: {
+    orgId: string;
+    enrollmentId?: string;
+    workflowId?: string;
+    nodeId?: string;
+    actionType: string;
+    payload?: Record<string, unknown>;
+  }
+): Promise<boolean> {
+  const result = canSendOnChannelDetailed(contact, channel);
+  if (result.allowed) return true;
+
+  // Log the suppression for audit. Use catch so a logging failure never
+  // blocks the (already-suppressed) action.
+  try {
+    await supabase.from("workflow_dnd_suppressions").insert({
+      org_id: context.orgId,
+      enrollment_id: context.enrollmentId ?? null,
+      workflow_id: context.workflowId ?? null,
+      node_id: context.nodeId ?? null,
+      action_type: context.actionType,
+      channel,
+      contact_id: (contact.id as string) ?? null,
+      reason: result.reason ?? "blocked",
+      payload: context.payload ?? {},
+    });
+  } catch (err) {
+    console.warn("[workflow-processor] failed to log dnd suppression:", err);
+  }
+  return false;
+}
+
+async function getVapiCredentialsForOrg(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string
+): Promise<{ apiKey: string; defaultPhoneNumberId?: string } | null> {
+  const { data: integ } = await supabase
+    .from("integrations")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("key", "vapi")
+    .maybeSingle();
+  if (!integ) return null;
+
+  const { data: conn } = await supabase
+    .from("integration_connections")
+    .select("credentials_encrypted, settings")
+    .eq("integration_id", integ.id)
+    .eq("org_id", orgId)
+    .eq("status", "connected")
+    .maybeSingle();
+  if (!conn?.credentials_encrypted) return null;
+
+  try {
+    const creds = JSON.parse(conn.credentials_encrypted as string);
+    if (!creds.api_key) return null;
+    const settings = (conn.settings as Record<string, unknown>) || {};
+    return {
+      apiKey: creds.api_key,
+      defaultPhoneNumberId: settings.default_phone_number_id as string | undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function vapiPlaceCall(
+  apiKey: string,
+  body: Record<string, unknown>
+): Promise<{ ok: boolean; status: number; data: unknown }> {
+  const response = await fetch("https://api.vapi.ai/call", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  return { ok: response.ok, status: response.status, data };
+}
+
+async function executeVapiAction(
+  supabase: ReturnType<typeof createClient>,
+  actionType: string,
+  config: Record<string, unknown>,
+  contact: Record<string, unknown>,
+  enrollment: Record<string, unknown>,
+  orgId: string,
+  contactId: string
+): Promise<VapiActionResult> {
+  // 1. Voice DND gate via centralized canSendOnChannel.
+  const allowed = await canSendOnChannel(supabase, contact, "voice", {
+    orgId,
+    enrollmentId: enrollment.id as string,
+    workflowId: (enrollment as Record<string, unknown>).workflow_id as string,
+    actionType,
+    payload: {
+      assistant_id: config.assistant_id || config.target_assistant_id,
+      call_goal: config.call_goal || config.handoff_context,
+    },
+  });
+  if (!allowed) {
+    return { success: true, suppressed: true, detail: "Voice DND active or no phone number" };
+  }
+
+  // 2. Need a phone number to call.
+  const phone = (contact.phone as string) || "";
+  if (!phone) {
+    return { success: false, error: "Contact has no phone number" };
+  }
+
+  // 3. Look up the vapi_assistants row and resolve to remote vapi_assistant_id.
+  const assistantRowId = (config.assistant_id || config.target_assistant_id) as string | undefined;
+  if (!assistantRowId) {
+    return { success: false, error: "No assistant_id configured" };
+  }
+
+  const { data: assistant } = await supabase
+    .from("vapi_assistants")
+    .select("id, name, vapi_assistant_id, status")
+    .eq("id", assistantRowId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (!assistant?.vapi_assistant_id) {
+    return { success: false, error: "Assistant not synced to Vapi (vapi_assistant_id missing)" };
+  }
+  if (assistant.status !== "published") {
+    return { success: false, error: `Assistant '${assistant.name}' is not published` };
+  }
+
+  // 4. Look up Vapi creds for this org.
+  const creds = await getVapiCredentialsForOrg(supabase, orgId);
+  if (!creds) {
+    return { success: false, error: "Vapi integration not connected for this org" };
+  }
+  const phoneNumberId = (config.phone_number_id as string) || creds.defaultPhoneNumberId;
+  if (!phoneNumberId) {
+    return { success: false, error: "No Vapi phoneNumberId configured (default or per-action)" };
+  }
+
+  // 5. Build the call request based on action type.
+  const callGoal = (config.call_goal as string) || (config.handoff_context as string) || "";
+  const resolvedGoal = callGoal ? resolveMergeFields(callGoal, contact) : "";
+  const maxDurationSeconds = (config.max_duration_seconds as number) || 600;
+
+  const baseBody: Record<string, unknown> = {
+    assistantId: assistant.vapi_assistant_id,
+    phoneNumberId,
+    customer: {
+      number: phone,
+      name: `${contact.first_name ?? ""} ${contact.last_name ?? ""}`.trim() || undefined,
+    },
+    metadata: {
+      enrollment_id: enrollment.id,
+      workflow_id: enrollment.workflow_id,
+      contact_id: contactId,
+      org_id: orgId,
+      action_type: actionType,
+    },
+    assistantOverrides: {
+      maxDurationSeconds,
+      ...(resolvedGoal
+        ? { variableValues: { call_goal: resolvedGoal, contact_first_name: contact.first_name, contact_last_name: contact.last_name } }
+        : {}),
+    },
+  };
+
+  if (actionType === "send_ai_voicemail") {
+    // Voicemail-only mode: configure assistant to hang up if a human picks up
+    // and only deliver the voicemail script.
+    const voicemailText = resolveMergeFields((config.voicemail_text as string) || "", contact);
+    (baseBody.assistantOverrides as Record<string, unknown>) = {
+      ...(baseBody.assistantOverrides as Record<string, unknown>),
+      voicemailMessage: voicemailText,
+      voicemailDetection: { provider: "twilio", voicemailDetectionTypes: ["machine_end_beep", "machine_end_silence"] },
+      // First message empty so it ONLY plays on voicemail detection.
+      firstMessage: "",
+    };
+  }
+
+  // 6. Place the call via Vapi.
+  const result = await vapiPlaceCall(creds.apiKey, baseBody);
+  if (!result.ok) {
+    console.error(`[workflow-processor] vapi /call failed (${actionType}):`, result.status, result.data);
+    return {
+      success: false,
+      error: `Vapi /call returned ${result.status}`,
+      detail: JSON.stringify(result.data).slice(0, 500),
+    };
+  }
+
+  const callData = result.data as { id?: string; status?: string };
+  const vapiCallId = callData.id;
+
+  // 7. Log to messages table for unified conversation history.
+  await supabase.from("messages").insert({
+    org_id: orgId,
+    contact_id: contactId,
+    channel: "voice",
+    direction: "outbound",
+    body: actionType === "send_ai_voicemail"
+      ? `[AI Voicemail] ${(config.voicemail_text as string) || ""}`.slice(0, 500)
+      : `[AI Call started — ${assistant.name}]`,
+    status: "queued",
+    metadata: {
+      vapi_call_id: vapiCallId,
+      vapi_assistant_id: assistant.vapi_assistant_id,
+      assistant_row_id: assistant.id,
+      enrollment_id: enrollment.id,
+      action_type: actionType,
+    },
+  }).catch((err) => {
+    console.warn(`[workflow-processor] Failed to log voice message:`, err);
+  });
+
+  return { success: true, vapi_call_id: vapiCallId };
 }
 
 async function executeProposalAction(
