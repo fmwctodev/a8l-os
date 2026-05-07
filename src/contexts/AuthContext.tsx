@@ -47,6 +47,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const activeOrgId = currentUser.organization?.id ?? currentUser.organization_id;
         const flags = await getFeatureFlags(activeOrgId);
         setFeatureFlags(flags);
+
+        // [TENANT-DEBUG] Temporary diagnostic — remove after Bug verified.
+        // Logs the resolved user state so we can detect any
+        // organization_id / organization.id desync that the dashboard
+        // reports for SuperAdmin org-switching.
+        // eslint-disable-next-line no-console
+        console.log('[AuthContext.loadUser] resolved', {
+          email: currentUser.email,
+          role: currentUser.role?.name,
+          home_organization_id: currentUser.home_organization_id,
+          organization_id: currentUser.organization_id,
+          super_admin_active_org_id: currentUser.super_admin_active_org_id,
+          'organization.id': currentUser.organization?.id,
+          'organization.display_name': currentUser.organization?.display_name,
+          activeOrgId_used_for_flags: activeOrgId,
+          flags_count: flags.length,
+          flags_enabled: flags.filter((f) => f.enabled).map((f) => f.key).sort(),
+          flags_disabled: flags.filter((f) => !f.enabled).map((f) => f.key).sort(),
+        });
       }
     } catch (error) {
       console.error('Error loading user:', error);
