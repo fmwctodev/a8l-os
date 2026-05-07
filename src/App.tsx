@@ -100,6 +100,7 @@ const ConversationsSettingsPage = lazy(() => import('./pages/settings/Conversati
 const AIAgentsSettingsPage = lazy(() => import('./pages/settings/AIAgentsSettingsPage').then(m => ({ default: m.AIAgentsSettingsPage })));
 const EmailServicesSettingsPage = lazy(() => import('./pages/settings/EmailServicesSettingsPage').then(m => ({ default: m.EmailServicesSettingsPage })));
 const PaymentsSettingsPage = lazy(() => import('./pages/settings/PaymentsSettingsPage').then(m => ({ default: m.PaymentsSettingsPage })));
+const MigrationSettingsPage = lazy(() => import('./pages/settings/MigrationSettingsPage').then(m => ({ default: m.MigrationSettingsPage })));
 const PhoneSystemSettingsPage = lazy(() => import('./pages/settings/PhoneSystemSettingsPage'));
 const CustomFieldsSettingsPage = lazy(() => import('./pages/settings/CustomFieldsSettingsPage').then(m => ({ default: m.CustomFieldsSettingsPage })));
 const CustomObjectsSettingsPage = lazy(() => import('./pages/settings/CustomObjectsSettingsPage').then(m => ({ default: m.CustomObjectsSettingsPage })));
@@ -745,6 +746,14 @@ function App() {
                   element={
                     <ProtectedRoute permission="payments.manage" featureFlag="payments">
                       <PaymentsSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="migration"
+                  element={
+                    <ProtectedRoute permission="settings.manage">
+                      <MigrationSettingsPage />
                     </ProtectedRoute>
                   }
                 />

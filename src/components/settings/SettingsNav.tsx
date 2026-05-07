@@ -20,6 +20,7 @@ import {
   Film,
   Database,
   CreditCard,
+  Download,
   LucideIcon,
 } from 'lucide-react';
 
@@ -156,6 +157,12 @@ const settingsNavSections: SettingsNavSection[] = [
         name: 'Integrations',
         path: '/settings/integrations',
         icon: Zap,
+      },
+      {
+        name: 'Data Migration',
+        path: '/settings/migration',
+        icon: Download,
+        requiresPermission: 'settings.manage',
       },
     ],
   },
