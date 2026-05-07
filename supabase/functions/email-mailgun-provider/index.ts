@@ -144,27 +144,41 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { error: upsertError } = await supabase
-        .from("integration_connections")
-        .upsert({
-          org_id: orgId,
-          integration_id: integration.id,
-          status: "connected",
-          credentials_encrypted: encrypted,
-          credentials_iv: iv,
-          account_info: {
-            nickname: payload.nickname || null,
-            domain: payload.domain,
-            region,
-          },
-          connected_at: new Date().toISOString(),
-          connected_by: user.id,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "org_id,integration_id" });
+      const connectionData = {
+        org_id: orgId,
+        integration_id: integration.id,
+        status: "connected" as const,
+        credentials_encrypted: encrypted,
+        credentials_iv: iv,
+        account_info: {
+          nickname: payload.nickname || null,
+          domain: payload.domain,
+          region,
+        },
+        connected_at: new Date().toISOString(),
+        connected_by: user.id,
+        updated_at: new Date().toISOString(),
+      };
 
-      if (upsertError) {
+      const { data: existing } = await supabase
+        .from("integration_connections")
+        .select("id")
+        .eq("org_id", orgId)
+        .eq("integration_id", integration.id)
+        .maybeSingle();
+
+      const { error: writeError } = existing
+        ? await supabase
+            .from("integration_connections")
+            .update(connectionData)
+            .eq("id", existing.id)
+        : await supabase
+            .from("integration_connections")
+            .insert(connectionData);
+
+      if (writeError) {
         return new Response(
-          JSON.stringify({ error: "Failed to save provider configuration" }),
+          JSON.stringify({ error: `Failed to save provider configuration: ${writeError.message}` }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
