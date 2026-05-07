@@ -63,6 +63,13 @@ export async function getCurrentUser(): Promise<UserWithDetails | null> {
 
   return {
     ...user,
+    // Rebind organization_id to the *active* org so every existing call
+    // site that filters Supabase queries by user.organization_id sends
+    // the active tenant's UUID. The original home org is preserved on
+    // home_organization_id for the OrgSwitcher's "is this my baseline?"
+    // comparison.
+    organization_id: activeOrgId,
+    home_organization_id: user.organization_id,
     organization: organization ?? null,
     permissions: permissionKeys,
   } as UserWithDetails;

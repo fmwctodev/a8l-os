@@ -120,6 +120,7 @@ export interface UserWithDetails extends User {
   organization: Organization | null;
   permissions: string[];
   super_admin_active_org_id?: string | null;
+  home_organization_id?: string;
 }
 
 export type PermissionKey =

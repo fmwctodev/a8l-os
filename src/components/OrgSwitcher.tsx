@@ -63,7 +63,10 @@ export function OrgSwitcher({ isCompact }: OrgSwitcherProps) {
     try {
       // For the home org, NULL the override so the user reverts to their
       // baseline organization_id. For any other org, set the override.
-      const newValue = orgId === user.organization_id ? null : orgId;
+      // user.organization_id is the *active* org now (rebound in
+      // getCurrentUser), so compare against home_organization_id.
+      const homeOrgId = user.home_organization_id ?? user.organization_id;
+      const newValue = orgId === homeOrgId ? null : orgId;
       const { error } = await supabase
         .from('users')
         .update({ super_admin_active_org_id: newValue })
