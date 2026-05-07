@@ -94,16 +94,29 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { encrypted, iv } = await encryptStripeCreds(
-        {
-          secret_key: payload.secretKey,
-          publishable_key: payload.publishableKey ?? null,
-          account_id: validation.account?.id ?? null,
-          webhook_signing_secret: payload.webhookSigningSecret ?? null,
-        },
-        supabaseUrl,
-        serviceRoleKey,
-      );
+      let encrypted: string;
+      let iv: string;
+      try {
+        const result = await encryptStripeCreds(
+          {
+            secret_key: payload.secretKey,
+            publishable_key: payload.publishableKey ?? null,
+            account_id: validation.account?.id ?? null,
+            webhook_signing_secret: payload.webhookSigningSecret ?? null,
+          },
+          supabaseUrl,
+          serviceRoleKey,
+        );
+        encrypted = result.encrypted;
+        iv = result.iv;
+      } catch (e) {
+        const detail = e instanceof Error ? e.message : String(e);
+        console.error("[stripe-provider] encrypt failed:", detail);
+        return jsonResponse(
+          { error: `Failed to encrypt Stripe credentials: ${detail}` },
+          500,
+        );
+      }
 
       const connectionData = {
         org_id: orgId,

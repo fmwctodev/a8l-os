@@ -639,6 +639,7 @@ export async function getDecryptedStripeCreds(
     method: "POST",
     headers: {
       Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -648,7 +649,11 @@ export async function getDecryptedStripeCreds(
     }),
   });
 
-  if (!response.ok) return null;
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    console.error(`[stripe getDecryptedStripeCreds] email-crypto ${response.status}: ${body}`);
+    return null;
+  }
 
   const { plaintext } = await response.json();
   let parsed: Record<string, unknown>;
@@ -686,16 +691,41 @@ export async function encryptStripeCreds(
     account_id: creds.account_id ?? null,
     webhook_signing_secret: creds.webhook_signing_secret ?? null,
   });
+
+  // Sanity check before we even fire the request — if the env var is
+  // missing in our runtime, no point hitting email-crypto with a
+  // garbage Bearer.
+  if (!serviceRoleKey || serviceRoleKey.length < 20) {
+    throw new Error(
+      `encryptStripeCreds: SUPABASE_SERVICE_ROLE_KEY env var is missing/short (len=${serviceRoleKey?.length ?? 0})`,
+    );
+  }
+
+  // Try the apikey + Authorization combo. The email-crypto function
+  // checks `authHeader.includes(serviceRoleKey)`, so passing the key
+  // in either header keeps the path resilient to gateway header
+  // rewrites between functions.
   const response = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${serviceRoleKey}`,
+      apikey: serviceRoleKey,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ action: "encrypt", plaintext: payload }),
   });
+
   if (!response.ok) {
-    throw new Error("Failed to encrypt Stripe credentials");
+    let body = "";
+    try {
+      body = await response.text();
+    } catch { /* ignore */ }
+    console.error(
+      `[stripe encryptStripeCreds] email-crypto returned ${response.status}: ${body}`,
+    );
+    throw new Error(
+      `email-crypto ${response.status}: ${body.slice(0, 200) || "(no body)"}`,
+    );
   }
   return await response.json();
 }
