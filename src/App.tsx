@@ -99,6 +99,7 @@ const CalendarsSettingsPage = lazy(() => import('./pages/settings/CalendarsSetti
 const ConversationsSettingsPage = lazy(() => import('./pages/settings/ConversationsSettingsPage').then(m => ({ default: m.ConversationsSettingsPage })));
 const AIAgentsSettingsPage = lazy(() => import('./pages/settings/AIAgentsSettingsPage').then(m => ({ default: m.AIAgentsSettingsPage })));
 const EmailServicesSettingsPage = lazy(() => import('./pages/settings/EmailServicesSettingsPage').then(m => ({ default: m.EmailServicesSettingsPage })));
+const PaymentsSettingsPage = lazy(() => import('./pages/settings/PaymentsSettingsPage').then(m => ({ default: m.PaymentsSettingsPage })));
 const PhoneSystemSettingsPage = lazy(() => import('./pages/settings/PhoneSystemSettingsPage'));
 const CustomFieldsSettingsPage = lazy(() => import('./pages/settings/CustomFieldsSettingsPage').then(m => ({ default: m.CustomFieldsSettingsPage })));
 const CustomObjectsSettingsPage = lazy(() => import('./pages/settings/CustomObjectsSettingsPage').then(m => ({ default: m.CustomObjectsSettingsPage })));
@@ -736,6 +737,14 @@ function App() {
                   element={
                     <ProtectedRoute featureFlag="email_services">
                       <EmailServicesSettingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="payments"
+                  element={
+                    <ProtectedRoute permission="payments.manage" featureFlag="payments">
+                      <PaymentsSettingsPage />
                     </ProtectedRoute>
                   }
                 />

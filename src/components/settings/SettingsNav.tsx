@@ -19,6 +19,7 @@ import {
   Sparkles,
   Film,
   Database,
+  CreditCard,
   LucideIcon,
 } from 'lucide-react';
 
@@ -79,6 +80,12 @@ const settingsNavSections: SettingsNavSection[] = [
         name: 'Email Services',
         path: '/settings/email-services',
         icon: Mail,
+      },
+      {
+        name: 'Payments',
+        path: '/settings/payments',
+        icon: CreditCard,
+        requiresPermission: 'payments.manage',
       },
       {
         name: 'Phone System',
