@@ -66,12 +66,21 @@ Deno.serve(async (req: Request) => {
 
     const { data: userData } = await supabase
       .from("users")
-      .select("organization_id")
+      .select("organization_id, super_admin_active_org_id, role:roles(name)")
       .eq("id", user.id)
       .maybeSingle();
     if (!userData) return jsonResponse({ error: "User not found" }, 404);
 
-    const orgId = userData.organization_id;
+    // Honor SuperAdmin org pivot (super_admin_active_org_id) so a
+    // SuperAdmin viewing BuilderLync writes the Stripe connection to
+    // BL, not their home org. Mirrors get_user_org_id() in SQL and
+    // extractUserContext in _shared/auth.ts.
+    const role = (userData as { role: { name: string } | { name: string }[] | null }).role;
+    const roleName = Array.isArray(role) ? role[0]?.name : role?.name;
+    const isSuperAdmin = roleName === "SuperAdmin";
+    const orgId =
+      (isSuperAdmin && userData.super_admin_active_org_id) ||
+      userData.organization_id;
 
     // Check that the caller can manage payment integrations
     const { data: hasPermission } = await supabase.rpc("user_has_permission", {
