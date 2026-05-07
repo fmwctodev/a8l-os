@@ -11,7 +11,8 @@ interface RecurringProfile {
   id: string;
   org_id: string;
   contact_id: string;
-  qbo_recurring_template_id: string | null;
+  provider_recurring_template_id: string | null;
+  provider: string | null;
   name: string;
   frequency: 'weekly' | 'monthly' | 'quarterly' | 'annually';
   status: string;
@@ -36,7 +37,7 @@ interface RecurringProfile {
     product: {
       id: string;
       name: string;
-      qbo_item_id: string | null;
+      provider_item_id: string | null;
     } | null;
   }[];
 }
@@ -79,9 +80,10 @@ async function createQBOInvoiceIfConnected(
   supabaseServiceKey: string
 ): Promise<{ qbo_invoice_id?: string; doc_number?: string; payment_link_url?: string }> {
   const { data: qboConnection } = await supabase
-    .from('qbo_connections')
+    .from('payment_provider_connections')
     .select('*')
     .eq('org_id', orgId)
+    .eq('provider', 'quickbooks_online')
     .maybeSingle();
 
   if (!qboConnection) {
@@ -131,7 +133,7 @@ async function createQBOInvoiceIfConnected(
       description: item.description,
       quantity: item.quantity,
       unit_price: item.unit_price,
-      qbo_item_id: item.product?.qbo_item_id || undefined,
+      qbo_item_id: item.product?.provider_item_id || undefined,
     }));
 
     const dueDate = calculateDueDate(new Date().toISOString().split('T')[0]);
@@ -188,7 +190,8 @@ Deno.serve(async (req: Request) => {
         id,
         org_id,
         contact_id,
-        qbo_recurring_template_id,
+        provider_recurring_template_id,
+        provider,
         name,
         frequency,
         status,
@@ -234,7 +237,7 @@ Deno.serve(async (req: Request) => {
             quantity,
             unit_price,
             product:products!recurring_profile_items_product_id_fkey(
-              id, name, qbo_item_id
+              id, name, provider_item_id
             )
           `)
           .eq('recurring_profile_id', profileData.id)
@@ -302,7 +305,8 @@ Deno.serve(async (req: Request) => {
           .insert({
             org_id: profile.org_id,
             contact_id: profile.contact_id,
-            qbo_invoice_id: qboResult.qbo_invoice_id || null,
+            provider_invoice_id: qboResult.qbo_invoice_id || null,
+            provider: qboResult.qbo_invoice_id ? 'quickbooks_online' : null,
             doc_number: docNumber,
             status: profile.auto_send ? 'sent' : 'draft',
             subtotal,

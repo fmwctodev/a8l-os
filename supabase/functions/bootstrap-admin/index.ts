@@ -73,14 +73,29 @@ Deno.serve(async (req: Request) => {
       throw new Error("SuperAdmin role not found");
     }
 
-    const { error: userError } = await supabase.from("users").insert({
-      id: authData.user.id,
-      email: adminEmail,
-      name: adminName,
-      role_id: superAdminRole.id,
-      organization_id: "00000000-0000-0000-0000-000000000001",
-      status: "active",
-    });
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("id")
+      .eq("slug", "autom8ionlab")
+      .maybeSingle();
+
+    const orgId = org?.id ?? "00000000-0000-0000-0000-000000000001";
+
+    // The handle_new_auth_user trigger may have already created a row
+    // with the Admin role. UPSERT to upgrade to SuperAdmin.
+    const { error: userError } = await supabase
+      .from("users")
+      .upsert(
+        {
+          id: authData.user.id,
+          email: adminEmail,
+          name: adminName,
+          role_id: superAdminRole.id,
+          organization_id: orgId,
+          status: "active",
+        },
+        { onConflict: "id" },
+      );
 
     if (userError) {
       throw userError;

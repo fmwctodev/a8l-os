@@ -227,20 +227,21 @@ Deno.serve(async (req: Request) => {
       };
 
       const { data: existingQbo } = await serviceClient
-        .from("qbo_connections")
+        .from("payment_provider_connections")
         .select("id")
         .eq("org_id", oauthState.org_id)
+        .eq("provider", "quickbooks_online")
         .maybeSingle();
 
       if (existingQbo) {
         await serviceClient
-          .from("qbo_connections")
-          .update(qboConnectionData)
+          .from("payment_provider_connections")
+          .update({ ...qboConnectionData, provider: "quickbooks_online" })
           .eq("id", existingQbo.id);
       } else {
         await serviceClient
-          .from("qbo_connections")
-          .insert({ ...qboConnectionData, created_at: new Date().toISOString() });
+          .from("payment_provider_connections")
+          .insert({ ...qboConnectionData, provider: "quickbooks_online", created_at: new Date().toISOString() });
       }
     }
 

@@ -88,9 +88,10 @@ async function resolveSubscriptionId(
 
 async function getQBOConnection(orgId: string): Promise<{ realmId: string; accessToken: string } | null> {
   const { data } = await supabase
-    .from('qbo_connections')
+    .from('payment_provider_connections')
     .select('realm_id, access_token_encrypted, token_expiry')
     .eq('org_id', orgId)
+    .eq('provider', 'quickbooks_online')
     .maybeSingle();
 
   if (!data) return null;
@@ -351,7 +352,7 @@ export async function voidInvoice(
 
     if (config.syncToQBO) {
       const qboConnection = await getQBOConnection(context.orgId);
-      if (qboConnection && invoice.qbo_invoice_id) {
+      if (qboConnection && invoice.provider_invoice_id) {
         await supabase.functions.invoke('qbo-api', {
           body: {
             action: 'voidInvoice',
@@ -586,7 +587,7 @@ export async function manageSubscription(
 
     if (config.syncToQBO) {
       const qboConnection = await getQBOConnection(context.orgId);
-      if (qboConnection && subscription.qbo_recurring_template_id) {
+      if (qboConnection && subscription.provider_recurring_template_id) {
         await supabase.functions.invoke('qbo-api', {
           body: {
             action: 'updateRecurringTemplate',

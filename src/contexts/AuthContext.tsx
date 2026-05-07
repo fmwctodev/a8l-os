@@ -41,7 +41,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(currentUser);
 
       if (currentUser) {
-        const flags = await getFeatureFlags();
+        // Load flags scoped to the user's active org (which honors
+        // super_admin_active_org_id when applicable). organization is
+        // already loaded by getCurrentUser.
+        const activeOrgId = currentUser.organization?.id ?? currentUser.organization_id;
+        const flags = await getFeatureFlags(activeOrgId);
         setFeatureFlags(flags);
       }
     } catch (error) {

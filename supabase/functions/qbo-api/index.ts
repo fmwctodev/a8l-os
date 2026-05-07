@@ -17,7 +17,7 @@ interface QBOConnection {
   access_token_encrypted: string;
   refresh_token_encrypted: string;
   token_expiry: string;
-  source_table: "qbo_connections" | "integration_connections";
+  source_table: "payment_provider_connections" | "integration_connections";
 }
 
 async function findConnection(
@@ -25,13 +25,14 @@ async function findConnection(
   orgId: string
 ): Promise<QBOConnection | null> {
   const { data: qboConn } = await supabase
-    .from("qbo_connections")
+    .from("payment_provider_connections")
     .select("*")
     .eq("org_id", orgId)
+    .eq("provider", "quickbooks_online")
     .maybeSingle();
 
   if (qboConn) {
-    return { ...qboConn, source_table: "qbo_connections" as const };
+    return { ...qboConn, source_table: "payment_provider_connections" as const };
   }
 
   const { data: intConn } = await supabase
@@ -102,14 +103,15 @@ async function getValidAccessToken(
   const updatedAt = new Date().toISOString();
 
   await supabase
-    .from("qbo_connections")
+    .from("payment_provider_connections")
     .update({
       access_token_encrypted: tokens.access_token,
       refresh_token_encrypted: tokens.refresh_token,
       token_expiry: newExpiry,
       updated_at: updatedAt,
     })
-    .eq("org_id", connection.org_id);
+    .eq("org_id", connection.org_id)
+    .eq("provider", "quickbooks_online");
 
   await supabase
     .from("integration_connections")
@@ -456,7 +458,8 @@ async function syncInvoicesFromQBO(
       .from("invoices")
       .select("id, status, contact_id, total")
       .eq("org_id", orgId)
-      .eq("qbo_invoice_id", qboInv.Id)
+      .eq("provider_invoice_id", qboInv.Id)
+      .eq("provider", "quickbooks_online")
       .maybeSingle();
 
     const status = mapQBOStatus(qboInv);
@@ -542,7 +545,8 @@ async function syncInvoicesFromQBO(
       .insert({
         org_id: orgId,
         contact_id: contactId,
-        qbo_invoice_id: qboInv.Id,
+        provider_invoice_id: qboInv.Id,
+        provider: "quickbooks_online",
         doc_number: qboInv.DocNumber || `QBO-${qboInv.Id}`,
         status,
         subtotal,
@@ -730,9 +734,10 @@ Deno.serve(async (req: Request) => {
     }
 
     await supabase
-      .from("qbo_connections")
+      .from("payment_provider_connections")
       .update({ last_sync_at: new Date().toISOString() })
-      .eq("org_id", connection.org_id);
+      .eq("org_id", connection.org_id)
+      .eq("provider", "quickbooks_online");
 
     return new Response(
       JSON.stringify(result),

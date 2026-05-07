@@ -39,7 +39,8 @@ Deno.serve(async (req: Request) => {
     });
 
     const body: CreateUserRequest = await req.json();
-    const { email, password, name, roleName = "Sales", organizationId = "00000000-0000-0000-0000-000000000001" } = body;
+    const { email, password, name, roleName = "Sales" } = body;
+    let { organizationId } = body;
 
     if (!email || !password || !name) {
       return new Response(
@@ -49,6 +50,32 @@ Deno.serve(async (req: Request) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
+    }
+
+    // Resolve organization by email domain if caller didn't specify one
+    if (!organizationId) {
+      const domain = email.split("@")[1]?.toLowerCase();
+      if (domain) {
+        const { data: domainRow } = await supabase
+          .from("organization_email_domains")
+          .select("organization_id")
+          .ilike("domain", domain)
+          .maybeSingle();
+        if (domainRow) {
+          organizationId = domainRow.organization_id;
+        }
+      }
+      if (!organizationId) {
+        return new Response(
+          JSON.stringify({
+            error: `Email domain "${domain}" is not registered with any organization. Pass organizationId explicitly or register the domain first.`,
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
     }
 
     const { data: existingUser } = await supabase
@@ -91,14 +118,22 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Role "${roleName}" not found`);
     }
 
-    const { error: userError } = await supabase.from("users").insert({
-      id: authData.user.id,
-      email,
-      name,
-      role_id: role.id,
-      organization_id: organizationId,
-      status: "active",
-    });
+    // The handle_new_auth_user trigger may have already created a row
+    // with default role/org based on email domain. UPSERT to set the
+    // explicitly-requested role and org.
+    const { error: userError } = await supabase
+      .from("users")
+      .upsert(
+        {
+          id: authData.user.id,
+          email,
+          name,
+          role_id: role.id,
+          organization_id: organizationId,
+          status: "active",
+        },
+        { onConflict: "id" },
+      );
 
     if (userError) {
       await supabase.auth.admin.deleteUser(authData.user.id);

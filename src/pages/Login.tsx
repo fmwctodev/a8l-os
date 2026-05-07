@@ -60,11 +60,24 @@ export function Login() {
       const errorDesc = params.get('error_description');
       const errorCode = params.get('error');
       if (errorDesc || errorCode) {
-        setError(`Google sign-in failed: ${errorDesc || errorCode}`);
+        const desc = errorDesc ?? '';
+        if (desc.includes('AUTH_DOMAIN_NOT_AUTHORIZED')) {
+          const domainMatch = desc.match(/"([^"]+)"/);
+          navigate(
+            `/auth/access-denied?reason=domain_not_authorized${domainMatch ? `&detail=${encodeURIComponent(domainMatch[1])}` : ''}`,
+            { replace: true },
+          );
+          return;
+        }
+        if (desc.includes('AUTH_PROVIDER_NOT_ALLOWED')) {
+          navigate('/auth/access-denied?reason=provider_not_allowed', { replace: true });
+          return;
+        }
+        setError(`Sign-in failed: ${errorDesc || errorCode}`);
         window.location.hash = '';
       }
     }
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     if (!authLoading && user) {

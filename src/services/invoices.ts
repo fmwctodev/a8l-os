@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { findOrCreateQBOCustomer, createQBOInvoice, sendQBOInvoice, voidQBOInvoice, findOrCreateQBOItem } from './qboApi';
 import { getQBOConnectionStatus } from './qboAuth';
+import { getActivePaymentsProvider } from './stripeAuth';
 import { publishEvent } from './eventOutbox';
 import type {
   Invoice,
@@ -155,9 +156,51 @@ export async function createInvoice(
   let qboInvoiceId: string | null = null;
   let docNumber: string | null = null;
   let paymentLinkUrl: string | null = null;
+  let providerKey: 'stripe' | 'quickbooks_online' | null = null;
 
-  const qboStatus = await getQBOConnectionStatus();
-  if (qboStatus.connected) {
+  const activeProvider = await getActivePaymentsProvider();
+
+  if (activeProvider === 'stripe') {
+    try {
+      const { data: stripeResult, error: stripeError } = await supabase.functions.invoke('stripe-api', {
+        body: {
+          action: 'createInvoice',
+          org_id: userData.organization_id,
+          contact: {
+            id: contact.id,
+            first_name: contact.first_name,
+            last_name: contact.last_name,
+            email: contact.email,
+            phone: contact.phone,
+            company: contact.company,
+          },
+          line_items: input.line_items.map((i) => ({
+            description: i.description,
+            quantity: i.quantity,
+            unit_price: i.unit_price,
+            currency: 'usd',
+          })),
+          due_days: input.due_date
+            ? Math.max(1, Math.ceil((new Date(input.due_date).getTime() - Date.now()) / 86400000))
+            : 30,
+          memo: input.memo,
+          auto_send: input.auto_send,
+        },
+      });
+      if (stripeError) throw stripeError;
+      if (stripeResult?.invoice) {
+        qboInvoiceId = stripeResult.invoice.id;
+        docNumber = stripeResult.invoice.number || null;
+        paymentLinkUrl = stripeResult.invoice.hosted_invoice_url || null;
+        providerKey = 'stripe';
+      }
+    } catch (err) {
+      console.error('Failed to create Stripe invoice:', err);
+    }
+  }
+
+  const qboStatus = activeProvider !== 'stripe' ? await getQBOConnectionStatus() : { connected: false };
+  if (!providerKey && qboStatus.connected) {
     try {
       const qboCustomer = await findOrCreateQBOCustomer(contact as Contact);
 
@@ -165,7 +208,7 @@ export async function createInvoice(
       const { data: products } = productIds.length
         ? await supabase
             .from('products')
-            .select('id, name, description, price_amount, billing_type, qbo_item_id')
+            .select('id, name, description, price_amount, billing_type, provider_item_id')
             .in('id', productIds)
         : { data: [] };
 
@@ -177,8 +220,8 @@ export async function createInvoice(
         if (item.product_id) {
           const prod = productMap.get(item.product_id);
           if (prod) {
-            if (prod.qbo_item_id) {
-              qboItemId = prod.qbo_item_id;
+            if (prod.provider_item_id) {
+              qboItemId = prod.provider_item_id;
             } else {
               try {
                 const qboItem = await findOrCreateQBOItem({
@@ -190,7 +233,7 @@ export async function createInvoice(
                 qboItemId = qboItem.Id;
                 await supabase
                   .from('products')
-                  .update({ qbo_item_id: qboItem.Id })
+                  .update({ provider_item_id: qboItem.Id, provider: 'quickbooks_online' })
                   .eq('id', prod.id);
               } catch (itemErr) {
                 console.error('Failed to sync product to QBO:', itemErr);
@@ -216,6 +259,7 @@ export async function createInvoice(
       qboInvoiceId = qboInvoice.Id;
       docNumber = qboInvoice.DocNumber;
       paymentLinkUrl = qboInvoice.InvoiceLink || null;
+      providerKey = 'quickbooks_online';
     } catch (err) {
       console.error('Failed to create QBO invoice:', err);
     }
@@ -236,7 +280,8 @@ export async function createInvoice(
       org_id: userData.organization_id,
       contact_id: input.contact_id,
       opportunity_id: input.opportunity_id || null,
-      qbo_invoice_id: qboInvoiceId,
+      provider_invoice_id: qboInvoiceId,
+      provider: providerKey,
       doc_number: docNumber,
       status: input.auto_send ? 'sent' : 'draft',
       subtotal,
@@ -338,7 +383,7 @@ export async function sendInvoice(id: string, user: User): Promise<Invoice> {
     throw new Error('Contact email is required to send invoice');
   }
 
-  let qboInvoiceId = invoice.qbo_invoice_id;
+  let qboInvoiceId = invoice.provider_invoice_id;
   let paymentLinkUrl = invoice.payment_link_url;
   let docNumber = invoice.doc_number;
 
@@ -356,13 +401,13 @@ export async function sendInvoice(id: string, user: User): Promise<Invoice> {
       if (item.product_id && item.product) {
         const { data: prod } = await supabase
           .from('products')
-          .select('id, name, description, price_amount, billing_type, qbo_item_id')
+          .select('id, name, description, price_amount, billing_type, provider_item_id')
           .eq('id', item.product_id)
           .maybeSingle();
 
         if (prod) {
-          if (prod.qbo_item_id) {
-            qboItemId = prod.qbo_item_id;
+          if (prod.provider_item_id) {
+            qboItemId = prod.provider_item_id;
           } else {
             const qboItem = await findOrCreateQBOItem({
               name: prod.name,
@@ -373,7 +418,7 @@ export async function sendInvoice(id: string, user: User): Promise<Invoice> {
             qboItemId = qboItem.Id;
             await supabase
               .from('products')
-              .update({ qbo_item_id: qboItem.Id })
+              .update({ provider_item_id: qboItem.Id, provider: 'quickbooks_online' })
               .eq('id', prod.id);
           }
         }
@@ -401,7 +446,8 @@ export async function sendInvoice(id: string, user: User): Promise<Invoice> {
     await supabase
       .from('invoices')
       .update({
-        qbo_invoice_id: qboInvoiceId,
+        provider_invoice_id: qboInvoiceId,
+        provider: 'quickbooks_online',
         doc_number: docNumber,
         payment_link_url: paymentLinkUrl,
       })
@@ -470,9 +516,9 @@ export async function voidInvoice(id: string, user: User): Promise<Invoice> {
     throw new Error('Cannot void this invoice');
   }
 
-  if (invoice.qbo_invoice_id) {
+  if (invoice.provider_invoice_id) {
     try {
-      await voidQBOInvoice(invoice.qbo_invoice_id, '0');
+      await voidQBOInvoice(invoice.provider_invoice_id, '0');
     } catch (err) {
       console.error('Failed to void in QBO:', err);
     }

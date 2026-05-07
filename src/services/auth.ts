@@ -39,6 +39,19 @@ export async function getCurrentUser(): Promise<UserWithDetails | null> {
 
   if (error || !user) return null;
 
+  // Load the user's *active* organization. For SuperAdmin with a
+  // super_admin_active_org_id set, that overrides; otherwise the
+  // home organization_id wins. Mirrors the get_user_org_id() SQL fn.
+  const isSuperAdmin = user.role?.name === 'SuperAdmin';
+  const activeOrgId =
+    (isSuperAdmin && user.super_admin_active_org_id) || user.organization_id;
+
+  const { data: organization } = await supabase
+    .from('organizations')
+    .select('id, name, slug, display_name, logo_url, created_at')
+    .eq('id', activeOrgId)
+    .maybeSingle();
+
   const { data: permissions } = await supabase
     .from('role_permissions')
     .select('permissions(key)')
@@ -50,6 +63,7 @@ export async function getCurrentUser(): Promise<UserWithDetails | null> {
 
   return {
     ...user,
+    organization: organization ?? null,
     permissions: permissionKeys,
   } as UserWithDetails;
 }

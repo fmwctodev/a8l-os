@@ -4,8 +4,9 @@ import type { QBOConnection } from '../types';
 
 export async function getQBOConnection(): Promise<QBOConnection | null> {
   const { data, error } = await supabase
-    .from('qbo_connections')
-    .select('*, connected_by_user:users!qbo_connections_connected_by_fkey(id, name, email)')
+    .from('payment_provider_connections')
+    .select('*, connected_by_user:users!connected_by(id, name, email)')
+    .eq('provider', 'quickbooks_online')
     .maybeSingle();
 
   if (error) {

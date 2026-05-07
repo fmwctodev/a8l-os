@@ -6,7 +6,8 @@ export interface RecurringProfile {
   id: string;
   org_id: string;
   contact_id: string;
-  qbo_recurring_template_id?: string;
+  provider_recurring_template_id?: string;
+  provider?: string | null;
   name: string;
   frequency: 'weekly' | 'monthly' | 'quarterly' | 'annually';
   status: 'active' | 'paused' | 'cancelled';

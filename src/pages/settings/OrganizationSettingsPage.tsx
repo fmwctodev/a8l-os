@@ -50,10 +50,11 @@ export function OrganizationSettingsPage() {
 
     try {
       setIsLoading(true);
+      const activeOrgId = user.organization?.id ?? user.organization_id;
       const [org, depts, flags] = await Promise.all([
         getOrganization(user.organization_id),
         getDepartments(user.organization_id),
-        getFeatureFlags(),
+        getFeatureFlags(activeOrgId),
       ]);
       setOrganization(org);
       setOrgName(org?.name || '');

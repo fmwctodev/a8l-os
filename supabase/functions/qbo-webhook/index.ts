@@ -79,9 +79,10 @@ Deno.serve(async (req: Request) => {
       let connection: { id: string; org_id: string } | null = null;
 
       const { data: qboConn } = await supabase
-        .from("qbo_connections")
+        .from("payment_provider_connections")
         .select("id, org_id")
         .eq("realm_id", realmId)
+        .eq("provider", "quickbooks_online")
         .maybeSingle();
 
       if (qboConn) {
@@ -107,7 +108,7 @@ Deno.serve(async (req: Request) => {
         const webhookId = `${realmId}-${entity.name}-${entity.id}-${entity.lastUpdated}`;
 
         const { data: existingLog } = await supabase
-          .from("qbo_webhook_logs")
+          .from("payment_provider_webhook_logs")
           .select("id")
           .eq("org_id", connection.org_id)
           .eq("webhook_id", webhookId)
@@ -118,7 +119,7 @@ Deno.serve(async (req: Request) => {
           continue;
         }
 
-        await supabase.from("qbo_webhook_logs").insert({
+        await supabase.from("payment_provider_webhook_logs").insert({
           org_id: connection.org_id,
           webhook_id: webhookId,
           event_type: `${entity.name}.${entity.operation}`,
@@ -156,7 +157,8 @@ async function handleInvoiceEvent(
     .from("invoices")
     .select("id, contact_id, status")
     .eq("org_id", orgId)
-    .eq("qbo_invoice_id", entity.id)
+    .eq("provider_invoice_id", entity.id)
+    .eq("provider", "quickbooks_online")
     .maybeSingle();
 
   if (!invoice) {
@@ -202,7 +204,8 @@ async function handlePaymentEvent(
     .from("payments")
     .select("id")
     .eq("org_id", orgId)
-    .eq("qbo_payment_id", entity.id)
+    .eq("provider_payment_id", entity.id)
+    .eq("provider", "quickbooks_online")
     .maybeSingle();
 
   if (existingPayment) {
@@ -251,7 +254,8 @@ async function handlePaymentEvent(
         .from("invoices")
         .select("id, contact_id, total, status")
         .eq("org_id", orgId)
-        .eq("qbo_invoice_id", invoiceTxn.TxnId)
+        .eq("provider_invoice_id", invoiceTxn.TxnId)
+        .eq("provider", "quickbooks_online")
         .maybeSingle();
 
       if (!invoice) {
@@ -265,7 +269,8 @@ async function handlePaymentEvent(
           org_id: orgId,
           contact_id: invoice.contact_id,
           invoice_id: invoice.id,
-          qbo_payment_id: qboPayment.Id,
+          provider_payment_id: qboPayment.Id,
+          provider: "quickbooks_online",
           amount: line.Amount,
           currency: qboPayment.CurrencyRef?.value || 'USD',
           payment_method: mapQBOPaymentMethod(qboPayment.PaymentMethodRef?.name),

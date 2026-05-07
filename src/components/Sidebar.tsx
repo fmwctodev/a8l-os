@@ -6,6 +6,7 @@ import { navigationConfig } from '../config/navigation';
 import { useUnreadCount } from '../hooks/useUnreadCount';
 import { usePaymentsAccess } from '../hooks/usePaymentsAccess';
 import { Tooltip } from './Tooltip';
+import { OrgSwitcher } from './OrgSwitcher';
 import type { NavItem, NavSection } from '../config/navigation';
 
 function NavItemComponent({
@@ -142,12 +143,16 @@ function NavSectionComponent({
 
 export function Sidebar() {
   const location = useLocation();
+  const { user } = useAuth();
   const { isExpanded, toggleSidebar, isMobile, isMobileOpen, closeMobileSidebar } = useSidebar();
   const { unreadCount } = useUnreadCount();
   const isHomeActive = location.pathname === '/';
 
   const isCompact = !isMobile && !isExpanded;
   const sidebarWidth = isCompact ? 'w-16' : 'w-64';
+
+  const orgLogo = user?.organization?.logo_url || '/assets/logo/logo.png';
+  const orgDisplayName = user?.organization?.display_name || user?.organization?.name || 'Autom8ion Lab';
 
   const dashboardLink = (
     <NavLink
@@ -176,16 +181,19 @@ export function Sidebar() {
       <div className={`p-4 border-b border-slate-800 ${isCompact ? 'px-2' : ''}`}>
         <div className={`flex items-center ${!isCompact ? 'gap-3' : 'justify-center'}`}>
           <img
-            src="/assets/logo/logo.png"
-            alt="Autom8ion Lab"
+            src={orgLogo}
+            alt={orgDisplayName}
             className="w-10 h-10 rounded-xl flex-shrink-0 object-contain"
           />
           {!isCompact && (
             <div className="min-w-0">
-              <h1 className="text-white font-semibold text-sm truncate">Autom8ion Lab</h1>
+              <h1 className="text-white font-semibold text-sm truncate">{orgDisplayName}</h1>
               <p className="text-slate-500 text-xs">OS Platform</p>
             </div>
           )}
+        </div>
+        <div className={`mt-3 ${isCompact ? 'flex justify-center' : ''}`}>
+          <OrgSwitcher isCompact={isCompact} />
         </div>
       </div>
 

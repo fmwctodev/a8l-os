@@ -78,9 +78,10 @@ Deno.serve(async (req: Request) => {
 
     if (action === "disconnect") {
       const { data: connection } = await supabase
-        .from("qbo_connections")
+        .from("payment_provider_connections")
         .select("refresh_token_encrypted")
         .eq("org_id", userData.organization_id)
+        .eq("provider", "quickbooks_online")
         .single();
 
       if (connection) {
@@ -95,9 +96,10 @@ Deno.serve(async (req: Request) => {
         });
 
         await supabase
-          .from("qbo_connections")
+          .from("payment_provider_connections")
           .delete()
-          .eq("org_id", userData.organization_id);
+          .eq("org_id", userData.organization_id)
+          .eq("provider", "quickbooks_online");
       }
 
       return new Response(
@@ -108,9 +110,10 @@ Deno.serve(async (req: Request) => {
 
     if (action === "refresh") {
       const { data: connection } = await supabase
-        .from("qbo_connections")
+        .from("payment_provider_connections")
         .select("*")
         .eq("org_id", userData.organization_id)
+        .eq("provider", "quickbooks_online")
         .single();
 
       if (!connection) {
@@ -142,7 +145,7 @@ Deno.serve(async (req: Request) => {
       const tokenExpiry = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
       await supabase
-        .from("qbo_connections")
+        .from("payment_provider_connections")
         .update({
           access_token_encrypted: tokens.access_token,
           refresh_token_encrypted: tokens.refresh_token,
@@ -203,16 +206,18 @@ Deno.serve(async (req: Request) => {
     const tokenExpiry = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
     const { data: existingConnection } = await supabase
-      .from("qbo_connections")
+      .from("payment_provider_connections")
       .select("id")
       .eq("org_id", userData.organization_id)
+      .eq("provider", "quickbooks_online")
       .maybeSingle();
 
     let connection;
     if (existingConnection) {
       const { data, error } = await supabase
-        .from("qbo_connections")
+        .from("payment_provider_connections")
         .update({
+          provider: "quickbooks_online",
           realm_id: realmId,
           company_name: companyName,
           access_token_encrypted: tokens.access_token,
@@ -229,9 +234,10 @@ Deno.serve(async (req: Request) => {
       connection = data;
     } else {
       const { data, error } = await supabase
-        .from("qbo_connections")
+        .from("payment_provider_connections")
         .insert({
           org_id: userData.organization_id,
+          provider: "quickbooks_online",
           realm_id: realmId,
           company_name: companyName,
           access_token_encrypted: tokens.access_token,

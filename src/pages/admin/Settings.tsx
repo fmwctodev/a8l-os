@@ -4,6 +4,7 @@ import { getOrganization, updateOrganization } from '../../services/organization
 import { getDepartments, createDepartment, updateDepartment, deleteDepartment } from '../../services/departments';
 import { getFeatureFlags, isFeatureEnabled } from '../../services/featureFlags';
 import { QBOConfig } from '../../components/settings/QBOConfig';
+import { StripeConfig } from '../../components/settings/StripeConfig';
 import DriveConfig from '../../components/settings/DriveConfig';
 import type { Organization, Department, FeatureFlag } from '../../types';
 import {
@@ -47,12 +48,13 @@ export function SettingsPage() {
 
     try {
       setIsLoading(true);
+      const activeOrgId = user.organization?.id ?? user.organization_id;
       const [org, depts, flags, paymentsFlag, mediaFlag] = await Promise.all([
         getOrganization(user.organization_id),
         getDepartments(user.organization_id),
-        getFeatureFlags(),
-        isFeatureEnabled('payments'),
-        isFeatureEnabled('media'),
+        getFeatureFlags(activeOrgId),
+        isFeatureEnabled('payments', activeOrgId),
+        isFeatureEnabled('media', activeOrgId),
       ]);
       setOrganization(org);
       setOrgName(org?.name || '');
@@ -278,7 +280,16 @@ export function SettingsPage() {
         </div>
       </div>
 
-      {paymentsEnabled && <QBOConfig />}
+      {paymentsEnabled && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-white">Payment Providers</h3>
+          <p className="text-sm text-slate-400">
+            Connect either QuickBooks Online or Stripe (or both — invoices route to Stripe first if both are connected).
+          </p>
+          <StripeConfig />
+          <QBOConfig />
+        </div>
+      )}
 
       {mediaEnabled && <DriveConfig />}
 

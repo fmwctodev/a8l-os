@@ -87,7 +87,8 @@ export async function createProduct(
       currency: input.currency || 'USD',
       billing_type: input.billing_type,
       income_account: input.income_account || null,
-      qbo_item_id: qboItemId,
+      provider_item_id: qboItemId,
+      provider: qboItemId ? 'quickbooks_online' : null,
       created_by: user.id,
     })
     .select('*, created_by_user:users!products_created_by_fkey(id, name, email)')

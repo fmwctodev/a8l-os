@@ -17,6 +17,9 @@ export * from './assistant';
 export interface Organization {
   id: string;
   name: string;
+  slug: string;
+  display_name: string | null;
+  logo_url: string | null;
   created_at: string;
   email?: string | null;
   phone?: string | null;
@@ -84,7 +87,7 @@ export interface User {
   updated_at: string;
   role?: Role;
   department?: Department | null;
-  organization?: Organization;
+  organization?: Organization | null;
   invited_by_user?: User | null;
   disabled_by_user?: User | null;
 }
@@ -107,13 +110,16 @@ export interface FeatureFlag {
   key: string;
   enabled: boolean;
   description: string | null;
+  organization_id: string | null;
   created_at: string;
 }
 
 export interface UserWithDetails extends User {
   role: Role;
   department: Department | null;
+  organization: Organization | null;
   permissions: string[];
+  super_admin_active_org_id?: string | null;
 }
 
 export type PermissionKey =
@@ -2900,7 +2906,8 @@ export interface Product {
   price_amount: number;
   currency: string;
   billing_type: BillingType;
-  qbo_item_id: string | null;
+  provider_item_id: string | null;
+  provider: string | null;
   income_account: string | null;
   active: boolean;
   created_by: string | null;
@@ -2914,7 +2921,8 @@ export interface Invoice {
   org_id: string;
   contact_id: string;
   opportunity_id: string | null;
-  qbo_invoice_id: string | null;
+  provider_invoice_id: string | null;
+  provider: string | null;
   doc_number: string | null;
   status: InvoiceStatus;
   subtotal: number;
@@ -2958,7 +2966,8 @@ export interface Payment {
   org_id: string;
   contact_id: string;
   invoice_id: string;
-  qbo_payment_id: string | null;
+  provider_payment_id: string | null;
+  provider: string | null;
   amount: number;
   currency: string;
   payment_method: PaymentMethod;
@@ -2973,7 +2982,8 @@ export interface RecurringProfile {
   id: string;
   org_id: string;
   contact_id: string;
-  qbo_recurring_template_id: string | null;
+  provider_recurring_template_id: string | null;
+  provider: string | null;
   name: string;
   frequency: RecurringFrequency;
   status: RecurringProfileStatus;

@@ -1,35 +1,49 @@
 import { supabase } from '../lib/supabase';
 import type { FeatureFlag } from '../types';
 
-export async function getFeatureFlags() {
+/**
+ * Fetches all feature flags visible to the current user. Returns a list
+ * containing both global rows (organization_id IS NULL) and per-org
+ * overrides for the user's current org. Per-org rows override globals.
+ *
+ * The returned list is already collapsed: there is at most ONE row per
+ * `key` — the per-org one if it exists, otherwise the global default.
+ */
+export async function getFeatureFlags(orgId?: string | null): Promise<FeatureFlag[]> {
+  const filter = orgId
+    ? `organization_id.eq.${orgId},organization_id.is.null`
+    : 'organization_id.is.null';
+
   const { data, error } = await supabase
     .from('feature_flags')
     .select('*')
+    .or(filter)
     .order('key');
 
   if (error) throw error;
-  return data as FeatureFlag[];
+
+  // Collapse: per-org row beats global for the same key.
+  const map = new Map<string, FeatureFlag>();
+  for (const row of (data ?? []) as FeatureFlag[]) {
+    const existing = map.get(row.key);
+    if (!existing) {
+      map.set(row.key, row);
+    } else if (row.organization_id && !existing.organization_id) {
+      map.set(row.key, row);
+    }
+  }
+  return Array.from(map.values());
 }
 
-export async function isFeatureEnabled(key: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('feature_flags')
-    .select('enabled')
-    .eq('key', key)
-    .maybeSingle();
-
-  if (error || !data) return false;
-  return data.enabled;
+export async function isFeatureEnabled(key: string, orgId?: string | null): Promise<boolean> {
+  const flags = await getFeatureFlags(orgId);
+  const flag = flags.find((f) => f.key === key);
+  return flag?.enabled ?? false;
 }
 
-export async function getEnabledFeatures(): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('feature_flags')
-    .select('key')
-    .eq('enabled', true);
-
-  if (error) return [];
-  return data?.map((f: { key: string }) => f.key) || [];
+export async function getEnabledFeatures(orgId?: string | null): Promise<string[]> {
+  const flags = await getFeatureFlags(orgId);
+  return flags.filter((f) => f.enabled).map((f) => f.key);
 }
 
 export async function updateFeatureFlag(

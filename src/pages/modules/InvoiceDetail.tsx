@@ -388,12 +388,14 @@ export function InvoiceDetail() {
                 </div>
               )}
 
-              {invoice.qbo_invoice_id && (
+              {invoice.provider_invoice_id && (
                 <div className="flex items-start gap-3">
                   <FileText className="w-5 h-5 text-slate-400 mt-0.5" />
                   <div>
-                    <p className="text-sm text-slate-400">QuickBooks ID</p>
-                    <p className="text-white font-mono text-sm">{invoice.qbo_invoice_id}</p>
+                    <p className="text-sm text-slate-400">
+                      {invoice.provider === 'stripe' ? 'Stripe Invoice ID' : 'QuickBooks ID'}
+                    </p>
+                    <p className="text-white font-mono text-sm">{invoice.provider_invoice_id}</p>
                   </div>
                 </div>
               )}

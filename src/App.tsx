@@ -8,6 +8,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { PaymentsGate } from './components/PaymentsGate';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { Login } from './pages/Login';
+import { AccessDenied } from './pages/auth/AccessDenied';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { Dashboard } from './pages/Dashboard';
 import { Unauthorized } from './pages/Unauthorized';
@@ -159,6 +160,7 @@ function App() {
             <Suspense fallback={<PageLoader />}>
             <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/auth/access-denied" element={<AccessDenied />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/unauthorized" element={<Unauthorized />} />
             <Route path="/feature-disabled" element={<FeatureDisabled />} />

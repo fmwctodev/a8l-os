@@ -722,7 +722,7 @@ export function Payments() {
                           </span>
                         </td>
                         <td className="py-3 px-4">
-                          {product.qbo_item_id ? (
+                          {product.provider_item_id ? (
                             <span className="inline-flex items-center gap-1 text-emerald-400 text-sm">
                               <CheckCircle2 className="w-3.5 h-3.5" />
                               Synced
