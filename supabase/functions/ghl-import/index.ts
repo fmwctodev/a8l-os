@@ -473,7 +473,7 @@ async function processOpportunitiesChunk(
         return "open";
       })(opp.status);
 
-      await supabase.from("opportunities").insert({
+      const { error: oppErr } = await supabase.from("opportunities").insert({
         org_id: payload.target_org_id,
         contact_id: contactId,
         pipeline_id: pl.pipeline_id,
@@ -486,6 +486,10 @@ async function processOpportunitiesChunk(
         created_by: payload.importer_user_id,
         ghl_opportunity_id: opp.id,
       });
+      if (oppErr) {
+        progress.errors.push(`opportunity ${opp.id}: ${oppErr.message}`);
+        continue;
+      }
       progress.opportunities_processed++;
     } catch (e) {
       progress.errors.push(`opportunity ${opp.id}: ${e instanceof Error ? e.message : String(e)}`);
