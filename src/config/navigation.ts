@@ -56,7 +56,7 @@ export const navigationConfig: NavSection[] = [
     items: [
       { name: 'Conversations', path: '/conversations', icon: MessageSquare, permission: 'conversations.view', featureFlag: 'conversations' },
       { name: 'Opportunities', path: '/opportunities', icon: Target, permission: 'opportunities.view', featureFlag: 'opportunities' },
-      { name: 'Government', path: '/government', icon: Landmark, permission: 'opportunities.view', featureFlag: 'opportunities' },
+      { name: 'Government', path: '/government', icon: Landmark, permission: 'opportunities.view', featureFlag: 'government' },
       { name: 'Marketing', path: '/marketing', icon: Megaphone, permission: 'marketing.view', featureFlag: 'marketing' },
       { name: 'Reputation', path: '/reputation', icon: Star, permission: 'reputation.view', featureFlag: 'reputation' },
     ],

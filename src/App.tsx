@@ -254,7 +254,7 @@ function App() {
               <Route
                 path="/government"
                 element={
-                  <ProtectedRoute permission="opportunities.view" featureFlag="opportunities">
+                  <ProtectedRoute permission="opportunities.view" featureFlag="government">
                     <GovContractSearch />
                   </ProtectedRoute>
                 }
