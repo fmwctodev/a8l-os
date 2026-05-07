@@ -95,6 +95,9 @@ export function AllIntegrationsTab({ onSuccess }: AllIntegrationsTabProps) {
   };
 
   const filteredIntegrations = integrations.filter((int) => {
+    // Hide legacy SendGrid row — replaced by Mailgun. Row left in DB for
+    // historical integration_connections references; not user-facing.
+    if (int.key === 'sendgrid') return false;
     if (search) {
       const searchLower = search.toLowerCase();
       return (

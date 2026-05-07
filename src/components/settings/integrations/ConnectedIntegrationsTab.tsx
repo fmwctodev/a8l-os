@@ -52,7 +52,11 @@ export function ConnectedIntegrationsTab({ onSuccess }: ConnectedIntegrationsTab
         return int;
       });
 
-      setIntegrations(merged.filter((int) => int.connection?.status === 'connected'));
+      setIntegrations(
+        merged.filter(
+          (int) => int.connection?.status === 'connected' && int.key !== 'sendgrid',
+        ),
+      );
     } catch (error) {
       console.error('Failed to load integrations:', error);
       showToast('warning', 'Failed to load integrations', 'Please check your connection and try again.');
