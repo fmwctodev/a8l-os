@@ -72,10 +72,12 @@ export async function extractUserContext(
 
   console.log("[Auth] JWT validated successfully for user:", user.id);
 
-  // Use service role client for database queries (bypass RLS)
+  // Use service role client for database queries (bypass RLS).
+  // super_admin_active_org_id lets a SuperAdmin pivot active org via the
+  // OrgSwitcher; we honor it below the same way get_user_org_id() does.
   const { data: userData, error: userError } = await supabase
     .from("users")
-    .select("id, email, organization_id, role_id, department_id")
+    .select("id, email, organization_id, super_admin_active_org_id, role_id, department_id")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -155,10 +157,18 @@ export async function extractUserContext(
 
   const isSuperAdmin = roleName === "SuperAdmin";
 
+  // SuperAdmin org pivot: when super_admin_active_org_id is set, use it as
+  // the effective org. Mirrors public.get_user_org_id() so server-side data
+  // queries in edge functions match the active org the user is viewing.
+  const activeOrgId =
+    (isSuperAdmin && userData.super_admin_active_org_id) ||
+    userData.organization_id;
+
   return {
     id: userData.id,
     email: userData.email,
-    orgId: userData.organization_id,
+    orgId: activeOrgId,
+    homeOrgId: userData.organization_id,
     roleId: userData.role_id,
     roleName,
     departmentId: userData.department_id,
@@ -173,7 +183,7 @@ export async function extractUserContextById(
 ): Promise<UserContext | null> {
   const { data: userData, error: userError } = await supabase
     .from("users")
-    .select("id, email, organization_id, role_id, department_id")
+    .select("id, email, organization_id, super_admin_active_org_id, role_id, department_id")
     .eq("id", userId)
     .maybeSingle();
 
@@ -232,14 +242,20 @@ export async function extractUserContextById(
     }
   }
 
+  const isSuperAdmin2 = roleName === "SuperAdmin";
+  const activeOrgId =
+    (isSuperAdmin2 && userData.super_admin_active_org_id) ||
+    userData.organization_id;
+
   return {
     id: userData.id,
     email: userData.email,
-    orgId: userData.organization_id,
+    orgId: activeOrgId,
+    homeOrgId: userData.organization_id,
     roleId: userData.role_id,
     roleName,
     departmentId: userData.department_id,
-    isSuperAdmin: roleName === "SuperAdmin",
+    isSuperAdmin: isSuperAdmin2,
     permissions: Array.from(rolePermissions),
   };
 }

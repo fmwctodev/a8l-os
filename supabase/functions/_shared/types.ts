@@ -1,7 +1,10 @@
 export interface UserContext {
   id: string;
   email: string;
+  /** Active org — honors SuperAdmin's super_admin_active_org_id pivot. */
   orgId: string;
+  /** User's home org. Equals orgId for non-pivoted users. */
+  homeOrgId?: string;
   roleId: string;
   roleName: string;
   departmentId: string | null;
