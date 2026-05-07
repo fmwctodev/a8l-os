@@ -35,9 +35,11 @@ import { RecurringProfilesTab } from '../../components/payments/RecurringProfile
 import { PaymentReportsTab } from '../../components/payments/PaymentReportsTab';
 import { InvoiceTemplatesTab } from '../../components/payments/InvoiceTemplatesTab';
 import { InvoiceBulkActionsBar } from '../../components/payments/InvoiceBulkActionsBar';
-import { BarChart3, LayoutGrid as Layout } from 'lucide-react';
+import { StripeOverviewTab } from '../../components/payments/StripeOverviewTab';
+import { getActivePaymentsProvider } from '../../services/stripeAuth';
+import { BarChart3, LayoutGrid as Layout, LayoutDashboard } from 'lucide-react';
 
-type TabType = 'invoices' | 'products' | 'recurring' | 'templates' | 'reports';
+type TabType = 'overview' | 'invoices' | 'products' | 'recurring' | 'templates' | 'reports';
 
 const STATUS_STYLES: Record<InvoiceStatus, { bg: string; text: string; label: string }> = {
   draft: { bg: 'bg-slate-500/20', text: 'text-slate-300', label: 'Draft' },
@@ -64,6 +66,7 @@ export function Payments() {
   const [showCreateProduct, setShowCreateProduct] = useState(false);
   const [qboConnected, setQboConnected] = useState(false);
   const [qboTokenExpired, setQboTokenExpired] = useState(false);
+  const [paymentsProvider, setPaymentsProvider] = useState<'stripe' | 'quickbooks_online' | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ synced: number; updated: number; total: number } | null>(null);
@@ -81,6 +84,12 @@ export function Payments() {
     if (canView) {
       loadData();
       handleQBOOAuthCallback().then(() => checkQBOConnection());
+      // Detect which provider this org has connected so we can decide
+      // whether to show the Stripe Overview tab.
+      getActivePaymentsProvider().then((p) => {
+        setPaymentsProvider(p);
+        if (p === 'stripe') setActiveTab('overview');
+      });
     }
   }, [user, canView]);
 
@@ -435,6 +444,9 @@ export function Payments() {
         <div className="border-b border-slate-800">
           <nav className="flex gap-1 p-2">
             {[
+              ...(paymentsProvider === 'stripe'
+                ? [{ key: 'overview', label: 'Overview', icon: LayoutDashboard }]
+                : []),
               { key: 'invoices', label: 'Invoices', icon: FileText },
               { key: 'products', label: 'Products', icon: Package },
               { key: 'recurring', label: 'Recurring', icon: RefreshCw },
@@ -456,6 +468,12 @@ export function Payments() {
             ))}
           </nav>
         </div>
+
+        {activeTab === 'overview' && paymentsProvider === 'stripe' && (
+          <div className="p-6">
+            <StripeOverviewTab />
+          </div>
+        )}
 
         {(activeTab === 'invoices' || activeTab === 'products') && (
           <div className="p-4 border-b border-slate-800">

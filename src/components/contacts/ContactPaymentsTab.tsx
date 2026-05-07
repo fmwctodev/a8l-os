@@ -15,6 +15,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { CreateInvoiceModal } from '../payments/CreateInvoiceModal';
+import { ContactStripePanel } from './ContactStripePanel';
 
 interface ContactPaymentsTabProps {
   contactId: string;
@@ -82,6 +83,8 @@ export function ContactPaymentsTab({ contactId }: ContactPaymentsTabProps) {
 
   return (
     <div className="space-y-6">
+      <ContactStripePanel contactId={contactId} />
+
       {summary && (
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-slate-800/50 rounded-lg p-4">

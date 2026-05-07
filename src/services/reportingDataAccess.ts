@@ -150,6 +150,7 @@ const DATA_SOURCE_CONFIG: Record<DataSource, {
     availableFields: [
       'id', 'invoice_number', 'status', 'subtotal', 'tax_amount',
       'total', 'due_date', 'paid_at', 'created_at', 'updated_at',
+      'provider', 'provider_invoice_id',
     ],
     joinSpecs: [
       { table: 'contacts', alias: 'contact', on: 'invoices.contact_id = contact.id', fields: ['contact.first_name as contact_first_name', 'contact.last_name as contact_last_name'] },
@@ -160,6 +161,7 @@ const DATA_SOURCE_CONFIG: Record<DataSource, {
     viewPermission: 'payments.view',
     availableFields: [
       'id', 'amount', 'status', 'method', 'paid_at', 'created_at',
+      'provider', 'provider_payment_id',
     ],
     joinSpecs: [
       { table: 'invoices', alias: 'invoice', on: 'payments.invoice_id = invoice.id', fields: ['invoice.invoice_number'] },
