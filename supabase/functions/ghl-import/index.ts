@@ -33,7 +33,7 @@ interface ImportRequest {
   importer_user_id: string;
   target_org_id: string;
   cursor?: string | null;
-  phase?: "contacts" | "opportunities" | "appointments" | "done";
+  phase?: "contacts" | "opportunities" | "calendars" | "appointments" | "done";
   // Per-phase progress carried across chunks.
   progress?: ImportProgress;
 }
@@ -43,11 +43,16 @@ interface ImportProgress {
   notes_processed: number;
   custom_field_values_processed: number;
   opportunities_processed: number;
+  calendars_processed: number;
   appointments_processed: number;
   errors: string[];
   contact_id_map?: Record<string, string>; // GHL ID → our UUID, used by later phases
   custom_field_map?: Record<string, string>; // GHL field key → our UUID
   pipeline_map?: Record<string, { pipeline_id: string; stages: Record<string, string> }>; // GHL pipeline_id → ours
+  // GHL calendar id → { calendar_id, appointment_type_id } in our DB
+  calendar_map?: Record<string, { calendar_id: string; appointment_type_id: string }>;
+  // List of GHL calendar ids the appointments phase still needs to fetch from
+  appointments_remaining_calendars?: string[];
 }
 
 function newProgress(): ImportProgress {
@@ -56,11 +61,14 @@ function newProgress(): ImportProgress {
     notes_processed: 0,
     custom_field_values_processed: 0,
     opportunities_processed: 0,
+    calendars_processed: 0,
     appointments_processed: 0,
     errors: [],
     contact_id_map: {},
     custom_field_map: {},
     pipeline_map: {},
+    calendar_map: {},
+    appointments_remaining_calendars: [],
   };
 }
 
@@ -488,29 +496,293 @@ async function processOpportunitiesChunk(
   return { next_cursor: opps[opps.length - 1].id, phase_done: false };
 }
 
+interface GhlCalendar {
+  id: string;
+  name: string;
+  isActive?: boolean;
+  calendarType?: string; // personal, round_robin, collective, class
+  slug?: string;
+  description?: string;
+  appointmentDuration?: number;
+  slotDuration?: number;
+  slotInterval?: number;
+  slotBuffer?: number;
+  minBookingNotice?: number;
+  allowReschedule?: boolean;
+  allowCancellation?: boolean;
+  eventColor?: string;
+  eventTitle?: string;
+}
+
+function mapCalendarType(_ghlType?: string): string {
+  // Our calendars table has TWO CHECK constraints:
+  //   calendars_type_check: type IN ('user', 'team')
+  //   valid_calendar_type: (type='user' AND owner_user_id NOT NULL) OR (type='team' AND owner_user_id NULL)
+  //
+  // GHL doesn't give us a user mapping that resolves to a BL user_id,
+  // so we can't legally assign owner_user_id during import.
+  // Therefore: ALL imported GHL calendars become 'team' type with no
+  // owner. Admins can convert to 'user' + assign an owner via the UI later.
+  return "team";
+}
+
+function slugify(name: string, fallback: string): string {
+  const s = (name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return s || fallback;
+}
+
+async function processCalendarsChunk(
+  supabase: Supabase,
+  payload: ImportRequest,
+  progress: ImportProgress,
+): Promise<{ next_cursor: string | null; phase_done: boolean }> {
+  // GHL returns all calendars in a single call (no pagination needed for typical orgs).
+  const result = await ghlGet<{ calendars: GhlCalendar[] }>(
+    payload.ghl_token,
+    `/calendars/?locationId=${encodeURIComponent(payload.ghl_location_id)}`,
+  );
+  if (!result.ok || !result.data) {
+    progress.errors.push(`calendars list ${result.status}: ${result.error}`);
+    return { next_cursor: null, phase_done: true };
+  }
+
+  const cals = result.data.calendars ?? [];
+  const remaining: string[] = [];
+
+  for (const ghl of cals) {
+    if (ghl.isActive === false) continue;
+    try {
+      // Idempotency: skip if we already imported this GHL calendar
+      const { data: existingCal } = await supabase
+        .from("calendars")
+        .select("id")
+        .eq("org_id", payload.target_org_id)
+        .eq("ghl_calendar_id", ghl.id)
+        .maybeSingle();
+
+      let calendarId: string;
+      if (existingCal) {
+        calendarId = existingCal.id;
+      } else {
+        const slugBase = slugify(ghl.name, `ghl-${ghl.id.slice(0, 8)}`);
+        // Ensure slug is unique within org
+        let slug = slugBase;
+        for (let attempt = 1; attempt < 20; attempt++) {
+          const { data: dupe } = await supabase
+            .from("calendars")
+            .select("id")
+            .eq("org_id", payload.target_org_id)
+            .eq("slug", slug)
+            .maybeSingle();
+          if (!dupe) break;
+          slug = `${slugBase}-${attempt}`;
+        }
+
+        const { data: created, error } = await supabase
+          .from("calendars")
+          .insert({
+            org_id: payload.target_org_id,
+            type: mapCalendarType(ghl.calendarType),
+            name: ghl.name,
+            slug,
+            description: ghl.description || null,
+            min_notice_minutes: ghl.minBookingNotice ?? 0,
+            allow_reschedule: ghl.allowReschedule ?? true,
+            allow_cancel: ghl.allowCancellation ?? true,
+            ghl_calendar_id: ghl.id,
+            settings: {
+              ghl_calendar_type: ghl.calendarType,
+              ghl_event_color: ghl.eventColor,
+              ghl_event_title_template: ghl.eventTitle,
+              imported_from: "ghl",
+            },
+          })
+          .select("id")
+          .single();
+
+        if (error || !created) {
+          progress.errors.push(`calendar ${ghl.id} (${ghl.name}): ${error?.message || "insert failed"}`);
+          continue;
+        }
+        calendarId = created.id;
+      }
+
+      // Default appointment_type for this calendar
+      const { data: existingAt } = await supabase
+        .from("appointment_types")
+        .select("id")
+        .eq("org_id", payload.target_org_id)
+        .eq("ghl_calendar_id", ghl.id)
+        .maybeSingle();
+
+      let apptTypeId: string;
+      if (existingAt) {
+        apptTypeId = existingAt.id;
+      } else {
+        const atSlugBase = slugify(`${ghl.name}-default`, `ghl-${ghl.id.slice(0, 8)}-default`);
+        let atSlug = atSlugBase;
+        for (let attempt = 1; attempt < 20; attempt++) {
+          const { data: dupe } = await supabase
+            .from("appointment_types")
+            .select("id")
+            .eq("org_id", payload.target_org_id)
+            .eq("slug", atSlug)
+            .maybeSingle();
+          if (!dupe) break;
+          atSlug = `${atSlugBase}-${attempt}`;
+        }
+
+        const { data: createdAt, error: atErr } = await supabase
+          .from("appointment_types")
+          .insert({
+            org_id: payload.target_org_id,
+            calendar_id: calendarId,
+            name: ghl.name,
+            slug: atSlug,
+            description: ghl.description || null,
+            duration_minutes: ghl.slotDuration ?? ghl.appointmentDuration ?? 30,
+            slot_interval_minutes: ghl.slotInterval ?? 15,
+            buffer_before_minutes: 0,
+            buffer_after_minutes: ghl.slotBuffer ?? 0,
+            min_notice_minutes: ghl.minBookingNotice ?? 60,
+            location_type: "google_meet",
+            generate_google_meet: false, // imported, don't create new Meet links
+            ghl_calendar_id: ghl.id,
+          })
+          .select("id")
+          .single();
+
+        if (atErr || !createdAt) {
+          progress.errors.push(
+            `appointment_type for cal ${ghl.id}: ${atErr?.message || "insert failed"}`,
+          );
+          continue;
+        }
+        apptTypeId = createdAt.id;
+      }
+
+      progress.calendar_map![ghl.id] = { calendar_id: calendarId, appointment_type_id: apptTypeId };
+      remaining.push(ghl.id);
+      progress.calendars_processed++;
+    } catch (e) {
+      progress.errors.push(`calendar ${ghl.id}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // Stash the list of GHL calendar ids for the appointments phase to iterate through
+  progress.appointments_remaining_calendars = remaining;
+  return { next_cursor: null, phase_done: true };
+}
+
+function mapAppointmentStatus(ghlStatus?: string): string {
+  // appointments.status CHECK accepts: scheduled, canceled (single L), completed, no_show
+  switch ((ghlStatus || "").toLowerCase()) {
+    case "confirmed":
+    case "new":
+      return "scheduled";
+    case "showed":
+      return "completed";
+    case "noshow":
+      return "no_show";
+    case "cancelled":
+    case "canceled":
+    case "invalid":
+      return "canceled";
+    default:
+      return "scheduled";
+  }
+}
+
 async function processAppointmentsChunk(
   supabase: Supabase,
   payload: ImportRequest,
   progress: ImportProgress,
 ): Promise<{ next_cursor: string | null; phase_done: boolean }> {
-  // Appointments need a calendar_id + appointment_type_id which BL likely
-  // doesn't have set up yet. Check; if no calendars, skip with a recorded note.
-  const { data: calendars } = await supabase
-    .from("calendars")
-    .select("id")
-    .eq("org_id", payload.target_org_id)
-    .limit(1);
+  const remaining = progress.appointments_remaining_calendars ?? [];
+  if (remaining.length === 0) return { next_cursor: null, phase_done: true };
 
-  if (!calendars || calendars.length === 0) {
-    progress.errors.push(
-      "appointments skipped: no calendar configured for this org. Create a calendar in Settings → Calendars first, then re-run import.",
+  const startTime = Date.now();
+  const TIMEOUT_BUDGET_MS = 100_000;
+
+  // Pull events 1 year back to 1 year forward — covers most legitimate ranges
+  const startTs = Date.now() - 365 * 24 * 3600 * 1000;
+  const endTs = Date.now() + 365 * 24 * 3600 * 1000;
+
+  while (remaining.length > 0) {
+    if (Date.now() - startTime > TIMEOUT_BUDGET_MS) {
+      // Pause and let caller resume
+      progress.appointments_remaining_calendars = remaining;
+      return { next_cursor: null, phase_done: false };
+    }
+
+    const ghlCalId = remaining.shift()!;
+    const calMap = progress.calendar_map?.[ghlCalId];
+    if (!calMap) continue;
+
+    const evRes = await ghlGet<{ events: GhlAppointment[] }>(
+      payload.ghl_token,
+      `/calendars/events?locationId=${encodeURIComponent(payload.ghl_location_id)}&calendarId=${encodeURIComponent(ghlCalId)}&startTime=${startTs}&endTime=${endTs}`,
     );
-    return { next_cursor: null, phase_done: true };
+    if (!evRes.ok || !evRes.data) {
+      progress.errors.push(`events for cal ${ghlCalId} ${evRes.status}: ${evRes.error}`);
+      continue;
+    }
+
+    const events = evRes.data.events ?? [];
+    for (const ev of events) {
+      try {
+        if (!ev.startTime || !ev.endTime) continue;
+
+        // Idempotency
+        const { data: existing } = await supabase
+          .from("appointments")
+          .select("id")
+          .eq("org_id", payload.target_org_id)
+          .eq("ghl_appointment_id", ev.id)
+          .maybeSingle();
+        if (existing) continue;
+
+        // Resolve contact via map; fallback to DB lookup
+        let contactId: string | null = null;
+        if (ev.contactId) {
+          contactId = progress.contact_id_map?.[ev.contactId] ?? null;
+          if (!contactId) {
+            const { data: c } = await supabase
+              .from("contacts")
+              .select("id")
+              .eq("organization_id", payload.target_org_id)
+              .eq("ghl_contact_id", ev.contactId)
+              .maybeSingle();
+            contactId = c?.id ?? null;
+            if (contactId) progress.contact_id_map![ev.contactId] = contactId;
+          }
+        }
+
+        const { error: apptErr } = await supabase.from("appointments").insert({
+          org_id: payload.target_org_id,
+          calendar_id: calMap.calendar_id,
+          appointment_type_id: calMap.appointment_type_id,
+          contact_id: contactId,
+          status: mapAppointmentStatus(ev.appointmentStatus),
+          start_at_utc: ev.startTime,
+          end_at_utc: ev.endTime,
+          notes: ev.notes || null,
+          location: ev.address || null,
+          source: "manual", // appointments.source CHECK only accepts 'booking' | 'manual'
+          ghl_appointment_id: ev.id,
+        });
+        if (apptErr) {
+          progress.errors.push(`appointment ${ev.id}: ${apptErr.message}`);
+          continue;
+        }
+        progress.appointments_processed++;
+      } catch (e) {
+        progress.errors.push(`appointment ${ev.id}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
   }
 
-  // Skipping the actual import for V1 — calendar setup is non-trivial.
-  // Documented as a follow-up.
-  progress.errors.push("appointments import not implemented in V1 (calendar mapping pending)");
+  progress.appointments_remaining_calendars = [];
   return { next_cursor: null, phase_done: true };
 }
 
@@ -551,6 +823,8 @@ Deno.serve(async (req: Request) => {
       result = await processContactsChunk(supabase, payload, progress);
     } else if (phase === "opportunities") {
       result = await processOpportunitiesChunk(supabase, payload, progress);
+    } else if (phase === "calendars") {
+      result = await processCalendarsChunk(supabase, payload, progress);
     } else if (phase === "appointments") {
       result = await processAppointmentsChunk(supabase, payload, progress);
     } else {
@@ -561,7 +835,8 @@ Deno.serve(async (req: Request) => {
     let nextCursor: string | null = result.next_cursor;
     if (result.phase_done) {
       if (phase === "contacts") nextPhase = "opportunities";
-      else if (phase === "opportunities") nextPhase = "appointments";
+      else if (phase === "opportunities") nextPhase = "calendars";
+      else if (phase === "calendars") nextPhase = "appointments";
       else if (phase === "appointments") nextPhase = "done";
       nextCursor = null;
     }

@@ -17,25 +17,31 @@ interface ImportProgress {
   notes_processed: number;
   custom_field_values_processed: number;
   opportunities_processed: number;
+  calendars_processed: number;
   appointments_processed: number;
   errors: string[];
   contact_id_map?: Record<string, string>;
   custom_field_map?: Record<string, string>;
   pipeline_map?: Record<string, { pipeline_id: string; stages: Record<string, string> }>;
+  calendar_map?: Record<string, { calendar_id: string; appointment_type_id: string }>;
+  appointments_remaining_calendars?: string[];
 }
 
-type Phase = 'contacts' | 'opportunities' | 'appointments' | 'done';
+type Phase = 'contacts' | 'opportunities' | 'calendars' | 'appointments' | 'done';
 
 const newProgress = (): ImportProgress => ({
   contacts_processed: 0,
   notes_processed: 0,
   custom_field_values_processed: 0,
   opportunities_processed: 0,
+  calendars_processed: 0,
   appointments_processed: 0,
   errors: [],
   contact_id_map: {},
   custom_field_map: {},
   pipeline_map: {},
+  calendar_map: {},
+  appointments_remaining_calendars: [],
 });
 
 export function GHLImporter() {
@@ -211,11 +217,12 @@ export function GHLImporter() {
             {stopRequested && <span className="text-amber-400 text-xs">stopping...</span>}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-sm">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
             <Stat label="Contacts" value={progress.contacts_processed} />
             <Stat label="Notes" value={progress.notes_processed} />
             <Stat label="Custom fields" value={progress.custom_field_values_processed} />
             <Stat label="Opportunities" value={progress.opportunities_processed} />
+            <Stat label="Calendars" value={progress.calendars_processed} />
             <Stat label="Appointments" value={progress.appointments_processed} />
           </div>
 
