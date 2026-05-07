@@ -595,6 +595,100 @@ interface SupabaseLike {
   from: (table: string) => unknown;
 }
 
+// =============================================================
+// Inline AES-GCM crypto for Stripe credentials.
+//
+// Bypasses email-crypto so stripe-provider / stripe-api /
+// stripe-webhook don't have a cross-function auth dependency
+// (Supabase function-to-function calls were 401-ing because the
+// two function workers see different SUPABASE_SERVICE_ROLE_KEY
+// env values during cold starts).
+//
+// Algorithm matches email-crypto:
+//   key  = HKDF-SHA256(SUPABASE_SERVICE_ROLE_KEY, salt, info)
+//   iv   = 12 random bytes
+//   ct   = AES-GCM-256(plaintext)
+//   wire = hex(ct), hex(iv)
+//
+// Salt is "stripe-creds-v1" (vs email-crypto's "sendgrid-email-crypto")
+// so the derived key is namespace-isolated. A leaked Mailgun-encrypted
+// blob can't be decrypted with the Stripe key, and vice versa.
+// =============================================================
+
+let _stripeKeyPromise: Promise<CryptoKey> | null = null;
+
+async function deriveStripeKey(): Promise<CryptoKey> {
+  if (_stripeKeyPromise) return _stripeKeyPromise;
+  _stripeKeyPromise = (async () => {
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!serviceRoleKey || serviceRoleKey.length < 20) {
+      throw new Error(
+        `deriveStripeKey: SUPABASE_SERVICE_ROLE_KEY missing/short (len=${serviceRoleKey?.length ?? 0})`,
+      );
+    }
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(serviceRoleKey),
+      { name: "HKDF" },
+      false,
+      ["deriveKey"],
+    );
+    return await crypto.subtle.deriveKey(
+      {
+        name: "HKDF",
+        salt: enc.encode("stripe-creds-v1"),
+        info: enc.encode("aes-gcm-key"),
+        hash: "SHA-256",
+      },
+      keyMaterial,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"],
+    );
+  })();
+  return _stripeKeyPromise;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const matches = hex.match(/.{1,2}/g);
+  if (!matches) return new Uint8Array(0);
+  return new Uint8Array(matches.map((b) => parseInt(b, 16)));
+}
+
+export async function aesGcmEncrypt(
+  plaintext: string,
+): Promise<{ encrypted: string; iv: string }> {
+  const key = await deriveStripeKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(plaintext),
+  );
+  return {
+    encrypted: bytesToHex(new Uint8Array(ct)),
+    iv: bytesToHex(iv),
+  };
+}
+
+export async function aesGcmDecrypt(
+  encryptedHex: string,
+  ivHex: string,
+): Promise<string> {
+  const key = await deriveStripeKey();
+  const ct = hexToBytes(encryptedHex);
+  const iv = hexToBytes(ivHex);
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+  return new TextDecoder().decode(pt);
+}
+
 /**
  * Resolves Stripe credentials for an org.
  *
@@ -611,8 +705,10 @@ export async function getDecryptedStripeCreds(
   orgId: string,
   // deno-lint-ignore no-explicit-any
   supabase: any,
-  supabaseUrl: string,
-  serviceRoleKey: string,
+  // Kept for backward compatibility with existing callers. No longer
+  // used — inline AES-GCM in this file replaces the email-crypto path.
+  _supabaseUrl?: string,
+  _serviceRoleKey?: string,
 ): Promise<StripeCredentials | null> {
   const envKey = Deno.env.get("STRIPE_SECRET_KEY");
   if (envKey) {
@@ -635,27 +731,14 @@ export async function getDecryptedStripeCreds(
     return null;
   }
 
-  const response = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      apikey: serviceRoleKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      action: "decrypt",
-      encrypted: conn.credentials_encrypted,
-      iv: conn.credentials_iv,
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    console.error(`[stripe getDecryptedStripeCreds] email-crypto ${response.status}: ${body}`);
+  let plaintext: string;
+  try {
+    plaintext = await aesGcmDecrypt(conn.credentials_encrypted, conn.credentials_iv);
+  } catch (e) {
+    console.error("[stripe getDecryptedStripeCreds] decrypt failed:", e instanceof Error ? e.message : String(e));
     return null;
   }
 
-  const { plaintext } = await response.json();
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(plaintext);
@@ -682,8 +765,10 @@ export async function encryptStripeCreds(
     account_id?: string | null;
     webhook_signing_secret?: string | null;
   },
-  supabaseUrl: string,
-  serviceRoleKey: string,
+  // Kept for backward compatibility with existing callers. No longer
+  // used — inline AES-GCM in this file replaces the email-crypto path.
+  _supabaseUrl?: string,
+  _serviceRoleKey?: string,
 ): Promise<{ encrypted: string; iv: string }> {
   const payload = JSON.stringify({
     secret_key: creds.secret_key,
@@ -691,41 +776,5 @@ export async function encryptStripeCreds(
     account_id: creds.account_id ?? null,
     webhook_signing_secret: creds.webhook_signing_secret ?? null,
   });
-
-  // Sanity check before we even fire the request — if the env var is
-  // missing in our runtime, no point hitting email-crypto with a
-  // garbage Bearer.
-  if (!serviceRoleKey || serviceRoleKey.length < 20) {
-    throw new Error(
-      `encryptStripeCreds: SUPABASE_SERVICE_ROLE_KEY env var is missing/short (len=${serviceRoleKey?.length ?? 0})`,
-    );
-  }
-
-  // Try the apikey + Authorization combo. The email-crypto function
-  // checks `authHeader.includes(serviceRoleKey)`, so passing the key
-  // in either header keeps the path resilient to gateway header
-  // rewrites between functions.
-  const response = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      apikey: serviceRoleKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ action: "encrypt", plaintext: payload }),
-  });
-
-  if (!response.ok) {
-    let body = "";
-    try {
-      body = await response.text();
-    } catch { /* ignore */ }
-    console.error(
-      `[stripe encryptStripeCreds] email-crypto returned ${response.status}: ${body}`,
-    );
-    throw new Error(
-      `email-crypto ${response.status}: ${body.slice(0, 200) || "(no body)"}`,
-    );
-  }
-  return await response.json();
+  return await aesGcmEncrypt(payload);
 }
