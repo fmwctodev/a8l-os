@@ -3,7 +3,7 @@
 
   Inserts 12 system templates that exercise the full action/trigger
   surface area shipped in P1–P9:
-    - send_sms (Plivo) + send_email_org (SendGrid) + send_email_personal (Gmail)
+    - send_sms (Plivo) + send_email_org (Mailgun) + send_email_personal (Gmail)
     - start_ai_call (Vapi) + ai_call_completed trigger filters
     - manual_action approval gate with auto-expire + multi-approver
     - DND-gated by default (canSendOnChannel enforced server-side)
@@ -41,7 +41,7 @@ IF v_existing_id IS NULL THEN
   INSERT INTO automation_templates (id, org_id, name, description, category, icon_name, channel_tags, estimated_time, complexity, is_system, status, published_at, use_count)
   VALUES (t_welcome_lead, NULL,
     'Welcome New Lead (SMS + Email)',
-    'When a contact submits a form with SMS consent, sends an instant SMS welcome + a 1-hour delayed SendGrid email with the capability statement attached.',
+    'When a contact submits a form with SMS consent, sends an instant SMS welcome + a 1-hour delayed Mailgun email with the capability statement attached.',
     'lead_management', 'Sparkles', ARRAY['sms', 'email'], '5 minutes', 'simple', true, 'published', now(), 0);
   INSERT INTO automation_template_versions (template_id, version_number, definition_snapshot, change_summary)
   VALUES (t_welcome_lead, 1, $template$
@@ -142,7 +142,7 @@ IF v_existing_id IS NULL THEN
   INSERT INTO automation_templates (id, org_id, name, description, category, icon_name, channel_tags, estimated_time, complexity, is_system, status, published_at, use_count)
   VALUES (t_no_show_recovery, NULL,
     'No-show Recovery',
-    'When an appointment is marked no-show, waits 1 hour then sends a SendGrid email with the reschedule link.',
+    'When an appointment is marked no-show, waits 1 hour then sends a Mailgun email with the reschedule link.',
     'scheduling', 'RotateCcw', ARRAY['email'], '3 minutes', 'simple', true, 'published', now(), 0);
   INSERT INTO automation_template_versions (template_id, version_number, definition_snapshot, change_summary)
   VALUES (t_no_show_recovery, 1, $template$
@@ -165,7 +165,7 @@ IF v_existing_id IS NULL THEN
   INSERT INTO automation_templates (id, org_id, name, description, category, icon_name, channel_tags, estimated_time, complexity, is_system, status, published_at, use_count)
   VALUES (t_capability_auto, NULL,
     'Capability Statement Auto-Delivery',
-    'When the /capability-statement form is submitted, sends the PDF via SendGrid + notifies sales channel in Slack.',
+    'When the /capability-statement form is submitted, sends the PDF via Mailgun + notifies sales channel in Slack.',
     'sales', 'FileText', ARRAY['email', 'slack'], '5 minutes', 'simple', true, 'published', now(), 0);
   INSERT INTO automation_template_versions (template_id, version_number, definition_snapshot, change_summary)
   VALUES (t_capability_auto, 1, $template$

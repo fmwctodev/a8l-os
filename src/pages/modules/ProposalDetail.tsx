@@ -816,10 +816,10 @@ export function ProposalDetail() {
                     </div>
                   )}
 
-                  {signatureRequest?.sendgrid_message_id && (
+                  {signatureRequest?.provider_message_id && (
                     <div className="mb-4">
                       <p className="text-xs text-slate-600">
-                        Message ID: {signatureRequest.sendgrid_message_id}
+                        Message ID: {signatureRequest.provider_message_id}
                       </p>
                     </div>
                   )}

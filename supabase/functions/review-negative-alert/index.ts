@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getDecryptedMailgunCreds, sendMailgunEmail } from "../_shared/mailgun.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -58,42 +59,6 @@ interface Contact {
   phone: string | null;
 }
 
-async function getDecryptedSendGridKey(
-  orgId: string,
-  supabase: ReturnType<typeof createClient>,
-  supabaseUrl: string,
-  serviceRoleKey: string
-): Promise<string | null> {
-  const envKey = Deno.env.get("SENDGRID_API_KEY");
-  if (envKey) return envKey;
-
-  const { data: conn } = await supabase
-    .from("integration_connections")
-    .select("credentials_encrypted, credentials_iv, status, integrations!inner(key)")
-    .eq("org_id", orgId)
-    .eq("integrations.key", "sendgrid")
-    .maybeSingle();
-
-  if (!conn || conn.status !== "connected" || !conn.credentials_encrypted || !conn.credentials_iv) return null;
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      action: "decrypt",
-      encrypted: conn.credentials_encrypted,
-      iv: conn.credentials_iv,
-    }),
-  });
-
-  if (!response.ok) return null;
-  const data = await response.json();
-  return data.plaintext;
-}
-
 async function sendEmailNotification(
   recipients: User[],
   review: Review,
@@ -103,9 +68,9 @@ async function sendEmailNotification(
   supabaseUrl: string,
   serviceRoleKey: string
 ): Promise<void> {
-  const sendgridKey = await getDecryptedSendGridKey(review.organization_id, supabase, supabaseUrl, serviceRoleKey);
-  if (!sendgridKey) {
-    console.log("SendGrid not connected for org, skipping email notification");
+  const mgCreds = await getDecryptedMailgunCreds(review.organization_id, supabase, supabaseUrl, serviceRoleKey);
+  if (!mgCreds) {
+    console.log("Mailgun not connected for org, skipping email notification");
     return;
   }
 
@@ -156,18 +121,16 @@ async function sendEmailNotification(
     `;
 
     try {
-      await fetch("https://api.sendgrid.com/v3/mail/send", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${sendgridKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email: recipient.email }] }],
-          from: { email: fromEmail, name: fromName },
-          subject: `[Action Required] Negative ${review.rating}-Star Review from ${customerName}`,
-          content: [{ type: "text/html", value: emailContent }],
-        }),
+      await sendMailgunEmail({
+        apiKey: mgCreds.apiKey,
+        domain: mgCreds.domain,
+        region: mgCreds.region,
+        from: `${fromName} <${fromEmail}>`,
+        to: recipient.email,
+        subject: `[Action Required] Negative ${review.rating}-Star Review from ${customerName}`,
+        html: emailContent,
+        trackOpens: true,
+        trackClicks: false,
       });
     } catch (error) {
       console.error(`Failed to send email to ${recipient.email}:`, error);

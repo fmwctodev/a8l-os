@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
+import { sendMailgunEmail, type MailgunRegion } from "../_shared/mailgun.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,41 +32,31 @@ interface EmailQueueItem {
   } | null;
 }
 
-async function sendWithSendGrid(
+async function sendWithMailgun(
   apiKey: string,
+  domain: string,
+  region: MailgunRegion,
   to: string,
   subject: string,
   htmlContent: string,
-  textContent: string
+  textContent: string,
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  try {
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: to }] }],
-        from: { email: 'reports@autom8ion.com', name: 'Autom8ion Reports' },
-        subject,
-        content: [
-          { type: 'text/plain', value: textContent },
-          { type: 'text/html', value: htmlContent },
-        ],
-      }),
-    });
-
-    if (response.ok) {
-      const messageId = response.headers.get('x-message-id') || '';
-      return { success: true, messageId };
-    } else {
-      const errorText = await response.text();
-      return { success: false, error: `SendGrid API error: ${response.status} - ${errorText}` };
-    }
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  const result = await sendMailgunEmail({
+    apiKey,
+    domain,
+    region,
+    from: "Autom8ion Reports <reports@autom8ion.com>",
+    to,
+    subject,
+    html: htmlContent,
+    text: textContent,
+    trackOpens: true,
+    trackClicks: false,
+  });
+  if (result.ok) {
+    return { success: true, messageId: result.messageId };
   }
+  return { success: false, error: result.error };
 }
 
 function formatBytes(bytes: number): string {
@@ -170,11 +161,15 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const sendgridApiKey = Deno.env.get("SENDGRID_API_KEY");
-    if (!sendgridApiKey) {
+    const mailgunApiKey = Deno.env.get("MAILGUN_API_KEY");
+    const mailgunDomain = Deno.env.get("MAILGUN_DOMAIN");
+    const mailgunRegion = ((Deno.env.get("MAILGUN_REGION") || "us").toLowerCase() === "eu"
+      ? "eu"
+      : "us") as MailgunRegion;
+    if (!mailgunApiKey || !mailgunDomain) {
       return new Response(
-        JSON.stringify({ error: 'SendGrid API key not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: "Mailgun API key/domain not configured (MAILGUN_API_KEY, MAILGUN_DOMAIN)" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -242,12 +237,14 @@ Deno.serve(async (req: Request) => {
 
         const subject = `Your Report is Ready: ${reportName}`;
 
-        const result = await sendWithSendGrid(
-          sendgridApiKey,
+        const result = await sendWithMailgun(
+          mailgunApiKey,
+          mailgunDomain,
+          mailgunRegion,
           email.recipient_email,
           subject,
           html,
-          text
+          text,
         );
 
         if (result.success) {
@@ -255,7 +252,7 @@ Deno.serve(async (req: Request) => {
             .from('report_email_queue')
             .update({
               status: 'sent',
-              sendgrid_message_id: result.messageId || null,
+              provider_message_id: result.messageId || null,
               sent_at: new Date().toISOString(),
             })
             .eq('id', email.id);

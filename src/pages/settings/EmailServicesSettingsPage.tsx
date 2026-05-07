@@ -89,7 +89,7 @@ export function EmailServicesSettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold text-white">Email Services</h1>
         <p className="mt-1 text-sm text-slate-400">
-          Configure SendGrid integration for transactional and marketing emails
+          Configure Mailgun integration for transactional and marketing emails
         </p>
       </div>
 

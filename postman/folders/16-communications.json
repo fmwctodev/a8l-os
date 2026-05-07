@@ -1,6 +1,6 @@
 {
   "name": "16 - Communications",
-  "description": "Gmail integration, email services (SendGrid), SMS messaging, phone system (Twilio), and Google Chat.",
+  "description": "Gmail integration, email services (Mailgun), SMS messaging, phone system (Twilio), and Google Chat.",
   "item": [
     {
       "name": "Gmail API (Edge Function)",
@@ -28,13 +28,13 @@
       ]
     },
     {
-      "name": "Email SendGrid Services (Edge Functions)",
+      "name": "Email Mailgun Services (Edge Functions)",
       "item": [
-        { "name": "List SendGrid Domains", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"list\"\n}" }, "url": { "raw": "{{base_edge_url}}/email-sendgrid-domains", "host": ["{{base_edge_url}}"], "path": ["email-sendgrid-domains"] } } },
-        { "name": "Authenticate SendGrid Domain", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"authenticate\",\n  \"domain\": \"example.com\"\n}" }, "url": { "raw": "{{base_edge_url}}/email-sendgrid-domains", "host": ["{{base_edge_url}}"], "path": ["email-sendgrid-domains"] } } },
-        { "name": "Get SendGrid Provider Status", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"status\"\n}" }, "url": { "raw": "{{base_edge_url}}/email-sendgrid-provider", "host": ["{{base_edge_url}}"], "path": ["email-sendgrid-provider"] } } },
-        { "name": "List SendGrid Senders", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"list\"\n}" }, "url": { "raw": "{{base_edge_url}}/email-sendgrid-senders", "host": ["{{base_edge_url}}"], "path": ["email-sendgrid-senders"] } } },
-        { "name": "List Unsubscribe Groups", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"list\"\n}" }, "url": { "raw": "{{base_edge_url}}/email-sendgrid-unsubscribe", "host": ["{{base_edge_url}}"], "path": ["email-sendgrid-unsubscribe"] } } }
+        { "name": "List Mailgun Domains", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"list\"\n}" }, "url": { "raw": "{{base_edge_url}}/email-mailgun-domains", "host": ["{{base_edge_url}}"], "path": ["email-mailgun-domains"] } } },
+        { "name": "Authenticate Mailgun Domain", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"authenticate\",\n  \"domain\": \"example.com\"\n}" }, "url": { "raw": "{{base_edge_url}}/email-mailgun-domains", "host": ["{{base_edge_url}}"], "path": ["email-mailgun-domains"] } } },
+        { "name": "Get Mailgun Provider Status", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"status\"\n}" }, "url": { "raw": "{{base_edge_url}}/email-mailgun-provider", "host": ["{{base_edge_url}}"], "path": ["email-mailgun-provider"] } } },
+        { "name": "List Mailgun Senders", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"list\"\n}" }, "url": { "raw": "{{base_edge_url}}/email-mailgun-senders", "host": ["{{base_edge_url}}"], "path": ["email-mailgun-senders"] } } },
+        { "name": "List Unsubscribe Groups", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{bearer_token}}" }, { "key": "apikey", "value": "{{supabase_anon_key}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"action\": \"list\"\n}" }, "url": { "raw": "{{base_edge_url}}/email-mailgun-suppressions", "host": ["{{base_edge_url}}"], "path": ["email-mailgun-suppressions"] } } }
       ]
     },
     {

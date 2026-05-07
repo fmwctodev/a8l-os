@@ -1,5 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  encryptMailgunCreds,
+  getDecryptedMailgunCreds,
+  validateMailgunCredentials,
+  type MailgunRegion,
+} from "../_shared/mailgun.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,6 +16,9 @@ const corsHeaders = {
 interface ConnectRequest {
   action: "connect";
   apiKey: string;
+  domain: string;
+  webhookSigningKey?: string;
+  region?: MailgunRegion;
   nickname?: string;
 }
 
@@ -27,71 +36,9 @@ interface StatusRequest {
 
 type RequestPayload = ConnectRequest | TestRequest | DisconnectRequest | StatusRequest;
 
-async function validateSendGridApiKey(apiKey: string): Promise<{ valid: boolean; error?: string }> {
-  try {
-    const response = await fetch("https://api.sendgrid.com/v3/user/profile", {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (response.ok) {
-      return { valid: true };
-    }
-
-    if (response.status === 401) {
-      return { valid: false, error: "Invalid API key" };
-    }
-
-    return { valid: false, error: `SendGrid API error: ${response.status}` };
-  } catch {
-    return { valid: false, error: "Failed to connect to SendGrid" };
-  }
-}
-
-async function encryptApiKey(apiKey: string, supabaseUrl: string, serviceRoleKey: string): Promise<{ encrypted: string; iv: string }> {
-  const response = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ action: "encrypt", plaintext: apiKey }),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to encrypt API key");
-  }
-
-  return await response.json();
-}
-
-async function decryptApiKey(encrypted: string, iv: string, supabaseUrl: string, serviceRoleKey: string): Promise<string> {
-  const response = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ action: "decrypt", encrypted, iv }),
-  });
-
-  if (!response.ok) {
-    throw new Error("Failed to decrypt API key");
-  }
-
-  const data = await response.json();
-  return data.plaintext;
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
@@ -102,7 +49,7 @@ Deno.serve(async (req: Request) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Authorization required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -120,20 +67,20 @@ Deno.serve(async (req: Request) => {
     if (userError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid user token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     const { data: userData } = await supabase
       .from("users")
-      .select("organization_id, role_id")
+      .select("organization_id")
       .eq("id", user.id)
       .maybeSingle();
 
     if (!userData) {
       return new Response(
         JSON.stringify({ error: "User not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -145,7 +92,7 @@ Deno.serve(async (req: Request) => {
     if (!hasPermission) {
       return new Response(
         JSON.stringify({ error: "Permission denied" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -153,26 +100,47 @@ Deno.serve(async (req: Request) => {
     const orgId = userData.organization_id;
 
     if (payload.action === "connect") {
-      const validation = await validateSendGridApiKey(payload.apiKey);
+      const region: MailgunRegion = payload.region === "eu" ? "eu" : "us";
+      const validation = await validateMailgunCredentials(payload.apiKey, region);
       if (!validation.valid) {
         return new Response(
-          JSON.stringify({ error: validation.error }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: validation.error || "Invalid Mailgun credentials" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
-      const { encrypted, iv } = await encryptApiKey(payload.apiKey, supabaseUrl, serviceRoleKey);
+      // Verify the supplied domain exists in this account
+      const matchingDomain = (validation.domains ?? []).find((d) => d.name === payload.domain);
+      if (!matchingDomain) {
+        return new Response(
+          JSON.stringify({
+            error: `Domain '${payload.domain}' not found in your Mailgun account. Available: ${(validation.domains ?? []).map((d) => d.name).join(", ") || "(none)"}`,
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const { encrypted, iv } = await encryptMailgunCreds(
+        {
+          api_key: payload.apiKey,
+          domain: payload.domain,
+          webhook_signing_key: payload.webhookSigningKey ?? null,
+          region,
+        },
+        supabaseUrl,
+        serviceRoleKey,
+      );
 
       const { data: integration } = await supabase
         .from("integrations")
         .select("id")
-        .eq("key", "sendgrid")
+        .eq("key", "mailgun")
         .maybeSingle();
 
       if (!integration) {
         return new Response(
-          JSON.stringify({ error: "SendGrid integration not found in catalog" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "Mailgun integration not found in catalog" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
@@ -184,7 +152,11 @@ Deno.serve(async (req: Request) => {
           status: "connected",
           credentials_encrypted: encrypted,
           credentials_iv: iv,
-          account_info: { nickname: payload.nickname || null },
+          account_info: {
+            nickname: payload.nickname || null,
+            domain: payload.domain,
+            region,
+          },
           connected_at: new Date().toISOString(),
           connected_by: user.id,
           updated_at: new Date().toISOString(),
@@ -193,7 +165,7 @@ Deno.serve(async (req: Request) => {
       if (upsertError) {
         return new Response(
           JSON.stringify({ error: "Failed to save provider configuration" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
@@ -202,12 +174,12 @@ Deno.serve(async (req: Request) => {
         user_id: user.id,
         action: "email.provider.connected",
         entity_type: "integration_connection",
-        details: { provider: "sendgrid", nickname: payload.nickname },
+        details: { provider: "mailgun", domain: payload.domain, region },
       });
 
       return new Response(
-        JSON.stringify({ success: true, message: "SendGrid connected successfully" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: true, message: "Mailgun connected successfully" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -216,7 +188,7 @@ Deno.serve(async (req: Request) => {
         .from("integration_connections")
         .select("status, account_info, connected_at, integrations!inner(key)")
         .eq("org_id", orgId)
-        .eq("integrations.key", "sendgrid")
+        .eq("integrations.key", "mailgun")
         .maybeSingle();
 
       return new Response(
@@ -224,51 +196,48 @@ Deno.serve(async (req: Request) => {
           success: true,
           connected: conn?.status === "connected",
           nickname: conn?.account_info?.nickname || null,
+          domain: conn?.account_info?.domain || null,
+          region: conn?.account_info?.region || null,
           connectedAt: conn?.connected_at || null,
         }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     if (payload.action === "test") {
-      const { data: conn } = await supabase
-        .from("integration_connections")
-        .select("credentials_encrypted, credentials_iv, status, integrations!inner(key)")
-        .eq("org_id", orgId)
-        .eq("integrations.key", "sendgrid")
-        .maybeSingle();
-
-      if (!conn || conn.status !== "connected" || !conn.credentials_encrypted || !conn.credentials_iv) {
+      const creds = await getDecryptedMailgunCreds(orgId, supabase, supabaseUrl, serviceRoleKey);
+      if (!creds) {
         return new Response(
           JSON.stringify({ error: "No connected email provider found" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
-      const apiKey = await decryptApiKey(
-        conn.credentials_encrypted,
-        conn.credentials_iv,
-        supabaseUrl,
-        serviceRoleKey
-      );
-
-      const validation = await validateSendGridApiKey(apiKey);
+      const validation = await validateMailgunCredentials(creds.apiKey, creds.region);
       if (!validation.valid) {
-        await supabase
-          .from("integration_connections")
-          .update({ status: "error", updated_at: new Date().toISOString() })
-          .eq("org_id", orgId)
-          .eq("integration_id", (await supabase.from("integrations").select("id").eq("key", "sendgrid").single()).data!.id);
+        const { data: integration } = await supabase
+          .from("integrations")
+          .select("id")
+          .eq("key", "mailgun")
+          .maybeSingle();
+
+        if (integration) {
+          await supabase
+            .from("integration_connections")
+            .update({ status: "error", updated_at: new Date().toISOString() })
+            .eq("org_id", orgId)
+            .eq("integration_id", integration.id);
+        }
 
         return new Response(
           JSON.stringify({ success: false, error: validation.error }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
       return new Response(
         JSON.stringify({ success: true, message: "Connection test successful" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -276,7 +245,7 @@ Deno.serve(async (req: Request) => {
       const { data: integration } = await supabase
         .from("integrations")
         .select("id")
-        .eq("key", "sendgrid")
+        .eq("key", "mailgun")
         .maybeSingle();
 
       if (integration) {
@@ -297,24 +266,24 @@ Deno.serve(async (req: Request) => {
         user_id: user.id,
         action: "email.provider.disconnected",
         entity_type: "integration_connection",
-        details: { provider: "sendgrid" },
+        details: { provider: "mailgun" },
       });
 
       return new Response(
-        JSON.stringify({ success: true, message: "SendGrid disconnected" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: true, message: "Mailgun disconnected" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     return new Response(
       JSON.stringify({ error: "Invalid action" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return new Response(
       JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

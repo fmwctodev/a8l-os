@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { fetchEdge } from '../lib/edgeFunction';
 import type { EmailUnsubscribeGroup } from '../types';
 
-const SLUG = 'email-sendgrid-unsubscribe';
+const SLUG = 'email-mailgun-suppressions';
 
 export async function getUnsubscribeGroups(orgId: string): Promise<EmailUnsubscribeGroup[]> {
   const { data, error } = await supabase

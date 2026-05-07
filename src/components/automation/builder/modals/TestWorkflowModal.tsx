@@ -218,8 +218,8 @@ export function TestWorkflowModal({ nodes, edges, onClose }: TestWorkflowModalPr
 
       // P4 — dual-rail email
       case 'send_email_org': return cfg.template_id
-        ? `Would send SendGrid email using template ${cfg.template_id}`
-        : `Would send raw SendGrid email: "${(cfg.raw_subject as string) ?? '(no subject)'}"`;
+        ? `Would send Mailgun email using template ${cfg.template_id}`
+        : `Would send raw Mailgun email: "${(cfg.raw_subject as string) ?? '(no subject)'}"`;
       case 'send_email_personal': return cfg.template_id
         ? `Would send Gmail (personal) using template ${cfg.template_id}`
         : `Would send raw Gmail email: "${(cfg.raw_subject as string) ?? '(no subject)'}"`;

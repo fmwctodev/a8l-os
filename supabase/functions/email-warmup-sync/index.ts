@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getDecryptedMailgunCreds, getMailgunStats } from "../_shared/mailgun.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,7 +12,7 @@ interface WarmingDomain {
   id: string;
   organization_id: string;
   domain: string;
-  sendgrid_domain_id: string;
+  provider_domain_id: string;
   status: string;
   warmup_progress_percent: number;
   current_daily_limit: number;
@@ -26,47 +27,6 @@ interface WarmingDomain {
     auto_throttle_low_engagement: boolean;
     ai_recommendations_enabled: boolean;
   } | null;
-}
-
-async function getDecryptedApiKey(
-  orgId: string,
-  supabase: ReturnType<typeof createClient>,
-  supabaseUrl: string,
-  serviceRoleKey: string
-): Promise<string | null> {
-  const envKey = Deno.env.get("SENDGRID_API_KEY");
-  if (envKey) return envKey;
-
-  const { data: conn } = await supabase
-    .from("integration_connections")
-    .select("credentials_encrypted, credentials_iv, status, integrations!inner(key)")
-    .eq("org_id", orgId)
-    .eq("integrations.key", "sendgrid")
-    .maybeSingle();
-
-  if (!conn || conn.status !== "connected" || !conn.credentials_encrypted || !conn.credentials_iv) {
-    return null;
-  }
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      action: "decrypt",
-      encrypted: conn.credentials_encrypted,
-      iv: conn.credentials_iv,
-    }),
-  });
-
-  if (!response.ok) {
-    return null;
-  }
-
-  const data = await response.json();
-  return data.plaintext;
 }
 
 async function logDomainEvent(
@@ -154,7 +114,7 @@ Deno.serve(async (req: Request) => {
         id,
         organization_id,
         domain,
-        sendgrid_domain_id,
+        provider_domain_id,
         status,
         warmup_progress_percent,
         current_daily_limit,
@@ -185,15 +145,15 @@ Deno.serve(async (req: Request) => {
         : domain.warmup_config;
 
       try {
-        const apiKey = await getDecryptedApiKey(
+        const mgCreds = await getDecryptedMailgunCreds(
           domain.organization_id,
           supabase,
           supabaseUrl,
           serviceRoleKey
         );
 
-        if (!apiKey) {
-          results.push({ domainId: domain.id, success: false, error: "No API key" });
+        if (!mgCreds) {
+          results.push({ domainId: domain.id, success: false, error: "No Mailgun credentials" });
           continue;
         }
 
@@ -201,21 +161,22 @@ Deno.serve(async (req: Request) => {
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - 7);
 
-        const formatDate = (d: Date) => d.toISOString().split("T")[0];
-
-        const sgResponse = await fetch(
-          `https://api.sendgrid.com/v3/stats?start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&aggregated_by=day`,
-          {
-            headers: { Authorization: `Bearer ${apiKey}` },
-          }
+        const stats = await getMailgunStats(
+          mgCreds.apiKey,
+          domain.domain,
+          mgCreds.region,
+          ["accepted", "delivered", "failed", "opened", "clicked", "complained"],
+          startDate,
+          endDate,
         );
 
-        if (!sgResponse.ok) {
-          results.push({ domainId: domain.id, success: false, error: "SendGrid API error" });
+        if (!stats.ok) {
+          results.push({ domainId: domain.id, success: false, error: stats.error || "Mailgun stats error" });
           continue;
         }
 
-        const statsData = await sgResponse.json();
+        // Mailgun stats shape: { stats: [{ time: <RFC2822>, accepted: { total }, delivered: { total }, failed: { permanent: { total }, temporary: { total } }, opened: { total }, clicked: { total }, complained: { total } }, ...] }
+        const items: Array<Record<string, any>> = stats.data?.stats ?? [];
 
         let totalSent = 0;
         let totalDelivered = 0;
@@ -223,14 +184,15 @@ Deno.serve(async (req: Request) => {
         let totalSpamComplaints = 0;
         let totalOpens = 0;
 
-        for (const dayStat of statsData) {
-          const metrics = dayStat.stats?.[0]?.metrics || {};
-          const sent = metrics.requests || 0;
-          const delivered = metrics.delivered || 0;
-          const bounces = (metrics.bounces || 0) + (metrics.bounce_drops || 0);
-          const spamComplaints = metrics.spam_reports || 0;
-          const opens = metrics.unique_opens || 0;
-          const clicks = metrics.unique_clicks || 0;
+        for (const dayStat of items) {
+          const sent = dayStat.accepted?.total || 0;
+          const delivered = dayStat.delivered?.total || 0;
+          const bounces =
+            (dayStat.failed?.permanent?.total || 0) +
+            (dayStat.failed?.temporary?.total || 0);
+          const spamComplaints = dayStat.complained?.total || 0;
+          const opens = dayStat.opened?.total || 0;
+          const clicks = dayStat.clicked?.total || 0;
 
           totalSent += sent;
           totalDelivered += delivered;
@@ -238,10 +200,14 @@ Deno.serve(async (req: Request) => {
           totalSpamComplaints += spamComplaints;
           totalOpens += opens;
 
+          const date = dayStat.time
+            ? new Date(dayStat.time).toISOString().split("T")[0]
+            : new Date().toISOString().split("T")[0];
+
           await supabase.from("email_warmup_daily_stats").upsert(
             {
               campaign_domain_id: domain.id,
-              date: dayStat.date,
+              date,
               emails_sent: sent,
               emails_delivered: delivered,
               bounces,

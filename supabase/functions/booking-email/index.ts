@@ -1,15 +1,16 @@
 // booking-email
 //
 // Sends transactional booking emails (confirmation / rescheduled / canceled) for
-// the public anonymous booking flow. Uses the SendGrid pattern from
-// change-request-notify because the standard email-send function requires a
-// user JWT (which the anonymous booking flow does not have).
+// the public anonymous booking flow. Calls Mailgun directly because the standard
+// email-send function requires a user JWT (which the anonymous booking flow does
+// not have).
 //
 // Auth: callers MUST pass `Authorization: Bearer <SUPABASE_SERVICE_ROLE_KEY>`.
 // Intended to be invoked fire-and-forget from booking-api.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getDecryptedMailgunCreds, sendMailgunEmail } from "../_shared/mailgun.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,50 +20,6 @@ const corsHeaders = {
 };
 
 type Action = "confirmation" | "rescheduled" | "canceled";
-
-async function getDecryptedSendGridKey(
-  orgId: string,
-  supabase: ReturnType<typeof createClient>,
-  supabaseUrl: string,
-  serviceRoleKey: string
-): Promise<string | null> {
-  const envKey = Deno.env.get("SENDGRID_API_KEY");
-  if (envKey) return envKey;
-
-  const { data: conn } = await supabase
-    .from("integration_connections")
-    .select(
-      "credentials_encrypted, credentials_iv, status, integrations!inner(key)"
-    )
-    .eq("org_id", orgId)
-    .eq("integrations.key", "sendgrid")
-    .maybeSingle();
-
-  if (
-    !conn ||
-    conn.status !== "connected" ||
-    !conn.credentials_encrypted ||
-    !conn.credentials_iv
-  )
-    return null;
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      action: "decrypt",
-      encrypted: conn.credentials_encrypted,
-      iv: conn.credentials_iv,
-    }),
-  });
-
-  if (!response.ok) return null;
-  const data = await response.json();
-  return data.plaintext;
-}
 
 function formatICSDate(dateStr: string): string {
   return new Date(dateStr).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
@@ -289,16 +246,16 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const sendgridKey = await getDecryptedSendGridKey(
+    const mgCreds = await getDecryptedMailgunCreds(
       appt.org_id,
       supabase,
       supabaseUrl,
       serviceRoleKey
     );
-    if (!sendgridKey) {
-      console.warn("booking-email: SendGrid not configured for org", appt.org_id);
+    if (!mgCreds) {
+      console.warn("booking-email: Mailgun not configured for org", appt.org_id);
       return new Response(
-        JSON.stringify({ success: false, reason: "sendgrid_not_configured" }),
+        JSON.stringify({ success: false, reason: "mailgun_not_configured" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -354,47 +311,35 @@ Deno.serve(async (req: Request) => {
         : [
             {
               filename: "appointment.ics",
-              type: "text/calendar; method=REQUEST",
-              disposition: "attachment",
-              content: btoa(
-                buildICS({
-                  id: appt.id,
-                  start_at_utc: appt.start_at_utc,
-                  end_at_utc: appt.end_at_utc,
-                  google_meet_link: appt.google_meet_link,
-                  appointment_type: { name: apptType.name },
-                })
-              ),
+              contentType: "text/calendar; method=REQUEST",
+              content: buildICS({
+                id: appt.id,
+                start_at_utc: appt.start_at_utc,
+                end_at_utc: appt.end_at_utc,
+                google_meet_link: appt.google_meet_link,
+                appointment_type: { name: apptType.name },
+              }),
             },
           ];
 
-    const sgRes = await fetch("https://api.sendgrid.com/v3/mail/send", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${sendgridKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        personalizations: [
-          { to: [{ email: recipientEmail, name: recipientName || undefined }] },
-        ],
-        from: { email: fromEmail, name: fromName },
-        subject,
-        content: [{ type: "text/html", value: html }],
-        attachments,
-        tracking_settings: {
-          open_tracking: { enable: true },
-          click_tracking: { enable: false },
-        },
-        mail_settings: { bypass_list_management: { enable: true } },
-      }),
+    const mgRes = await sendMailgunEmail({
+      apiKey: mgCreds.apiKey,
+      domain: mgCreds.domain,
+      region: mgCreds.region,
+      from: `${fromName} <${fromEmail}>`,
+      to: recipientEmail,
+      toName: recipientName || undefined,
+      subject,
+      html,
+      trackOpens: true,
+      trackClicks: false,
+      attachments,
     });
 
-    if (!sgRes.ok) {
-      const errText = await sgRes.text().catch(() => "");
-      console.error("booking-email: SendGrid error", sgRes.status, errText);
+    if (!mgRes.ok) {
+      console.error("booking-email: Mailgun error", mgRes.status, mgRes.error);
       return new Response(
-        JSON.stringify({ success: false, status: sgRes.status, error: errText }),
+        JSON.stringify({ success: false, status: mgRes.status, error: mgRes.error }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -405,6 +350,7 @@ Deno.serve(async (req: Request) => {
         action,
         to: recipientEmail,
         from: fromEmail,
+        messageId: mgRes.messageId,
         calendar: calendar?.slug,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

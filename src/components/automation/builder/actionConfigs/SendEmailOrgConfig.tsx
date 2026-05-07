@@ -10,7 +10,7 @@ interface Props {
 }
 
 /**
- * SendEmailOrgConfig — sends as the organization via SendGrid.
+ * SendEmailOrgConfig — sends as the organization via Mailgun.
  * Templates are sourced from the marketing module's email_templates table.
  */
 export default function SendEmailOrgConfig({ data, onUpdate }: Props) {
@@ -36,7 +36,7 @@ export default function SendEmailOrgConfig({ data, onUpdate }: Props) {
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 flex items-start gap-2">
         <Mail className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
         <div className="text-xs text-blue-800">
-          Sends from your organization's verified SendGrid sender. Higher deliverability for transactional + lifecycle emails.
+          Sends from your organization's verified Mailgun sender. Higher deliverability for transactional + lifecycle emails.
         </div>
       </div>
 

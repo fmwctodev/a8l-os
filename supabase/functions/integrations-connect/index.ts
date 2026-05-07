@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { encryptMailgunCreds, validateMailgunCredentials, type MailgunRegion } from "../_shared/mailgun.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,22 +43,6 @@ interface RequestPayload {
   app_url?: string;
 }
 
-async function validateSendGridApiKey(apiKey: string): Promise<{ valid: boolean; error?: string }> {
-  try {
-    const response = await fetch("https://api.sendgrid.com/v3/user/profile", {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-    });
-    if (response.ok) return { valid: true };
-    if (response.status === 401) return { valid: false, error: "Invalid API key" };
-    return { valid: false, error: `SendGrid API error: ${response.status}` };
-  } catch {
-    return { valid: false, error: "Failed to connect to SendGrid" };
-  }
-}
 
 async function encryptWithCrypto(
   plaintext: string,
@@ -209,16 +194,18 @@ Deno.serve(async (req: Request) => {
         let credentialsIv: string;
         let accountInfo: Record<string, unknown> = {};
 
-        if (integration_key === "sendgrid") {
+        if (integration_key === "mailgun") {
           const apiKey = credentials.api_key;
-          if (!apiKey) {
+          const domain = credentials.domain;
+          if (!apiKey || !domain) {
             return new Response(
-              JSON.stringify({ error: "API key is required" }),
+              JSON.stringify({ error: "API key and domain are required" }),
               { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
 
-          const validation = await validateSendGridApiKey(apiKey);
+          const region = (credentials.region === "eu" ? "eu" : "us") as MailgunRegion;
+          const validation = await validateMailgunCredentials(apiKey, region);
           if (!validation.valid) {
             return new Response(
               JSON.stringify({ error: validation.error }),
@@ -226,13 +213,34 @@ Deno.serve(async (req: Request) => {
             );
           }
 
-          const encrypted = await encryptWithCrypto(apiKey, supabaseUrl, serviceRoleKey);
+          const matchingDomain = (validation.domains ?? []).find((d) => d.name === domain);
+          if (!matchingDomain) {
+            return new Response(
+              JSON.stringify({
+                error: `Domain '${domain}' not found in your Mailgun account.`,
+              }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          const encrypted = await encryptMailgunCreds(
+            {
+              api_key: apiKey,
+              domain,
+              webhook_signing_key: credentials.webhook_signing_key ?? null,
+              region,
+            },
+            supabaseUrl,
+            serviceRoleKey,
+          );
           credentialsEncrypted = encrypted.encrypted;
           credentialsIv = encrypted.iv;
           accountInfo = {
-            provider: "sendgrid",
+            provider: "mailgun",
             configured: true,
             api_key_set: true,
+            domain,
+            region,
             nickname: credentials.nickname || null,
           };
         } else {
@@ -342,9 +350,9 @@ Deno.serve(async (req: Request) => {
       }
 
       case "test": {
-        if (integration_key === "sendgrid") {
-          const sgUrl = Deno.env.get("SUPABASE_URL")!;
-          const sgSrk = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        if (integration_key === "mailgun") {
+          const mgUrl = Deno.env.get("SUPABASE_URL")!;
+          const mgSrk = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
           const { data: conn } = await serviceClient
             .from("integration_connections")
@@ -355,15 +363,15 @@ Deno.serve(async (req: Request) => {
 
           if (!conn || conn.status !== "connected" || !conn.credentials_encrypted || !conn.credentials_iv) {
             return new Response(
-              JSON.stringify({ success: false, message: "SendGrid is not connected" }),
+              JSON.stringify({ success: false, message: "Mailgun is not connected" }),
               { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
             );
           }
 
-          const decryptRes = await fetch(`${sgUrl}/functions/v1/email-crypto`, {
+          const decryptRes = await fetch(`${mgUrl}/functions/v1/email-crypto`, {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${sgSrk}`,
+              Authorization: `Bearer ${mgSrk}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ action: "decrypt", encrypted: conn.credentials_encrypted, iv: conn.credentials_iv }),
@@ -376,8 +384,19 @@ Deno.serve(async (req: Request) => {
             );
           }
 
-          const { plaintext: apiKey } = await decryptRes.json();
-          const validation = await validateSendGridApiKey(apiKey);
+          const { plaintext } = await decryptRes.json();
+          let parsed: Record<string, unknown> = {};
+          try {
+            parsed = JSON.parse(plaintext);
+          } catch {
+            return new Response(
+              JSON.stringify({ success: false, message: "Failed to parse stored Mailgun credentials" }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          const apiKey = typeof parsed.api_key === "string" ? parsed.api_key : "";
+          const region = (parsed.region === "eu" ? "eu" : "us") as MailgunRegion;
+          const validation = await validateMailgunCredentials(apiKey, region);
 
           await serviceClient.from("integration_logs").insert({
             integration_id: integration.id,
@@ -385,7 +404,7 @@ Deno.serve(async (req: Request) => {
             user_id: user.id,
             action: "test",
             status: validation.valid ? "success" : "failure",
-            request_meta: { message: validation.valid ? "SendGrid API key is valid" : validation.error },
+            request_meta: { message: validation.valid ? "Mailgun API key is valid" : validation.error },
           });
 
           if (!validation.valid) {
@@ -402,7 +421,7 @@ Deno.serve(async (req: Request) => {
           }
 
           return new Response(
-            JSON.stringify({ success: true, message: "SendGrid connection is healthy" }),
+            JSON.stringify({ success: true, message: "Mailgun connection is healthy" }),
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }

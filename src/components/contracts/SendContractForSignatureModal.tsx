@@ -134,7 +134,7 @@ export function SendContractForSignatureModal({ contract, onClose, onSent }: Pro
           {
             signer_name: signerName.trim(),
             signer_email: signerEmail.trim(),
-            sendgrid_message_id: emailResult.messageId,
+            provider_message_id: emailResult.messageId,
             sender_email: senderEmail,
           }
         );

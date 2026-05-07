@@ -62,7 +62,7 @@ export async function validateEmailSetup(orgId: string): Promise<{
     return {
       ready: false,
       fromAddress: null,
-      blockingReasons: ['No verified SendGrid sender is configured for e-signature delivery.'],
+      blockingReasons: ['No verified Mailgun sender is configured for e-signature delivery.'],
     };
   }
 
@@ -110,7 +110,7 @@ export async function updateSignatureRequestSendStatus(
     .from('proposal_signature_requests')
     .update({
       send_status: status,
-      sendgrid_message_id: messageId || null,
+      provider_message_id: messageId || null,
       send_error: status === 'failed' ? (error || 'Unknown error') : null,
       last_sent_at: status === 'sent' ? new Date().toISOString() : undefined,
     })

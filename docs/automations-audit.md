@@ -268,7 +268,7 @@ the user asked for:
 | Channel | Provider | Action(s) shipped | Trigger(s) shipped |
 |---|---|---|---|
 | **SMS** | Plivo | `send_sms` (canSendOnChannel-gated for TCPA + DND) | `conversation_message_received` (plivo-sms-inbound emits) |
-| **Email — Org** | SendGrid | `send_email_org` (template_id or raw) | `event_email` (existing) |
+| **Email — Org** | Mailgun | `send_email_org` (template_id or raw) | `event_email` (existing) |
 | **Email — Personal** | Gmail OAuth | `send_email_personal` (from_user_id sentinel) | `event_email` (existing) |
 | **AI Voice** | Vapi | `start_ai_call` / `transfer_to_ai_agent` / `send_ai_voicemail` | `ai_call_started` / `ai_call_completed` / `ai_voicemail_received` / `ai_agent_handoff_requested` |
 
@@ -288,7 +288,7 @@ the user asked for:
 - `plivo-sms-inbound` — emits conversation_message_received with message_body_upper
 - `booking-api` — emits appointment_booked with start_at_minus_24h/_1h merge fields
 - `form-submit` — TCPA gate + opportunity creation
-- `email-send` — template_id + rail (sendgrid|gmail) modes
+- `email-send` — template_id + rail (mailgun|gmail) modes
 - `approval-magic-link` (NEW) — typed-magic-link with HMAC-signed tokens
 - `approval-reminder-cron` (NEW) — auto-expire + 24h reminder dispatch
 
@@ -296,7 +296,7 @@ the user asked for:
 
 UI configs (action side, in `automation/builder/actionConfigs/`):
 - SendSmsConfig — TCPA + segment counter + from-number
-- SendEmailOrgConfig — SendGrid + template picker + raw mode
+- SendEmailOrgConfig — Mailgun + template picker + raw mode
 - SendEmailPersonalConfig — Gmail OAuth + from_user_id selector
 - StartAiCallConfig — Vapi assistant picker + call_goal + max_duration + fallback
 - TransferToAiAgentConfig — transfer_mode + handoff_context
@@ -341,7 +341,7 @@ Run these to verify end-to-end:
 - [ ] Build a workflow with a `form_submitted` trigger + `send_sms` action.
       Submit /get-in-touch on a8l-site. Verify SMS arrives within 30s.
 - [ ] Add a `send_email_org` action with a published email template.
-      Verify SendGrid sends from the org's verified sender + template merge fields resolve.
+      Verify Mailgun sends from the org's verified sender + template merge fields resolve.
 - [ ] Add a `start_ai_call` action pointing at a published Vapi assistant.
       Verify outbound call places via Vapi `/call`.
 - [ ] On call completion, verify `ai_call_completed` event fires + downstream

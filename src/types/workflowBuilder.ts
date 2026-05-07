@@ -267,7 +267,7 @@ export interface ActionOption {
 export const ACTION_OPTIONS: ActionOption[] = [
   { type: 'send_sms', label: 'Send SMS', description: 'Send a text message to the contact via Plivo', category: 'communication' },
   { type: 'send_email', label: 'Send Email (legacy)', description: 'Deprecated — use Send Email (Org) or Send Email (Personal)', category: 'communication' },
-  { type: 'send_email_org', label: 'Send Email (Organization)', description: 'Send email as the organization via SendGrid using a marketing template', category: 'communication' },
+  { type: 'send_email_org', label: 'Send Email (Organization)', description: 'Send email as the organization via Mailgun using a marketing template', category: 'communication' },
   { type: 'send_email_personal', label: 'Send Email (Personal)', description: 'Send email from a user\'s Gmail account using a marketing template', category: 'communication' },
   { type: 'send_internal_email', label: 'Internal Email', description: 'Send email to a team member', category: 'communication' },
   { type: 'call_contact', label: 'Call Contact', description: 'Initiate a phone call', category: 'communication' },

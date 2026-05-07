@@ -11856,7 +11856,7 @@
     },
     {
       "name": "16 - Communications",
-      "description": "Gmail integration, email services (SendGrid), SMS messaging, phone system (Twilio), and Google Chat.",
+      "description": "Gmail integration, email services (Mailgun), SMS messaging, phone system (Twilio), and Google Chat.",
       "item": [
         {
           "name": "Gmail API (Edge Function)",
@@ -12204,10 +12204,10 @@
           ]
         },
         {
-          "name": "Email SendGrid Services (Edge Functions)",
+          "name": "Email Mailgun Services (Edge Functions)",
           "item": [
             {
-              "name": "List SendGrid Domains",
+              "name": "List Mailgun Domains",
               "request": {
                 "method": "POST",
                 "header": [
@@ -12229,18 +12229,18 @@
                   "raw": "{\n  \"action\": \"list\"\n}"
                 },
                 "url": {
-                  "raw": "{{base_edge_url}}/email-sendgrid-domains",
+                  "raw": "{{base_edge_url}}/email-mailgun-domains",
                   "host": [
                     "{{base_edge_url}}"
                   ],
                   "path": [
-                    "email-sendgrid-domains"
+                    "email-mailgun-domains"
                   ]
                 }
               }
             },
             {
-              "name": "Authenticate SendGrid Domain",
+              "name": "Authenticate Mailgun Domain",
               "request": {
                 "method": "POST",
                 "header": [
@@ -12262,18 +12262,18 @@
                   "raw": "{\n  \"action\": \"authenticate\",\n  \"domain\": \"example.com\"\n}"
                 },
                 "url": {
-                  "raw": "{{base_edge_url}}/email-sendgrid-domains",
+                  "raw": "{{base_edge_url}}/email-mailgun-domains",
                   "host": [
                     "{{base_edge_url}}"
                   ],
                   "path": [
-                    "email-sendgrid-domains"
+                    "email-mailgun-domains"
                   ]
                 }
               }
             },
             {
-              "name": "Get SendGrid Provider Status",
+              "name": "Get Mailgun Provider Status",
               "request": {
                 "method": "POST",
                 "header": [
@@ -12295,18 +12295,18 @@
                   "raw": "{\n  \"action\": \"status\"\n}"
                 },
                 "url": {
-                  "raw": "{{base_edge_url}}/email-sendgrid-provider",
+                  "raw": "{{base_edge_url}}/email-mailgun-provider",
                   "host": [
                     "{{base_edge_url}}"
                   ],
                   "path": [
-                    "email-sendgrid-provider"
+                    "email-mailgun-provider"
                   ]
                 }
               }
             },
             {
-              "name": "List SendGrid Senders",
+              "name": "List Mailgun Senders",
               "request": {
                 "method": "POST",
                 "header": [
@@ -12328,12 +12328,12 @@
                   "raw": "{\n  \"action\": \"list\"\n}"
                 },
                 "url": {
-                  "raw": "{{base_edge_url}}/email-sendgrid-senders",
+                  "raw": "{{base_edge_url}}/email-mailgun-senders",
                   "host": [
                     "{{base_edge_url}}"
                   ],
                   "path": [
-                    "email-sendgrid-senders"
+                    "email-mailgun-senders"
                   ]
                 }
               }
@@ -12361,12 +12361,12 @@
                   "raw": "{\n  \"action\": \"list\"\n}"
                 },
                 "url": {
-                  "raw": "{{base_edge_url}}/email-sendgrid-unsubscribe",
+                  "raw": "{{base_edge_url}}/email-mailgun-suppressions",
                   "host": [
                     "{{base_edge_url}}"
                   ],
                   "path": [
-                    "email-sendgrid-unsubscribe"
+                    "email-mailgun-suppressions"
                   ]
                 }
               }
@@ -14729,7 +14729,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"integration_slug\": \"sendgrid\",\n  \"credentials\": {\n    \"api_key\": \"\"\n  }\n}"
+                  "raw": "{\n  \"integration_slug\": \"mailgun\",\n  \"credentials\": {\n    \"api_key\": \"\",\n    \"domain\": \"\",\n    \"webhook_signing_key\": \"\",\n    \"region\": \"us\"\n  }\n}"
                 },
                 "url": {
                   "raw": "{{base_edge_url}}/integrations-connect",

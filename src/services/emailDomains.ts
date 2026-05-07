@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { fetchEdge } from '../lib/edgeFunction';
 import type { EmailDomain } from '../types';
 
-const SLUG = 'email-sendgrid-domains';
+const SLUG = 'email-mailgun-domains';
 
 export async function getDomains(orgId: string): Promise<EmailDomain[]> {
   const { data, error } = await supabase

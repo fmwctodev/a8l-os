@@ -75,7 +75,7 @@ async function sendReminderEmails(
         ${approval.expires_at ? `<p style="font-size:12px;color:#6b7280;">This approval auto-expires on ${approval.expires_at}.</p>` : ""}
       `;
 
-      // Dispatch via the org's SendGrid sender (email-send Edge Function).
+      // Dispatch via the org's Mailgun sender (email-send Edge Function).
       const response = await fetch(`${SUPABASE_URL}/functions/v1/email-send`, {
         method: "POST",
         headers: {
@@ -84,7 +84,7 @@ async function sendReminderEmails(
         },
         body: JSON.stringify({
           orgId: approval.org_id,
-          rail: "sendgrid",
+          rail: "mailgun",
           to: user.email,
           subject,
           body_html: html,

@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { fetchEdge } from '../lib/edgeFunction';
 import type { EmailFromAddress } from '../types';
 
-const SLUG = 'email-sendgrid-senders';
+const SLUG = 'email-mailgun-senders';
 
 export async function getFromAddresses(orgId: string): Promise<EmailFromAddress[]> {
   const { data, error } = await supabase

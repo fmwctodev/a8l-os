@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getDecryptedMailgunCreds, sendMailgunEmail } from "../_shared/mailgun.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,47 +26,6 @@ interface UserInfo {
   id: string;
   email: string;
   full_name: string | null;
-}
-
-async function getDecryptedApiKey(
-  orgId: string,
-  supabase: ReturnType<typeof createClient>,
-  supabaseUrl: string,
-  serviceRoleKey: string
-): Promise<string | null> {
-  const envKey = Deno.env.get("SENDGRID_API_KEY");
-  if (envKey) return envKey;
-
-  const { data: conn } = await supabase
-    .from("integration_connections")
-    .select("credentials_encrypted, credentials_iv, status, integrations!inner(key)")
-    .eq("org_id", orgId)
-    .eq("integrations.key", "sendgrid")
-    .maybeSingle();
-
-  if (!conn || conn.status !== "connected" || !conn.credentials_encrypted || !conn.credentials_iv) {
-    return null;
-  }
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      action: "decrypt",
-      encrypted: conn.credentials_encrypted,
-      iv: conn.credentials_iv,
-    }),
-  });
-
-  if (!response.ok) {
-    return null;
-  }
-
-  const data = await response.json();
-  return data.plaintext;
 }
 
 async function getAdminsWithApprovalPermission(
@@ -278,9 +238,9 @@ Deno.serve(async (req: Request) => {
 
     const targetNames = accounts?.map((a) => a.display_name) || [];
 
-    const apiKey = await getDecryptedApiKey(post.organization_id, supabase, supabaseUrl, serviceRoleKey);
+    const mgCreds = await getDecryptedMailgunCreds(post.organization_id, supabase, supabaseUrl, serviceRoleKey);
 
-    if (!apiKey) {
+    if (!mgCreds) {
       await supabase.from("social_post_logs").insert({
         post_id: post.id,
         account_id: null,
@@ -346,42 +306,23 @@ Deno.serve(async (req: Request) => {
     const errors: string[] = [];
 
     for (const admin of admins) {
-      const sendGridPayload = {
-        personalizations: [
-          {
-            to: [{ email: admin.email, name: admin.full_name || undefined }],
-          },
-        ],
-        from: {
-          email: fromAddress.email,
-          name: fromAddress.display_name,
-        },
+      const result = await sendMailgunEmail({
+        apiKey: mgCreds.apiKey,
+        domain: mgCreds.domain,
+        region: mgCreds.region,
+        from: `${fromAddress.display_name} <${fromAddress.email}>`,
+        to: admin.email,
+        toName: admin.full_name || undefined,
         subject: `[Action Required] Social Post Approval - ${orgName}`,
-        content: [{ type: "text/html", value: htmlBody }],
-        tracking_settings: {
-          open_tracking: { enable: true },
-          click_tracking: { enable: false },
-        },
-      };
-
-      const sgResponse = await fetch("https://api.sendgrid.com/v3/mail/send", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(sendGridPayload),
+        html: htmlBody,
+        trackOpens: true,
+        trackClicks: false,
       });
 
-      if (sgResponse.ok) {
+      if (result.ok) {
         notifiedCount++;
       } else {
-        try {
-          const errorData = await sgResponse.json();
-          errors.push(`${admin.email}: ${errorData.errors?.[0]?.message || "Unknown error"}`);
-        } catch {
-          errors.push(`${admin.email}: Failed to send`);
-        }
+        errors.push(`${admin.email}: ${result.error || "Failed to send"}`);
       }
     }
 

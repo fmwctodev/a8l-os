@@ -175,7 +175,7 @@ export function UnsubscribeGroupsTab() {
                 className="inline-flex items-center px-3 py-1.5 border border-slate-600 text-sm font-medium rounded-md text-slate-300 bg-slate-700 hover:bg-slate-600 disabled:opacity-50"
               >
                 <RefreshCw className={`h-4 w-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
-                Sync from SendGrid
+                Refresh
               </button>
               <button
                 onClick={() => handleOpenModal()}
@@ -198,7 +198,7 @@ export function UnsubscribeGroupsTab() {
           <div className="px-6 py-12 text-center">
             <p className="text-slate-400">No unsubscribe groups configured</p>
             <p className="mt-2 text-sm text-slate-500">
-              Sync from SendGrid to import existing groups, or create a new one
+              Create a group to label suppression categories for Mailgun tagging
             </p>
             {isAdmin && (
               <div className="mt-4 flex justify-center space-x-3">
@@ -208,7 +208,7 @@ export function UnsubscribeGroupsTab() {
                   className="inline-flex items-center px-4 py-2 border border-slate-600 text-sm font-medium rounded-md text-slate-300 bg-slate-700 hover:bg-slate-600"
                 >
                   <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
-                  Sync from SendGrid
+                  Refresh
                 </button>
                 <button
                   onClick={() => handleOpenModal()}
@@ -231,7 +231,7 @@ export function UnsubscribeGroupsTab() {
                     Description
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                    SendGrid ID
+                    Mailgun Tag
                   </th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-slate-400 uppercase tracking-wider">
                     Default
@@ -253,7 +253,7 @@ export function UnsubscribeGroupsTab() {
                       {group.description || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-mono">
-                      {group.sendgrid_group_id}
+                      {group.provider_group_id ?? '—'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <input

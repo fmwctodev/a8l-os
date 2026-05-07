@@ -7,6 +7,16 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+/**
+ * Mailgun has no remote "verified senders" concept — domain authentication
+ * implicitly authorizes any from-address on that domain. This function therefore
+ * manages the local email_from_addresses catalog and validates that addresses
+ * match a configured (verified) Mailgun domain.
+ *
+ * Action shapes mirror email-sendgrid-senders for compatibility with existing
+ * frontend code.
+ */
+
 interface CreateRequest {
   action: "create";
   displayName: string;
@@ -39,55 +49,9 @@ interface SyncRequest {
 
 type RequestPayload = CreateRequest | UpdateRequest | SetDefaultRequest | DeleteRequest | SyncRequest;
 
-async function getDecryptedApiKey(
-  orgId: string,
-  supabase: ReturnType<typeof createClient>,
-  supabaseUrl: string,
-  serviceRoleKey: string
-): Promise<string | null> {
-  const envKey = Deno.env.get("SENDGRID_API_KEY");
-  if (envKey) {
-    return envKey;
-  }
-
-  const { data: conn } = await supabase
-    .from("integration_connections")
-    .select("credentials_encrypted, credentials_iv, status, integrations!inner(key)")
-    .eq("org_id", orgId)
-    .eq("integrations.key", "sendgrid")
-    .maybeSingle();
-
-  if (!conn || conn.status !== "connected" || !conn.credentials_encrypted || !conn.credentials_iv) {
-    return null;
-  }
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      action: "decrypt",
-      encrypted: conn.credentials_encrypted,
-      iv: conn.credentials_iv,
-    }),
-  });
-
-  if (!response.ok) {
-    return null;
-  }
-
-  const data = await response.json();
-  return data.plaintext;
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
@@ -98,7 +62,7 @@ Deno.serve(async (req: Request) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Authorization required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -116,7 +80,7 @@ Deno.serve(async (req: Request) => {
     if (userError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid user token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -129,7 +93,7 @@ Deno.serve(async (req: Request) => {
     if (!userData) {
       return new Response(
         JSON.stringify({ error: "User not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -141,20 +105,11 @@ Deno.serve(async (req: Request) => {
     if (!hasPermission) {
       return new Response(
         JSON.stringify({ error: "Permission denied" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     const orgId = userData.organization_id;
-    const apiKey = await getDecryptedApiKey(orgId, supabase, supabaseUrl, serviceRoleKey);
-
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: "SendGrid not connected" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const payload: RequestPayload = await req.json();
 
     if (payload.action === "create") {
@@ -168,7 +123,7 @@ Deno.serve(async (req: Request) => {
       if (!domain) {
         return new Response(
           JSON.stringify({ error: "Domain not found" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
@@ -176,29 +131,15 @@ Deno.serve(async (req: Request) => {
       if (emailDomain !== domain.domain) {
         return new Response(
           JSON.stringify({ error: "Email domain does not match selected domain" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
-      const sgResponse = await fetch("https://api.sendgrid.com/v3/verified_senders", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          nickname: payload.displayName,
-          from_email: payload.email,
-          from_name: payload.displayName,
-          reply_to: payload.replyTo || payload.email,
-          reply_to_name: payload.displayName,
-        }),
-      });
-
-      let sendgridSenderId: string | null = null;
-      if (sgResponse.ok) {
-        const sgSender = await sgResponse.json();
-        sendgridSenderId = String(sgSender.id);
+      if (domain.status !== "verified") {
+        return new Response(
+          JSON.stringify({ error: "Cannot add a sender on an unverified domain" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
 
       const { data: existingAddresses } = await supabase
@@ -216,7 +157,7 @@ Deno.serve(async (req: Request) => {
           email: payload.email,
           domain_id: payload.domainId,
           reply_to: payload.replyTo || null,
-          sendgrid_sender_id: sendgridSenderId,
+          provider_sender_id: payload.email, // Mailgun has no separate sender ID; use the email itself
           is_default: isFirst,
           active: true,
         })
@@ -226,15 +167,14 @@ Deno.serve(async (req: Request) => {
       if (insertError) {
         return new Response(
           JSON.stringify({ error: "Failed to save from address" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
       if (isFirst) {
         await supabase
           .from("email_defaults")
-          .update({ default_from_address_id: address.id })
-          .eq("org_id", orgId);
+          .upsert({ org_id: orgId, default_from_address_id: address.id }, { onConflict: "org_id" });
       }
 
       await supabase.from("audit_logs").insert({
@@ -243,12 +183,12 @@ Deno.serve(async (req: Request) => {
         action: "email.from_address.created",
         entity_type: "email_from_address",
         entity_id: address.id,
-        details: { email: payload.email, display_name: payload.displayName },
+        details: { email: payload.email, display_name: payload.displayName, provider: "mailgun" },
       });
 
       return new Response(
         JSON.stringify({ success: true, address }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -263,7 +203,7 @@ Deno.serve(async (req: Request) => {
       if (!address) {
         return new Response(
           JSON.stringify({ error: "From address not found" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
@@ -280,7 +220,7 @@ Deno.serve(async (req: Request) => {
       if (updateError) {
         return new Response(
           JSON.stringify({ error: "Failed to update from address" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
@@ -295,7 +235,7 @@ Deno.serve(async (req: Request) => {
 
       return new Response(
         JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -310,7 +250,7 @@ Deno.serve(async (req: Request) => {
       if (!address) {
         return new Response(
           JSON.stringify({ error: "From address not found" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
@@ -326,19 +266,18 @@ Deno.serve(async (req: Request) => {
 
       await supabase
         .from("email_defaults")
-        .update({ default_from_address_id: payload.addressId })
-        .eq("org_id", orgId);
+        .upsert({ org_id: orgId, default_from_address_id: payload.addressId }, { onConflict: "org_id" });
 
       return new Response(
         JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     if (payload.action === "delete") {
       const { data: address } = await supabase
         .from("email_from_addresses")
-        .select("id, email, sendgrid_sender_id, is_default")
+        .select("id, email, is_default")
         .eq("id", payload.addressId)
         .eq("org_id", orgId)
         .single();
@@ -346,26 +285,14 @@ Deno.serve(async (req: Request) => {
       if (!address) {
         return new Response(
           JSON.stringify({ error: "From address not found" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
       if (address.is_default) {
         return new Response(
           JSON.stringify({ error: "Cannot delete default from address" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      if (address.sendgrid_sender_id) {
-        await fetch(
-          `https://api.sendgrid.com/v3/verified_senders/${address.sendgrid_sender_id}`,
-          {
-            method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-            },
-          }
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
@@ -377,7 +304,7 @@ Deno.serve(async (req: Request) => {
       if (deleteError) {
         return new Response(
           JSON.stringify({ error: "Failed to delete from address" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
 
@@ -392,101 +319,42 @@ Deno.serve(async (req: Request) => {
 
       return new Response(
         JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     if (payload.action === "sync") {
-      const sgResponse = await fetch("https://api.sendgrid.com/v3/verified_senders", {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-      });
-
-      if (!sgResponse.ok) {
-        return new Response(
-          JSON.stringify({ error: "Failed to fetch verified senders from SendGrid" }),
-          { status: sgResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const sgData = await sgResponse.json();
-      const sgSenders = sgData.results || [];
-
-      const { data: orgDomains } = await supabase
-        .from("email_domains")
-        .select("id, domain")
-        .eq("org_id", orgId);
-
-      const domainMap = new Map<string, string>();
-      for (const d of orgDomains || []) {
-        domainMap.set(d.domain, d.id);
-      }
-
-      const { data: existingAddresses } = await supabase
+      // Mailgun has no remote sender list. Sync is a no-op that just confirms
+      // the local catalog is consistent (e.g. flips is_default if all flags
+      // were cleared).
+      const { data: addresses } = await supabase
         .from("email_from_addresses")
-        .select("id")
-        .eq("org_id", orgId);
+        .select("id, is_default")
+        .eq("org_id", orgId)
+        .eq("active", true);
 
-      const hasExisting = existingAddresses && existingAddresses.length > 0;
-      let synced = 0;
-
-      for (let i = 0; i < sgSenders.length; i++) {
-        const sender = sgSenders[i];
-        if (!sender.verified) continue;
-
-        const senderEmail = sender.from_email;
-        const senderDomain = senderEmail.split("@")[1];
-        const domainId = domainMap.get(senderDomain) || null;
-
+      if (addresses && addresses.length > 0 && !addresses.some((a: { is_default: boolean }) => a.is_default)) {
         await supabase
           .from("email_from_addresses")
-          .upsert({
-            org_id: orgId,
-            email: senderEmail,
-            display_name: sender.from_name || sender.nickname || senderEmail.split("@")[0],
-            reply_to: sender.reply_to || null,
-            sendgrid_sender_id: String(sender.id),
-            domain_id: domainId,
-            active: true,
-            is_default: !hasExisting && i === 0,
-          }, { onConflict: "org_id,email" });
-
-        synced++;
-      }
-
-      if (!hasExisting && synced > 0) {
-        const { data: firstAddr } = await supabase
-          .from("email_from_addresses")
-          .select("id")
-          .eq("org_id", orgId)
-          .eq("is_default", true)
-          .maybeSingle();
-
-        if (firstAddr) {
-          await supabase
-            .from("email_defaults")
-            .update({ default_from_address_id: firstAddr.id })
-            .eq("org_id", orgId);
-        }
+          .update({ is_default: true })
+          .eq("id", addresses[0].id);
       }
 
       return new Response(
-        JSON.stringify({ success: true, synced }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ success: true, synced: addresses?.length ?? 0 }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
     return new Response(
       JSON.stringify({ error: "Invalid action" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return new Response(
       JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

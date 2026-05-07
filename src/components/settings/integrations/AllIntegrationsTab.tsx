@@ -32,7 +32,7 @@ function getIntegrationIcon(key: string): string {
     gmail: 'https://www.gstatic.com/images/branding/product/2x/gmail_2020q4_48dp.png',
     google_workspace: 'https://www.gstatic.com/images/branding/product/2x/drive_2020q4_48dp.png',
     google_calendar: 'https://www.gstatic.com/images/branding/product/2x/calendar_2020q4_48dp.png',
-    sendgrid: 'https://sendgrid.com/content/dam/sendgrid/legacy/themes/flavor/1.0.0-flavor.0/images/SG_Twilio_Lockup_RGB-small.png',
+    mailgun: 'https://www.mailgun.com/wp-content/uploads/2022/08/mailgun-logo.svg',
     quickbooks_online: 'https://quickbooks.intuit.com/oidam/intuit/ic/en_us/images/qb-logo-63x63.png',
     openai: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/OpenAI_Logo.svg/512px-OpenAI_Logo.svg.png',
     anthropic: 'https://www.anthropic.com/images/icons/apple-touch-icon.png',

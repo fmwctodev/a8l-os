@@ -1259,7 +1259,7 @@ async function executeAction(
     }
 
     case "send_email_org": {
-      // Sends as the organization via SendGrid. Optionally resolves a
+      // Sends as the organization via Mailgun. Optionally resolves a
       // marketing-module email template by ID.
       const ctx = enrollment.context_data as Record<string, unknown> | undefined;
       const allowed = await canSendOnChannel(supabase, contact, "email", {
@@ -4082,7 +4082,7 @@ async function renderEmailTemplate(
 }
 
 /**
- * Send a workflow email as the organization via SendGrid (email-send
+ * Send a workflow email as the organization via Mailgun (email-send
  * Edge Function). Writes a `messages` row of channel='email'.
  */
 async function dispatchOrgEmail(
@@ -4165,9 +4165,9 @@ async function dispatchOrgEmail(
     metadata: {
       to_email: toEmail,
       source: "workflow",
-      rail: "sendgrid",
+      rail: "mailgun",
       template_id: opts.template_id,
-      sendgrid_message_id: externalMessageId,
+      provider_message_id: externalMessageId,
     },
     status: success ? "sent" : "failed",
     delivery_status: success ? "queued" : "failed",

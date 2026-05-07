@@ -194,7 +194,7 @@ export function FromAddressesTab() {
                 className="inline-flex items-center px-3 py-1.5 border border-slate-600 text-sm font-medium rounded-md text-slate-300 bg-slate-700 hover:bg-slate-600 disabled:opacity-50"
               >
                 <RefreshCw className={`h-4 w-4 mr-1.5 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? 'Syncing...' : 'Sync from SendGrid'}
+                {syncing ? 'Syncing...' : 'Refresh'}
               </button>
               {verifiedDomains.length > 0 && (
                 <button

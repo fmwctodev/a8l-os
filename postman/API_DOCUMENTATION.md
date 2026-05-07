@@ -494,7 +494,7 @@ Multi-channel conversation management including email, SMS, phone, internal mess
 
 | Channel | Value | Description |
 |---------|-------|-------------|
-| Email | `email` | Email conversations via Gmail/SendGrid |
+| Email | `email` | Email conversations via Gmail/Mailgun |
 | SMS | `sms` | Text messages via Twilio |
 | Phone | `phone` | Voice call logs and transcripts |
 | Internal | `internal` | Internal team conversations |
@@ -2467,7 +2467,7 @@ POST {SUPABASE_URL}/functions/v1/drive-auto-connect
 
 ### 16 - Communications
 
-Comprehensive multi-channel communication management including Gmail, SendGrid email, SMS (Twilio), phone/voice (Twilio), and Google Chat.
+Comprehensive multi-channel communication management including Gmail, Mailgun email, SMS (Twilio), phone/voice (Twilio), and Google Chat.
 
 #### Tables
 
@@ -2576,11 +2576,11 @@ Incremental Gmail sync (processes only new/changed messages).
 POST {SUPABASE_URL}/functions/v1/gmail-sync-incremental
 ```
 
-#### Edge Functions -- SendGrid Email
+#### Edge Functions -- Mailgun Email
 
 ##### `email-send`
 
-Sends an email via SendGrid.
+Sends an email via Mailgun.
 
 ```
 POST {SUPABASE_URL}/functions/v1/email-send
@@ -2602,12 +2602,12 @@ POST {SUPABASE_URL}/functions/v1/email-send
 }
 ```
 
-##### `email-sendgrid-domains`
+##### `email-mailgun-domains`
 
-Manages SendGrid authenticated domains.
+Manages Mailgun authenticated domains.
 
 ```
-POST {SUPABASE_URL}/functions/v1/email-sendgrid-domains
+POST {SUPABASE_URL}/functions/v1/email-mailgun-domains
 ```
 
 ```json
@@ -2616,28 +2616,28 @@ POST {SUPABASE_URL}/functions/v1/email-sendgrid-domains
 }
 ```
 
-##### `email-sendgrid-provider`
+##### `email-mailgun-provider`
 
-Manages SendGrid provider configuration.
-
-```
-POST {SUPABASE_URL}/functions/v1/email-sendgrid-provider
-```
-
-##### `email-sendgrid-senders`
-
-Manages verified SendGrid sender identities.
+Manages Mailgun provider configuration.
 
 ```
-POST {SUPABASE_URL}/functions/v1/email-sendgrid-senders
+POST {SUPABASE_URL}/functions/v1/email-mailgun-provider
 ```
 
-##### `email-sendgrid-unsubscribe`
+##### `email-mailgun-senders`
 
-Manages SendGrid unsubscribe groups and suppressions.
+Manages verified Mailgun sender identities.
 
 ```
-POST {SUPABASE_URL}/functions/v1/email-sendgrid-unsubscribe
+POST {SUPABASE_URL}/functions/v1/email-mailgun-senders
+```
+
+##### `email-mailgun-suppressions`
+
+Manages Mailgun suppressions groups and suppressions.
+
+```
+POST {SUPABASE_URL}/functions/v1/email-mailgun-suppressions
 ```
 
 ##### `email-campaign-domains`

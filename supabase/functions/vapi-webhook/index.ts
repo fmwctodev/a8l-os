@@ -1,42 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders, handleCors, errorResponse } from "../_shared/cors.ts";
 import { verifyWebhookSecret } from "../_shared/webhook-auth.ts";
-
-async function getDecryptedSendGridKey(
-  supabase: ReturnType<typeof createClient>,
-  orgId: string,
-): Promise<string | null> {
-  const envKey = Deno.env.get("SENDGRID_API_KEY");
-  if (envKey) return envKey;
-
-  const { data: conn } = await supabase
-    .from("integration_connections")
-    .select("credentials_encrypted, credentials_iv, status, integrations!inner(key)")
-    .eq("org_id", orgId)
-    .eq("integrations.key", "sendgrid")
-    .maybeSingle();
-
-  if (!conn || conn.status !== "connected" || !conn.credentials_encrypted || !conn.credentials_iv) {
-    return null;
-  }
-
-  const response = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/email-crypto`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      action: "decrypt",
-      encrypted: conn.credentials_encrypted,
-      iv: conn.credentials_iv,
-    }),
-  });
-
-  if (!response.ok) return null;
-  const data = await response.json();
-  return data.plaintext || null;
-}
+import { getDecryptedMailgunCreds, sendMailgunEmail } from "../_shared/mailgun.ts";
 
 async function sendInboundCallEmail(
   supabase: ReturnType<typeof createClient>,
@@ -51,8 +16,10 @@ async function sendInboundCallEmail(
     recordingUrl: string | null;
   },
 ): Promise<void> {
-  const apiKey = await getDecryptedSendGridKey(supabase, orgId);
-  if (!apiKey) return;
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const mgCreds = await getDecryptedMailgunCreds(orgId, supabase, supabaseUrl, serviceRoleKey);
+  if (!mgCreds) return;
 
   const { vapiCallId, callerPhone, assistantName, startedAt, durationSeconds, summary, recordingUrl } = params;
 
@@ -92,18 +59,16 @@ async function sendInboundCallEmail(
       </div>
     </div>`;
 
-  await fetch("https://api.sendgrid.com/v3/mail/send", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: { email: "info@mail.autom8ionlab.com", name: "Autom8ion Voice AI" },
-      personalizations: [{ to: [{ email: "admin@autom8ionlab.com" }] }],
-      subject: `Inbound Call: ${callerPhone || "Unknown"} \u2014 ${durationText}`,
-      content: [{ type: "text/html", value: html }],
-    }),
+  await sendMailgunEmail({
+    apiKey: mgCreds.apiKey,
+    domain: mgCreds.domain,
+    region: mgCreds.region,
+    from: "Autom8ion Voice AI <info@mail.autom8ionlab.com>",
+    to: "admin@autom8ionlab.com",
+    subject: `Inbound Call: ${callerPhone || "Unknown"} \u2014 ${durationText}`,
+    html,
+    trackOpens: true,
+    trackClicks: false,
   });
 }
 

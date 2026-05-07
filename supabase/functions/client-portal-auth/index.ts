@@ -13,6 +13,7 @@
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { getDecryptedMailgunCreds, sendMailgunEmail } from "../_shared/mailgun.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -264,7 +265,7 @@ function buildOtpEmailHtml(params: {
 }
 
 // -----------------------------------------------------------------
-// Internal: send email via SendGrid directly (same pattern as the
+// Internal: send email via Mailgun directly (same pattern as the
 // original portal-auth edge function). This is more reliable than
 // routing through the email-send function because it avoids auth
 // context issues with internal edge-function-to-edge-function calls.
@@ -281,37 +282,12 @@ async function sendTransactionalEmail(
   }
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    // Get SendGrid API key (env var or org-level encrypted credential)
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-    // Try env var first, then org-level credential
-    let apiKey = Deno.env.get("SENDGRID_API_KEY") ?? null;
-    if (!apiKey) {
-      const { data: conn } = await supabase
-        .from("integration_connections")
-        .select("credentials_encrypted, credentials_iv, status, integrations!inner(key)")
-        .eq("org_id", orgId)
-        .eq("integrations.key", "sendgrid")
-        .maybeSingle();
-      if (conn?.status === "connected" && conn.credentials_encrypted && conn.credentials_iv) {
-        const res = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${serviceRoleKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ action: "decrypt", encrypted: conn.credentials_encrypted, iv: conn.credentials_iv }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          apiKey = data.plaintext;
-        }
-      }
-    }
-
-    if (!apiKey) {
-      return { success: false, error: "SendGrid API key not configured" };
+    const mgCreds = await getDecryptedMailgunCreds(orgId, supabase, supabaseUrl, serviceRoleKey);
+    if (!mgCreds) {
+      return { success: false, error: "Mailgun credentials not configured" };
     }
 
     // Resolve org from-address
@@ -343,29 +319,22 @@ async function sendTransactionalEmail(
       }
     }
 
-    // Send via SendGrid
-    const sgRes = await fetch("https://api.sendgrid.com/v3/mail/send", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: params.toEmail, name: params.toName }] }],
-        from: { email: fromEmail, name: fromName },
-        subject: params.subject,
-        content: [{ type: "text/html", value: params.htmlBody }],
-        tracking_settings: {
-          open_tracking: { enable: false },
-          click_tracking: { enable: false },
-        },
-      }),
+    const mgRes = await sendMailgunEmail({
+      apiKey: mgCreds.apiKey,
+      domain: mgCreds.domain,
+      region: mgCreds.region,
+      from: `${fromName} <${fromEmail}>`,
+      to: params.toEmail,
+      toName: params.toName,
+      subject: params.subject,
+      html: params.htmlBody,
+      trackOpens: false,
+      trackClicks: false,
     });
 
-    if (!sgRes.ok) {
-      const errBody = await sgRes.text().catch(() => "");
-      console.error(`[client-portal-auth] SendGrid ${sgRes.status}: ${errBody}`);
-      return { success: false, error: `SendGrid error ${sgRes.status}` };
+    if (!mgRes.ok) {
+      console.error(`[client-portal-auth] Mailgun ${mgRes.status}: ${mgRes.error}`);
+      return { success: false, error: `Mailgun error ${mgRes.status}` };
     }
 
     return { success: true };

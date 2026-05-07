@@ -119,7 +119,7 @@ export function registerCommunicationsTools(server: McpServer): void {
 
   server.tool(
     'email_send',
-    'Send an email via SendGrid',
+    'Send an email via Mailgun',
     {
       to: z.string(),
       from: z.string().optional(),
@@ -139,15 +139,15 @@ export function registerCommunicationsTools(server: McpServer): void {
   );
 
   server.tool(
-    'email_sendgrid_domains',
-    'Manage SendGrid authenticated domains. Actions: list, verify, add, delete',
+    'email_mailgun_domains',
+    'Manage Mailgun authenticated domains. Actions: create, verify, delete, sync',
     {
       action: z.string(),
       payload: z.record(z.unknown()).optional(),
     },
     async ({ action, payload }) => {
       try {
-        const data = await callEdgeFunction('email-sendgrid-domains', { action, ...payload });
+        const data = await callEdgeFunction('email-mailgun-domains', { action, ...payload });
         return toolResult(data);
       } catch (e) {
         return toolError(e);
@@ -156,12 +156,12 @@ export function registerCommunicationsTools(server: McpServer): void {
   );
 
   server.tool(
-    'email_sendgrid_provider',
-    'Manage SendGrid provider configuration',
+    'email_mailgun_provider',
+    'Manage Mailgun provider configuration. Actions: connect, test, disconnect, status',
     { action: z.string(), payload: z.record(z.unknown()).optional() },
     async ({ action, payload }) => {
       try {
-        const data = await callEdgeFunction('email-sendgrid-provider', { action, ...payload });
+        const data = await callEdgeFunction('email-mailgun-provider', { action, ...payload });
         return toolResult(data);
       } catch (e) {
         return toolError(e);
@@ -170,12 +170,12 @@ export function registerCommunicationsTools(server: McpServer): void {
   );
 
   server.tool(
-    'email_sendgrid_senders',
-    'Manage verified SendGrid sender identities',
+    'email_mailgun_senders',
+    'Manage Mailgun from-address catalog. Actions: create, update, set-default, delete, sync',
     { action: z.string(), payload: z.record(z.unknown()).optional() },
     async ({ action, payload }) => {
       try {
-        const data = await callEdgeFunction('email-sendgrid-senders', { action, ...payload });
+        const data = await callEdgeFunction('email-mailgun-senders', { action, ...payload });
         return toolResult(data);
       } catch (e) {
         return toolError(e);
@@ -184,12 +184,12 @@ export function registerCommunicationsTools(server: McpServer): void {
   );
 
   server.tool(
-    'email_sendgrid_unsubscribe',
-    'Manage SendGrid unsubscribe groups and suppressions',
+    'email_mailgun_suppressions',
+    'Manage Mailgun unsubscribe groups (labels) and per-domain suppressions. Actions: list, create, update, set-default, delete, sync, list-suppressions, add-suppression, remove-suppression',
     { action: z.string(), payload: z.record(z.unknown()).optional() },
     async ({ action, payload }) => {
       try {
-        const data = await callEdgeFunction('email-sendgrid-unsubscribe', { action, ...payload });
+        const data = await callEdgeFunction('email-mailgun-suppressions', { action, ...payload });
         return toolResult(data);
       } catch (e) {
         return toolError(e);

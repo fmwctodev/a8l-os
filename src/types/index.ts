@@ -2596,7 +2596,7 @@ export interface ReportEmailQueue {
   report_run_id: string;
   recipient_email: string;
   status: ReportEmailStatus;
-  sendgrid_message_id: string | null;
+  provider_message_id: string | null;
   error: string | null;
   created_at: string;
   sent_at: string | null;
@@ -4138,7 +4138,7 @@ export interface EmailDomain {
   id: string;
   org_id: string;
   domain: string;
-  sendgrid_domain_id: string | null;
+  provider_domain_id: string | null;
   status: EmailDomainStatus;
   dns_records: EmailDomainDnsRecord[];
   last_checked_at: string | null;
@@ -4153,7 +4153,7 @@ export interface EmailFromAddress {
   email: string;
   domain_id: string | null;
   reply_to: string | null;
-  sendgrid_sender_id: string | null;
+  provider_sender_id: string | null;
   is_default: boolean;
   active: boolean;
   created_at: string;
@@ -4164,7 +4164,7 @@ export interface EmailFromAddress {
 export interface EmailUnsubscribeGroup {
   id: string;
   org_id: string;
-  sendgrid_group_id: string;
+  provider_group_id: string | null;
   name: string;
   description: string | null;
   is_default: boolean;
@@ -4191,7 +4191,8 @@ export interface EmailTestLog {
   from_address_id: string | null;
   status: 'success' | 'failed';
   error_message: string | null;
-  sendgrid_message_id: string | null;
+  provider_message_id: string | null;
+  provider: string;
   sent_at: string;
   from_address?: EmailFromAddress | null;
   sent_by_user?: User | null;
@@ -4239,7 +4240,7 @@ export interface EmailCampaignDomain {
   organization_id: string;
   domain: string;
   friendly_label: string | null;
-  sendgrid_domain_id: string | null;
+  provider_domain_id: string | null;
   status: EmailCampaignDomainStatus;
   warmup_progress_percent: number;
   current_daily_limit: number;
@@ -5382,7 +5383,7 @@ export interface ProposalSignatureRequest {
   created_at: string;
   updated_at: string;
   send_status: 'pending' | 'sent' | 'failed';
-  sendgrid_message_id: string | null;
+  provider_message_id: string | null;
   send_error: string | null;
   last_sent_at: string | null;
   proposal?: Proposal;

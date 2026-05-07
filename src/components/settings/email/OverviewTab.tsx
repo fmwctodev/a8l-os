@@ -109,10 +109,10 @@ export function OverviewTab({ onNavigate }: OverviewTabProps) {
           {isAdmin && !status.providerConnected && (
             <div className="bg-slate-700/50 px-5 py-3">
               <button
-                onClick={() => navigate('/settings/integrations?tab=all&search=sendgrid')}
+                onClick={() => navigate('/settings/integrations?tab=all&search=mailgun')}
                 className="text-sm font-medium text-cyan-400 hover:text-cyan-300 flex items-center"
               >
-                Connect SendGrid <ExternalLink className="ml-1 h-4 w-4" />
+                Connect Mailgun <ExternalLink className="ml-1 h-4 w-4" />
               </button>
             </div>
           )}

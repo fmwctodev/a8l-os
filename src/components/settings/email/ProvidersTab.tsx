@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Eye, EyeOff, CheckCircle, XCircle, RefreshCw, Unplug, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
-import { getProvider, connectProvider, testConnection, disconnectProvider } from '../../../services/emailProviders';
-import type { EmailProvider } from '../../../types';
+import {
+  getProviderStatus,
+  connectProvider,
+  testConnection,
+  disconnectProvider,
+  type ProviderStatus,
+} from '../../../services/emailProviders';
 
 interface ProvidersTabProps {
   onSuccess: () => void;
@@ -10,11 +15,15 @@ interface ProvidersTabProps {
 
 export function ProvidersTab({ onSuccess }: ProvidersTabProps) {
   const { user } = useAuth();
-  const [provider, setProvider] = useState<EmailProvider | null>(null);
+  const [provider, setProvider] = useState<ProviderStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiKey, setApiKey] = useState('');
+  const [domain, setDomain] = useState('');
+  const [webhookSigningKey, setWebhookSigningKey] = useState('');
+  const [region, setRegion] = useState<'us' | 'eu'>('us');
   const [nickname, setNickname] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showSigningKey, setShowSigningKey] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [testing, setTesting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -30,7 +39,7 @@ export function ProvidersTab({ onSuccess }: ProvidersTabProps) {
   const loadProvider = async () => {
     if (!user?.organization_id) return;
     try {
-      const data = await getProvider(user.organization_id);
+      const data = await getProviderStatus(user.organization_id);
       setProvider(data);
     } catch (err) {
       console.error('Failed to load provider:', err);
@@ -46,10 +55,18 @@ export function ProvidersTab({ onSuccess }: ProvidersTabProps) {
     setConnecting(true);
 
     try {
-      const result = await connectProvider(apiKey, nickname || undefined);
+      const result = await connectProvider({
+        apiKey,
+        domain,
+        webhookSigningKey: webhookSigningKey || undefined,
+        region,
+        nickname: nickname || undefined,
+      });
       if (result.success) {
-        setSuccess('SendGrid connected successfully');
+        setSuccess('Mailgun connected successfully');
         setApiKey('');
+        setDomain('');
+        setWebhookSigningKey('');
         setNickname('');
         await loadProvider();
         onSuccess();
@@ -112,7 +129,7 @@ export function ProvidersTab({ onSuccess }: ProvidersTabProps) {
     );
   }
 
-  const isConnected = provider?.status === 'connected';
+  const isConnected = provider?.connected ?? false;
 
   return (
     <div className="max-w-2xl">
@@ -145,9 +162,9 @@ export function ProvidersTab({ onSuccess }: ProvidersTabProps) {
               <div className="flex items-center">
                 <CheckCircle className="h-6 w-6 text-emerald-400 mr-3" />
                 <div>
-                  <h3 className="text-lg font-medium text-white">SendGrid Connected</h3>
-                  {provider.account_nickname && (
-                    <p className="text-sm text-slate-400">{provider.account_nickname}</p>
+                  <h3 className="text-lg font-medium text-white">Mailgun Connected</h3>
+                  {provider?.nickname && (
+                    <p className="text-sm text-slate-400">{provider.nickname}</p>
                   )}
                 </div>
               </div>
@@ -160,13 +177,15 @@ export function ProvidersTab({ onSuccess }: ProvidersTabProps) {
             <dl className="grid grid-cols-2 gap-4">
               <div>
                 <dt className="text-sm font-medium text-slate-400">Provider</dt>
-                <dd className="mt-1 text-sm text-white">SendGrid</dd>
+                <dd className="mt-1 text-sm text-white">Mailgun</dd>
               </div>
               <div>
-                <dt className="text-sm font-medium text-slate-400">Connected Since</dt>
-                <dd className="mt-1 text-sm text-white">
-                  {new Date(provider.created_at).toLocaleDateString()}
-                </dd>
+                <dt className="text-sm font-medium text-slate-400">Sending Domain</dt>
+                <dd className="mt-1 text-sm text-white">{provider?.domain ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-slate-400">Region</dt>
+                <dd className="mt-1 text-sm text-white">{(provider?.region ?? 'us').toUpperCase()}</dd>
               </div>
             </dl>
           </div>
@@ -193,9 +212,9 @@ export function ProvidersTab({ onSuccess }: ProvidersTabProps) {
       ) : (
         <div className="bg-slate-800 border border-slate-700 rounded-lg">
           <div className="px-6 py-5 border-b border-slate-700">
-            <h3 className="text-lg font-medium text-white">Connect SendGrid</h3>
+            <h3 className="text-lg font-medium text-white">Connect Mailgun</h3>
             <p className="mt-1 text-sm text-slate-400">
-              Enter your SendGrid API key to enable email sending
+              Enter your Mailgun API key, sending domain, and webhook signing key to enable email sending
             </p>
           </div>
           <form onSubmit={handleConnect} className="px-6 py-5 space-y-6">
@@ -210,7 +229,7 @@ export function ProvidersTab({ onSuccess }: ProvidersTabProps) {
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   required
-                  placeholder="SG.xxxxxxxxxxxxxxxx"
+                  placeholder="key-xxxxxxxxxxxxxxxx"
                   className="block w-full pr-10 bg-slate-900 border-slate-600 rounded-md text-white placeholder-slate-500 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm"
                 />
                 <button
@@ -226,15 +245,78 @@ export function ProvidersTab({ onSuccess }: ProvidersTabProps) {
                 </button>
               </div>
               <p className="mt-1 text-xs text-slate-500">
-                Create an API key in your{' '}
+                Find your private API key in your{' '}
                 <a
-                  href="https://app.sendgrid.com/settings/api_keys"
+                  href="https://app.mailgun.com/app/account/security/api_keys"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-cyan-400 hover:text-cyan-300"
                 >
-                  SendGrid Dashboard
+                  Mailgun Dashboard
                 </a>
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="domain" className="block text-sm font-medium text-slate-300">
+                Sending Domain <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                id="domain"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                required
+                placeholder="mg.yourdomain.com"
+                className="mt-1 block w-full bg-slate-900 border-slate-600 rounded-md text-white placeholder-slate-500 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                A domain you've verified in Mailgun
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="region" className="block text-sm font-medium text-slate-300">
+                Region
+              </label>
+              <select
+                id="region"
+                value={region}
+                onChange={(e) => setRegion(e.target.value as 'us' | 'eu')}
+                className="mt-1 block w-full bg-slate-900 border-slate-600 rounded-md text-white focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm"
+              >
+                <option value="us">US (api.mailgun.net)</option>
+                <option value="eu">EU (api.eu.mailgun.net)</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="webhookSigningKey" className="block text-sm font-medium text-slate-300">
+                Webhook Signing Key
+              </label>
+              <div className="mt-1 relative">
+                <input
+                  type={showSigningKey ? 'text' : 'password'}
+                  id="webhookSigningKey"
+                  value={webhookSigningKey}
+                  onChange={(e) => setWebhookSigningKey(e.target.value)}
+                  placeholder="HTTP webhook signing key"
+                  className="block w-full pr-10 bg-slate-900 border-slate-600 rounded-md text-white placeholder-slate-500 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSigningKey(!showSigningKey)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                >
+                  {showSigningKey ? (
+                    <EyeOff className="h-5 w-5 text-slate-500 hover:text-slate-300" />
+                  ) : (
+                    <Eye className="h-5 w-5 text-slate-500 hover:text-slate-300" />
+                  )}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Optional. Required if you'll receive Mailgun event webhooks (delivered, opened, etc).
               </p>
             </div>
 
@@ -258,7 +340,7 @@ export function ProvidersTab({ onSuccess }: ProvidersTabProps) {
             <div className="pt-4 border-t border-slate-700">
               <button
                 type="submit"
-                disabled={connecting || !apiKey}
+                disabled={connecting || !apiKey || !domain}
                 className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-cyan-600 hover:bg-cyan-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-cyan-500 disabled:opacity-50"
               >
                 {connecting ? (
@@ -286,7 +368,7 @@ export function ProvidersTab({ onSuccess }: ProvidersTabProps) {
                   <AlertTriangle className="h-6 w-6 text-red-400" />
                 </div>
                 <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                  <h3 className="text-lg font-medium text-white">Disconnect SendGrid</h3>
+                  <h3 className="text-lg font-medium text-white">Disconnect Mailgun</h3>
                   <div className="mt-2">
                     <p className="text-sm text-slate-400">
                       This will immediately block all email sending. Workflows, AI agents, and

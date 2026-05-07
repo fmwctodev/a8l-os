@@ -176,7 +176,7 @@ Deno.serve(async (req: Request) => {
         .eq("is_default", true)
         .maybeSingle();
 
-      let sendgridMessageId: string | null = null;
+      let providerMessageId: string | null = null;
       let sendError: string | null = null;
 
       if (fromAddress) {
@@ -201,7 +201,7 @@ Deno.serve(async (req: Request) => {
           });
           const emailResult = await emailRes.json();
           if (emailRes.ok && emailResult.success) {
-            sendgridMessageId = emailResult.messageId || null;
+            providerMessageId = emailResult.messageId || null;
           } else {
             sendError = emailResult.error || "Email send failed";
           }
@@ -216,7 +216,7 @@ Deno.serve(async (req: Request) => {
           last_reminder_sent_at: now.toISOString(),
           reminder_count: (req.reminder_count || 0) + 1,
           send_status: sendError ? "failed" : "sent",
-          sendgrid_message_id: sendgridMessageId,
+          provider_message_id: providerMessageId,
           send_error: sendError,
         })
         .eq("id", req.id);
@@ -230,7 +230,7 @@ Deno.serve(async (req: Request) => {
           request_id: req.id,
           reminder_number: (req.reminder_count || 0) + 1,
           days_remaining: daysRemaining,
-          sendgrid_message_id: sendgridMessageId,
+          provider_message_id: providerMessageId,
           send_error: sendError,
         },
       });

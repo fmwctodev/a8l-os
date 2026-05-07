@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getDecryptedMailgunCreds, sendMailgunEmail } from "../_shared/mailgun.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,52 +10,6 @@ const corsHeaders = {
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-async function getDecryptedSendGridKey(
-  orgId: string,
-  supabase: ReturnType<typeof createClient>,
-  supabaseUrl: string,
-  serviceRoleKey: string
-): Promise<string | null> {
-  const envKey = Deno.env.get("SENDGRID_API_KEY");
-  if (envKey) {
-    return envKey;
-  }
-
-  const { data: conn } = await supabase
-    .from("integration_connections")
-    .select(
-      "credentials_encrypted, credentials_iv, status, integrations!inner(key)"
-    )
-    .eq("org_id", orgId)
-    .eq("integrations.key", "sendgrid")
-    .maybeSingle();
-
-  if (
-    !conn ||
-    conn.status !== "connected" ||
-    !conn.credentials_encrypted ||
-    !conn.credentials_iv
-  )
-    return null;
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      action: "decrypt",
-      encrypted: conn.credentials_encrypted,
-      iv: conn.credentials_iv,
-    }),
-  });
-
-  if (!response.ok) return null;
-  const data = await response.json();
-  return data.plaintext;
-}
 
 const SERVICE_CATEGORY_LABELS: Record<string, string> = {
   ai_automation: "AI Automation System",
@@ -349,16 +304,16 @@ Deno.serve(async (req: Request) => {
       ? ticket.attachments
       : [];
 
-    const sendgridKey = await getDecryptedSendGridKey(
+    const mgCreds = await getDecryptedMailgunCreds(
       org_id,
       supabase,
       supabaseUrl,
       serviceRoleKey
     );
 
-    if (!sendgridKey) {
+    if (!mgCreds) {
       return new Response(
-        JSON.stringify({ success: false, error: "SendGrid not configured" }),
+        JSON.stringify({ success: false, error: "Mailgun not configured" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -416,29 +371,23 @@ Deno.serve(async (req: Request) => {
 
     console.log("Sending team email to support@autom8ionlab.com from", fromEmail);
 
-    const teamPayload = {
-      personalizations: [
-        { to: [{ email: "support@autom8ionlab.com" }] },
-      ],
-      from: { email: fromEmail, name: fromName },
+    const teamEmailRes = await sendMailgunEmail({
+      apiKey: mgCreds.apiKey,
+      domain: mgCreds.domain,
+      region: mgCreds.region,
+      from: `${fromName} <${fromEmail}>`,
+      to: "support@autom8ionlab.com",
       subject,
-      content: [{ type: "text/html", value: teamEmailContent }],
-    };
-
-    const teamEmailRes = await fetch("https://api.sendgrid.com/v3/mail/send", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${sendgridKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(teamPayload),
+      html: teamEmailContent,
+      trackOpens: true,
+      trackClicks: false,
     });
 
     const teamStatus = teamEmailRes.status;
     let teamError = "";
     if (!teamEmailRes.ok) {
-      teamError = await teamEmailRes.text().catch(() => "");
-      console.error("SendGrid team email error:", teamStatus, teamError);
+      teamError = teamEmailRes.error || "";
+      console.error("Mailgun team email error:", teamStatus, teamError);
     } else {
       console.log("Team email sent successfully, status:", teamStatus);
     }
@@ -459,27 +408,24 @@ Deno.serve(async (req: Request) => {
         support_email: org_email,
       });
 
-      const clientEmailRes = await fetch("https://api.sendgrid.com/v3/mail/send", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${sendgridKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          personalizations: [
-            { to: [{ email: client_email, name: client_name }] },
-          ],
-          from: { email: fromEmail, name: fromName },
-          reply_to: { email: org_email, name: org_name },
-          subject: `Your support ticket has been received (${ticket_number})`,
-          content: [{ type: "text/html", value: clientEmailContent }],
-        }),
+      const clientEmailRes = await sendMailgunEmail({
+        apiKey: mgCreds.apiKey,
+        domain: mgCreds.domain,
+        region: mgCreds.region,
+        from: `${fromName} <${fromEmail}>`,
+        to: client_email,
+        toName: client_name,
+        replyTo: org_email,
+        subject: `Your support ticket has been received (${ticket_number})`,
+        html: clientEmailContent,
+        trackOpens: true,
+        trackClicks: false,
       });
 
       clientStatus = clientEmailRes.status;
       if (!clientEmailRes.ok) {
-        clientError = await clientEmailRes.text().catch(() => "");
-        console.error("SendGrid client email error:", clientStatus, clientError);
+        clientError = clientEmailRes.error || "";
+        console.error("Mailgun client email error:", clientStatus, clientError);
       } else {
         console.log("Client email sent successfully, status:", clientStatus);
       }

@@ -133,7 +133,7 @@ export function SendForSignatureModal({ proposal, onClose, onSent }: SendForSign
           {
             signer_name: signerName.trim(),
             signer_email: signerEmail.trim(),
-            sendgrid_message_id: emailResult.messageId,
+            provider_message_id: emailResult.messageId,
             sender_email: senderEmail,
           },
           user.id
@@ -230,7 +230,7 @@ export function SendForSignatureModal({ proposal, onClose, onSent }: SendForSign
           {step === 'sending' && (
             <div className="flex flex-col items-center justify-center py-12 gap-4">
               <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
-              <p className="text-slate-300">Sending signature request via SendGrid...</p>
+              <p className="text-slate-300">Sending signature request via Mailgun...</p>
             </div>
           )}
 

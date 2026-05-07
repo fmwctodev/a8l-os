@@ -1,5 +1,13 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  createMailgunDomain,
+  deleteMailgunDomain,
+  getDecryptedMailgunCreds,
+  getMailgunDomain,
+  getMailgunStats,
+  verifyMailgunDomain,
+} from "../_shared/mailgun.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -60,45 +68,40 @@ type RequestPayload =
   | SyncStatsRequest
   | ApplyRecommendationRequest;
 
-async function getDecryptedApiKey(
-  orgId: string,
-  supabase: ReturnType<typeof createClient>,
-  supabaseUrl: string,
-  serviceRoleKey: string
-): Promise<string | null> {
-  const envKey = Deno.env.get("SENDGRID_API_KEY");
-  if (envKey) return envKey;
+interface MailgunDnsRecord {
+  record_type?: string;
+  name?: string;
+  value?: string;
+  priority?: string | number;
+  valid?: string;
+}
 
-  const { data: conn } = await supabase
-    .from("integration_connections")
-    .select("credentials_encrypted, credentials_iv, status, integrations!inner(key)")
-    .eq("org_id", orgId)
-    .eq("integrations.key", "sendgrid")
-    .maybeSingle();
-
-  if (!conn || conn.status !== "connected" || !conn.credentials_encrypted || !conn.credentials_iv) {
-    return null;
+function mapDnsRecords(
+  sending: MailgunDnsRecord[] | undefined,
+  receiving: MailgunDnsRecord[] | undefined,
+  fallbackHost: string,
+): Array<Record<string, unknown>> {
+  const out: Array<Record<string, unknown>> = [];
+  for (const r of sending ?? []) {
+    out.push({
+      type: r.record_type,
+      host: r.name ?? fallbackHost,
+      value: r.value,
+      valid: r.valid === "valid",
+      purpose: "sending",
+    });
   }
-
-  const response = await fetch(`${supabaseUrl}/functions/v1/email-crypto`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRoleKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      action: "decrypt",
-      encrypted: conn.credentials_encrypted,
-      iv: conn.credentials_iv,
-    }),
-  });
-
-  if (!response.ok) {
-    return null;
+  for (const r of receiving ?? []) {
+    out.push({
+      type: r.record_type,
+      host: r.name ?? fallbackHost,
+      value: r.value,
+      priority: r.priority,
+      valid: r.valid === "valid",
+      purpose: "receiving",
+    });
   }
-
-  const data = await response.json();
-  return data.plaintext;
+  return out;
 }
 
 async function logDomainEvent(
@@ -188,56 +191,24 @@ Deno.serve(async (req: Request) => {
     const payload: RequestPayload = await req.json();
 
     if (payload.action === "create") {
-      const apiKey = await getDecryptedApiKey(orgId, supabase, supabaseUrl, serviceRoleKey);
-      if (!apiKey) {
+      const mgCreds = await getDecryptedMailgunCreds(orgId, supabase, supabaseUrl, serviceRoleKey);
+      if (!mgCreds) {
         return new Response(
-          JSON.stringify({ error: "SendGrid not connected" }),
+          JSON.stringify({ error: "Mailgun not connected" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const sgResponse = await fetch("https://api.sendgrid.com/v3/whitelabel/domains", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          domain: payload.domain,
-          automatic_security: true,
-        }),
-      });
-
-      if (!sgResponse.ok) {
-        const errorData = await sgResponse.json();
+      const create = await createMailgunDomain(mgCreds.apiKey, payload.domain, mgCreds.region);
+      if (!create.ok) {
         return new Response(
-          JSON.stringify({ error: errorData.errors?.[0]?.message || "Failed to create domain in SendGrid" }),
-          { status: sgResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: create.error || "Failed to create domain in Mailgun" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const sgDomain = await sgResponse.json();
-
-      const dnsRecords = [
-        ...(sgDomain.dns?.mail_cname ? [{
-          type: "CNAME",
-          host: sgDomain.dns.mail_cname.host,
-          value: sgDomain.dns.mail_cname.data,
-          valid: sgDomain.dns.mail_cname.valid,
-        }] : []),
-        ...(sgDomain.dns?.dkim1 ? [{
-          type: "CNAME",
-          host: sgDomain.dns.dkim1.host,
-          value: sgDomain.dns.dkim1.data,
-          valid: sgDomain.dns.dkim1.valid,
-        }] : []),
-        ...(sgDomain.dns?.dkim2 ? [{
-          type: "CNAME",
-          host: sgDomain.dns.dkim2.host,
-          value: sgDomain.dns.dkim2.data,
-          valid: sgDomain.dns.dkim2.valid,
-        }] : []),
-      ];
+      const detail = await getMailgunDomain(mgCreds.apiKey, payload.domain, mgCreds.region);
+      const dnsRecords = mapDnsRecords(detail.sendingDnsRecords, detail.receivingDnsRecords, payload.domain);
 
       const { data: domain, error: insertError } = await supabase
         .from("email_campaign_domains")
@@ -245,7 +216,7 @@ Deno.serve(async (req: Request) => {
           organization_id: orgId,
           domain: payload.domain,
           friendly_label: payload.friendly_label || null,
-          sendgrid_domain_id: String(sgDomain.id),
+          provider_domain_id: payload.domain,
           status: "pending_verification",
           target_daily_volume: payload.target_daily_volume || 10000,
           dns_records: dnsRecords,
@@ -277,7 +248,7 @@ Deno.serve(async (req: Request) => {
     if (payload.action === "verify") {
       const { data: domain } = await supabase
         .from("email_campaign_domains")
-        .select("sendgrid_domain_id, domain, status")
+        .select("provider_domain_id, domain, status")
         .eq("id", payload.domainId)
         .eq("organization_id", orgId)
         .single();
@@ -289,56 +260,29 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const apiKey = await getDecryptedApiKey(orgId, supabase, supabaseUrl, serviceRoleKey);
-      if (!apiKey) {
+      const mgCreds = await getDecryptedMailgunCreds(orgId, supabase, supabaseUrl, serviceRoleKey);
+      if (!mgCreds) {
         return new Response(
-          JSON.stringify({ error: "SendGrid not connected" }),
+          JSON.stringify({ error: "Mailgun not connected" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const sgResponse = await fetch(
-        `https://api.sendgrid.com/v3/whitelabel/domains/${domain.sendgrid_domain_id}/validate`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      const validationResult = await sgResponse.json();
-      const isValid = validationResult.valid === true;
-
-      const dnsRecords = [];
-      if (validationResult.validation_results) {
-        const vr = validationResult.validation_results;
-        if (vr.mail_cname) {
-          dnsRecords.push({
-            type: "CNAME",
-            host: vr.mail_cname.host || "",
-            value: vr.mail_cname.data || "",
-            valid: vr.mail_cname.valid,
-          });
-        }
-        if (vr.dkim1) {
-          dnsRecords.push({
-            type: "CNAME",
-            host: vr.dkim1.host || "",
-            value: vr.dkim1.data || "",
-            valid: vr.dkim1.valid,
-          });
-        }
-        if (vr.dkim2) {
-          dnsRecords.push({
-            type: "CNAME",
-            host: vr.dkim2.host || "",
-            value: vr.dkim2.data || "",
-            valid: vr.dkim2.valid,
-          });
-        }
+      const verifyResult = await verifyMailgunDomain(mgCreds.apiKey, domain.domain, mgCreds.region);
+      if (!verifyResult.ok) {
+        return new Response(
+          JSON.stringify({ error: verifyResult.error || "Mailgun verification failed" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
+
+      const verifyData = verifyResult.data;
+      const isValid = verifyData?.domain?.state === "active";
+      const dnsRecords = mapDnsRecords(
+        verifyData?.sending_dns_records,
+        verifyData?.receiving_dns_records,
+        domain.domain,
+      );
 
       const newStatus = isValid ? "verified" : "pending_verification";
 
@@ -365,7 +309,7 @@ Deno.serve(async (req: Request) => {
     if (payload.action === "delete") {
       const { data: domain } = await supabase
         .from("email_campaign_domains")
-        .select("sendgrid_domain_id, domain")
+        .select("provider_domain_id, domain")
         .eq("id", payload.domainId)
         .eq("organization_id", orgId)
         .single();
@@ -377,15 +321,9 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const apiKey = await getDecryptedApiKey(orgId, supabase, supabaseUrl, serviceRoleKey);
-      if (apiKey && domain.sendgrid_domain_id) {
-        await fetch(
-          `https://api.sendgrid.com/v3/whitelabel/domains/${domain.sendgrid_domain_id}`,
-          {
-            method: "DELETE",
-            headers: { Authorization: `Bearer ${apiKey}` },
-          }
-        );
+      const mgCreds = await getDecryptedMailgunCreds(orgId, supabase, supabaseUrl, serviceRoleKey);
+      if (mgCreds && domain.domain) {
+        await deleteMailgunDomain(mgCreds.apiKey, domain.domain, mgCreds.region);
       }
 
       await logDomainEvent(supabase, payload.domainId, "deleted", "user", user.id, null, null, {
@@ -535,7 +473,7 @@ Deno.serve(async (req: Request) => {
     if (payload.action === "sync_stats") {
       const { data: domain } = await supabase
         .from("email_campaign_domains")
-        .select("sendgrid_domain_id, domain")
+        .select("provider_domain_id, domain")
         .eq("id", payload.domainId)
         .eq("organization_id", orgId)
         .single();
@@ -547,10 +485,10 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const apiKey = await getDecryptedApiKey(orgId, supabase, supabaseUrl, serviceRoleKey);
-      if (!apiKey) {
+      const mgCreds = await getDecryptedMailgunCreds(orgId, supabase, supabaseUrl, serviceRoleKey);
+      if (!mgCreds) {
         return new Response(
-          JSON.stringify({ error: "SendGrid not connected" }),
+          JSON.stringify({ error: "Mailgun not connected" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -559,36 +497,39 @@ Deno.serve(async (req: Request) => {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 30);
 
-      const formatDate = (d: Date) => d.toISOString().split("T")[0];
-
-      const sgResponse = await fetch(
-        `https://api.sendgrid.com/v3/stats?start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&aggregated_by=day`,
-        {
-          headers: { Authorization: `Bearer ${apiKey}` },
-        }
+      const stats = await getMailgunStats(
+        mgCreds.apiKey,
+        domain.domain,
+        mgCreds.region,
+        ["accepted", "delivered", "failed", "opened", "clicked", "complained"],
+        startDate,
+        endDate,
       );
 
-      if (!sgResponse.ok) {
+      if (!stats.ok) {
         return new Response(
-          JSON.stringify({ error: "Failed to fetch stats from SendGrid" }),
-          { status: sgResponse.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: stats.error || "Failed to fetch stats from Mailgun" }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const statsData = await sgResponse.json();
+      const items: Array<Record<string, any>> = stats.data?.stats ?? [];
 
-      for (const dayStat of statsData) {
-        const metrics = dayStat.stats?.[0]?.metrics || {};
+      for (const dayStat of items) {
+        const date = dayStat.time
+          ? new Date(dayStat.time).toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0];
+
         await supabase.from("email_warmup_daily_stats").upsert(
           {
             campaign_domain_id: payload.domainId,
-            date: dayStat.date,
-            emails_sent: metrics.requests || 0,
-            emails_delivered: metrics.delivered || 0,
-            bounces: (metrics.bounces || 0) + (metrics.bounce_drops || 0),
-            spam_complaints: metrics.spam_reports || 0,
-            opens: metrics.unique_opens || 0,
-            clicks: metrics.unique_clicks || 0,
+            date,
+            emails_sent: dayStat.accepted?.total || 0,
+            emails_delivered: dayStat.delivered?.total || 0,
+            bounces: (dayStat.failed?.permanent?.total || 0) + (dayStat.failed?.temporary?.total || 0),
+            spam_complaints: dayStat.complained?.total || 0,
+            opens: dayStat.opened?.total || 0,
+            clicks: dayStat.clicked?.total || 0,
             synced_at: new Date().toISOString(),
           },
           { onConflict: "campaign_domain_id,date" }
