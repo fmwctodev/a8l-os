@@ -330,17 +330,36 @@ Deno.serve(async (req: Request) => {
           fromEmail: tokenData.email,
         });
 
-        const res = await fetch(
-          `${GMAIL_API_URL}/users/me/messages/send`,
-          {
+        const doSend = async (withThreadId: boolean) => {
+          const sendBody: Record<string, string> = { raw };
+          if (withThreadId && threadId) sendBody.threadId = threadId;
+          return await fetch(`${GMAIL_API_URL}/users/me/messages/send`, {
             method: "POST",
             headers: {
               Authorization: `Bearer ${accessToken}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ raw, threadId }),
-          }
-        );
+            body: JSON.stringify(sendBody),
+          });
+        };
+
+        let res = await doSend(true);
+        let threadIdFallbackUsed = false;
+
+        // Gmail returns 404 "Requested entity was not found" when the threadId
+        // doesn't exist in the *signed-in user's* mailbox. Gmail threadIds are
+        // mailbox-scoped — when User A synced a conversation first, the stored
+        // threadId belongs to A's mailbox, so User B replying via their own
+        // OAuth token 404s. Retry once without threadId; the In-Reply-To /
+        // References headers (passed through buildRawEmail) still let the
+        // recipient's client thread the message correctly.
+        if (res.status === 404) {
+          console.log(
+            `[gmail-api reply] threadId ${threadId} not in ${tokenData.email}'s mailbox — retrying without threadId`
+          );
+          res = await doSend(false);
+          threadIdFallbackUsed = true;
+        }
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
@@ -351,6 +370,20 @@ Deno.serve(async (req: Request) => {
         }
 
         const sentMsg = await res.json();
+
+        // If we fell back (or Gmail returned a different threadId for any
+        // reason), refresh conversations.external_thread_id so subsequent
+        // replies in this user's mailbox use the threadId that actually exists.
+        if (
+          body.conversationId &&
+          sentMsg.threadId &&
+          (threadIdFallbackUsed || sentMsg.threadId !== threadId)
+        ) {
+          await supabase
+            .from("conversations")
+            .update({ external_thread_id: sentMsg.threadId })
+            .eq("id", body.conversationId);
+        }
 
         if (body.conversationId && body.contactId) {
           await supabase.from("messages").insert({
